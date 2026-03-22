@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+/**
+ * 登录态权限与数据范围查询映射。
+ */
 @Mapper
 public interface IdentityAccessMapper {
 

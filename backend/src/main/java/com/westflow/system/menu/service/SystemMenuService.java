@@ -19,6 +19,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统菜单管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemMenuService {
@@ -29,6 +32,9 @@ public class SystemMenuService {
 
     private final SystemMenuMapper systemMenuMapper;
 
+    /**
+     * 分页查询菜单。
+     */
     public PageResponse<SystemMenuListItemResponse> page(PageRequest request) {
         // 菜单树支持筛选、排序和关键字搜索，列表层只做基础聚合。
         Boolean enabled = null;
@@ -75,6 +81,9 @@ public class SystemMenuService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询菜单详情。
+     */
     public SystemMenuDetailResponse detail(String menuId) {
         // 菜单详情主要用于编辑页和父级校验。
         SystemMenuDetailResponse detail = systemMenuMapper.selectDetail(menuId);
@@ -89,6 +98,9 @@ public class SystemMenuService {
         return detail;
     }
 
+    /**
+     * 获取菜单表单选项。
+     */
     public SystemMenuFormOptionsResponse formOptions() {
         return new SystemMenuFormOptionsResponse(
                 List.of(
@@ -100,6 +112,9 @@ public class SystemMenuService {
         );
     }
 
+    /**
+     * 新建菜单。
+     */
     @Transactional
     public SystemMenuMutationResponse create(SaveSystemMenuRequest request) {
         String parentMenuId = normalizeNullable(request.parentMenuId());
@@ -123,6 +138,9 @@ public class SystemMenuService {
         return new SystemMenuMutationResponse(entity.id());
     }
 
+    /**
+     * 更新菜单。
+     */
     @Transactional
     public SystemMenuMutationResponse update(String menuId, SaveSystemMenuRequest request) {
         detail(menuId);

@@ -26,6 +26,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统通知渠道管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemNotificationChannelService {
@@ -36,6 +39,9 @@ public class SystemNotificationChannelService {
     private final NotificationChannelMapper notificationChannelMapper;
     private final FixtureAuthService fixtureAuthService;
 
+    /**
+     * 分页查询通知渠道。
+     */
     public PageResponse<SystemNotificationChannelListItemResponse> page(PageRequest request) {
         ensureProcessAdmin();
         Filters filters = resolveFilters(request.filters());
@@ -60,11 +66,17 @@ public class SystemNotificationChannelService {
         return new PageResponse<>(request.page(), pageSize, total, pages, pageRecords, List.of());
     }
 
+    /**
+     * 查询通知渠道详情。
+     */
     public SystemNotificationChannelDetailResponse detail(String channelId) {
         ensureProcessAdmin();
         return toDetail(requireChannel(channelId));
     }
 
+    /**
+     * 获取通知渠道表单选项。
+     */
     public SystemNotificationChannelFormOptionsResponse formOptions() {
         ensureProcessAdmin();
         // 系统侧只暴露当前一期真正开放的渠道类型。
@@ -78,6 +90,9 @@ public class SystemNotificationChannelService {
         ));
     }
 
+    /**
+     * 新建通知渠道。
+     */
     @Transactional
     public SystemNotificationChannelMutationResponse create(SaveSystemNotificationChannelRequest request) {
         ensureProcessAdmin();
@@ -100,6 +115,9 @@ public class SystemNotificationChannelService {
         return new SystemNotificationChannelMutationResponse(channelId);
     }
 
+    /**
+     * 更新通知渠道。
+     */
     @Transactional
     public SystemNotificationChannelMutationResponse update(String channelId, SaveSystemNotificationChannelRequest request) {
         ensureProcessAdmin();

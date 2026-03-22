@@ -14,6 +14,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+/**
+ * 角色数据访问层，负责角色查询和写入。
+ */
 @Mapper
 public interface SystemRoleMapper {
 

@@ -8,10 +8,16 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 权限拦截探针接口。
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class PermissionProbeController {
 
+    /**
+     * 验证权限校验是否生效。
+     */
     @GetMapping("/permission-probe")
     @SaCheckPermission("system:permission-probe")
     public ApiResponse<Map<String, String>> permissionProbe() {

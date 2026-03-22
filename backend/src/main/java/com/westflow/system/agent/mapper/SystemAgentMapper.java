@@ -11,6 +11,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+/**
+ * 系统代理关系的数据访问层，负责查询和维护委托关系。
+ */
 @Mapper
 public interface SystemAgentMapper {
 

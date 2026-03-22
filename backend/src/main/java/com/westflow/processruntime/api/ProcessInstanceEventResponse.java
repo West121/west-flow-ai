@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
+// 流程实例事件条目。
 public record ProcessInstanceEventResponse(
         String eventId,
         String instanceId,

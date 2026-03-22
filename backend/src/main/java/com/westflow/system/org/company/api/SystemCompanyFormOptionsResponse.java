@@ -2,6 +2,9 @@ package com.westflow.system.org.company.api;
 
 import java.util.List;
 
+/**
+ * 公司表单下拉选项响应。
+ */
 public record SystemCompanyFormOptionsResponse(
         List<CompanyOption> companies
 ) {

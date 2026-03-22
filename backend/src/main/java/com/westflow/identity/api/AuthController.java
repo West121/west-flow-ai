@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 登录与当前用户信息接口。
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -22,11 +25,17 @@ public class AuthController {
 
     private final FixtureAuthService fixtureAuthService;
 
+    /**
+     * 登录并返回令牌信息。
+     */
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(fixtureAuthService.login(request));
     }
 
+    /**
+     * 获取当前登录用户信息。
+     */
     @GetMapping("/current-user")
     @SaCheckLogin
     public ApiResponse<CurrentUserResponse> currentUser() {
@@ -34,6 +43,9 @@ public class AuthController {
         return ApiResponse.success(fixtureAuthService.currentUser());
     }
 
+    /**
+     * 切换当前岗位上下文。
+     */
     @PostMapping("/switch-context")
     @SaCheckLogin
     public ApiResponse<Void> switchContext(@Valid @RequestBody SwitchContextRequest request) {

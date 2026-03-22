@@ -21,6 +21,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统公司管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemCompanyService {
@@ -31,6 +34,9 @@ public class SystemCompanyService {
     private final SystemCompanyMapper systemCompanyMapper;
     private final CurrentUserAccessService currentUserAccessService;
 
+    /**
+     * 分页查询公司。
+     */
     public PageResponse<SystemCompanyListItemResponse> page(PageRequest request) {
         // 公司列表先按当前人的数据权限收口，再叠加搜索和筛选条件。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
@@ -66,6 +72,9 @@ public class SystemCompanyService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询公司详情。
+     */
     public SystemCompanyDetailResponse detail(String companyId) {
         // 详情要做二次校验，不能只依赖列表层过滤。
         SystemCompanyDetailResponse detail = systemCompanyMapper.selectDetail(companyId);
@@ -81,10 +90,16 @@ public class SystemCompanyService {
         return detail;
     }
 
+    /**
+     * 获取公司表单选项。
+     */
     public SystemCompanyFormOptionsResponse formOptions() {
         return new SystemCompanyFormOptionsResponse(systemCompanyMapper.selectCompanyOptions());
     }
 
+    /**
+     * 新建公司。
+     */
     @Transactional
     public SystemCompanyMutationResponse create(SaveSystemCompanyRequest request) {
         validateCompanyName(request.companyName(), null);
@@ -93,6 +108,9 @@ public class SystemCompanyService {
         return new SystemCompanyMutationResponse(companyId);
     }
 
+    /**
+     * 更新公司。
+     */
     @Transactional
     public SystemCompanyMutationResponse update(String companyId, SaveSystemCompanyRequest request) {
         ensureExists(companyId);

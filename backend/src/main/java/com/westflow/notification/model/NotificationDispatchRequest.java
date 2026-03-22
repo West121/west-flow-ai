@@ -3,6 +3,7 @@ package com.westflow.notification.model;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
 
+// 通知发送请求载荷。
 public record NotificationDispatchRequest(
         @NotBlank(message = "接收人不能为空")
         String recipient,

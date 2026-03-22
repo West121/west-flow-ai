@@ -2,6 +2,9 @@ package com.westflow.system.user.api;
 
 import java.time.OffsetDateTime;
 
+/**
+ * 用户列表项响应。
+ */
 public record SystemUserListItemResponse(
         String userId,
         String displayName,

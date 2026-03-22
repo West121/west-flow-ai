@@ -30,6 +30,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * OA 单据发起服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class OALaunchService {
@@ -43,6 +46,9 @@ public class OALaunchService {
     private final OACommonRequestBillMapper oaCommonRequestBillMapper;
     private final ProcessDemoService processDemoService;
 
+    /**
+     * 发起请假单。
+     */
     @Transactional
     public OALaunchResponse createLeaveBill(CreateOALeaveBillRequest request) {
         // 先落业务单，再启动流程实例，避免流程实例和业务单脱节。
@@ -71,6 +77,9 @@ public class OALaunchService {
         return toLaunchResponse(billId, billNo, startResponse);
     }
 
+    /**
+     * 发起报销单。
+     */
     @Transactional
     public OALaunchResponse createExpenseBill(CreateOAExpenseBillRequest request) {
         String billId = buildId("expense");
@@ -98,6 +107,9 @@ public class OALaunchService {
         return toLaunchResponse(billId, billNo, startResponse);
     }
 
+    /**
+     * 发起通用申请单。
+     */
     @Transactional
     public OALaunchResponse createCommonRequestBill(CreateOACommonRequestBillRequest request) {
         String billId = buildId("common");
@@ -125,6 +137,9 @@ public class OALaunchService {
         return toLaunchResponse(billId, billNo, startResponse);
     }
 
+    /**
+     * 查询请假单详情。
+     */
     public OALeaveBillDetailResponse leaveDetail(String billId) {
         OALeaveBillDetailResponse detail = oaLeaveBillMapper.selectDetail(billId);
         if (detail == null) {
@@ -133,6 +148,9 @@ public class OALaunchService {
         return detail;
     }
 
+    /**
+     * 查询报销单详情。
+     */
     public OAExpenseBillDetailResponse expenseDetail(String billId) {
         OAExpenseBillDetailResponse detail = oaExpenseBillMapper.selectDetail(billId);
         if (detail == null) {
@@ -141,6 +159,9 @@ public class OALaunchService {
         return detail;
     }
 
+    /**
+     * 查询通用申请单详情。
+     */
     public OACommonRequestBillDetailResponse commonDetail(String billId) {
         OACommonRequestBillDetailResponse detail = oaCommonRequestBillMapper.selectDetail(billId);
         if (detail == null) {

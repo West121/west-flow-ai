@@ -2,6 +2,9 @@ package com.westflow.common.query;
 
 import java.util.List;
 
+/**
+ * 通用分页响应。
+ */
 public record PageResponse<T>(
         long page,
         long pageSize,
@@ -16,6 +19,9 @@ public record PageResponse<T>(
         groups = groups == null ? List.of() : List.copyOf(groups);
     }
 
+    /**
+     * 分组值。
+     */
     public record GroupValue(
             String field,
             String value

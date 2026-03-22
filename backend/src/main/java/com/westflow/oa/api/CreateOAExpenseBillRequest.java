@@ -5,6 +5,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
+/**
+ * OA 费用报销单的创建请求载体。
+ */
 public record CreateOAExpenseBillRequest(
         String sceneCode,
         @NotNull(message = "报销金额不能为空")

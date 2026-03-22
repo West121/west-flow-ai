@@ -2,6 +2,9 @@ package com.westflow.system.user.api;
 
 import java.util.List;
 
+/**
+ * 用户详情响应。
+ */
 public record SystemUserDetailResponse(
         String userId,
         String displayName,

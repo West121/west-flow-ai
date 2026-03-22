@@ -8,6 +8,9 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
+/**
+ * 触发器定义的数据访问层。
+ */
 public class SystemTriggerMapper {
 
     private final Map<String, TriggerDefinitionRecord> storage = new LinkedHashMap<>();

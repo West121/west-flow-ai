@@ -25,6 +25,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统触发器管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemTriggerService {
@@ -36,6 +39,9 @@ public class SystemTriggerService {
     private final NotificationChannelMapper notificationChannelMapper;
     private final FixtureAuthService fixtureAuthService;
 
+    /**
+     * 分页查询触发器。
+     */
     public PageResponse<SystemTriggerListItemResponse> page(PageRequest request) {
         ensureProcessAdmin();
         Filters filters = resolveFilters(request.filters());
@@ -60,11 +66,17 @@ public class SystemTriggerService {
         return new PageResponse<>(request.page(), pageSize, total, pages, pageRecords, List.of());
     }
 
+    /**
+     * 查询触发器详情。
+     */
     public SystemTriggerDetailResponse detail(String triggerId) {
         ensureProcessAdmin();
         return toDetail(requireTrigger(triggerId));
     }
 
+    /**
+     * 获取触发器表单选项。
+     */
     public SystemTriggerFormOptionsResponse formOptions() {
         ensureProcessAdmin();
         return new SystemTriggerFormOptionsResponse(List.of(
@@ -75,6 +87,9 @@ public class SystemTriggerService {
         ));
     }
 
+    /**
+     * 新建触发器。
+     */
     @Transactional
     public SystemTriggerMutationResponse create(SaveSystemTriggerRequest request) {
         ensureProcessAdmin();
@@ -97,6 +112,9 @@ public class SystemTriggerService {
         return new SystemTriggerMutationResponse(triggerId);
     }
 
+    /**
+     * 更新触发器。
+     */
     @Transactional
     public SystemTriggerMutationResponse update(String triggerId, SaveSystemTriggerRequest request) {
         ensureProcessAdmin();

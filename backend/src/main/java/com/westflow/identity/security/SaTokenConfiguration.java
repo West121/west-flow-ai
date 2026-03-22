@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+/**
+ * Sa-Token 和审计拦截器配置。
+ */
 @Configuration
 public class SaTokenConfiguration implements WebMvcConfigurer {
 
@@ -18,6 +21,9 @@ public class SaTokenConfiguration implements WebMvcConfigurer {
         this.auditLogInterceptor = auditLogInterceptor;
     }
 
+    /**
+     * 提供 Sa-Token 权限角色查询实现。
+     */
     @Bean
     public StpInterface stpInterface(FixtureAuthService fixtureAuthService) {
         return new StpInterface() {
@@ -33,6 +39,9 @@ public class SaTokenConfiguration implements WebMvcConfigurer {
         };
     }
 
+    /**
+     * 注册审计日志拦截器。
+     */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(auditLogInterceptor).addPathPatterns("/api/v1/**");

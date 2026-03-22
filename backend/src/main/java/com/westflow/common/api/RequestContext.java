@@ -6,6 +6,9 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+/**
+ * 请求上下文工具类，用于读取当前请求的基础标识信息。
+ */
 public final class RequestContext {
 
     public static final String REQUEST_ID_ATTRIBUTE = "requestId";

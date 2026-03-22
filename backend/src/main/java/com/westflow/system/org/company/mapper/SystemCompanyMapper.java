@@ -11,6 +11,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+/**
+ * 公司数据访问层，负责公司查询和写入。
+ */
 @Mapper
 public interface SystemCompanyMapper {
 

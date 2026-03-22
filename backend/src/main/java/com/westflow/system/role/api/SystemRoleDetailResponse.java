@@ -2,6 +2,9 @@ package com.westflow.system.role.api;
 
 import java.util.List;
 
+/**
+ * 角色详情响应。
+ */
 public record SystemRoleDetailResponse(
         String roleId,
         String roleCode,

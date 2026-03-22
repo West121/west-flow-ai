@@ -6,6 +6,9 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
+/**
+ * 角色保存请求，供新建和编辑复用。
+ */
 public record SaveSystemRoleRequest(
         @NotBlank(message = "请输入角色名称")
         String roleName,

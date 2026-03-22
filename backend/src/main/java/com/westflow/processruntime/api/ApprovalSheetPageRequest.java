@@ -11,6 +11,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
+// 审批单分页查询请求。
 public record ApprovalSheetPageRequest(
         @NotNull(message = "view 不能为空")
         ApprovalSheetListView view,

@@ -3,6 +3,7 @@ package com.westflow.notification.model;
 import java.time.Instant;
 import java.util.Map;
 
+// 通知发送日志记录。
 public record NotificationLogRecord(
         String logId,
         String channelId,

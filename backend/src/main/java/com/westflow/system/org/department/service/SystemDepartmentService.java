@@ -22,6 +22,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统部门管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemDepartmentService {
@@ -33,6 +36,9 @@ public class SystemDepartmentService {
     private final SystemCompanyMapper systemCompanyMapper;
     private final CurrentUserAccessService currentUserAccessService;
 
+    /**
+     * 分页查询部门。
+     */
     public PageResponse<SystemDepartmentListItemResponse> page(PageRequest request) {
         // 部门列表同时受公司、部门和子部门的数据权限约束。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
@@ -74,6 +80,9 @@ public class SystemDepartmentService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询部门详情。
+     */
     public SystemDepartmentDetailResponse detail(String departmentId) {
         // 详情需要补一次权限校验，避免直接访问越权部门。
         SystemDepartmentDetailResponse detail = systemDepartmentMapper.selectDetail(departmentId);
@@ -89,6 +98,9 @@ public class SystemDepartmentService {
         return detail;
     }
 
+    /**
+     * 获取部门表单选项。
+     */
     public SystemDepartmentFormOptionsResponse formOptions(String companyId) {
         return new SystemDepartmentFormOptionsResponse(
                 systemDepartmentMapper.selectCompanyOptions(),
@@ -96,6 +108,9 @@ public class SystemDepartmentService {
         );
     }
 
+    /**
+     * 新建部门。
+     */
     @Transactional
     public SystemDepartmentMutationResponse create(SaveSystemDepartmentRequest request) {
         validateCompanyExists(request.companyId());
@@ -113,6 +128,9 @@ public class SystemDepartmentService {
         return new SystemDepartmentMutationResponse(departmentId);
     }
 
+    /**
+     * 更新部门。
+     */
     @Transactional
     public SystemDepartmentMutationResponse update(String departmentId, SaveSystemDepartmentRequest request) {
         ensureExists(departmentId);

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/process-runtime/demo")
+// 演示态流程运行的任务、审批单和动作入口。
 public class ProcessRuntimeController {
 
     private final ProcessDemoService processDemoService;
@@ -26,18 +27,21 @@ public class ProcessRuntimeController {
 
     @PostMapping("/start")
     @SaCheckLogin
+    // 发起一个新的流程实例。
     public ApiResponse<StartProcessResponse> start(@Valid @RequestBody StartProcessRequest request) {
         return ApiResponse.success(processDemoService.start(request));
     }
 
     @PostMapping("/tasks/page")
     @SaCheckLogin
+    // 分页查询流程任务列表。
     public ApiResponse<PageResponse<ProcessTaskListItemResponse>> page(@Valid @RequestBody PageRequest request) {
         return ApiResponse.success(processDemoService.page(request));
     }
 
     @PostMapping("/approval-sheets/page")
     @SaCheckLogin
+    // 分页查询审批单列表。
     public ApiResponse<PageResponse<ApprovalSheetListItemResponse>> approvalSheetPage(
             @Valid @RequestBody ApprovalSheetPageRequest request
     ) {
@@ -46,12 +50,14 @@ public class ProcessRuntimeController {
 
     @GetMapping("/tasks/{taskId}")
     @SaCheckLogin
+    // 查询任务详情。
     public ApiResponse<ProcessTaskDetailResponse> detail(@PathVariable String taskId) {
         return ApiResponse.success(processDemoService.detail(taskId));
     }
 
     @GetMapping("/approval-sheets/by-business")
     @SaCheckLogin
+    // 按业务类型和业务主键查询审批单详情。
     public ApiResponse<ProcessTaskDetailResponse> detailByBusiness(
             @RequestParam String businessType,
             @RequestParam String businessId
@@ -61,12 +67,14 @@ public class ProcessRuntimeController {
 
     @GetMapping("/tasks/{taskId}/actions")
     @SaCheckLogin
+    // 查询任务可执行动作。
     public ApiResponse<TaskActionAvailabilityResponse> actions(@PathVariable String taskId) {
         return ApiResponse.success(processDemoService.actions(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/add-sign")
     @SaCheckLogin
+    // 为任务增加会签处理人。
     public ApiResponse<CompleteTaskResponse> addSign(
             @PathVariable String taskId,
             @Valid @RequestBody AddSignTaskRequest request
@@ -76,6 +84,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/remove-sign")
     @SaCheckLogin
+    // 移除加签任务。
     public ApiResponse<CompleteTaskResponse> removeSign(
             @PathVariable String taskId,
             @Valid @RequestBody RemoveSignTaskRequest request
@@ -85,6 +94,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/revoke")
     @SaCheckLogin
+    // 撤回当前任务。
     public ApiResponse<CompleteTaskResponse> revoke(
             @PathVariable String taskId,
             @Valid @RequestBody RevokeTaskRequest request
@@ -94,6 +104,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/urge")
     @SaCheckLogin
+    // 催办当前任务。
     public ApiResponse<CompleteTaskResponse> urge(
             @PathVariable String taskId,
             @Valid @RequestBody UrgeTaskRequest request
@@ -103,12 +114,14 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/read")
     @SaCheckLogin
+    // 将任务标记为已读。
     public ApiResponse<CompleteTaskResponse> read(@PathVariable String taskId) {
         return ApiResponse.success(processDemoService.read(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/reject")
     @SaCheckLogin
+    // 按规则驳回任务。
     public ApiResponse<CompleteTaskResponse> reject(
             @PathVariable String taskId,
             @Valid @RequestBody RejectTaskRequest request
@@ -118,6 +131,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/jump")
     @SaCheckLogin
+    // 跳转任务到指定节点。
     public ApiResponse<CompleteTaskResponse> jump(
             @PathVariable String taskId,
             @Valid @RequestBody JumpTaskRequest request
@@ -127,6 +141,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/take-back")
     @SaCheckLogin
+    // 取回未处理任务。
     public ApiResponse<CompleteTaskResponse> takeBack(
             @PathVariable String taskId,
             @RequestBody(required = false) TakeBackTaskRequest request
@@ -136,6 +151,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/instances/{instanceId}/wake-up")
     @SaCheckLogin
+    // 唤醒挂起实例。
     public ApiResponse<CompleteTaskResponse> wakeUp(
             @PathVariable String instanceId,
             @Valid @RequestBody WakeUpInstanceRequest request
@@ -145,6 +161,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/delegate")
     @SaCheckLogin
+    // 委派任务给其他用户。
     public ApiResponse<CompleteTaskResponse> delegate(
             @PathVariable String taskId,
             @Valid @RequestBody DelegateTaskRequest request
@@ -154,6 +171,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/users/{sourceUserId}/handover")
     @SaCheckLogin
+    // 发起离职转办。
     public ApiResponse<CompleteTaskResponse> handover(
             @PathVariable String sourceUserId,
             @Valid @RequestBody HandoverTaskRequest request
@@ -163,6 +181,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/users/{sourceUserId}/handover/preview")
     @SaCheckLogin
+    // 预览离职转办影响范围。
     public ApiResponse<HandoverPreviewResponse> handoverPreview(
             @PathVariable String sourceUserId,
             @Valid @RequestBody HandoverTaskRequest request
@@ -172,6 +191,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/users/{sourceUserId}/handover/execute")
     @SaCheckLogin
+    // 执行离职转办。
     public ApiResponse<HandoverExecutionResponse> handoverExecute(
             @PathVariable String sourceUserId,
             @Valid @RequestBody HandoverTaskRequest request
@@ -181,6 +201,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/claim")
     @SaCheckLogin
+    // 认领待办任务。
     public ApiResponse<ClaimTaskResponse> claim(
             @PathVariable String taskId,
             @RequestBody(required = false) ClaimTaskRequest request
@@ -190,6 +211,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/complete")
     @SaCheckLogin
+    // 完成任务。
     public ApiResponse<CompleteTaskResponse> complete(
             @PathVariable String taskId,
             @Valid @RequestBody CompleteTaskRequest request
@@ -199,6 +221,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/transfer")
     @SaCheckLogin
+    // 转交任务。
     public ApiResponse<CompleteTaskResponse> transfer(
             @PathVariable String taskId,
             @Valid @RequestBody TransferTaskRequest request
@@ -208,6 +231,7 @@ public class ProcessRuntimeController {
 
     @PostMapping("/tasks/{taskId}/return")
     @SaCheckLogin
+    // 退回到上一节点。
     public ApiResponse<CompleteTaskResponse> returnTask(
             @PathVariable String taskId,
             @RequestBody(required = false) ReturnTaskRequest request

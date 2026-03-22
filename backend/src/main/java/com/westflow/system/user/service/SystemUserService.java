@@ -29,6 +29,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统用户管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemUserService {
@@ -45,6 +48,9 @@ public class SystemUserService {
     private final SystemUserMapper systemUserMapper;
     private final IdentityAccessMapper identityAccessMapper;
 
+    /**
+     * 分页查询用户。
+     */
     public PageResponse<SystemUserListItemResponse> page(PageRequest request) {
         // 用户列表先按当前登录人的数据权限收口，再应用筛选和排序。
         AccessPolicy accessPolicy = resolveAccessPolicy();
@@ -88,6 +94,9 @@ public class SystemUserService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询用户详情。
+     */
     public SystemUserDetailResponse detail(String userId) {
         // 详情页不能只依赖列表层过滤，必须再做一次权限校验。
         SystemUserBaseDetailRecord detail = systemUserMapper.selectDetail(userId);
@@ -117,6 +126,9 @@ public class SystemUserService {
         );
     }
 
+    /**
+     * 获取用户表单选项。
+     */
     public SystemUserFormOptionsResponse formOptions() {
         // 用户表单一次性返回公司、岗位、角色选项。
         return new SystemUserFormOptionsResponse(
@@ -126,6 +138,9 @@ public class SystemUserService {
         );
     }
 
+    /**
+     * 新建用户。
+     */
     @Transactional
     public SystemUserMutationResponse create(SaveSystemUserRequest request) {
         // 创建前先校验主岗位、公司和角色关系是否完整。
@@ -158,6 +173,9 @@ public class SystemUserService {
         return new SystemUserMutationResponse(userId);
     }
 
+    /**
+     * 更新用户。
+     */
     @Transactional
     public SystemUserMutationResponse update(String userId, SaveSystemUserRequest request) {
         // 更新时先确认原用户存在，再重建主岗位和角色关系。

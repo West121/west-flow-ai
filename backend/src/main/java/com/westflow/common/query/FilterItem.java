@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 
+/**
+ * 通用筛选项。
+ */
 public record FilterItem(
         @NotBlank(message = "筛选字段不能为空")
         String field,

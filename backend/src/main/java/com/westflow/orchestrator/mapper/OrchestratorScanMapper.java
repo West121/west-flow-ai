@@ -8,6 +8,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
+// 编排器扫描目标和执行记录的演示映射接口。
 public interface OrchestratorScanMapper {
 
     default List<OrchestratorScanTargetRecord> selectDemoScanTargets() {

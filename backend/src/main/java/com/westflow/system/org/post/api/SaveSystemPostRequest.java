@@ -3,6 +3,9 @@ package com.westflow.system.org.post.api;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+/**
+ * 岗位保存请求，供新建和编辑复用。
+ */
 public record SaveSystemPostRequest(
         @NotBlank(message = "请选择所属部门")
         String departmentId,

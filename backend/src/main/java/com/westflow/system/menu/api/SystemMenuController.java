@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 系统菜单管理接口。
+ */
 @RestController
 @RequestMapping("/api/v1/system/menus")
 @SaCheckLogin
@@ -23,26 +26,41 @@ public class SystemMenuController {
 
     private final SystemMenuService systemMenuService;
 
+    /**
+     * 分页查询菜单。
+     */
     @PostMapping("/page")
     public ApiResponse<PageResponse<SystemMenuListItemResponse>> page(@Valid @RequestBody PageRequest request) {
         return ApiResponse.success(systemMenuService.page(request));
     }
 
+    /**
+     * 查询菜单详情。
+     */
     @GetMapping("/{menuId}")
     public ApiResponse<SystemMenuDetailResponse> detail(@PathVariable String menuId) {
         return ApiResponse.success(systemMenuService.detail(menuId));
     }
 
+    /**
+     * 获取菜单表单选项。
+     */
     @GetMapping("/options")
     public ApiResponse<SystemMenuFormOptionsResponse> options() {
         return ApiResponse.success(systemMenuService.formOptions());
     }
 
+    /**
+     * 新建菜单。
+     */
     @PostMapping
     public ApiResponse<SystemMenuMutationResponse> create(@Valid @RequestBody SaveSystemMenuRequest request) {
         return ApiResponse.success(systemMenuService.create(request));
     }
 
+    /**
+     * 更新菜单。
+     */
     @PutMapping("/{menuId}")
     public ApiResponse<SystemMenuMutationResponse> update(
             @PathVariable String menuId,

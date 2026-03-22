@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/orchestrator")
 @SaCheckLogin
 @RequiredArgsConstructor
+// 编排器的手动扫描入口。
 public class OrchestratorController {
 
     private final OrchestratorService orchestratorService;

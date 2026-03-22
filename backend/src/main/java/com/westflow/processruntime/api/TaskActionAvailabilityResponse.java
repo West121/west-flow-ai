@@ -1,5 +1,6 @@
 package com.westflow.processruntime.api;
 
+// 任务动作可用性返回值。
 public record TaskActionAvailabilityResponse(
         boolean canClaim,
         boolean canApprove,

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotEmpty;
 import java.util.List;
 import java.util.Map;
 
+// 流程设计器提交的 DSL 载荷，包含节点、连线和表单配置。
 public record ProcessDslPayload(
         @NotBlank(message = "dslVersion 不能为空")
         String dslVersion,
@@ -24,6 +25,7 @@ public record ProcessDslPayload(
         List<@Valid Edge> edges
 ) {
 
+    // 流程表单字段定义。
     public record FormField(
             @NotBlank(message = "formFields.fieldKey 不能为空")
             String fieldKey,
@@ -35,6 +37,7 @@ public record ProcessDslPayload(
     ) {
     }
 
+    // 流程节点定义。
     public record Node(
             @NotBlank(message = "node.id 不能为空")
             String id,
@@ -49,6 +52,7 @@ public record ProcessDslPayload(
     ) {
     }
 
+    // 流程连线定义。
     public record Edge(
             @NotBlank(message = "edge.id 不能为空")
             String id,

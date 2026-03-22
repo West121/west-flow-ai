@@ -64,6 +64,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Service
+// 演示态流程运行服务，负责启动实例、流转任务和组装运行时视图。
 public class ProcessDemoService {
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
@@ -153,12 +154,14 @@ public class ProcessDemoService {
         this.systemUserMapper = systemUserMapper;
     }
 
+    // 清空演示态内存数据，便于回归测试和手工重置。
     public synchronized void reset() {
         instancesById.clear();
         tasksById.clear();
         instanceEvents.clear();
     }
 
+    // 根据已发布流程定义启动一个新的流程实例。
     public synchronized StartProcessResponse start(StartProcessRequest request) {
         PublishedProcessDefinition definition = processDefinitionService.getLatestByProcessKey(request.processKey());
         Graph graph = Graph.from(definition.dsl());
@@ -201,6 +204,7 @@ public class ProcessDemoService {
         return new StartProcessResponse(definition.processDefinitionId(), instance.instanceId, instance.status, activeTasks);
     }
 
+    // 按当前用户可见范围分页查询任务列表。
     public synchronized PageResponse<ProcessTaskListItemResponse> page(PageRequest request) {
         String currentUserId = currentUserId();
         List<DemoTask> filtered = tasksById.values().stream()
@@ -225,6 +229,7 @@ public class ProcessDemoService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    // 按当前用户可见范围分页查询审批单视图。
     public synchronized PageResponse<ApprovalSheetListItemResponse> pageApprovalSheets(ApprovalSheetPageRequest request) {
         PageRequest pageRequest = request.toPageRequest();
         String userId = currentUserId();
@@ -251,6 +256,7 @@ public class ProcessDemoService {
         return new PageResponse<>(pageRequest.page(), pageSize, total, pages, records, List.of());
     }
 
+    // 查询单个任务详情。
     public synchronized ProcessTaskDetailResponse detail(String taskId) {
         DemoTask task = requireTask(taskId);
         DemoProcessInstance instance = requireInstance(task.instanceId);
@@ -258,17 +264,20 @@ public class ProcessDemoService {
         return toDetailResponse(task, instance);
     }
 
+    // 按业务类型和业务主键查询审批单详情。
     public synchronized ProcessTaskDetailResponse detailByBusiness(String businessType, String businessId) {
         DemoProcessInstance instance = requireInstanceByBusiness(businessType, businessId);
         DemoTask task = resolveDetailTask(instance);
         return detail(task.taskId);
     }
 
+    // 查询当前任务可执行的动作。
     public synchronized TaskActionAvailabilityResponse actions(String taskId) {
         DemoTask task = requireTask(taskId);
         return actionAvailability(task, currentUserId());
     }
 
+    // 新增签收任务并返回处理结果。
     public synchronized CompleteTaskResponse addSign(String taskId, AddSignTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -316,6 +325,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(addSignTask.toView()));
     }
 
+    // 撤销签收任务并恢复源任务状态。
     public synchronized CompleteTaskResponse removeSign(String taskId, RemoveSignTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -376,6 +386,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of());
     }
 
+    // 撤回任务并把实例状态回滚到可再次处理。
     public synchronized CompleteTaskResponse revoke(String taskId, RevokeTaskRequest request) {
         DemoTask task = requireTask(taskId);
         DemoProcessInstance instance = requireInstance(task.instanceId);
@@ -434,6 +445,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
     }
 
+    // 催办当前任务的处理人或候选人。
     public synchronized CompleteTaskResponse urge(String taskId, UrgeTaskRequest request) {
         DemoTask task = requireTask(taskId);
         DemoProcessInstance instance = requireInstance(task.instanceId);
@@ -468,6 +480,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
     }
 
+    // 将当前任务标记为已读。
     public synchronized CompleteTaskResponse read(String taskId) {
         DemoTask task = requireTask(taskId);
         if (task.taskKind != TaskKind.CC) {
@@ -490,6 +503,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
     }
 
+    // 按驳回配置把任务退回到指定节点。
     public synchronized CompleteTaskResponse reject(String taskId, RejectTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -570,6 +584,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of(nextTask.toView()));
     }
 
+    // 跳转当前任务到指定目标节点。
     public synchronized CompleteTaskResponse jump(String taskId, JumpTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -628,6 +643,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, nextTasks);
     }
 
+    // 取回已发出的待办任务。
     public synchronized CompleteTaskResponse takeBack(String taskId, TakeBackTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -717,6 +733,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of(nextTask.toView()));
     }
 
+    // 唤醒处于等待中的实例或任务。
     public synchronized CompleteTaskResponse wakeUp(String instanceId, WakeUpInstanceRequest request) {
         DemoProcessInstance instance = requireInstance(instanceId);
         if (!List.of("COMPLETED", "REJECTED", "REVOKED").contains(instance.status)) {
@@ -794,6 +811,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, sourceTask.taskId, instance.status, List.of(nextTask.toView()));
     }
 
+    // 将任务委派给其他处理人。
     public synchronized CompleteTaskResponse delegate(String taskId, DelegateTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -874,11 +892,13 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
     }
 
+    // 发起任务移交。
     public synchronized CompleteTaskResponse handover(String sourceUserId, HandoverTaskRequest request) {
         HandoverExecutionResult result = executeHandoverInternal(sourceUserId, request);
         return new CompleteTaskResponse(result.instanceId(), result.completedTaskId(), result.status(), result.nextTasks());
     }
 
+    // 预览移交后会影响哪些任务。
     public synchronized HandoverPreviewResponse previewHandover(String sourceUserId, HandoverTaskRequest request) {
         requireProcessAdminForHandover();
         String normalizedSourceUserId = normalizeId(sourceUserId, "sourceUserId");
@@ -938,6 +958,7 @@ public class ProcessDemoService {
         );
     }
 
+    // 执行任务移交并返回执行结果。
     public synchronized HandoverExecutionResponse executeHandover(String sourceUserId, HandoverTaskRequest request) {
         HandoverExecutionResult result = executeHandoverInternal(sourceUserId, request);
         return new HandoverExecutionResponse(
@@ -954,6 +975,7 @@ public class ProcessDemoService {
         );
     }
 
+    // 认领当前待办任务。
     public synchronized ClaimTaskResponse claim(String taskId, ClaimTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -1006,6 +1028,7 @@ public class ProcessDemoService {
         return new ClaimTaskResponse(task.taskId, task.instanceId, task.status, task.assigneeUserId);
     }
 
+    // 完成当前任务并推进流程。
     public synchronized CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = request.operatorUserId() == null || request.operatorUserId().isBlank()
@@ -1131,6 +1154,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, nextTasks);
     }
 
+    // 转交当前任务给其他处理人。
     public synchronized CompleteTaskResponse transfer(String taskId, TransferTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -1185,6 +1209,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
     }
 
+    // 退回到上一节点或指定来源节点。
     public synchronized CompleteTaskResponse returnToPrevious(String taskId, ReturnTaskRequest request) {
         DemoTask task = requireTask(taskId);
         String currentUserId = currentUserId();
@@ -1256,6 +1281,7 @@ public class ProcessDemoService {
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
     }
 
+    // 按节点类型推进流程，并生成后续可见任务。
     private List<DemoTaskView> advanceFromNode(
             PublishedProcessDefinition definition,
             Graph graph,
@@ -1298,6 +1324,7 @@ public class ProcessDemoService {
         };
     }
 
+    // 沿着当前节点的出边继续推进，处理串行和分支节点。
     private List<DemoTaskView> continueAlongOutgoing(
             PublishedProcessDefinition definition,
             Graph graph,
@@ -1314,6 +1341,7 @@ public class ProcessDemoService {
         return tasks;
     }
 
+    // 按条件分支选出命中的下一节点。
     private List<DemoTaskView> advanceCondition(
             PublishedProcessDefinition definition,
             Graph graph,
@@ -1336,6 +1364,7 @@ public class ProcessDemoService {
         return advanceFromNode(definition, graph, instance, selected.target(), previousTaskId, originTaskId);
     }
 
+    // 并行分支拆出多个后续任务。
     private List<DemoTaskView> advanceParallelSplit(
             PublishedProcessDefinition definition,
             Graph graph,
@@ -1352,6 +1381,7 @@ public class ProcessDemoService {
         return tasks;
     }
 
+    // 并行汇聚节点等待所有前置分支完成后再继续。
     private List<DemoTaskView> advanceParallelJoin(
             PublishedProcessDefinition definition,
             Graph graph,
@@ -1371,6 +1401,7 @@ public class ProcessDemoService {
         return continueAlongOutgoing(definition, graph, instance, node.id(), previousTaskId, originTaskId);
     }
 
+    // 创建普通人工任务并写入实例内存态。
     private DemoTask createTask(
             DemoProcessInstance instance,
             ProcessDslPayload.Node node,
@@ -1487,6 +1518,7 @@ public class ProcessDemoService {
         return ccTasks;
     }
 
+    // 创建加签任务，沿用源任务上下文继续流转。
     private DemoTask createAddSignTask(DemoProcessInstance instance, DemoTask sourceTask, String targetUserId) {
         if (targetUserId == null || targetUserId.isBlank()) {
             throw new ContractException(
@@ -1538,6 +1570,7 @@ public class ProcessDemoService {
         return candidateUserIds.size() > 1 ? "PENDING_CLAIM" : "PENDING";
     }
 
+    // 记录抄送已读状态并补齐阅读轨迹。
     private void markCcRead(DemoTask task, DemoProcessInstance instance, String currentUserId) {
         OffsetDateTime now = now();
         task.status = "CC_READ";
@@ -1567,6 +1600,7 @@ public class ProcessDemoService {
         );
     }
 
+    // 根据当前任务集合重新计算实例状态。
     private void refreshStatus(DemoProcessInstance instance) {
         instance.updatedAt = now();
         if ("REVOKED".equals(instance.status)) {
@@ -1989,6 +2023,7 @@ public class ProcessDemoService {
         };
     }
 
+    // 按前端传入的排序条件构建审批单排序器。
     private Comparator<ApprovalSheetProjection> resolveApprovalSheetComparator(List<SortItem> sorts) {
         if (sorts == null || sorts.isEmpty()) {
             return Comparator.comparing(
@@ -2959,6 +2994,7 @@ public class ProcessDemoService {
         }
     }
 
+    // 读取当前登录用户ID。
     private String currentUserId() {
         return StpUtil.getLoginIdAsString();
     }
@@ -2983,6 +3019,7 @@ public class ProcessDemoService {
     ) {
     }
 
+    // 统一写入流程实例事件，供轨迹和详情页复用。
     private void recordInstanceEvent(
             String instanceId,
             String taskId,
@@ -2995,6 +3032,7 @@ public class ProcessDemoService {
         recordInstanceEvent(instanceId, taskId, nodeId, eventType, eventName, operatorUserId, null, null, null, null, details, null, null, null, null, null, null, null);
     }
 
+    // 统一写入流程实例事件，供轨迹和详情页复用。
     private void recordInstanceEvent(
             String instanceId,
             String taskId,
@@ -3011,6 +3049,7 @@ public class ProcessDemoService {
         recordInstanceEvent(instanceId, taskId, nodeId, eventType, eventName, operatorUserId, actionCategory, sourceTaskId, targetTaskId, targetUserId, details, null, null, null, null, null, null, null);
     }
 
+    // 统一写入流程实例事件，供轨迹和详情页复用。
     private void recordInstanceEvent(
             String instanceId,
             String taskId,
@@ -3049,6 +3088,7 @@ public class ProcessDemoService {
         );
     }
 
+    // 统一写入流程实例事件，供轨迹和详情页复用。
     private void recordInstanceEvent(
             String instanceId,
             String taskId,
@@ -3093,6 +3133,7 @@ public class ProcessDemoService {
         ));
     }
 
+    // 将事件附加信息组装成键值映射。
     private Map<String, Object> eventDetails(Object... keyValues) {
         Map<String, Object> details = new HashMap<>();
         for (int i = 0; i + 1 < keyValues.length; i += 2) {
@@ -3105,6 +3146,7 @@ public class ProcessDemoService {
         return details;
     }
 
+    // 按任务ID读取任务，不存在时抛业务异常。
     private DemoTask requireTask(String taskId) {
         DemoTask task = tasksById.get(taskId);
         if (task == null) {
@@ -3167,6 +3209,7 @@ public class ProcessDemoService {
                 ));
     }
 
+    // 按实例ID读取实例，不存在时抛业务异常。
     private DemoProcessInstance requireInstance(String instanceId) {
         DemoProcessInstance instance = instancesById.get(instanceId);
         if (instance == null) {
@@ -3180,10 +3223,12 @@ public class ProcessDemoService {
         return instance;
     }
 
+    // 统一使用上海时区生成当前时间。
     private OffsetDateTime now() {
         return OffsetDateTime.now(TIME_ZONE);
     }
 
+    // 规范化节点配置，避免空值向下游传播。
     private Map<String, Object> safeConfig(ProcessDslPayload.Node node) {
         return node.config() == null ? Map.of() : node.config();
     }
@@ -3233,6 +3278,7 @@ public class ProcessDemoService {
         return values.stream().map(String::valueOf).toList();
     }
 
+    // 生成演示态主键。
     private String newId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }

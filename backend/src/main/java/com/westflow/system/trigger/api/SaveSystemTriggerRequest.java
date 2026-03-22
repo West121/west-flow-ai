@@ -4,6 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
+/**
+ * 触发器保存请求，供新建和编辑复用。
+ */
 public record SaveSystemTriggerRequest(
         @NotBlank(message = "触发器名称不能为空")
         String triggerName,

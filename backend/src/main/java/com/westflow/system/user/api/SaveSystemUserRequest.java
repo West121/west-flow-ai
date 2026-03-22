@@ -6,6 +6,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
+/**
+ * 用户保存请求，供新建和编辑复用。
+ */
 public record SaveSystemUserRequest(
         @NotBlank(message = "请输入用户姓名")
         String displayName,

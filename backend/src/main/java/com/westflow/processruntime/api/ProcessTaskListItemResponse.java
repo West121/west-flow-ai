@@ -3,6 +3,7 @@ package com.westflow.processruntime.api;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+// 任务列表项摘要。
 public record ProcessTaskListItemResponse(
         String taskId,
         String instanceId,

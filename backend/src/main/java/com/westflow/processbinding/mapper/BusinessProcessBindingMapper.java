@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 @Mapper
+// 业务流程绑定表的查询接口。
 public interface BusinessProcessBindingMapper {
 
     @Select("""

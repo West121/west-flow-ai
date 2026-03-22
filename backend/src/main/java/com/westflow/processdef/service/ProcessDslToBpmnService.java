@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
+// 把设计器 DSL 转成最小可执行的 BPMN 片段。
 public class ProcessDslToBpmnService {
 
     public String convert(ProcessDslPayload payload, String processDefinitionId, int version) {

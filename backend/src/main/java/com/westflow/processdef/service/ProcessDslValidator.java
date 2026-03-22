@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Service
+// 校验流程 DSL 的结构、引用关系和节点配置完整性。
 public class ProcessDslValidator {
 
     private static final List<String> SUPPORTED_TIMEOUT_ACTIONS = List.of("APPROVE", "REJECT");
@@ -31,6 +32,7 @@ public class ProcessDslValidator {
     private static final List<String> SUPPORTED_SCHEDULE_TYPES = List.of("ABSOLUTE_TIME", "RELATIVE_TO_ARRIVAL");
     private static final List<String> SUPPORTED_TRIGGER_MODES = List.of("IMMEDIATE", "SCHEDULED");
 
+    // 对整份 DSL 做一致性校验，失败时直接抛出请求异常。
     public void validate(ProcessDslPayload payload) {
         Map<String, ProcessDslPayload.Node> nodeById = indexNodes(payload.nodes());
         Map<String, List<ProcessDslPayload.Edge>> outgoingEdges = indexEdges(payload.edges(), ProcessDslPayload.Edge::source);
@@ -50,6 +52,7 @@ public class ProcessDslValidator {
         validateParallelPairs(nodeById.values(), outgoingEdges, incomingEdges, nodeById);
     }
 
+    // 先按节点 id 建索引，顺便拦截重复节点。
     private Map<String, ProcessDslPayload.Node> indexNodes(List<ProcessDslPayload.Node> nodes) {
         Map<String, ProcessDslPayload.Node> nodeById = new HashMap<>();
         for (ProcessDslPayload.Node node : nodes) {
@@ -61,6 +64,7 @@ public class ProcessDslValidator {
         return nodeById;
     }
 
+    // 按源节点或目标节点建立边索引，便于后续做图遍历和分支校验。
     private Map<String, List<ProcessDslPayload.Edge>> indexEdges(
             List<ProcessDslPayload.Edge> edges,
             Function<ProcessDslPayload.Edge, String> classifier
@@ -73,6 +77,7 @@ public class ProcessDslValidator {
         return indexed;
     }
 
+    // 校验边的 source 和 target 是否都能在节点集合中找到。
     private void validateEdgeReferences(
             List<ProcessDslPayload.Edge> edges,
             Map<String, ProcessDslPayload.Node> nodeById
@@ -88,6 +93,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 只允许一个 start 节点。
     private void validateSingleStart(Collection<ProcessDslPayload.Node> nodes) {
         long startCount = nodes.stream().filter(node -> "start".equals(node.type())).count();
         if (startCount != 1) {
@@ -95,6 +101,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 至少要有一个 end 节点，保证流程可闭合。
     private void validateAtLeastOneEnd(Collection<ProcessDslPayload.Node> nodes) {
         long endCount = nodes.stream().filter(node -> "end".equals(node.type())).count();
         if (endCount < 1) {
@@ -102,6 +109,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验审批节点的选人、会签和操作配置。
     private void validateApproverAssignments(Collection<ProcessDslPayload.Node> nodes) {
         for (ProcessDslPayload.Node node : nodes) {
             if (!"approver".equals(node.type())) {
@@ -166,6 +174,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验 start 节点是否带有发起人是否可编辑的开关。
     private void validateStartConfig(Collection<ProcessDslPayload.Node> nodes) {
         for (ProcessDslPayload.Node node : nodes) {
             if (!"start".equals(node.type())) {
@@ -178,6 +187,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验抄送节点的目标配置。
     private void validateCcTargets(Collection<ProcessDslPayload.Node> nodes) {
         for (ProcessDslPayload.Node node : nodes) {
             if (!"cc".equals(node.type())) {
@@ -212,6 +222,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验定时节点的调度类型和调度参数。
     private void validateTimerNodes(Collection<ProcessDslPayload.Node> nodes) {
         for (ProcessDslPayload.Node node : nodes) {
             if (!"timer".equals(node.type())) {
@@ -226,6 +237,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验触发节点的触发模式、重试参数和可选调度配置。
     private void validateTriggerNodes(Collection<ProcessDslPayload.Node> nodes) {
         for (ProcessDslPayload.Node node : nodes) {
             if (!"trigger".equals(node.type())) {
@@ -258,6 +270,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 孤立节点既没有入边也没有出边，直接判定为非法。
     private void validateIsolatedNodes(
             Collection<ProcessDslPayload.Node> nodes,
             Map<String, List<ProcessDslPayload.Edge>> outgoingEdges,
@@ -274,6 +287,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 从 start 节点出发做可达性遍历，找出未被访问的节点。
     private void validateReachability(
             Collection<ProcessDslPayload.Node> nodes,
             Map<String, List<ProcessDslPayload.Edge>> outgoingEdges
@@ -307,6 +321,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // condition 节点必须形成至少两条出边的条件分支。
     private void validateConditionFanout(
             Collection<ProcessDslPayload.Node> nodes,
             Map<String, List<ProcessDslPayload.Edge>> outgoingEdges
@@ -348,6 +363,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 并行分支必须成对出现，且 split 和 join 的连接关系要闭合。
     private void validateParallelPairs(
             Collection<ProcessDslPayload.Node> nodes,
             Map<String, List<ProcessDslPayload.Edge>> outgoingEdges,
@@ -381,6 +397,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验审批节点的超时策略。
     private void validateTimeoutPolicy(ProcessDslPayload.Node node) {
         Map<String, Object> timeoutPolicy = mapValue(safeConfig(node).get("timeoutPolicy"));
         if (timeoutPolicy.isEmpty() || !Boolean.TRUE.equals(timeoutPolicy.get("enabled"))) {
@@ -396,6 +413,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验审批节点的催办策略。
     private void validateReminderPolicy(ProcessDslPayload.Node node) {
         Map<String, Object> reminderPolicy = mapValue(safeConfig(node).get("reminderPolicy"));
         if (reminderPolicy.isEmpty() || !Boolean.TRUE.equals(reminderPolicy.get("enabled"))) {
@@ -422,6 +440,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 校验定时节点和触发节点共用的调度配置。
     private void validateScheduleConfig(ProcessDslPayload.Node node, Map<String, Object> config, String nodeType) {
         String scheduleType = asString(config.get("scheduleType"));
         if ("ABSOLUTE_TIME".equals(scheduleType)) {
@@ -436,6 +455,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 递归判断某个节点是否能够到达目标节点类型。
     private boolean canReachNodeType(
             String nodeId,
             String targetType,
@@ -463,16 +483,19 @@ public class ProcessDslValidator {
         return false;
     }
 
+    // 边排序时按 priority 和 id 保持稳定结果。
     private Comparator<ProcessDslPayload.Edge> edgeComparator() {
         return Comparator
                 .comparing(ProcessDslPayload.Edge::priority, Comparator.nullsLast(Integer::compareTo))
                 .thenComparing(ProcessDslPayload.Edge::id);
     }
 
+    // 统一把节点配置转成可读写的 Map。
     private Map<String, Object> safeConfig(ProcessDslPayload.Node node) {
         return node.config() == null ? Map.of() : node.config();
     }
 
+    // 把任意对象安全转换成 Map。
     private Map<String, Object> mapValue(Object value) {
         if (!(value instanceof Map<?, ?> map)) {
             return Map.of();
@@ -482,6 +505,7 @@ public class ProcessDslValidator {
         return result;
     }
 
+    // 把任意对象安全转换成字符串列表。
     private List<String> stringList(Object value) {
         if (!(value instanceof List<?> values)) {
             return List.of();
@@ -492,6 +516,7 @@ public class ProcessDslValidator {
                 .toList();
     }
 
+    // 把任意对象安全转换成整数。
     private Integer integerValue(Object value) {
         if (value instanceof Number number) {
             return number.intValue();
@@ -506,6 +531,7 @@ public class ProcessDslValidator {
         }
     }
 
+    // 把任意对象安全转换成字符串。
     private String asString(Object value) {
         if (value == null) {
             return null;
@@ -514,6 +540,7 @@ public class ProcessDslValidator {
         return stringValue.isBlank() ? null : stringValue;
     }
 
+    // 统一构造 DSL 校验异常，便于前端展示。
     private ContractException invalid(String message, Map<String, Object> details) {
         return new ContractException("VALIDATION.REQUEST_INVALID", HttpStatus.BAD_REQUEST, message, details);
     }

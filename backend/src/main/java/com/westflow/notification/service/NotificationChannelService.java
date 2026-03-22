@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+// 管理通知渠道的查询、配置校验和保存。
 public class NotificationChannelService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "channelType", "mockMode");
@@ -33,6 +34,7 @@ public class NotificationChannelService {
 
     private final NotificationChannelMapper notificationChannelMapper;
 
+    // 通知渠道列表支持关键字、状态、渠道类型和 mock 模式筛选。
     public PageResponse<NotificationChannelListItemResponse> page(PageRequest request) {
         // 渠道列表先走内存过滤，后续接数据库时只替换 mapper 即可。
         Filters filters = resolveFilters(request.filters());
@@ -58,12 +60,14 @@ public class NotificationChannelService {
         return new PageResponse<>(request.page(), pageSize, total, pages, pageRecords, List.of());
     }
 
+    // 返回渠道详情，供编辑页直接回填。
     public NotificationChannelDetailResponse detail(String channelId) {
         // 详情页直接返回完整配置，方便编辑页一次性回填。
         NotificationChannelRecord record = requireChannel(channelId);
         return toDetail(record);
     }
 
+    // 返回可用渠道类型枚举，供表单下拉框使用。
     public NotificationChannelFormOptionsResponse formOptions() {
         return new NotificationChannelFormOptionsResponse(
                 NotificationChannelType.orderedValues().stream()
@@ -78,6 +82,7 @@ public class NotificationChannelService {
     }
 
     @Transactional
+    // 新建通知渠道并返回新主键。
     public NotificationChannelMutationResponse create(SaveNotificationChannelRequest request) {
         validateChannelCode(request.channelCode(), null);
         NotificationChannelType type = resolveType(request.channelType());
@@ -89,6 +94,7 @@ public class NotificationChannelService {
     }
 
     @Transactional
+    // 更新通知渠道并保留原始创建时间。
     public NotificationChannelMutationResponse update(String channelId, SaveNotificationChannelRequest request) {
         requireChannel(channelId);
         validateChannelCode(request.channelCode(), channelId);
@@ -112,6 +118,7 @@ public class NotificationChannelService {
         return new NotificationChannelMutationResponse(channelId);
     }
 
+    // 按主键读取通知渠道，不存在时抛出资源不存在异常。
     public NotificationChannelRecord requireChannel(String channelId) {
         NotificationChannelRecord record = notificationChannelMapper.selectById(channelId);
         if (record == null) {
@@ -125,6 +132,7 @@ public class NotificationChannelService {
         return record;
     }
 
+    // 组装渠道持久化记录。
     private NotificationChannelRecord buildRecord(
             String channelId,
             SaveNotificationChannelRequest request,
@@ -147,6 +155,7 @@ public class NotificationChannelService {
         );
     }
 
+    // 关键字命中渠道编码、名称和类型任一字段即算匹配。
     private boolean matchesKeyword(NotificationChannelRecord record, String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return true;
@@ -157,6 +166,7 @@ public class NotificationChannelService {
                 || record.channelType().toLowerCase().contains(normalized);
     }
 
+    // 解析列表排序规则。
     private Comparator<NotificationChannelRecord> resolveComparator(List<SortItem> sorts) {
         if (sorts == null || sorts.isEmpty()) {
             return Comparator.comparing(NotificationChannelRecord::createdAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed();
@@ -175,6 +185,7 @@ public class NotificationChannelService {
         return "asc".equalsIgnoreCase(sort.direction()) ? comparator : comparator.reversed();
     }
 
+    // 解析筛选条件并转换成内部结构。
     private Filters resolveFilters(List<FilterItem> filters) {
         Boolean enabled = null;
         String channelType = null;
@@ -198,6 +209,7 @@ public class NotificationChannelService {
         return new Filters(enabled, channelType, mockMode);
     }
 
+    // 把前端状态值归一成布尔值。
     private Boolean resolveBoolean(String value, String message) {
         if ("ENABLED".equalsIgnoreCase(value)) {
             return true;
@@ -213,6 +225,7 @@ public class NotificationChannelService {
         );
     }
 
+    // 校验渠道编码是否重复。
     private void validateChannelCode(String channelCode, String excludeChannelId) {
         String normalized = channelCode.trim();
         if (notificationChannelMapper.existsByCode(normalized, excludeChannelId)) {
@@ -225,6 +238,7 @@ public class NotificationChannelService {
         }
     }
 
+    // 解析渠道类型枚举。
     private NotificationChannelType resolveType(String channelType) {
         String normalized = normalizeNullable(channelType);
         if (normalized == null) {
@@ -247,6 +261,7 @@ public class NotificationChannelService {
         }
     }
 
+    // 校验渠道配置是否满足类型要求。
     private void validateConfig(NotificationChannelType type, Map<String, Object> config) {
         Map<String, Object> normalized = normalizeConfig(config);
         switch (type) {
@@ -261,6 +276,7 @@ public class NotificationChannelService {
         }
     }
 
+    // 读取必须配置项，缺失时直接报错。
     private void requireField(Map<String, Object> config, String key) {
         Object value = config.get(key);
         if (value == null || String.valueOf(value).isBlank()) {
@@ -273,6 +289,7 @@ public class NotificationChannelService {
         }
     }
 
+    // 配置值做空值归一。
     private Map<String, Object> normalizeConfig(Map<String, Object> config) {
         if (config == null || config.isEmpty()) {
             return Map.of();
@@ -280,6 +297,7 @@ public class NotificationChannelService {
         return new LinkedHashMap<>(config);
     }
 
+    // 把空白备注归一为 null。
     private String normalizeNullable(String value) {
         if (value == null) {
             return null;
@@ -288,6 +306,7 @@ public class NotificationChannelService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    // 转换为列表页数据。
     private NotificationChannelListItemResponse toListItem(NotificationChannelRecord record) {
         return new NotificationChannelListItemResponse(
                 record.channelId(),
@@ -302,6 +321,7 @@ public class NotificationChannelService {
         );
     }
 
+    // 转换为详情页数据。
     private NotificationChannelDetailResponse toDetail(NotificationChannelRecord record) {
         return new NotificationChannelDetailResponse(
                 record.channelId(),
@@ -318,6 +338,7 @@ public class NotificationChannelService {
         );
     }
 
+    // 统一构造请求非法异常。
     private ContractException unsupported(String message, String field, List<String> allowedFields) {
         return new ContractException(
                 "VALIDATION.REQUEST_INVALID",
@@ -327,6 +348,7 @@ public class NotificationChannelService {
         );
     }
 
+    // 生成渠道主键。
     private String buildId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }

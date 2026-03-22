@@ -23,6 +23,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统岗位管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemPostService {
@@ -34,6 +37,9 @@ public class SystemPostService {
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final CurrentUserAccessService currentUserAccessService;
 
+    /**
+     * 分页查询岗位。
+     */
     public PageResponse<SystemPostListItemResponse> page(PageRequest request) {
         // 岗位列表先按当前人的组织可见范围过滤，再叠加关键词和筛选条件。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
@@ -75,6 +81,9 @@ public class SystemPostService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询岗位详情。
+     */
     public SystemPostDetailResponse detail(String postId) {
         // 岗位详情不能只看列表结果，要再次校验可见范围。
         SystemPostDetailResponse detail = systemPostMapper.selectDetail(postId);
@@ -90,10 +99,16 @@ public class SystemPostService {
         return detail;
     }
 
+    /**
+     * 获取岗位表单选项。
+     */
     public SystemPostFormOptionsResponse formOptions(String companyId) {
         return new SystemPostFormOptionsResponse(systemPostMapper.selectDepartmentOptions(companyId));
     }
 
+    /**
+     * 新建岗位。
+     */
     @Transactional
     public SystemPostMutationResponse create(SaveSystemPostRequest request) {
         SystemDepartmentDetailResponse department = validateDepartmentExists(request.departmentId());
@@ -108,6 +123,9 @@ public class SystemPostService {
         return new SystemPostMutationResponse(postId);
     }
 
+    /**
+     * 更新岗位。
+     */
     @Transactional
     public SystemPostMutationResponse update(String postId, SaveSystemPostRequest request) {
         ensureExists(postId);

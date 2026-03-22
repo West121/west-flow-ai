@@ -6,6 +6,9 @@ import com.westflow.notification.model.NotificationDispatchRequest;
 import com.westflow.notification.model.NotificationSendResult;
 import org.springframework.stereotype.Component;
 
+/**
+ * 企业微信通知的 mock 适配器，当前仅用于联调阶段占位。
+ */
 @Component
 public class WechatMockNotificationProvider implements NotificationProvider {
 

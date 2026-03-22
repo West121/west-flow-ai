@@ -2,6 +2,9 @@ package com.westflow.system.user.api;
 
 import java.util.List;
 
+/**
+ * 用户表单下拉选项响应。
+ */
 public record SystemUserFormOptionsResponse(
         List<CompanyOption> companies,
         List<PostOption> posts,

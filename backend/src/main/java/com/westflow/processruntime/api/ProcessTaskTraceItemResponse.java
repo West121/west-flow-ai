@@ -5,6 +5,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
+// 任务轨迹条目。
 public record ProcessTaskTraceItemResponse(
         String taskId,
         String nodeId,

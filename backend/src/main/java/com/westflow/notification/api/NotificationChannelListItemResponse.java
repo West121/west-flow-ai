@@ -2,6 +2,7 @@ package com.westflow.notification.api;
 
 import java.time.Instant;
 
+// 通知渠道列表项摘要。
 public record NotificationChannelListItemResponse(
         String channelId,
         String channelCode,

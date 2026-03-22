@@ -2,6 +2,9 @@ package com.westflow.identity.dto;
 
 import java.util.List;
 
+/**
+ * 当前登录用户信息。
+ */
 public record CurrentUserResponse(
         String userId,
         String username,
@@ -20,12 +23,18 @@ public record CurrentUserResponse(
         List<String> aiCapabilities,
         List<MenuItem> menus
 ) {
+    /**
+     * 数据权限范围项。
+     */
     public record DataScope(
             String scopeType,
             String scopeValue
     ) {
     }
 
+    /**
+     * 兼职岗位信息。
+     */
     public record PartTimePost(
             String postId,
             String departmentId,
@@ -33,6 +42,9 @@ public record CurrentUserResponse(
     ) {
     }
 
+    /**
+     * 代理关系信息。
+     */
     public record Delegation(
             String principalUserId,
             String delegateUserId,
@@ -40,6 +52,9 @@ public record CurrentUserResponse(
     ) {
     }
 
+    /**
+     * 菜单导航项。
+     */
     public record MenuItem(
             String id,
             String title,

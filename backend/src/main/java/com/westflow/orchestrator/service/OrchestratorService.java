@@ -15,10 +15,12 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+// 执行编排器的手动扫描和演示态推进。
 public class OrchestratorService {
 
     private final OrchestratorScanMapper orchestratorScanMapper;
 
+    // 手动扫描 demo 目标并生成执行结果。
     public OrchestratorManualScanResponse manualScan() {
         String runId = buildId("orc_scan_");
         Instant scannedAt = Instant.now();
@@ -28,6 +30,7 @@ public class OrchestratorService {
         return new OrchestratorManualScanResponse(runId, scannedAt, results);
     }
 
+    // 按自动化类型模拟执行目标，当前仅落执行记录。
     private OrchestratorScanResultResponse executeTarget(String runId, OrchestratorScanTargetRecord target) {
         // 先把四类自动化的执行语义串起来，后续再替换成真实流程实例查询与推进。
         OrchestratorExecutionStatus status = OrchestratorExecutionStatus.SUCCEEDED;
@@ -58,6 +61,7 @@ public class OrchestratorService {
         );
     }
 
+    // 生成扫描和执行记录主键。
     private String buildId(String prefix) {
         return prefix + UUID.randomUUID().toString().replace("-", "");
     }

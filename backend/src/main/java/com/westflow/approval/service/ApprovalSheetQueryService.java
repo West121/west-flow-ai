@@ -5,6 +5,9 @@ import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+/**
+ * 审批单业务数据查询服务。
+ */
 @Service
 public class ApprovalSheetQueryService {
 
@@ -14,6 +17,9 @@ public class ApprovalSheetQueryService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /**
+     * 按业务类型和业务主键读取审批单业务数据。
+     */
     public Map<String, Object> resolveBusinessData(String businessType, String businessKey) {
         if (businessType == null || businessType.isBlank() || businessKey == null || businessKey.isBlank()) {
             return Map.of();
@@ -27,6 +33,9 @@ public class ApprovalSheetQueryService {
         };
     }
 
+    /**
+     * 读取请假单业务数据。
+     */
     private Map<String, Object> resolveLeaveBusinessData(String businessKey) {
         return queryBusinessData(
                 """
@@ -50,6 +59,9 @@ public class ApprovalSheetQueryService {
         );
     }
 
+    /**
+     * 读取报销单业务数据。
+     */
     private Map<String, Object> resolveExpenseBusinessData(String businessKey) {
         return queryBusinessData(
                 """
@@ -73,6 +85,9 @@ public class ApprovalSheetQueryService {
         );
     }
 
+    /**
+     * 读取通用申请单业务数据。
+     */
     private Map<String, Object> resolveCommonBusinessData(String businessKey) {
         return queryBusinessData(
                 """
@@ -96,6 +111,9 @@ public class ApprovalSheetQueryService {
         );
     }
 
+    /**
+     * 执行具体 SQL 查询并映射结果。
+     */
     private Map<String, Object> queryBusinessData(
             String sql,
             String businessKey,
@@ -109,6 +127,9 @@ public class ApprovalSheetQueryService {
         }, businessKey);
     }
 
+    /**
+     * 行映射函数。
+     */
     @FunctionalInterface
     private interface RowMapperFunction {
         Map<String, Object> apply(java.sql.ResultSet resultSet) throws java.sql.SQLException;

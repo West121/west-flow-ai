@@ -12,6 +12,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+/**
+ * 用户数据访问层，负责用户查询和写入。
+ */
 @Mapper
 public interface SystemUserMapper {
 

@@ -3,6 +3,7 @@ package com.westflow.notification.model;
 import java.time.Instant;
 import java.util.Map;
 
+// 通知渠道的持久化记录。
 public record NotificationChannelRecord(
         String channelId,
         String channelCode,

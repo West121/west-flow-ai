@@ -2,6 +2,7 @@ package com.westflow.processruntime.api;
 
 import java.time.OffsetDateTime;
 
+// 审批单列表项摘要。
 public record ApprovalSheetListItemResponse(
         String instanceId,
         String processDefinitionId,

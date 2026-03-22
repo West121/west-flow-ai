@@ -3,6 +3,9 @@ package com.westflow.common.query;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
+/**
+ * 通用排序项。
+ */
 public record SortItem(
         @NotBlank(message = "排序字段不能为空")
         String field,

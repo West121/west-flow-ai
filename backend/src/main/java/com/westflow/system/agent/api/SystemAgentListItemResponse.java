@@ -2,6 +2,9 @@ package com.westflow.system.agent.api;
 
 import java.time.OffsetDateTime;
 
+/**
+ * 代理关系列表项响应。
+ */
 public record SystemAgentListItemResponse(
         String agentId,
         String principalUserId,

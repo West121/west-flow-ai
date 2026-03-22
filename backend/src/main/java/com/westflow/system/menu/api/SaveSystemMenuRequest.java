@@ -4,6 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
+/**
+ * 菜单保存请求，供新建和编辑复用。
+ */
 public record SaveSystemMenuRequest(
         String parentMenuId,
         @NotBlank(message = "请输入菜单名称")

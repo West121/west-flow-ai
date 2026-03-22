@@ -21,6 +21,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 系统角色管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemRoleService {
@@ -38,6 +41,9 @@ public class SystemRoleService {
 
     private final SystemRoleMapper systemRoleMapper;
 
+    /**
+     * 分页查询角色。
+     */
     public PageResponse<SystemRoleListItemResponse> page(PageRequest request) {
         // 角色列表支持关键词、状态和分类筛选。
         Filters filters = resolveFilters(request.filters());
@@ -63,6 +69,9 @@ public class SystemRoleService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询角色详情。
+     */
     public SystemRoleDetailResponse detail(String roleId) {
         // 角色详情要把菜单和数据权限一起带回去，方便编辑页一次性渲染。
         SystemRoleBaseDetailRecord role = systemRoleMapper.selectRole(roleId);
@@ -86,6 +95,9 @@ public class SystemRoleService {
         );
     }
 
+    /**
+     * 获取角色表单选项。
+     */
     public SystemRoleFormOptionsResponse formOptions() {
         // 表单选项集中返回，前端无需再拆多个接口。
         return new SystemRoleFormOptionsResponse(
@@ -103,6 +115,9 @@ public class SystemRoleService {
         );
     }
 
+    /**
+     * 新建角色。
+     */
     @Transactional
     public SystemRoleMutationResponse create(SaveSystemRoleRequest request) {
         validateRoleCode(request.roleCode(), null);
@@ -124,6 +139,9 @@ public class SystemRoleService {
         return new SystemRoleMutationResponse(roleId);
     }
 
+    /**
+     * 更新角色。
+     */
     @Transactional
     public SystemRoleMutationResponse update(String roleId, SaveSystemRoleRequest request) {
         detail(roleId);

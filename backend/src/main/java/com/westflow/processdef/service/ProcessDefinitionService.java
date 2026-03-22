@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+// 负责流程定义的草稿保存、发布、查询和分页检索。
 public class ProcessDefinitionService {
 
     private static final String STATUS_DRAFT = "DRAFT";
@@ -101,10 +102,12 @@ public class ProcessDefinitionService {
         return toDetailResponse(publishedRecord, payload);
     }
 
+    // 返回流程定义详情，包含 DSL 和 BPMN 片段。
     public ProcessDefinitionDetailResponse detail(String processDefinitionId) {
         return toDetailResponse(getRecordById(processDefinitionId));
     }
 
+    // 按流程键获取最近一次已发布版本，供运行时启动流程使用。
     public PublishedProcessDefinition getLatestByProcessKey(String processKey) {
         ProcessDefinitionRecord record = processDefinitionMapper.selectLatestPublishedByProcessKey(processKey);
         if (record == null) {
@@ -113,10 +116,12 @@ public class ProcessDefinitionService {
         return toPublishedProcessDefinition(record);
     }
 
+    // 按主键获取已保存的流程定义，发布后和草稿态都适用。
     public PublishedProcessDefinition getById(String processDefinitionId) {
         return toPublishedProcessDefinition(getRecordById(processDefinitionId));
     }
 
+    // 按关键字、状态和分类组合分页查询流程定义列表。
     public PageResponse<ProcessDefinitionListItemResponse> page(PageRequest request) {
         // 流程定义列表同时支持关键词、状态和分类筛选。
         QueryCriteria criteria = resolveCriteria(request.filters());
@@ -142,6 +147,7 @@ public class ProcessDefinitionService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    // 根据主键读取流程定义，缺失时抛出资源不存在异常。
     private ProcessDefinitionRecord getRecordById(String processDefinitionId) {
         ProcessDefinitionRecord record = processDefinitionMapper.selectById(processDefinitionId);
         if (record == null) {
@@ -150,10 +156,12 @@ public class ProcessDefinitionService {
         return record;
     }
 
+    // 把数据库记录和 DSL 反序列化结果组装成详情返回值。
     private ProcessDefinitionDetailResponse toDetailResponse(ProcessDefinitionRecord record) {
         return toDetailResponse(record, deserializeDsl(record.dslJson()));
     }
 
+    // 带入外部传入的 DSL 对象，避免重复反序列化。
     private ProcessDefinitionDetailResponse toDetailResponse(
             ProcessDefinitionRecord record,
             ProcessDslPayload payload
@@ -172,6 +180,7 @@ public class ProcessDefinitionService {
         );
     }
 
+    // 把数据库记录转换成运行时可直接使用的已发布定义对象。
     private PublishedProcessDefinition toPublishedProcessDefinition(ProcessDefinitionRecord record) {
         return new PublishedProcessDefinition(
                 record.processDefinitionId(),
@@ -186,6 +195,7 @@ public class ProcessDefinitionService {
         );
     }
 
+    // 组装列表页的单行摘要数据。
     private ProcessDefinitionListItemResponse toListItem(ProcessDefinitionRecord record) {
         return new ProcessDefinitionListItemResponse(
                 record.processDefinitionId(),
@@ -198,6 +208,7 @@ public class ProcessDefinitionService {
         );
     }
 
+    // 解析分页筛选条件，当前只支持状态和分类。
     private QueryCriteria resolveCriteria(List<FilterItem> filters) {
         String status = null;
         String category = null;
@@ -221,6 +232,7 @@ public class ProcessDefinitionService {
         return new QueryCriteria(status, category);
     }
 
+    // 解析排序字段到数据库列名。
     private String resolveOrderBy(List<SortItem> sorts) {
         if (sorts == null || sorts.isEmpty()) {
             return "created_at";
@@ -241,6 +253,7 @@ public class ProcessDefinitionService {
         };
     }
 
+    // 解析排序方向，默认按时间倒序。
     private String resolveOrderDirection(List<SortItem> sorts) {
         if (sorts == null || sorts.isEmpty()) {
             return "DESC";
@@ -248,11 +261,13 @@ public class ProcessDefinitionService {
         return "asc".equalsIgnoreCase(sorts.get(0).direction()) ? "ASC" : "DESC";
     }
 
+    // 计算下一个正式版本号，保证同一流程键下版本递增。
     private int nextPublishedVersion(String processKey) {
         Integer currentMaxVersion = processDefinitionMapper.selectMaxVersionByProcessKey(processKey);
         return (currentMaxVersion == null ? 0 : currentMaxVersion) + 1;
     }
 
+    // 将 DSL 序列化后写入数据库。
     private String serializeDsl(ProcessDslPayload payload) {
         try {
             return objectMapper.writeValueAsString(payload);
@@ -261,6 +276,7 @@ public class ProcessDefinitionService {
         }
     }
 
+    // 将数据库中的 DSL JSON 反序列化为对象。
     private ProcessDslPayload deserializeDsl(String dslJson) {
         try {
             return objectMapper.readValue(dslJson, ProcessDslPayload.class);
@@ -269,34 +285,42 @@ public class ProcessDefinitionService {
         }
     }
 
+    // 统一使用当前时区时间，避免数据库和业务时区不一致。
     private LocalDateTime now() {
         return LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
     }
 
+    // 把本地时间转换为带时区的返回值。
     private OffsetDateTime toOffsetDateTime(LocalDateTime dateTime) {
         return dateTime == null ? null : dateTime.atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime();
     }
 
+    // 分类字段空值归一为 null，方便持久化和筛选。
     private String normalizeCategory(String category) {
         return normalizeNullable(category);
     }
 
+    // 把空白字符串归一为 null，避免脏数据进入数据库。
     private String normalizeNullable(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    // 草稿定义使用固定后缀，便于同一流程键覆盖更新。
     private String draftProcessDefinitionId(String processKey) {
         return processKey + DRAFT_PROCESS_DEFINITION_ID_SUFFIX;
     }
 
+    // 发布定义的主键包含版本号，便于历史追溯。
     private String publishProcessDefinitionId(String processKey, int version) {
         return processKey + ":" + version;
     }
 
+    // 草稿版本固定为 0，和正式版本区分开。
     private int draftVersion() {
         return 0;
     }
 
+    // 统一构造资源不存在异常。
     private ContractException resourceNotFound(String field, String value) {
         return new ContractException(
                 "BIZ.RESOURCE_NOT_FOUND",
@@ -306,6 +330,7 @@ public class ProcessDefinitionService {
         );
     }
 
+    // 统一构造不支持字段异常，提示允许值。
     private ContractException unsupportedField(String message, String field, List<String> allowedFields) {
         return new ContractException(
                 "VALIDATION.REQUEST_INVALID",

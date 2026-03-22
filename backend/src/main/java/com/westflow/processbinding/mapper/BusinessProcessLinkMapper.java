@@ -5,6 +5,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
+// 业务流程关联表的写入接口。
 public interface BusinessProcessLinkMapper {
 
     @Insert("""

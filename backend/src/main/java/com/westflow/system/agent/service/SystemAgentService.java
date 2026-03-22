@@ -22,6 +22,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 代理关系管理服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemAgentService {
@@ -34,6 +37,9 @@ public class SystemAgentService {
     private final SystemUserMapper systemUserMapper;
     private final FixtureAuthService fixtureAuthService;
 
+    /**
+     * 分页查询代理关系列表。
+     */
     public PageResponse<SystemAgentListItemResponse> page(PageRequest request) {
         ensureProcessAdmin();
         // 代理关系列表只支持少量稳定筛选，避免把管理页做成复杂查询平台。
@@ -64,6 +70,9 @@ public class SystemAgentService {
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
+    /**
+     * 查询代理关系详情。
+     */
     public SystemAgentDetailResponse detail(String agentId) {
         ensureProcessAdmin();
         SystemAgentDetailResponse detail = systemAgentMapper.selectDetail(agentId);
@@ -78,6 +87,9 @@ public class SystemAgentService {
         return detail;
     }
 
+    /**
+     * 获取代理关系表单选项。
+     */
     public SystemAgentFormOptionsResponse formOptions() {
         ensureProcessAdmin();
         return new SystemAgentFormOptionsResponse(
@@ -90,6 +102,9 @@ public class SystemAgentService {
         );
     }
 
+    /**
+     * 新建代理关系。
+     */
     @Transactional
     public SystemAgentMutationResponse create(SaveSystemAgentRequest request) {
         ensureProcessAdmin();
@@ -110,6 +125,9 @@ public class SystemAgentService {
         return new SystemAgentMutationResponse(entity.id());
     }
 
+    /**
+     * 更新代理关系。
+     */
     @Transactional
     public SystemAgentMutationResponse update(String agentId, SaveSystemAgentRequest request) {
         ensureProcessAdmin();

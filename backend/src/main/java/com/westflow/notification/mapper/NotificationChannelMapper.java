@@ -9,6 +9,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
+// 通知渠道的内存态数据访问层。
 public class NotificationChannelMapper {
 
     private final Map<String, NotificationChannelRecord> storage = new LinkedHashMap<>();

@@ -8,6 +8,9 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+/**
+ * OA 费用报销单的持久化与详情查询接口。
+ */
 @Mapper
 public interface OAExpenseBillMapper {
 

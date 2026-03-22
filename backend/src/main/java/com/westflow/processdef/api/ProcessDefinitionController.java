@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/process-definitions")
 @RequiredArgsConstructor
+// 流程定义的草稿、发布、详情和分页查询入口。
 public class ProcessDefinitionController {
 
     private final ProcessDefinitionService processDefinitionService;

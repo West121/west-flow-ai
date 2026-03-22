@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 代理关系管理接口。
+ */
 @RestController
 @RequestMapping("/api/v1/system/agents")
 @SaCheckLogin
@@ -23,28 +26,43 @@ public class SystemAgentController {
 
     private final SystemAgentService systemAgentService;
 
+    /**
+     * 分页查询代理关系列表。
+     */
     @PostMapping("/page")
     public ApiResponse<PageResponse<SystemAgentListItemResponse>> page(@Valid @RequestBody PageRequest request) {
         // 代理关系列表沿用统一分页契约，方便前端表格组件直接复用。
         return ApiResponse.success(systemAgentService.page(request));
     }
 
+    /**
+     * 查询代理关系详情。
+     */
     @GetMapping("/{agentId}")
     public ApiResponse<SystemAgentDetailResponse> detail(@PathVariable String agentId) {
         return ApiResponse.success(systemAgentService.detail(agentId));
     }
 
+    /**
+     * 获取代理关系表单选项。
+     */
     @GetMapping("/options")
     public ApiResponse<SystemAgentFormOptionsResponse> options() {
         // 新建和编辑页共用一套选项接口，避免前端分别取人。
         return ApiResponse.success(systemAgentService.formOptions());
     }
 
+    /**
+     * 新建代理关系。
+     */
     @PostMapping
     public ApiResponse<SystemAgentMutationResponse> create(@Valid @RequestBody SaveSystemAgentRequest request) {
         return ApiResponse.success(systemAgentService.create(request));
     }
 
+    /**
+     * 更新代理关系。
+     */
     @PutMapping("/{agentId}")
     public ApiResponse<SystemAgentMutationResponse> update(
             @PathVariable String agentId,

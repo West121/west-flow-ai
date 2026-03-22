@@ -11,6 +11,9 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/**
+ * 本地联调用的模拟认证服务。
+ */
 @Service
 public class FixtureAuthService {
 
@@ -20,6 +23,9 @@ public class FixtureAuthService {
     private final Map<String, FixtureUser> usersById;
     private final IdentityAccessMapper identityAccessMapper;
 
+    /**
+     * 构造本地模拟用户和权限数据。
+     */
     public FixtureAuthService(IdentityAccessMapper identityAccessMapper) {
         this.identityAccessMapper = identityAccessMapper;
         // 这里是本地联调用的登录桩数据，便于快速验证权限和流程场景。
@@ -86,6 +92,9 @@ public class FixtureAuthService {
         );
     }
 
+    /**
+     * 执行登录。
+     */
     public LoginResponse login(LoginRequest request) {
         // 登录只做最小校验，真实权限来源仍然由权限表和当前岗位上下文决定。
         FixtureUser user = usersByUsername.get(request.username());
@@ -99,6 +108,9 @@ public class FixtureAuthService {
         return new LoginResponse(StpUtil.getTokenValue(), "Bearer", StpUtil.getTokenTimeout());
     }
 
+    /**
+     * 获取当前用户完整上下文。
+     */
     public CurrentUserResponse currentUser() {
         // 当前用户信息要把岗位、权限、数据范围一次性带齐，前端不用再拆多次请求。
         String loginId = StpUtil.getLoginIdAsString();
@@ -137,6 +149,9 @@ public class FixtureAuthService {
         );
     }
 
+    /**
+     * 切换当前活跃岗位。
+     */
     public void switchContext(String activePostId) {
         // 岗位切换只允许在用户已有的岗位集合内发生。
         FixtureUser user = getUserById(StpUtil.getLoginIdAsString());
@@ -151,16 +166,25 @@ public class FixtureAuthService {
         StpUtil.getTokenSession().set(ACTIVE_POST_ID, activePostId);
     }
 
+    /**
+     * 根据用户 ID 获取权限编码列表。
+     */
     public List<String> permissionsByUserId(String userId) {
         getUserById(userId);
         return identityAccessMapper.selectPermissionsByUserId(userId);
     }
 
+    /**
+     * 根据用户 ID 获取角色编码列表。
+     */
     public List<String> rolesByUserId(String userId) {
         getUserById(userId);
         return identityAccessMapper.selectRoleCodesByUserId(userId);
     }
 
+    /**
+     * 判断两个用户之间是否存在有效代理关系。
+     */
     public boolean isActiveDelegate(String principalUserId, String delegateUserId) {
         getUserById(principalUserId);
         getUserById(delegateUserId);
@@ -173,10 +197,16 @@ public class FixtureAuthService {
                 );
     }
 
+    /**
+     * 判断用户是否为流程管理员。
+     */
     public boolean isProcessAdmin(String userId) {
         return rolesByUserId(userId).stream().anyMatch("PROCESS_ADMIN"::equalsIgnoreCase);
     }
 
+    /**
+     * 按用户 ID 读取模拟用户。
+     */
     private FixtureUser getUserById(String userId) {
         FixtureUser user = usersById.get(userId);
         if (user == null) {
@@ -185,6 +215,9 @@ public class FixtureAuthService {
         return user;
     }
 
+    /**
+     * 模拟用户信息。
+     */
     private record FixtureUser(
             String userId,
             String username,
@@ -202,6 +235,9 @@ public class FixtureAuthService {
     ) {
     }
 
+    /**
+     * 模拟岗位信息。
+     */
     private record PostFixture(
             String postId,
             String departmentId,

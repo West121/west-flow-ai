@@ -10,11 +10,17 @@ import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+/**
+ * 接口审计日志拦截器。
+ */
 @Component
 public class AuditLogInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLogInterceptor.class);
 
+    /**
+     * 在请求开始时写入请求 ID。
+     */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         String requestId = RequestContext.getOrCreateRequestId();
@@ -22,6 +28,9 @@ public class AuditLogInterceptor implements HandlerInterceptor {
         return true;
     }
 
+    /**
+     * 在请求结束后记录审计日志。
+     */
     @Override
     public void afterCompletion(
             HttpServletRequest request,

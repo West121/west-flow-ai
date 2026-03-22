@@ -5,6 +5,9 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 统一的接口错误响应体。
+ */
 public record ApiErrorResponse(
         String code,
         String message,
@@ -15,6 +18,9 @@ public record ApiErrorResponse(
         List<FieldErrorItem> fieldErrors
 ) {
 
+    /**
+     * 构造错误响应。
+     */
     public static ApiErrorResponse of(
             String code,
             String message,
@@ -32,6 +38,9 @@ public record ApiErrorResponse(
         );
     }
 
+    /**
+     * 字段级校验错误项。
+     */
     public record FieldErrorItem(
             String field,
             String code,

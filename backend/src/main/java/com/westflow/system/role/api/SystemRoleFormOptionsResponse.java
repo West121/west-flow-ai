@@ -2,6 +2,9 @@ package com.westflow.system.role.api;
 
 import java.util.List;
 
+/**
+ * 角色表单下拉选项响应。
+ */
 public record SystemRoleFormOptionsResponse(
         List<MenuOption> menus,
         List<ScopeTypeOption> scopeTypes,

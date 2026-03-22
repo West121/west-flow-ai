@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 @Mapper
+// 流程定义表的 MyBatis 映射接口。
 public interface ProcessDefinitionMapper {
 
     @Select("""

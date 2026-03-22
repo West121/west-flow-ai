@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
+// 任务详情返回值，包含流程、任务、轨迹和表单数据。
 public record ProcessTaskDetailResponse(
         String taskId,
         String instanceId,
