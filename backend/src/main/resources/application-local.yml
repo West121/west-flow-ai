@@ -8,7 +8,24 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
+      password: ${REDIS_PASSWORD:westflow}
+
+flowable:
+  database-schema-update: true
+  async-executor-activate: false
+  async-history-executor-activate: false
+  jpa-enabled: false
+  rest-api-enabled: false
+  app:
+    enabled: false
+  cmmn:
+    enabled: false
+  dmn:
+    enabled: false
+  idm:
+    enabled: false
+  eventregistry:
+    enabled: false
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
