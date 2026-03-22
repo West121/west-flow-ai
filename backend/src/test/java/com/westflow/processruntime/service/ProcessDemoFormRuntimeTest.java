@@ -41,6 +41,10 @@ class ProcessDemoFormRuntimeTest {
     @BeforeEach
     void setUp() {
         jdbcTemplate.update("DELETE FROM wf_process_definition");
+        jdbcTemplate.update("DELETE FROM wf_business_process_link");
+        jdbcTemplate.update("DELETE FROM oa_leave_bill");
+        jdbcTemplate.update("DELETE FROM oa_expense_bill");
+        jdbcTemplate.update("DELETE FROM oa_common_request_bill");
         processDemoService.reset();
         fixtureAuthService.login(new LoginRequest("zhangsan", "password123"));
     }
@@ -90,10 +94,35 @@ class ProcessDemoFormRuntimeTest {
         JsonNode detailJson = objectMapper.valueToTree(processDemoService.detail(startResponse.activeTasks().get(0).taskId()));
         assertThat(detailJson.path("processFormKey").asText()).isEqualTo("oa_leave_start_form");
         assertThat(detailJson.path("processFormVersion").asText()).isEqualTo("1.0.0");
-        assertThat(detailJson.path("nodeFormKey").asText()).isBlank();
-        assertThat(detailJson.path("nodeFormVersion").asText()).isBlank();
+        assertThat(detailJson.path("nodeFormKey").isNull()).isTrue();
+        assertThat(detailJson.path("nodeFormVersion").isNull()).isTrue();
         assertThat(detailJson.path("effectiveFormKey").asText()).isEqualTo("oa_leave_start_form");
         assertThat(detailJson.path("effectiveFormVersion").asText()).isEqualTo("1.0.0");
+    }
+
+    @Test
+    void shouldResolveBusinessSnapshotsForLeaveExpenseAndCommonBills() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue(runtimeDsl(), ProcessDslPayload.class));
+
+        seedLeaveBill("leave_100");
+        seedExpenseBill("expense_100");
+        seedCommonBill("common_100");
+
+        assertThat(objectMapper.valueToTree(processDemoService.detail(startAndGetTaskId("leave_100", "OA_LEAVE")))
+                .path("businessData")
+                .path("billNo")
+                .asText())
+                .isEqualTo("LEAVE-100");
+
+        JsonNode expenseDetail = objectMapper.valueToTree(processDemoService.detail(startAndGetTaskId("expense_100", "OA_EXPENSE")));
+        assertThat(expenseDetail.path("businessData").path("billNo").asText()).isEqualTo("EXP-100");
+        assertThat(expenseDetail.path("businessData").path("amount").asInt()).isEqualTo(1200);
+        assertThat(expenseDetail.path("taskTrace").size()).isEqualTo(1);
+
+        JsonNode commonDetail = objectMapper.valueToTree(processDemoService.detail(startAndGetTaskId("common_100", "OA_COMMON")));
+        assertThat(commonDetail.path("businessData").path("billNo").asText()).isEqualTo("COMMON-100");
+        assertThat(commonDetail.path("businessData").path("title").asText()).isEqualTo("采购申请");
+        assertThat(commonDetail.path("businessData").path("content").asText()).isEqualTo("采购办公用品");
     }
 
     private String runtimeDsl() {
@@ -279,5 +308,93 @@ class ProcessDemoFormRuntimeTest {
                   ]
                 }
                 """;
+    }
+
+    private String startAndGetTaskId(String billId, String businessType) {
+        StartProcessResponse startResponse = processDemoService.start(new com.westflow.processruntime.api.StartProcessRequest(
+                "oa_leave",
+                billId,
+                businessType,
+                Map.of(
+                        "days", 3,
+                        "reason", "事假"
+                )
+        ));
+        return startResponse.activeTasks().get(0).taskId();
+    }
+
+    private void seedLeaveBill(String billId) {
+        jdbcTemplate.update("""
+                INSERT INTO oa_leave_bill (
+                    id,
+                    bill_no,
+                    scene_code,
+                    days,
+                    reason,
+                    process_instance_id,
+                    status,
+                    creator_user_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                billId,
+                "LEAVE-100",
+                "default",
+                3,
+                "事假",
+                null,
+                "DRAFT",
+                "usr_001");
+    }
+
+    private void seedExpenseBill(String billId) {
+        jdbcTemplate.update("""
+                INSERT INTO oa_expense_bill (
+                    id,
+                    bill_no,
+                    scene_code,
+                    amount,
+                    reason,
+                    process_instance_id,
+                    status,
+                    creator_user_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                billId,
+                "EXP-100",
+                "default",
+                1200,
+                "差旅报销",
+                null,
+                "DRAFT",
+                "usr_001");
+    }
+
+    private void seedCommonBill(String billId) {
+        jdbcTemplate.update("""
+                INSERT INTO oa_common_request_bill (
+                    id,
+                    bill_no,
+                    scene_code,
+                    title,
+                    content,
+                    process_instance_id,
+                    status,
+                    creator_user_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                billId,
+                "COMMON-100",
+                "default",
+                "采购申请",
+                "采购办公用品",
+                null,
+                "DRAFT",
+                "usr_001");
     }
 }

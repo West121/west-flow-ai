@@ -9,6 +9,7 @@ export type WorkbenchTaskListItem = {
   processKey: string
   processName: string
   businessKey: string | null
+  businessType: string | null
   applicantUserId: string
   nodeId: string
   nodeName: string
@@ -21,12 +22,74 @@ export type WorkbenchTaskListItem = {
   completedAt: string | null
 }
 
+export type WorkbenchFlowNode = {
+  id: string
+  type: string
+  name: string
+  position: {
+    x: number
+    y: number
+  }
+  config?: Record<string, unknown> | null
+  ui?: {
+    width?: number | null
+    height?: number | null
+  } | null
+}
+
+export type WorkbenchFlowEdge = {
+  id: string
+  source: string
+  target: string
+  priority?: number | null
+  label?: string | null
+}
+
+export type WorkbenchProcessInstanceEvent = {
+  eventId: string
+  instanceId: string
+  taskId?: string | null
+  nodeId?: string | null
+  eventType: string
+  eventName: string
+  operatorUserId?: string | null
+  occurredAt: string
+  details?: Record<string, unknown> | null
+}
+
+export type WorkbenchTaskTraceItem = {
+  taskId: string
+  nodeId: string
+  nodeName: string
+  status: string
+  assigneeUserId?: string | null
+  candidateUserIds: string[]
+  action?: string | null
+  operatorUserId?: string | null
+  comment?: string | null
+  receiveTime?: string | null
+  readTime?: string | null
+  handleStartTime?: string | null
+  handleEndTime?: string | null
+  handleDurationSeconds?: number | null
+}
+
 export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   action: string | null
   operatorUserId: string | null
   comment: string | null
   instanceStatus: string
   formData: Record<string, unknown>
+  businessData?: Record<string, unknown> | null
+  flowNodes?: WorkbenchFlowNode[] | null
+  flowEdges?: WorkbenchFlowEdge[] | null
+  instanceEvents?: WorkbenchProcessInstanceEvent[] | null
+  taskTrace?: WorkbenchTaskTraceItem[] | null
+  receiveTime?: string | null
+  readTime?: string | null
+  handleStartTime?: string | null
+  handleEndTime?: string | null
+  handleDurationSeconds?: number | null
   processFormKey: string
   processFormVersion: string
   effectiveFormKey: string

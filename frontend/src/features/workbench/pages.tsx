@@ -53,6 +53,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { PageShell } from '@/features/shared/page-shell'
+import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
+import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { handleServerError } from '@/lib/handle-server-error'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
@@ -733,8 +735,8 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
 
   return (
     <PageShell
-      title='任务处理'
-      description='独立的任务处理页，支持认领、转办、退回和审批处理等运行态动作。'
+      title='审批单详情'
+      description='统一审批单详情页，支持业务正文、流程回顾和运行态处理动作。'
       actions={
         <Button asChild variant='outline'>
           <Link to='/workbench/todos/list'>
@@ -834,6 +836,10 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
                     <dt className='text-muted-foreground'>完成时间</dt>
                     <dd>{formatDateTime(detail.completedAt)}</dd>
                   </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>接收时间</dt>
+                    <dd>{formatDateTime(detail.receiveTime)}</dd>
+                  </div>
                 </dl>
               </div>
 
@@ -868,7 +874,33 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
                     <dt className='text-muted-foreground'>当前待办</dt>
                     <dd>{detail.activeTaskIds.length}</dd>
                   </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>阅读时间</dt>
+                    <dd>{formatDateTime(detail.readTime)}</dd>
+                  </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>办理开始</dt>
+                    <dd>{formatDateTime(detail.handleStartTime)}</dd>
+                  </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>办理时长</dt>
+                    <dd>
+                      {detail.handleDurationSeconds === null || detail.handleDurationSeconds === undefined
+                        ? '--'
+                        : `${detail.handleDurationSeconds} 秒`}
+                    </dd>
+                  </div>
                 </dl>
+              </div>
+
+              <div className='md:col-span-2 grid gap-4 xl:grid-cols-2'>
+                <ApprovalSheetBusinessSection detail={detail} />
+                <ApprovalSheetGraph
+                  flowNodes={detail.flowNodes ?? []}
+                  flowEdges={detail.flowEdges ?? []}
+                  taskTrace={detail.taskTrace ?? []}
+                  instanceEvents={detail.instanceEvents ?? []}
+                />
               </div>
 
               <TaskRuntimeFormCard

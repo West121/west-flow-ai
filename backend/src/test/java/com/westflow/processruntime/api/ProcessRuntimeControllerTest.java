@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,9 +34,16 @@ class ProcessRuntimeControllerTest {
     @Autowired
     private ProcessDemoService processDemoService;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     @BeforeEach
     void resetRuntimeState() {
         processDemoService.reset();
+        jdbcTemplate.update("DELETE FROM wf_business_process_link");
+        jdbcTemplate.update("DELETE FROM oa_leave_bill");
+        jdbcTemplate.update("DELETE FROM oa_expense_bill");
+        jdbcTemplate.update("DELETE FROM oa_common_request_bill");
     }
 
     @Test
@@ -59,13 +67,15 @@ class ProcessRuntimeControllerTest {
         assertThat(publishBody.path("data").path("version").asInt()).isEqualTo(1);
         assertThat(publishBody.path("data").path("bpmnXml").asText()).contains("<process");
 
+        seedLeaveBill("leave_001");
+
         String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "processKey": "oa_leave",
-                                  "businessKey": "biz_001",
+                                  "businessKey": "leave_001",
                                   "businessType": "OA_LEAVE",
                                   "formData": {
                                     "amount": 500
@@ -131,6 +141,17 @@ class ProcessRuntimeControllerTest {
         assertThat(detailBody.path("data").path("taskId").asText()).isEqualTo(taskId);
         assertThat(detailBody.path("data").path("processName").asText()).isEqualTo("请假审批");
         assertThat(detailBody.path("data").path("businessType").asText()).isEqualTo("OA_LEAVE");
+        assertThat(detailBody.path("data").path("businessData").path("billNo").asText()).isEqualTo("LEAVE-20260322-001");
+        assertThat(detailBody.path("data").path("businessData").path("days").asInt()).isEqualTo(3);
+        assertThat(detailBody.path("data").path("flowNodes").size()).isEqualTo(3);
+        assertThat(detailBody.path("data").path("flowEdges").size()).isEqualTo(2);
+        assertThat(detailBody.path("data").path("instanceEvents").size()).isEqualTo(3);
+        assertThat(detailBody.path("data").path("taskTrace").size()).isEqualTo(1);
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("receiveTime").isNull()).isFalse();
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("readTime").isNull()).isFalse();
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("handleStartTime").isNull()).isFalse();
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("handleEndTime").isNull()).isTrue();
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("handleDurationSeconds").isNull()).isTrue();
         assertThat(detailBody.path("data").path("instanceStatus").asText()).isEqualTo("RUNNING");
         assertThat(detailBody.path("data").path("activeTaskIds").size()).isEqualTo(1);
 
@@ -169,6 +190,8 @@ class ProcessRuntimeControllerTest {
         JsonNode completedDetailBody = objectMapper.readTree(completedDetailResponse);
         assertThat(completedDetailBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
         assertThat(completedDetailBody.path("data").path("businessType").asText()).isEqualTo("OA_LEAVE");
+        assertThat(completedDetailBody.path("data").path("taskTrace").get(0).path("handleEndTime").isNull()).isFalse();
+        assertThat(completedDetailBody.path("data").path("taskTrace").get(0).path("handleDurationSeconds").asLong()).isGreaterThanOrEqualTo(0);
         assertThat(completedDetailBody.path("data").path("completedAt").isNull()).isFalse();
         assertThat(completedDetailBody.path("data").path("taskFormData").path("approvedDays").asInt()).isEqualTo(2);
         assertThat(completedDetailBody.path("data").path("taskFormData").path("opinionTag").asText()).isEqualTo("同意");
@@ -720,5 +743,32 @@ class ProcessRuntimeControllerTest {
                   ]
                 }
                 """;
+    }
+
+    private void seedLeaveBill(String billId) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO oa_leave_bill (
+                    id,
+                    bill_no,
+                    scene_code,
+                    days,
+                    reason,
+                    process_instance_id,
+                    status,
+                    creator_user_id,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                billId,
+                "LEAVE-20260322-001",
+                "default",
+                3,
+                "年假",
+                null,
+                "DRAFT",
+                "usr_001"
+        );
     }
 }

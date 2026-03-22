@@ -9,19 +9,23 @@ import com.westflow.common.query.SortItem;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import com.westflow.approval.service.ApprovalSheetQueryService;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
 import com.westflow.processruntime.api.ClaimTaskRequest;
 import com.westflow.processruntime.api.ClaimTaskResponse;
 import com.westflow.processruntime.api.DemoTaskView;
+import com.westflow.processruntime.api.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
+import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
 import com.westflow.processruntime.api.ReturnTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
 import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -63,18 +67,23 @@ public class ProcessDemoService {
     );
 
     private final ProcessDefinitionService processDefinitionService;
+    private final ApprovalSheetQueryService approvalSheetQueryService;
     private final Map<String, DemoProcessInstance> instancesById = new ConcurrentHashMap<>();
     private final Map<String, DemoTask> tasksById = new ConcurrentHashMap<>();
-    private final List<DemoTaskActionLog> actionLogs = new ArrayList<>();
+    private final List<ProcessInstanceEventResponse> instanceEvents = new ArrayList<>();
 
-    public ProcessDemoService(ProcessDefinitionService processDefinitionService) {
+    public ProcessDemoService(
+            ProcessDefinitionService processDefinitionService,
+            ApprovalSheetQueryService approvalSheetQueryService
+    ) {
         this.processDefinitionService = processDefinitionService;
+        this.approvalSheetQueryService = approvalSheetQueryService;
     }
 
     public synchronized void reset() {
         instancesById.clear();
         tasksById.clear();
-        actionLogs.clear();
+        instanceEvents.clear();
     }
 
     public synchronized StartProcessResponse start(StartProcessRequest request) {
@@ -95,6 +104,20 @@ public class ProcessDemoService {
                 now
         );
         instancesById.put(instance.instanceId, instance);
+        recordInstanceEvent(
+                instance.instanceId,
+                null,
+                null,
+                "INSTANCE_STARTED",
+                "流程实例已发起",
+                StpUtil.getLoginIdAsString(),
+                eventDetails(
+                        "processDefinitionId", instance.processDefinitionId,
+                        "processKey", instance.processKey,
+                        "businessKey", instance.businessKey,
+                        "businessType", instance.businessType
+                )
+        );
 
         List<DemoTaskView> activeTasks = advanceFromNode(definition, graph, instance, startNode.id(), null, null);
         refreshStatus(instance);
@@ -126,6 +149,18 @@ public class ProcessDemoService {
     public synchronized ProcessTaskDetailResponse detail(String taskId) {
         DemoTask task = requireTask(taskId);
         DemoProcessInstance instance = requireInstance(task.instanceId);
+        if (task.readTime == null) {
+            task.readTime = now();
+            recordInstanceEvent(
+                    instance.instanceId,
+                    task.taskId,
+                    task.nodeId,
+                    "TASK_READ",
+                    "任务已阅读",
+                    currentUserId(),
+                    eventDetails("status", task.status)
+            );
+        }
         return toDetailResponse(task, instance);
     }
 
@@ -161,7 +196,18 @@ public class ProcessDemoService {
         task.action = "CLAIM";
         task.comment = request.comment();
         task.updatedAt = now();
-        logAction(task, "CLAIM", currentUserId, request.comment());
+        if (task.handleStartTime == null) {
+            task.handleStartTime = task.updatedAt;
+        }
+        recordInstanceEvent(
+                task.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_CLAIMED",
+                "任务已认领",
+                currentUserId,
+                eventDetails("comment", request.comment())
+        );
 
         return new ClaimTaskResponse(task.taskId, task.instanceId, task.status, task.assigneeUserId);
     }
@@ -200,11 +246,23 @@ public class ProcessDemoService {
         task.taskFormData = request.taskFormData() == null
                 ? Map.of()
                 : new HashMap<>(request.taskFormData());
+        if (task.handleStartTime == null) {
+            task.handleStartTime = now;
+        }
         task.completedAt = now;
+        task.handleEndTime = now;
         task.updatedAt = now;
         instance.activeTaskIds.remove(taskId);
         instance.updatedAt = now;
-        logAction(task, request.action(), currentUserId, request.comment());
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_COMPLETED",
+                "任务已完成",
+                currentUserId,
+                eventDetails("action", request.action(), "comment", request.comment())
+        );
 
         PublishedProcessDefinition definition = processDefinitionService.getById(instance.processDefinitionId);
         Graph graph = Graph.from(definition.dsl());
@@ -226,6 +284,7 @@ public class ProcessDemoService {
         task.operatorUserId = currentUserId;
         task.comment = request.comment();
         task.completedAt = now;
+        task.handleEndTime = now;
         task.updatedAt = now;
         instance.activeTaskIds.remove(task.taskId);
 
@@ -243,7 +302,15 @@ public class ProcessDemoService {
                 task.taskId,
                 task.originTaskId
         );
-        logAction(task, "TRANSFER", currentUserId, request.comment());
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_TRANSFERRED",
+                "任务已转办",
+                currentUserId,
+                eventDetails("targetUserId", request.targetUserId(), "comment", request.comment())
+        );
         refreshStatus(instance);
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
     }
@@ -282,6 +349,7 @@ public class ProcessDemoService {
         task.operatorUserId = currentUserId;
         task.comment = request.comment();
         task.completedAt = now;
+        task.handleEndTime = now;
         task.updatedAt = now;
         instance.activeTaskIds.remove(task.taskId);
 
@@ -293,7 +361,15 @@ public class ProcessDemoService {
                 task.taskId,
                 previousTask.originTaskId
         );
-        logAction(task, "RETURN", currentUserId, request.comment());
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_RETURNED",
+                "任务已退回",
+                currentUserId,
+                eventDetails("comment", request.comment(), "targetStrategy", targetStrategy)
+        );
         refreshStatus(instance);
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
     }
@@ -445,8 +521,24 @@ public class ProcessDemoService {
                 now,
                 status
         );
+        if (assigneeUserId != null) {
+            task.handleStartTime = now;
+        }
         tasksById.put(taskId, task);
         instance.activeTaskIds.add(taskId);
+        recordInstanceEvent(
+                instance.instanceId,
+                taskId,
+                nodeId,
+                "TASK_CREATED",
+                "任务已创建",
+                instance.initiatorUserId,
+                eventDetails(
+                        "status", status,
+                        "assigneeUserId", assigneeUserId,
+                        "candidateUserIds", candidateUserIds
+                )
+        );
         refreshStatus(instance);
         return task;
     }
@@ -454,6 +546,18 @@ public class ProcessDemoService {
     private void refreshStatus(DemoProcessInstance instance) {
         instance.updatedAt = now();
         if (instance.activeTaskIds.isEmpty() && instance.joinArrivals.isEmpty() && !instance.reachedEndNodeIds.isEmpty()) {
+            if (!instance.completedLogged) {
+                instance.completedLogged = true;
+                recordInstanceEvent(
+                        instance.instanceId,
+                        null,
+                        null,
+                        "INSTANCE_COMPLETED",
+                        "流程实例已结束",
+                        instance.initiatorUserId,
+                        eventDetails("processDefinitionId", instance.processDefinitionId)
+                );
+            }
             instance.status = "COMPLETED";
             return;
         }
@@ -646,6 +750,7 @@ public class ProcessDemoService {
         String nodeFormVersion = stringValue(nodeConfig.get("nodeFormVersion"));
         String effectiveFormKey = nodeFormKey != null ? nodeFormKey : processFormKey;
         String effectiveFormVersion = nodeFormVersion != null ? nodeFormVersion : processFormVersion;
+        Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(instance.businessType, instance.businessKey);
 
         return new ProcessTaskDetailResponse(
                 task.taskId,
@@ -656,6 +761,11 @@ public class ProcessDemoService {
                 instance.businessKey,
                 instance.businessType,
                 instance.initiatorUserId,
+                businessData,
+                payload.nodes(),
+                payload.edges(),
+                instanceEventsFor(instance.instanceId),
+                taskTraceFor(instance.instanceId),
                 task.nodeId,
                 task.nodeName,
                 task.status,
@@ -665,6 +775,11 @@ public class ProcessDemoService {
                 task.action,
                 task.operatorUserId,
                 task.comment,
+                task.createdAt,
+                task.readTime,
+                task.handleStartTime,
+                task.handleEndTime,
+                handleDurationSeconds(task.handleStartTime, task.handleEndTime),
                 task.createdAt,
                 task.updatedAt,
                 task.completedAt,
@@ -680,6 +795,46 @@ public class ProcessDemoService {
                 task.taskFormData,
                 instance.activeTaskIds.stream().sorted().toList()
         );
+    }
+
+    private List<ProcessInstanceEventResponse> instanceEventsFor(String instanceId) {
+        return instanceEvents.stream()
+                .filter(event -> instanceId.equals(event.instanceId()))
+                .toList();
+    }
+
+    private List<ProcessTaskTraceItemResponse> taskTraceFor(String instanceId) {
+        return tasksById.values().stream()
+                .filter(task -> instanceId.equals(task.instanceId))
+                .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
+                .map(this::toTraceItem)
+                .toList();
+    }
+
+    private ProcessTaskTraceItemResponse toTraceItem(DemoTask task) {
+        return new ProcessTaskTraceItemResponse(
+                task.taskId,
+                task.nodeId,
+                task.nodeName,
+                task.status,
+                task.assigneeUserId,
+                task.candidateUserIds,
+                task.action,
+                task.operatorUserId,
+                task.comment,
+                task.createdAt,
+                task.readTime,
+                task.handleStartTime,
+                task.handleEndTime,
+                handleDurationSeconds(task.handleStartTime, task.handleEndTime)
+        );
+    }
+
+    private Long handleDurationSeconds(OffsetDateTime handleStartTime, OffsetDateTime handleEndTime) {
+        if (handleStartTime == null || handleEndTime == null) {
+            return null;
+        }
+        return Math.max(0L, Duration.between(handleStartTime, handleEndTime).toSeconds());
     }
 
     private TaskActionAvailabilityResponse actionAvailability(DemoTask task, String userId) {
@@ -718,20 +873,42 @@ public class ProcessDemoService {
         }
     }
 
-    private void logAction(DemoTask task, String action, String operatorUserId, String comment) {
-        actionLogs.add(new DemoTaskActionLog(
-                newId("tal"),
-                task.instanceId,
-                task.taskId,
-                action,
+    private String currentUserId() {
+        return StpUtil.getLoginIdAsString();
+    }
+
+    private void recordInstanceEvent(
+            String instanceId,
+            String taskId,
+            String nodeId,
+            String eventType,
+            String eventName,
+            String operatorUserId,
+            Map<String, Object> details
+    ) {
+        instanceEvents.add(new ProcessInstanceEventResponse(
+                newId("evt"),
+                instanceId,
+                taskId,
+                nodeId,
+                eventType,
+                eventName,
                 operatorUserId,
-                comment,
-                now()
+                now(),
+                details == null ? Map.of() : new HashMap<>(details)
         ));
     }
 
-    private String currentUserId() {
-        return StpUtil.getLoginIdAsString();
+    private Map<String, Object> eventDetails(Object... keyValues) {
+        Map<String, Object> details = new HashMap<>();
+        for (int i = 0; i + 1 < keyValues.length; i += 2) {
+            Object key = keyValues[i];
+            Object value = keyValues[i + 1];
+            if (key != null && value != null) {
+                details.put(String.valueOf(key), value);
+            }
+        }
+        return details;
     }
 
     private DemoTask requireTask(String taskId) {
@@ -878,6 +1055,9 @@ public class ProcessDemoService {
         private final String originTaskId;
         private final OffsetDateTime createdAt;
         private Map<String, Object> taskFormData = Map.of();
+        private OffsetDateTime readTime;
+        private OffsetDateTime handleStartTime;
+        private OffsetDateTime handleEndTime;
         private String assigneeUserId;
         private OffsetDateTime updatedAt;
         private OffsetDateTime completedAt;
@@ -943,17 +1123,6 @@ public class ProcessDemoService {
         }
     }
 
-    private record DemoTaskActionLog(
-            String actionLogId,
-            String instanceId,
-            String taskId,
-            String action,
-            String operatorUserId,
-            String comment,
-            OffsetDateTime createdAt
-    ) {
-    }
-
     private static final class DemoProcessInstance {
         private final String instanceId;
         private final String processDefinitionId;
@@ -969,6 +1138,7 @@ public class ProcessDemoService {
         private final Map<String, Integer> joinArrivals = new HashMap<>();
         private String status = "RUNNING";
         private OffsetDateTime updatedAt;
+        private boolean completedLogged;
 
         private DemoProcessInstance(
                 String instanceId,

@@ -1,9 +1,12 @@
 package com.westflow.processruntime.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.westflow.processdef.model.ProcessDslPayload;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
+@JsonInclude(JsonInclude.Include.ALWAYS)
 public record ProcessTaskDetailResponse(
         String taskId,
         String instanceId,
@@ -13,6 +16,11 @@ public record ProcessTaskDetailResponse(
         String businessKey,
         String businessType,
         String applicantUserId,
+        Map<String, Object> businessData,
+        List<ProcessDslPayload.Node> flowNodes,
+        List<ProcessDslPayload.Edge> flowEdges,
+        List<ProcessInstanceEventResponse> instanceEvents,
+        List<ProcessTaskTraceItemResponse> taskTrace,
         String nodeId,
         String nodeName,
         String status,
@@ -22,6 +30,11 @@ public record ProcessTaskDetailResponse(
         String action,
         String operatorUserId,
         String comment,
+        OffsetDateTime receiveTime,
+        OffsetDateTime readTime,
+        OffsetDateTime handleStartTime,
+        OffsetDateTime handleEndTime,
+        Long handleDurationSeconds,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         OffsetDateTime completedAt,

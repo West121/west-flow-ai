@@ -102,6 +102,148 @@ function renderWithQuery(ui: React.ReactNode) {
   )
 }
 
+function createWorkbenchTaskDetail(
+  overrides: Record<string, unknown> = {}
+) {
+  const taskId = typeof overrides.taskId === 'string' ? overrides.taskId : 'task_001'
+  const nodeId = typeof overrides.nodeId === 'string' ? overrides.nodeId : 'approve_manager'
+  const nodeName = typeof overrides.nodeName === 'string' ? overrides.nodeName : '部门负责人审批'
+
+  return {
+    taskId,
+    instanceId: 'pi_001',
+    processDefinitionId: 'pd_001',
+    processKey: 'oa_leave',
+    processName: '请假审批',
+    businessKey: 'leave_001',
+    businessType: 'OA_LEAVE',
+    applicantUserId: 'usr_001',
+    nodeId,
+    nodeName,
+    status: 'PENDING',
+    assignmentMode: 'USER',
+    candidateUserIds: ['usr_002'],
+    assigneeUserId: 'usr_002',
+    action: null,
+    operatorUserId: null,
+    comment: null,
+    processFormKey: 'oa-leave-start-form',
+    processFormVersion: '1.0.0',
+    effectiveFormKey: 'oa-leave-approve-form',
+    effectiveFormVersion: '1.0.0',
+    nodeFormKey: 'oa-leave-approve-form',
+    nodeFormVersion: '1.0.0',
+    fieldBindings: [
+      {
+        source: 'PROCESS_FORM',
+        sourceFieldKey: 'days',
+        targetFieldKey: 'approvedDays',
+      },
+    ],
+    taskFormData: {
+      approved: true,
+      comment: '同意',
+    },
+    createdAt: '2026-03-22T09:00:00+08:00',
+    updatedAt: '2026-03-22T09:00:00+08:00',
+    completedAt: null,
+    receiveTime: '2026-03-22T09:00:00+08:00',
+    readTime: '2026-03-22T09:02:00+08:00',
+    handleStartTime: '2026-03-22T09:03:00+08:00',
+    handleEndTime: null,
+    handleDurationSeconds: null,
+    instanceStatus: 'RUNNING',
+    formData: { days: 2, reason: '外出处理事务' },
+    businessData: {
+      billId: 'leave_001',
+      billNo: 'LEAVE-001',
+      sceneCode: 'default',
+      days: 2,
+      reason: '外出处理事务',
+      status: 'RUNNING',
+      creatorUserId: 'usr_001',
+    },
+    flowNodes: [
+      {
+        id: 'start_1',
+        type: 'start',
+        name: '流程发起',
+        position: { x: 100, y: 100 },
+      },
+      {
+        id: 'approve_manager',
+        type: 'approver',
+        name: '部门负责人审批',
+        position: { x: 340, y: 100 },
+      },
+      {
+        id: 'end_1',
+        type: 'end',
+        name: '流程结束',
+        position: { x: 580, y: 100 },
+      },
+    ],
+    flowEdges: [
+      {
+        id: 'edge_1',
+        source: 'start_1',
+        target: 'approve_manager',
+        label: '提交',
+      },
+      {
+        id: 'edge_2',
+        source: 'approve_manager',
+        target: 'end_1',
+        label: '通过',
+      },
+    ],
+    instanceEvents: [
+      {
+        eventId: 'evt_001',
+        instanceId: 'pi_001',
+        nodeId: 'start_1',
+        taskId: null,
+        eventType: 'INSTANCE_STARTED',
+        eventName: '流程实例已发起',
+        operatorUserId: 'usr_001',
+        occurredAt: '2026-03-22T09:00:00+08:00',
+        details: {},
+      },
+      {
+        eventId: 'evt_002',
+        instanceId: 'pi_001',
+        nodeId: nodeId,
+        taskId,
+        eventType: 'TASK_CREATED',
+        eventName: '任务已创建',
+        operatorUserId: 'usr_001',
+        occurredAt: '2026-03-22T09:10:00+08:00',
+        details: {},
+      },
+    ],
+    taskTrace: [
+      {
+        taskId,
+        nodeId,
+        nodeName,
+        status: 'PENDING',
+        assigneeUserId: 'usr_002',
+        candidateUserIds: ['usr_002'],
+        action: null,
+        operatorUserId: null,
+        comment: '待处理',
+        receiveTime: '2026-03-22T09:10:00+08:00',
+        readTime: '2026-03-22T09:12:00+08:00',
+        handleStartTime: '2026-03-22T09:13:00+08:00',
+        handleEndTime: null,
+        handleDurationSeconds: null,
+      },
+    ],
+    activeTaskIds: [taskId],
+    ...overrides,
+  }
+}
+
 describe('workbench pages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -173,13 +315,14 @@ describe('workbench pages', () => {
   })
 
   it('shows claim and return actions conditionally in the task detail page', async () => {
-    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(createWorkbenchTaskDetail({
       taskId: 'task_claim_001',
       instanceId: 'pi_001',
       processDefinitionId: 'pd_001',
       processKey: 'oa_leave',
       processName: '公共认领请假审批',
-      businessKey: 'biz_001',
+      businessKey: 'leave_001',
+      businessType: 'OA_LEAVE',
       applicantUserId: 'usr_001',
       nodeId: 'approve_manager',
       nodeName: '共享审批池',
@@ -187,33 +330,59 @@ describe('workbench pages', () => {
       assignmentMode: 'USER',
       candidateUserIds: ['usr_001', 'usr_002'],
       assigneeUserId: null,
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      processFormKey: 'oa-leave-start-form',
-      processFormVersion: '1.0.0',
-      effectiveFormKey: 'oa-leave-approve-form',
-      effectiveFormVersion: '1.0.0',
-      nodeFormKey: 'oa-leave-approve-form',
-      nodeFormVersion: '1.0.0',
-      fieldBindings: [
+      businessData: {
+        billId: 'leave_001',
+        billNo: 'LEAVE-001',
+        sceneCode: 'default',
+        days: 2,
+        reason: '外出处理事务',
+        status: 'RUNNING',
+        creatorUserId: 'usr_001',
+      },
+      instanceEvents: [
         {
-          source: 'PROCESS_FORM',
-          sourceFieldKey: 'days',
-          targetFieldKey: 'approvedDays',
+          eventId: 'evt_001',
+          instanceId: 'pi_001',
+          nodeId: 'start_1',
+          taskId: null,
+          eventType: 'INSTANCE_STARTED',
+          eventName: '流程实例已发起',
+          operatorUserId: 'usr_001',
+          occurredAt: '2026-03-22T09:00:00+08:00',
+          details: {},
+        },
+        {
+          eventId: 'evt_002',
+          instanceId: 'pi_001',
+          nodeId: 'approve_manager',
+          taskId: 'task_claim_001',
+          eventType: 'TASK_CREATED',
+          eventName: '任务已创建',
+          operatorUserId: 'usr_001',
+          occurredAt: '2026-03-22T09:10:00+08:00',
+          details: {},
         },
       ],
-      taskFormData: {
-        approved: true,
-        comment: '同意',
-      },
-      createdAt: '2026-03-22T09:00:00+08:00',
-      updatedAt: '2026-03-22T09:00:00+08:00',
-      completedAt: null,
-      instanceStatus: 'RUNNING',
-      formData: { days: 2 },
+      taskTrace: [
+        {
+          taskId: 'task_claim_001',
+          nodeId: 'approve_manager',
+          nodeName: '共享审批池',
+          status: 'PENDING_CLAIM',
+          assigneeUserId: null,
+          candidateUserIds: ['usr_001', 'usr_002'],
+          action: null,
+          operatorUserId: null,
+          comment: '待认领',
+          receiveTime: '2026-03-22T09:10:00+08:00',
+          readTime: '2026-03-22T09:12:00+08:00',
+          handleStartTime: '2026-03-22T09:13:00+08:00',
+          handleEndTime: null,
+          handleDurationSeconds: null,
+        },
+      ],
       activeTaskIds: ['task_claim_001'],
-    })
+    }))
     workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
       canClaim: true,
       canApprove: false,
@@ -224,52 +393,29 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_claim_001' />)
 
+    expect(await screen.findByText('业务正文')).toBeInTheDocument()
+    expect(screen.getByText('业务表单正文')).toBeInTheDocument()
+    expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '播放回顾' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '暂停回顾' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '继续回顾' })).toBeInTheDocument()
+    expect(screen.getAllByText('办理人').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('读取时间').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('办理开始时间').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('办理完成时间').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('办理时长').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('是否超时').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('审批意见摘要').length).toBeGreaterThan(0)
+
     expect(await screen.findByRole('button', { name: '认领任务' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '退回上一步' })).toBeInTheDocument()
   })
 
   it('submits the transfer dialog with target user id', async () => {
-    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(createWorkbenchTaskDetail({
       taskId: 'task_pending_001',
-      instanceId: 'pi_001',
-      processDefinitionId: 'pd_001',
-      processKey: 'oa_leave',
-      processName: '请假审批',
-      businessKey: 'biz_001',
-      applicantUserId: 'usr_001',
-      nodeId: 'approve_manager',
-      nodeName: '部门负责人审批',
-      status: 'PENDING',
-      assignmentMode: 'USER',
-      candidateUserIds: ['usr_002'],
-      assigneeUserId: 'usr_002',
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      processFormKey: 'oa-leave-start-form',
-      processFormVersion: '1.0.0',
-      effectiveFormKey: 'oa-leave-approve-form',
-      effectiveFormVersion: '1.0.0',
-      nodeFormKey: 'oa-leave-approve-form',
-      nodeFormVersion: '1.0.0',
-      fieldBindings: [
-        {
-          source: 'PROCESS_FORM',
-          sourceFieldKey: 'days',
-          targetFieldKey: 'approvedDays',
-        },
-      ],
-      taskFormData: {
-        approved: true,
-        comment: '同意',
-      },
-      createdAt: '2026-03-22T09:00:00+08:00',
-      updatedAt: '2026-03-22T09:00:00+08:00',
-      completedAt: null,
-      instanceStatus: 'RUNNING',
-      formData: { days: 2 },
       activeTaskIds: ['task_pending_001'],
-    })
+    }))
     workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
       canClaim: false,
       canApprove: true,
@@ -317,47 +463,15 @@ describe('workbench pages', () => {
   })
 
   it('submits node form data when completing a task', async () => {
-    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(createWorkbenchTaskDetail({
       taskId: 'task_pending_003',
-      instanceId: 'pi_001',
-      processDefinitionId: 'pd_001',
-      processKey: 'oa_leave',
-      processName: '请假审批',
-      businessKey: 'biz_001',
-      applicantUserId: 'usr_001',
-      nodeId: 'approve_manager',
-      nodeName: '部门负责人审批',
-      status: 'PENDING',
-      assignmentMode: 'USER',
-      candidateUserIds: ['usr_002'],
-      assigneeUserId: 'usr_002',
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      processFormKey: 'oa-leave-start-form',
-      processFormVersion: '1.0.0',
-      effectiveFormKey: 'oa-leave-approve-form',
-      effectiveFormVersion: '1.0.0',
-      nodeFormKey: 'oa-leave-approve-form',
-      nodeFormVersion: '1.0.0',
-      fieldBindings: [
-        {
-          source: 'PROCESS_FORM',
-          sourceFieldKey: 'days',
-          targetFieldKey: 'approvedDays',
-        },
-      ],
       taskFormData: {
         approved: true,
         comment: '同意执行',
       },
-      createdAt: '2026-03-22T09:00:00+08:00',
-      updatedAt: '2026-03-22T09:00:00+08:00',
-      completedAt: null,
-      instanceStatus: 'RUNNING',
       formData: { days: 2, reason: '请假' },
       activeTaskIds: ['task_pending_003'],
-    })
+    }))
     workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
       canClaim: false,
       canApprove: true,
@@ -396,25 +510,11 @@ describe('workbench pages', () => {
   })
 
   it('falls back to the process form when no node override is registered', async () => {
-    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(createWorkbenchTaskDetail({
       taskId: 'task_pending_004',
-      instanceId: 'pi_001',
-      processDefinitionId: 'pd_001',
-      processKey: 'oa_leave',
-      processName: '请假审批',
-      businessKey: 'biz_001',
-      applicantUserId: 'usr_001',
       nodeId: 'start_1',
       nodeName: '流程发起',
       status: 'PENDING',
-      assignmentMode: 'USER',
-      candidateUserIds: ['usr_002'],
-      assigneeUserId: 'usr_002',
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      processFormKey: 'oa-leave-start-form',
-      processFormVersion: '1.0.0',
       effectiveFormKey: 'oa-leave-start-form',
       effectiveFormVersion: '1.0.0',
       nodeFormKey: null,
@@ -424,13 +524,35 @@ describe('workbench pages', () => {
         days: 2,
         reason: '请假',
       },
-      createdAt: '2026-03-22T09:00:00+08:00',
-      updatedAt: '2026-03-22T09:00:00+08:00',
-      completedAt: null,
-      instanceStatus: 'RUNNING',
       formData: { days: 2, reason: '请假' },
+      flowNodes: [
+        {
+          id: 'start_1',
+          type: 'start',
+          name: '流程发起',
+          position: { x: 100, y: 100 },
+        },
+      ],
+      taskTrace: [
+        {
+          taskId: 'task_pending_004',
+          nodeId: 'start_1',
+          nodeName: '流程发起',
+          status: 'PENDING',
+          assigneeUserId: 'usr_002',
+          candidateUserIds: ['usr_002'],
+          action: null,
+          operatorUserId: null,
+          comment: '待处理',
+          receiveTime: '2026-03-22T09:00:00+08:00',
+          readTime: '2026-03-22T09:02:00+08:00',
+          handleStartTime: '2026-03-22T09:03:00+08:00',
+          handleEndTime: null,
+          handleDurationSeconds: null,
+        },
+      ],
       activeTaskIds: ['task_pending_004'],
-    })
+    }))
     workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
       canClaim: false,
       canApprove: true,
@@ -445,13 +567,23 @@ describe('workbench pages', () => {
       nextTasks: [],
     })
 
-    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_004' />)
+    const view = renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_004' />)
 
-    await screen.findByLabelText('请假天数')
-    fireEvent.change(screen.getByLabelText('请假天数'), {
+    await waitFor(() => {
+      expect(view.container.querySelectorAll('input').length).toBeGreaterThan(0)
+    })
+
+    const dayInput = Array.from(view.container.querySelectorAll('input')).find(
+      (element) =>
+        element.getAttribute('type') === 'number' && !element.hasAttribute('disabled')
+    )
+    fireEvent.change(dayInput as HTMLElement, {
       target: { value: '3' },
     })
-    fireEvent.change(screen.getByLabelText('请假原因'), {
+    const reasonInput = Array.from(view.container.querySelectorAll('textarea')).find(
+      (element) => !element.hasAttribute('disabled')
+    )
+    fireEvent.change(reasonInput as HTMLElement, {
       target: { value: '外出处理事务' },
     })
     fireEvent.change(screen.getByLabelText('审批意见'), {

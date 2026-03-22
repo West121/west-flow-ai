@@ -6,7 +6,7 @@
 
 ## 目标
 
-定义当前运行时 demo 的审批任务动作、状态流转、表单载荷、审批单详情时间字段和审计留痕规范。
+定义当前运行时 demo 的审批任务动作、状态流转、表单载荷、审批单详情、流程跟踪与审计留痕规范。
 
 ## 当前覆盖范围
 
@@ -109,11 +109,103 @@
 - `effectiveFormVersion`
 - `fieldBindings`
 - `taskFormData`
+- `businessType`
+- `businessKey`
+- `businessData`
+- `flowNodes`
+- `flowEdges`
+- `instanceEvents`
+- `taskTrace`
+- `receiveTime`
+- `readTime`
+- `handleStartTime`
+- `handleEndTime`
+- `handleDurationSeconds`
 
 生效规则：
 
 - 若节点配置了 `nodeFormKey/nodeFormVersion`，则 `effectiveFormKey/effectiveFormVersion` 取节点表单
 - 否则回退到流程默认表单 `processFormKey/processFormVersion`
+
+## 审批单详情扩展字段
+
+### `businessData`
+
+审批单详情必须直接返回业务正文数据，供“审批单详情页”展示，不再要求前端按业务类型额外跳接口拼接。
+
+当前 OA 范围内至少包括：
+
+- `billId`
+- `billNo`
+- `sceneCode`
+- `status`
+- 业务字段本体
+
+### `flowNodes / flowEdges`
+
+审批单详情必须直接返回当前流程实例对应的流程图快照，供前端在详情页中渲染只读 React Flow 画布。
+
+节点至少包含：
+
+- `id`
+- `type`
+- `name`
+- `position`
+
+边至少包含：
+
+- `id`
+- `source`
+- `target`
+- `label`
+
+### `instanceEvents`
+
+用于动画回顾。事件必须按时间顺序返回。
+
+每条事件至少包含：
+
+- `eventId`
+- `instanceId`
+- `taskId`
+- `nodeId`
+- `eventType`
+- `eventName`
+- `operatorUserId`
+- `occurredAt`
+- `details`
+
+说明：
+
+- 当前 demo 先返回 `operatorUserId`，暂不扩展展示名
+- 节点显示信息由 `nodeId + flowNodes/taskTrace` 组合推导
+- 事件备注、目标用户、动作上下文等统一收敛在 `details`
+
+### `taskTrace`
+
+用于节点明细与时序展示。每条记录对应一次真实任务处理或流转。
+
+每条轨迹至少包含：
+
+- `taskId`
+- `nodeId`
+- `nodeName`
+- `status`
+- `assigneeUserId`
+- `candidateUserIds`
+- `action`
+- `operatorUserId`
+- `receiveTime`
+- `readTime`
+- `handleStartTime`
+- `handleEndTime`
+- `handleDurationSeconds`
+- `comment`
+
+说明：
+
+- 当前 demo 先返回办理人用户 ID，不扩展显示名
+- 是否超时由后续 SLA/超时策略模块补齐，本期详情页先按 `false` 展示
 
 ## 审计字段
 
@@ -128,5 +220,5 @@
 - `readTime`
 - `handleStartTime`
 - `handleEndTime`
-- `handleDuration`
+- `handleDurationSeconds`
 - `createdAt`
