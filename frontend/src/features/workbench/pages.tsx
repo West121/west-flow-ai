@@ -1,7 +1,7 @@
-import { useEffect, useMemo, startTransition } from 'react'
+import { useEffect, useMemo, startTransition, useState } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
@@ -11,6 +11,9 @@ import {
   Loader2,
   Play,
   Sparkles,
+  Undo2,
+  UserCheck2,
+  UserRoundPlus,
 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -35,14 +38,27 @@ import {
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
+  claimWorkbenchTask,
   completeWorkbenchTask,
+  getWorkbenchTaskActions,
   getWorkbenchTaskDetail,
   listWorkbenchTasks,
+  returnWorkbenchTask,
   startWorkbenchProcess,
+  transferWorkbenchTask,
   type WorkbenchTaskListItem,
 } from '@/lib/api/workbench'
 
@@ -93,7 +109,10 @@ function resolveTaskStatusVariant(status: WorkbenchTaskListItem['status']) {
 function summarizeTasks(records: WorkbenchTaskListItem[]) {
   return {
     total: records.length,
-    pending: records.filter((record) => record.status === 'PENDING').length,
+    pending: records.filter(
+      (record) =>
+        record.status === 'PENDING' || record.status === 'PENDING_CLAIM'
+    ).length,
     completed: records.filter((record) => record.status === 'COMPLETED').length,
   }
 }
@@ -166,6 +185,25 @@ const taskActionSchema = z.object({
 })
 
 type TaskActionFormValues = z.input<typeof taskActionSchema>
+
+const claimTaskSchema = z.object({
+  comment: z.string().max(500, '认领说明最多 500 个字符').default(''),
+})
+
+type ClaimTaskFormValues = z.input<typeof claimTaskSchema>
+
+const transferTaskSchema = z.object({
+  targetUserId: z.string().trim().min(1, '请输入目标用户编码'),
+  comment: z.string().max(500, '转办说明最多 500 个字符').default(''),
+})
+
+type TransferTaskFormValues = z.input<typeof transferTaskSchema>
+
+const returnTaskSchema = z.object({
+  comment: z.string().max(500, '退回说明最多 500 个字符').default(''),
+})
+
+type ReturnTaskFormValues = z.input<typeof returnTaskSchema>
 
 export function Dashboard() {
   return (
@@ -504,9 +542,16 @@ export function WorkbenchStartPage() {
 
 export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false)
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false)
   const detailQuery = useQuery({
     queryKey: ['workbench', 'todo-detail', taskId],
     queryFn: () => getWorkbenchTaskDetail(taskId),
+  })
+  const actionsQuery = useQuery({
+    queryKey: ['workbench', 'todo-actions', taskId],
+    queryFn: () => getWorkbenchTaskActions(taskId),
   })
   const detail = detailQuery.data
 
@@ -514,6 +559,25 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
     resolver: zodResolver(taskActionSchema),
     defaultValues: {
       action: 'APPROVE',
+      comment: '',
+    },
+  })
+  const claimForm = useForm<ClaimTaskFormValues>({
+    resolver: zodResolver(claimTaskSchema),
+    defaultValues: {
+      comment: '',
+    },
+  })
+  const transferForm = useForm<TransferTaskFormValues>({
+    resolver: zodResolver(transferTaskSchema),
+    defaultValues: {
+      targetUserId: '',
+      comment: '',
+    },
+  })
+  const returnForm = useForm<ReturnTaskFormValues>({
+    resolver: zodResolver(returnTaskSchema),
+    defaultValues: {
       comment: '',
     },
   })
@@ -527,7 +591,25 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
       action: 'APPROVE',
       comment: detail.comment ?? '',
     })
-  }, [detail, form])
+    claimForm.reset({
+      comment: '',
+    })
+    transferForm.reset({
+      targetUserId: '',
+      comment: '',
+    })
+    returnForm.reset({
+      comment: '',
+    })
+  }, [claimForm, detail, form, returnForm, transferForm])
+
+  async function refreshWorkbenchQueries() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-page'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-detail', taskId] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-actions', taskId] }),
+    ])
+  }
 
   const completeMutation = useMutation({
     mutationFn: (payload: TaskActionFormValues) =>
@@ -535,7 +617,8 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
         action: payload.action,
         comment: payload.comment?.trim() || undefined,
       }),
-    onSuccess: (response) => {
+    onSuccess: async (response) => {
+      await refreshWorkbenchQueries()
       const nextTask = response.nextTasks[0]
       if (nextTask) {
         startTransition(() => {
@@ -553,23 +636,85 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
     },
     onError: handleServerError,
   })
+  const claimMutation = useMutation({
+    mutationFn: (payload: ClaimTaskFormValues) =>
+      claimWorkbenchTask(taskId, {
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      claimForm.reset({
+        comment: '',
+      })
+    },
+    onError: handleServerError,
+  })
+  const transferMutation = useMutation({
+    mutationFn: (payload: TransferTaskFormValues) =>
+      transferWorkbenchTask(taskId, {
+        targetUserId: payload.targetUserId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setTransferDialogOpen(false)
+      transferForm.reset({
+        targetUserId: '',
+        comment: '',
+      })
+      startTransition(() => {
+        navigate({ to: '/workbench/todos/list' })
+      })
+    },
+    onError: handleServerError,
+  })
+  const returnMutation = useMutation({
+    mutationFn: (payload: ReturnTaskFormValues) =>
+      returnWorkbenchTask(taskId, {
+        targetStrategy: 'PREVIOUS_USER_TASK',
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setReturnDialogOpen(false)
+      returnForm.reset({
+        comment: '',
+      })
+      startTransition(() => {
+        navigate({ to: '/workbench/todos/list' })
+      })
+    },
+    onError: handleServerError,
+  })
 
   const actionLabel = useMemo(() => {
     if (!detail) {
       return ''
     }
 
-    return detail.status === 'COMPLETED' ? '已完成' : '待处理'
+    return resolveTaskStatusLabel(detail.status)
   }, [detail])
 
   const onSubmit = form.handleSubmit((values) => {
     completeMutation.mutate(values)
   })
+  const onClaimSubmit = claimForm.handleSubmit((values) => {
+    claimMutation.mutate(values)
+  })
+  const onTransferSubmit = transferForm.handleSubmit((values) => {
+    transferMutation.mutate(values)
+  })
+  const onReturnSubmit = returnForm.handleSubmit((values) => {
+    returnMutation.mutate(values)
+  })
+  const showCompletionForm = Boolean(
+    actionsQuery.data?.canApprove || actionsQuery.data?.canReject
+  )
 
   return (
     <PageShell
       title='任务处理'
-      description='独立的任务处理页，支持查看详情、填写审批意见并完成任务。'
+      description='独立的任务处理页，支持认领、转办、退回和审批处理等运行态动作。'
       actions={
         <Button asChild variant='outline'>
           <Link to='/workbench/todos/list'>
@@ -717,75 +862,295 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
 
           <Card>
             <CardHeader>
-              <CardTitle>完成任务</CardTitle>
+              <CardTitle>任务动作</CardTitle>
               <CardDescription>
-                选择审批动作并填写意见，完成后会自动跳转到下一个待办或返回列表。
+                根据当前任务权限显示可执行动作，完成后会自动刷新详情或返回待办列表。
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form className='space-y-6' onSubmit={onSubmit}>
-                  <FormField
-                    control={form.control}
-                    name='action'
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>审批动作</FormLabel>
-                        <FormControl>
-                          <select
-                            className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
-                            {...field}
-                          >
-                            <option value='APPROVE'>同意通过</option>
-                            <option value='REJECT'>驳回</option>
-                          </select>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+            <CardContent className='space-y-6'>
+              {actionsQuery.isLoading ? (
+                <div className='space-y-3'>
+                  <Skeleton className='h-10 w-full' />
+                  <Skeleton className='h-24 w-full' />
+                  <Skeleton className='h-10 w-32' />
+                </div>
+              ) : null}
 
-                  <FormField
-                    control={form.control}
-                    name='comment'
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>审批意见</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            className='min-h-36'
-                            placeholder='请输入审批意见'
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          审批意见会随任务完成状态一起保存。
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <div className='flex items-center gap-3'>
-                    <Button
-                      type='submit'
-                      disabled={completeMutation.isPending || detail.status === 'COMPLETED'}
-                    >
-                      {completeMutation.isPending ? (
+              {actionsQuery.data?.canClaim ? (
+                <Form {...claimForm}>
+                  <form className='space-y-4 rounded-lg border p-4' onSubmit={onClaimSubmit}>
+                    <div className='space-y-1'>
+                      <p className='text-sm font-medium'>认领任务</p>
+                      <p className='text-sm text-muted-foreground'>
+                        当前任务在公共认领池中，认领后会转为你的个人待办。
+                      </p>
+                    </div>
+                    <FormField
+                      control={claimForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>认领说明</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              className='min-h-24'
+                              placeholder='可选，填写认领说明'
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button type='submit' disabled={claimMutation.isPending}>
+                      {claimMutation.isPending ? (
                         <>
                           <Loader2 className='animate-spin' />
-                          提交中
+                          认领中
                         </>
                       ) : (
-                        '完成任务'
+                        <>
+                          <UserCheck2 />
+                          认领任务
+                        </>
                       )}
                     </Button>
-                    <Button asChild type='button' variant='outline'>
-                      <Link to='/workbench/todos/list'>返回列表</Link>
-                    </Button>
+                  </form>
+                </Form>
+              ) : null}
+
+              {actionsQuery.data?.canTransfer ? (
+                <div className='rounded-lg border p-4'>
+                  <div className='mb-4 space-y-1'>
+                    <p className='text-sm font-medium'>转办</p>
+                    <p className='text-sm text-muted-foreground'>
+                      将当前任务转交给其他用户继续处理，并保留转办轨迹。
+                    </p>
                   </div>
-                </form>
-              </Form>
+                  <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button type='button' variant='outline'>
+                        <UserRoundPlus />
+                        转办任务
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>转办任务</DialogTitle>
+                        <DialogDescription>
+                          输入目标用户编码后，当前任务会转到对方待办中。
+                        </DialogDescription>
+                      </DialogHeader>
+                      <Form {...transferForm}>
+                        <form className='space-y-4' onSubmit={onTransferSubmit}>
+                          <FormField
+                            control={transferForm.control}
+                            name='targetUserId'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>目标用户编码</FormLabel>
+                                <FormControl>
+                                  <Input placeholder='例如：usr_003' {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={transferForm.control}
+                            name='comment'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>转办说明</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    className='min-h-24'
+                                    placeholder='请输入转办说明'
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <DialogFooter>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              onClick={() => setTransferDialogOpen(false)}
+                            >
+                              取消
+                            </Button>
+                            <Button type='submit' disabled={transferMutation.isPending}>
+                              {transferMutation.isPending ? (
+                                <>
+                                  <Loader2 className='animate-spin' />
+                                  转办中
+                                </>
+                              ) : (
+                                '确认转办'
+                              )}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </Form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              ) : null}
+
+              {actionsQuery.data?.canReturn ? (
+                <div className='rounded-lg border p-4'>
+                  <div className='mb-4 space-y-1'>
+                    <p className='text-sm font-medium'>退回上一步</p>
+                    <p className='text-sm text-muted-foreground'>
+                      当前版本只支持退回到上一步人工节点，并生成新的待处理任务。
+                    </p>
+                  </div>
+                  <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button type='button' variant='outline'>
+                        <Undo2 />
+                        退回上一步
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>退回上一步</DialogTitle>
+                        <DialogDescription>
+                          请填写退回说明，系统会把任务重新投递到上一步办理人。
+                        </DialogDescription>
+                      </DialogHeader>
+                      <Form {...returnForm}>
+                        <form className='space-y-4' onSubmit={onReturnSubmit}>
+                          <FormField
+                            control={returnForm.control}
+                            name='comment'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>退回说明</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    className='min-h-24'
+                                    placeholder='请输入退回说明'
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <DialogFooter>
+                            <Button
+                              type='button'
+                              variant='outline'
+                              onClick={() => setReturnDialogOpen(false)}
+                            >
+                              取消
+                            </Button>
+                            <Button type='submit' disabled={returnMutation.isPending}>
+                              {returnMutation.isPending ? (
+                                <>
+                                  <Loader2 className='animate-spin' />
+                                  退回中
+                                </>
+                              ) : (
+                                '确认退回'
+                              )}
+                            </Button>
+                          </DialogFooter>
+                        </form>
+                      </Form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              ) : null}
+
+              {showCompletionForm ? (
+                <Form {...form}>
+                  <form className='space-y-6 rounded-lg border p-4' onSubmit={onSubmit}>
+                    <div className='space-y-1'>
+                      <p className='text-sm font-medium'>审批处理</p>
+                      <p className='text-sm text-muted-foreground'>
+                        选择审批动作并填写意见，完成后会自动跳转到下一个待办或返回列表。
+                      </p>
+                    </div>
+                    <FormField
+                      control={form.control}
+                      name='action'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>审批动作</FormLabel>
+                          <FormControl>
+                            <select
+                              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                              {...field}
+                            >
+                              <option value='APPROVE'>同意通过</option>
+                              <option value='REJECT'>驳回</option>
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>审批意见</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              className='min-h-36'
+                              placeholder='请输入审批意见'
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            审批意见会随任务完成状态一起保存。
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className='flex items-center gap-3'>
+                      <Button
+                        type='submit'
+                        disabled={completeMutation.isPending || detail.status === 'COMPLETED'}
+                      >
+                        {completeMutation.isPending ? (
+                          <>
+                            <Loader2 className='animate-spin' />
+                            提交中
+                          </>
+                        ) : (
+                          '完成任务'
+                        )}
+                      </Button>
+                      <Button asChild type='button' variant='outline'>
+                        <Link to='/workbench/todos/list'>返回列表</Link>
+                      </Button>
+                    </div>
+                  </form>
+                </Form>
+              ) : null}
+
+              {!actionsQuery.isLoading &&
+              !actionsQuery.isError &&
+              !actionsQuery.data?.canClaim &&
+              !actionsQuery.data?.canTransfer &&
+              !actionsQuery.data?.canReturn &&
+              !showCompletionForm ? (
+                <Alert>
+                  <AlertTitle>当前没有可执行动作</AlertTitle>
+                  <AlertDescription>
+                    该任务可能已完成，或者当前登录用户不具备处理权限。
+                  </AlertDescription>
+                </Alert>
+              ) : null}
             </CardContent>
           </Card>
         </div>
