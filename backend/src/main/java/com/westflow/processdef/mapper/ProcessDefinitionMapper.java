@@ -75,6 +75,24 @@ public interface ProcessDefinitionMapper {
             """)
     Integer selectMaxVersionByProcessKey(@Param("processKey") String processKey);
 
+    @Select("""
+            SELECT
+              id AS process_definition_id,
+              process_key,
+              process_name,
+              category,
+              version,
+              status,
+              dsl_json,
+              bpmn_xml,
+              created_at,
+              updated_at
+            FROM wf_process_definition
+            WHERE status = 'PUBLISHED'
+            ORDER BY process_key ASC, version DESC, updated_at DESC, created_at DESC, id DESC
+            """)
+    List<ProcessDefinitionRecord> selectAllPublished();
+
     @Select({
             "<script>",
             "SELECT COUNT(1)",

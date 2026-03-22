@@ -55,6 +55,7 @@ class ProcessRuntimeControllerTest {
         assertThat(publishBody.path("code").asText()).isEqualTo("OK");
         assertThat(publishBody.path("data").path("processDefinitionId").asText()).isNotBlank();
         assertThat(publishBody.path("data").path("processKey").asText()).isEqualTo("oa_leave");
+        assertThat(publishBody.path("data").path("dsl").path("processFormKey").asText()).isEqualTo("oa-leave-form");
         assertThat(publishBody.path("data").path("version").asInt()).isEqualTo(1);
         assertThat(publishBody.path("data").path("bpmnXml").asText()).contains("<process");
 
@@ -137,7 +138,11 @@ class ProcessRuntimeControllerTest {
                                 {
                                   "action": "APPROVE",
                                   "operatorUserId": "usr_002",
-                                  "comment": "同意"
+                                  "comment": "同意",
+                                  "taskFormData": {
+                                    "approvedDays": 2,
+                                    "opinionTag": "同意"
+                                  }
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -161,6 +166,80 @@ class ProcessRuntimeControllerTest {
         JsonNode completedDetailBody = objectMapper.readTree(completedDetailResponse);
         assertThat(completedDetailBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
         assertThat(completedDetailBody.path("data").path("completedAt").isNull()).isFalse();
+        assertThat(completedDetailBody.path("data").path("taskFormData").path("approvedDays").asInt()).isEqualTo(2);
+        assertThat(completedDetailBody.path("data").path("taskFormData").path("opinionTag").asText()).isEqualTo("同意");
+    }
+
+    @Test
+    void shouldPersistTaskFormDataAndExposeEffectiveFormRefs() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDslWithRuntimeForms()))
+                .andExpect(status().isOk());
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "biz_002",
+                                  "formData": {
+                                    "days": 3,
+                                    "reason": "事假"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String taskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+
+        String completeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", taskId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "同意",
+                                  "taskFormData": {
+                                    "approvedDays": 2,
+                                    "opinionTag": "同意"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode completeBody = objectMapper.readTree(completeResponse);
+        assertThat(completeBody.path("code").asText()).isEqualTo("OK");
+
+        String detailResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode detailBody = objectMapper.readTree(detailResponse);
+        assertThat(detailBody.path("data").path("nodeFormKey").asText()).isEqualTo("oa_leave_approve_form");
+        assertThat(detailBody.path("data").path("nodeFormVersion").asText()).isEqualTo("1.0.0");
+        assertThat(detailBody.path("data").path("processFormKey").asText()).isEqualTo("oa_leave_start_form");
+        assertThat(detailBody.path("data").path("processFormVersion").asText()).isEqualTo("1.0.0");
+        assertThat(detailBody.path("data").path("effectiveFormKey").asText()).isEqualTo("oa_leave_approve_form");
+        assertThat(detailBody.path("data").path("effectiveFormVersion").asText()).isEqualTo("1.0.0");
+        assertThat(detailBody.path("data").path("fieldBindings").size()).isEqualTo(1);
+        assertThat(detailBody.path("data").path("taskFormData").path("approvedDays").asInt()).isEqualTo(2);
+        assertThat(detailBody.path("data").path("taskFormData").path("opinionTag").asText()).isEqualTo("同意");
     }
 
     @Test
@@ -172,16 +251,16 @@ class ProcessRuntimeControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "dslVersion": "1.0.0",
-                                  "processKey": "oa_leave",
-                                  "processName": "请假审批",
-                                  "category": "OA",
-                                  "formKey": "oa-leave-form",
-                                  "formVersion": "1.0.0",
-                                  "settings": {
-                                    "allowWithdraw": true,
-                                    "allowUrge": true,
-                                    "allowTransfer": true
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假审批",
+                  "category": "OA",
+                  "processFormKey": "oa-leave-form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
                                   },
                                   "nodes": [
                                     {
@@ -401,8 +480,8 @@ class ProcessRuntimeControllerTest {
                   "processKey": "oa_leave",
                   "processName": "请假审批",
                   "category": "OA",
-                  "formKey": "oa-leave-form",
-                  "formVersion": "1.0.0",
+                  "processFormKey": "oa-leave-form",
+                  "processFormVersion": "1.0.0",
                   "settings": {
                     "allowWithdraw": true,
                     "allowUrge": true,
@@ -468,6 +547,103 @@ class ProcessRuntimeControllerTest {
                 """;
     }
 
+    private String validProcessDslWithRuntimeForms() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假审批",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_start_form",
+                  "processFormVersion": "1.0.0",
+                  "formFields": [
+                    {
+                      "fieldKey": "days",
+                      "label": "请假天数",
+                      "valueType": "number",
+                      "required": true
+                    },
+                    {
+                      "fieldKey": "reason",
+                      "label": "请假原因",
+                      "valueType": "string",
+                      "required": true
+                    }
+                  ],
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "nodeFormKey": "oa_leave_approve_form",
+                        "nodeFormVersion": "1.0.0",
+                        "fieldBindings": [
+                          {
+                            "source": "PROCESS_FORM",
+                            "sourceFieldKey": "days",
+                            "targetFieldKey": "approvedDays"
+                          }
+                        ],
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """;
+    }
+
     private String validClaimableProcessDsl() {
         return """
                 {
@@ -475,8 +651,8 @@ class ProcessRuntimeControllerTest {
                   "processKey": "oa_claim_leave",
                   "processName": "公共认领请假审批",
                   "category": "OA",
-                  "formKey": "oa-claim-leave-form",
-                  "formVersion": "1.0.0",
+                  "processFormKey": "oa-claim-leave-form",
+                  "processFormVersion": "1.0.0",
                   "settings": {
                     "allowWithdraw": true,
                     "allowUrge": true,

@@ -10,8 +10,8 @@ export type ProcessDefinitionMeta = {
   processKey: string
   processName: string
   category: string
-  formKey: string
-  formVersion: string
+  processFormKey: string
+  processFormVersion: string
   formFields: WorkflowProcessFormField[]
 }
 
@@ -29,8 +29,8 @@ export type ProcessDefinitionDslPayload = {
   processKey: string
   processName: string
   category: string
-  formKey: string
-  formVersion: string
+  processFormKey: string
+  processFormVersion: string
   formFields: WorkflowProcessFormField[]
   settings: {
     allowWithdraw: boolean
@@ -128,8 +128,8 @@ export function workflowSnapshotToProcessDefinitionDsl(
     processKey: meta.processKey,
     processName: meta.processName,
     category: meta.category,
-    formKey: meta.formKey,
-    formVersion: meta.formVersion,
+    processFormKey: meta.processFormKey,
+    processFormVersion: meta.processFormVersion,
     formFields: meta.formFields,
     settings: {
       allowWithdraw: true,

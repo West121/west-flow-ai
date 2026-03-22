@@ -1,5 +1,6 @@
 import { apiClient, unwrapResponse } from '@/lib/api/client'
 import { type ListQuerySearch, toPaginationRequest } from '@/features/shared/table/query-contract'
+import { type WorkflowFieldBinding } from '@/features/workflow/designer/types'
 
 export type WorkbenchTaskListItem = {
   taskId: string
@@ -26,6 +27,14 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   comment: string | null
   instanceStatus: string
   formData: Record<string, unknown>
+  processFormKey: string
+  processFormVersion: string
+  effectiveFormKey: string
+  effectiveFormVersion: string
+  nodeFormKey: string | null
+  nodeFormVersion: string | null
+  fieldBindings: WorkflowFieldBinding[]
+  taskFormData: Record<string, unknown> | null
   activeTaskIds: string[]
 }
 
@@ -82,6 +91,7 @@ export type CompleteWorkbenchTaskPayload = {
   action: 'APPROVE' | 'REJECT' | string
   operatorUserId?: string | null
   comment?: string | null
+  taskFormData?: Record<string, unknown> | null
 }
 
 export type CompleteWorkbenchTaskResponse = {

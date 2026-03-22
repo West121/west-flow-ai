@@ -25,6 +25,7 @@ import {
   joinListValue,
   parseListValue,
 } from './config'
+import { NodeFormSelector } from './form-selection'
 import {
   type WorkflowFieldBinding,
   type WorkflowApproverApprovalPolicyType,
@@ -542,6 +543,14 @@ export function NodeConfigPanel({
     control: form.control,
     name: 'approver.approvalPolicyType',
   })
+  const selectedNodeFormKey = useWatch({
+    control: form.control,
+    name: 'approver.nodeFormKey',
+  })
+  const selectedNodeFormVersion = useWatch({
+    control: form.control,
+    name: 'approver.nodeFormVersion',
+  })
   const selectedCcMode = useWatch({ control: form.control, name: 'cc.targetMode' })
   const selectedBranches = useWatch({
     control: form.control,
@@ -789,24 +798,30 @@ export function NodeConfigPanel({
               name='approver.nodeFormKey'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>节点表单编码</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder='oa-leave-approve-form' />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='approver.nodeFormVersion'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>节点表单版本</FormLabel>
-                  <FormControl>
-                    <Input {...field} placeholder='1.0.0' />
-                  </FormControl>
+                  <NodeFormSelector
+                    label='节点覆盖表单'
+                    description='审批节点可覆盖流程默认表单，覆盖后任务页优先渲染这里选择的代码组件。'
+                    value={
+                      selectedNodeFormKey || selectedNodeFormVersion
+                        ? {
+                            nodeFormKey: selectedNodeFormKey,
+                            nodeFormVersion: selectedNodeFormVersion,
+                          }
+                        : null
+                    }
+                    onChange={(selection) => {
+                      field.onChange(selection?.nodeFormKey ?? '')
+                      form.setValue(
+                        'approver.nodeFormVersion',
+                        selection?.nodeFormVersion ?? '',
+                        {
+                          shouldDirty: true,
+                          shouldTouch: true,
+                          shouldValidate: true,
+                        }
+                      )
+                    }}
+                  />
                   <FormMessage />
                 </FormItem>
               )}

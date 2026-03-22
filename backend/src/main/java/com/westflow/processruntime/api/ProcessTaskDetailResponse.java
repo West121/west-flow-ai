@@ -25,7 +25,15 @@ public record ProcessTaskDetailResponse(
         OffsetDateTime updatedAt,
         OffsetDateTime completedAt,
         String instanceStatus,
+        String processFormKey,
+        String processFormVersion,
+        String nodeFormKey,
+        String nodeFormVersion,
+        String effectiveFormKey,
+        String effectiveFormVersion,
+        List<WorkflowFieldBinding> fieldBindings,
         Map<String, Object> formData,
+        Map<String, Object> taskFormData,
         List<String> activeTaskIds
 ) {
 }

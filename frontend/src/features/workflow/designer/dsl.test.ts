@@ -84,8 +84,8 @@ describe('workflow designer dsl mapping', () => {
       processKey: 'oa_leave',
       processName: '请假审批',
       category: 'OA',
-      formKey: 'oa-leave-form',
-      formVersion: '1.0.0',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
       formFields: [],
     })
 
@@ -133,8 +133,8 @@ describe('workflow designer dsl mapping', () => {
       processKey: 'oa_leave',
       processName: '请假审批',
       category: 'OA',
-      formKey: 'oa-leave-form',
-      formVersion: '1.0.0',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
       formFields: [
         { fieldKey: 'days', label: '请假天数', valueType: 'number' },
         { fieldKey: 'reason', label: '请假原因', valueType: 'string' },
@@ -175,8 +175,8 @@ describe('workflow designer dsl mapping', () => {
         processKey: 'oa_leave',
         processName: '请假审批',
         category: 'OA',
-        formKey: 'oa-leave-form',
-        formVersion: '1.0.0',
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
         formFields: [],
         settings: {
           allowWithdraw: true,
@@ -209,8 +209,8 @@ describe('workflow designer dsl mapping', () => {
         processKey: 'oa_leave',
         processName: '请假审批',
         category: 'OA',
-        formKey: 'oa-leave-form',
-        formVersion: '1.0.0',
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
         formFields: [],
         settings: {
           allowWithdraw: true,
@@ -377,8 +377,8 @@ describe('workflow designer dsl mapping', () => {
       processKey: 'oa_leave',
       processName: '请假审批',
       category: 'OA',
-      formKey: 'oa-leave-form',
-      formVersion: '1.0.0',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
       formFields: [],
     })
 
@@ -427,8 +427,8 @@ describe('workflow designer dsl mapping', () => {
         processKey: 'oa_leave',
         processName: '请假审批',
         category: 'OA',
-        formKey: 'oa-leave-form',
-        formVersion: '1.0.0',
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
         formFields: [{ fieldKey: 'amount', label: '金额', valueType: 'number' }],
         settings: {
           allowWithdraw: true,

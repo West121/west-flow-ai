@@ -244,6 +244,7 @@ class ProcessDslValidatorTest {
                 "OA",
                 "oa-leave-form",
                 "1.0.0",
+                List.of(),
                 Map.of(
                         "allowWithdraw", true,
                         "allowUrge", true,
@@ -267,8 +268,9 @@ class ProcessDslValidatorTest {
                 source.processKey(),
                 source.processName(),
                 source.category(),
-                source.formKey(),
-                source.formVersion(),
+                source.processFormKey(),
+                source.processFormVersion(),
+                List.of(),
                 source.settings(),
                 nodes,
                 source.edges()
@@ -285,8 +287,9 @@ class ProcessDslValidatorTest {
                 source.processKey(),
                 source.processName(),
                 source.category(),
-                source.formKey(),
-                source.formVersion(),
+                source.processFormKey(),
+                source.processFormVersion(),
+                List.of(),
                 source.settings(),
                 nodes,
                 edges

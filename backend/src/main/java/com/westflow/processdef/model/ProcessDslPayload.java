@@ -14,8 +14,9 @@ public record ProcessDslPayload(
         @NotBlank(message = "processName 不能为空")
         String processName,
         String category,
-        String formKey,
-        String formVersion,
+        String processFormKey,
+        String processFormVersion,
+        List<@Valid FormField> formFields,
         Map<String, Object> settings,
         @NotEmpty(message = "nodes 不能为空")
         List<@Valid Node> nodes,
@@ -23,17 +24,28 @@ public record ProcessDslPayload(
         List<@Valid Edge> edges
 ) {
 
+    public record FormField(
+            @NotBlank(message = "formFields.fieldKey 不能为空")
+            String fieldKey,
+            @NotBlank(message = "formFields.label 不能为空")
+            String label,
+            @NotBlank(message = "formFields.valueType 不能为空")
+            String valueType,
+            Boolean required
+    ) {
+    }
+
     public record Node(
             @NotBlank(message = "node.id 不能为空")
             String id,
-        @NotBlank(message = "node.type 不能为空")
-        String type,
-        @NotBlank(message = "node.name 不能为空")
-        String name,
-        String description,
-        Map<String, Object> position,
-        Map<String, Object> config,
-        Map<String, Object> ui
+            @NotBlank(message = "node.type 不能为空")
+            String type,
+            @NotBlank(message = "node.name 不能为空")
+            String name,
+            String description,
+            Map<String, Object> position,
+            Map<String, Object> config,
+            Map<String, Object> ui
     ) {
     }
 

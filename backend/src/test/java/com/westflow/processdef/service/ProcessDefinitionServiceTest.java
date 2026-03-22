@@ -50,6 +50,8 @@ class ProcessDefinitionServiceTest {
         ProcessDefinitionDetailResponse detail = processDefinitionService.detail("oa_leave:draft");
         assertThat(detail.processKey()).isEqualTo("oa_leave");
         assertThat(detail.dsl().processName()).isEqualTo("请假审批");
+        assertThat(detail.dsl().processFormKey()).isEqualTo("oa_leave-form");
+        assertThat(detail.dsl().processFormVersion()).isEqualTo("1.0.0");
     }
 
     @Test
@@ -232,8 +234,8 @@ class ProcessDefinitionServiceTest {
                   "processKey": "%s",
                   "processName": "%s",
                   "category": "%s",
-                  "formKey": "%s-form",
-                  "formVersion": "1.0.0",
+                  "processFormKey": "%s-form",
+                  "processFormVersion": "1.0.0",
                   "settings": {
                     "allowWithdraw": true,
                     "allowUrge": true,

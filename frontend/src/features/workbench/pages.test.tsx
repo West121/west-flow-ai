@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { WorkbenchTodoDetailPage, WorkbenchTodoListPage } from './pages'
+import {
+  WorkbenchStartPage,
+  WorkbenchTodoDetailPage,
+  WorkbenchTodoListPage,
+} from './pages'
 
 const {
   navigateMock,
@@ -144,6 +148,50 @@ describe('workbench pages', () => {
     expect(screen.getByText('待认领')).toBeInTheDocument()
   })
 
+  it('submits the runtime leave form data from the start page', async () => {
+    workbenchApiMocks.startWorkbenchProcess.mockResolvedValue({
+      processDefinitionId: 'pd_001',
+      instanceId: 'pi_001',
+      status: 'RUNNING',
+      activeTasks: [
+        {
+          taskId: 'task_001',
+          nodeId: 'approve_manager',
+          nodeName: '部门负责人审批',
+          status: 'PENDING',
+          assignmentMode: 'USER',
+          candidateUserIds: ['usr_002'],
+          assigneeUserId: 'usr_002',
+        },
+      ],
+    })
+
+    renderWithQuery(<WorkbenchStartPage />)
+
+    expect(screen.queryByLabelText('流程表单 JSON')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('请假天数'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText('请假原因'), {
+      target: { value: '外出处理事务' },
+    })
+    fireEvent.change(screen.getByLabelText('业务单号'), {
+      target: { value: 'biz_20260322_001' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发起并进入待办' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.startWorkbenchProcess).toHaveBeenCalledWith({
+        processKey: 'oa_leave',
+        businessKey: 'biz_20260322_001',
+        formData: {
+          days: 3,
+          reason: '外出处理事务',
+        },
+      })
+    })
+  })
+
   it('shows claim and return actions conditionally in the task detail page', async () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
       taskId: 'task_claim_001',
@@ -162,6 +210,23 @@ describe('workbench pages', () => {
       action: null,
       operatorUserId: null,
       comment: null,
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      effectiveFormKey: 'oa-leave-approve-form',
+      effectiveFormVersion: '1.0.0',
+      nodeFormKey: 'oa-leave-approve-form',
+      nodeFormVersion: '1.0.0',
+      fieldBindings: [
+        {
+          source: 'PROCESS_FORM',
+          sourceFieldKey: 'days',
+          targetFieldKey: 'approvedDays',
+        },
+      ],
+      taskFormData: {
+        approved: true,
+        comment: '同意',
+      },
       createdAt: '2026-03-22T09:00:00+08:00',
       updatedAt: '2026-03-22T09:00:00+08:00',
       completedAt: null,
@@ -201,6 +266,23 @@ describe('workbench pages', () => {
       action: null,
       operatorUserId: null,
       comment: null,
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      effectiveFormKey: 'oa-leave-approve-form',
+      effectiveFormVersion: '1.0.0',
+      nodeFormKey: 'oa-leave-approve-form',
+      nodeFormVersion: '1.0.0',
+      fieldBindings: [
+        {
+          source: 'PROCESS_FORM',
+          sourceFieldKey: 'days',
+          targetFieldKey: 'approvedDays',
+        },
+      ],
+      taskFormData: {
+        approved: true,
+        comment: '同意',
+      },
       createdAt: '2026-03-22T09:00:00+08:00',
       updatedAt: '2026-03-22T09:00:00+08:00',
       completedAt: null,
@@ -249,6 +331,164 @@ describe('workbench pages', () => {
         {
           targetUserId: 'usr_003',
           comment: '转给王五处理',
+        }
+      )
+    })
+  })
+
+  it('submits node form data when completing a task', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
+      taskId: 'task_pending_003',
+      instanceId: 'pi_001',
+      processDefinitionId: 'pd_001',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      businessKey: 'biz_001',
+      applicantUserId: 'usr_001',
+      nodeId: 'approve_manager',
+      nodeName: '部门负责人审批',
+      status: 'PENDING',
+      assignmentMode: 'USER',
+      candidateUserIds: ['usr_002'],
+      assigneeUserId: 'usr_002',
+      action: null,
+      operatorUserId: null,
+      comment: null,
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      effectiveFormKey: 'oa-leave-approve-form',
+      effectiveFormVersion: '1.0.0',
+      nodeFormKey: 'oa-leave-approve-form',
+      nodeFormVersion: '1.0.0',
+      fieldBindings: [
+        {
+          source: 'PROCESS_FORM',
+          sourceFieldKey: 'days',
+          targetFieldKey: 'approvedDays',
+        },
+      ],
+      taskFormData: {
+        approved: true,
+        comment: '同意执行',
+      },
+      createdAt: '2026-03-22T09:00:00+08:00',
+      updatedAt: '2026-03-22T09:00:00+08:00',
+      completedAt: null,
+      instanceStatus: 'RUNNING',
+      formData: { days: 2, reason: '请假' },
+      activeTaskIds: ['task_pending_003'],
+    })
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canTransfer: false,
+      canReturn: false,
+    })
+    workbenchApiMocks.completeWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_pending_003',
+      status: 'COMPLETED',
+      nextTasks: [],
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_003' />)
+
+    fireEvent.click(await screen.findByLabelText('同意通过'))
+    fireEvent.change(screen.getByLabelText('审批意见'), {
+      target: { value: '同意，继续流转' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '完成任务' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.completeWorkbenchTask).toHaveBeenCalledWith(
+        'task_pending_003',
+        {
+          action: 'APPROVE',
+          comment: '同意，继续流转',
+          taskFormData: {
+            approved: true,
+            comment: '同意，继续流转',
+          },
+        }
+      )
+    })
+  })
+
+  it('falls back to the process form when no node override is registered', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue({
+      taskId: 'task_pending_004',
+      instanceId: 'pi_001',
+      processDefinitionId: 'pd_001',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      businessKey: 'biz_001',
+      applicantUserId: 'usr_001',
+      nodeId: 'start_1',
+      nodeName: '流程发起',
+      status: 'PENDING',
+      assignmentMode: 'USER',
+      candidateUserIds: ['usr_002'],
+      assigneeUserId: 'usr_002',
+      action: null,
+      operatorUserId: null,
+      comment: null,
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      effectiveFormKey: 'oa-leave-start-form',
+      effectiveFormVersion: '1.0.0',
+      nodeFormKey: null,
+      nodeFormVersion: null,
+      fieldBindings: [],
+      taskFormData: {
+        days: 2,
+        reason: '请假',
+      },
+      createdAt: '2026-03-22T09:00:00+08:00',
+      updatedAt: '2026-03-22T09:00:00+08:00',
+      completedAt: null,
+      instanceStatus: 'RUNNING',
+      formData: { days: 2, reason: '请假' },
+      activeTaskIds: ['task_pending_004'],
+    })
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: false,
+      canTransfer: false,
+      canReturn: false,
+    })
+    workbenchApiMocks.completeWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_pending_004',
+      status: 'COMPLETED',
+      nextTasks: [],
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_004' />)
+
+    await screen.findByLabelText('请假天数')
+    fireEvent.change(screen.getByLabelText('请假天数'), {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getByLabelText('请假原因'), {
+      target: { value: '外出处理事务' },
+    })
+    fireEvent.change(screen.getByLabelText('审批意见'), {
+      target: { value: '同意，请按流程执行' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '完成任务' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.completeWorkbenchTask).toHaveBeenCalledWith(
+        'task_pending_004',
+        {
+          action: 'APPROVE',
+          comment: '同意，请按流程执行',
+          taskFormData: {
+            days: 3,
+            reason: '外出处理事务',
+          },
         }
       )
     })

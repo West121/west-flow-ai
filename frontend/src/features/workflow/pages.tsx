@@ -47,6 +47,9 @@ import {
   saveProcessDefinition,
 } from '@/lib/api/workflow'
 import { getApiErrorMessage } from '@/lib/api/client'
+import {
+  findProcessRuntimeFormByProcessKey,
+} from '@/features/forms/runtime/form-component-registry'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
 import {
@@ -54,6 +57,9 @@ import {
   processDefinitionDetailToWorkflowSnapshot,
   workflowSnapshotToProcessDefinitionDsl,
 } from './designer/dsl'
+import {
+  ProcessFormSelector,
+} from './designer/form-selection'
 import {
   workflowNodeTemplates,
   type WorkflowNodeTemplate,
@@ -86,12 +92,13 @@ const workflowNodeTypes = {
 }
 
 const helperLineThreshold = 16
+const defaultProcessForm = findProcessRuntimeFormByProcessKey('oa_leave')
 const defaultDefinitionMeta: ProcessDefinitionMeta = {
   processKey: 'oa_leave',
   processName: '请假审批',
   category: 'OA',
-  formKey: 'oa-leave-form',
-  formVersion: '1.0.0',
+  processFormKey: defaultProcessForm?.formKey ?? '',
+  processFormVersion: defaultProcessForm?.formVersion ?? '',
   formFields: [],
 }
 
@@ -397,8 +404,8 @@ function WorkflowDesignerWorkspace({
             processKey: detailQuery.data.processKey,
             processName: detailQuery.data.processName,
             category: detailQuery.data.category,
-            formKey: detailQuery.data.dsl.formKey,
-            formVersion: detailQuery.data.dsl.formVersion,
+            processFormKey: detailQuery.data.dsl.processFormKey,
+            processFormVersion: detailQuery.data.dsl.processFormVersion,
             formFields: detailQuery.data.dsl.formFields ?? [],
           }
 
@@ -708,35 +715,26 @@ function WorkflowDesignerWorkspace({
                     }
                   />
                 </div>
-                <div className='grid gap-2 sm:grid-cols-2'>
-                  <div className='grid gap-2'>
-                    <Label htmlFor='formKey'>表单编码</Label>
-                    <Input
-                      id='formKey'
-                      value={definitionMeta.formKey}
-                      onChange={(event) =>
-                        setDefinitionMetaOverrides((previous) => ({
-                          ...previous,
-                          formKey: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className='grid gap-2'>
-                    <Label htmlFor='formVersion'>表单版本</Label>
-                    <Input
-                      id='formVersion'
-                      value={definitionMeta.formVersion}
-                      onChange={(event) =>
-                        setDefinitionMetaOverrides((previous) => ({
-                          ...previous,
-                          formVersion: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
               </div>
+              <ProcessFormSelector
+                label='流程默认表单'
+                description='发起页使用流程默认表单，审批节点未配置覆盖表单时也会回退到这里。'
+                value={
+                  definitionMeta.processFormKey && definitionMeta.processFormVersion
+                    ? {
+                        processFormKey: definitionMeta.processFormKey,
+                        processFormVersion: definitionMeta.processFormVersion,
+                      }
+                    : null
+                }
+                onChange={(selection) =>
+                  setDefinitionMetaOverrides((previous) => ({
+                    ...previous,
+                    processFormKey: selection?.processFormKey ?? '',
+                    processFormVersion: selection?.processFormVersion ?? '',
+                  }))
+                }
+              />
               <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-1'>
                 <div className='rounded-2xl border p-4'>
                   <p className='text-xs text-muted-foreground'>当前节点数</p>

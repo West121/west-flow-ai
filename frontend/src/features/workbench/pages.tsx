@@ -1,4 +1,9 @@
-import { useEffect, useMemo, startTransition, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  startTransition,
+  useState,
+} from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -15,7 +20,7 @@ import {
   UserCheck2,
   UserRoundPlus,
 } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,6 +55,9 @@ import {
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { handleServerError } from '@/lib/handle-server-error'
+import { findProcessRuntimeFormByProcessKey } from '@/features/forms/runtime/form-component-registry'
+import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
+import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import {
   claimWorkbenchTask,
   completeWorkbenchTask,
@@ -59,6 +67,9 @@ import {
   returnWorkbenchTask,
   startWorkbenchProcess,
   transferWorkbenchTask,
+  type CompleteWorkbenchTaskPayload,
+  type StartWorkbenchProcessPayload,
+  type WorkbenchTaskDetail,
   type WorkbenchTaskListItem,
 } from '@/lib/api/workbench'
 
@@ -115,6 +126,292 @@ function summarizeTasks(records: WorkbenchTaskListItem[]) {
     ).length,
     completed: records.filter((record) => record.status === 'COMPLETED').length,
   }
+}
+
+function StartProcessRuntimeFormCard({
+  onSubmit,
+  isPending,
+}: {
+  onSubmit: (payload: StartWorkbenchProcessPayload) => void
+  isPending: boolean
+}) {
+  const form = useForm<StartProcessFormValues>({
+    resolver: zodResolver(startProcessSchema),
+    defaultValues: {
+      processKey: 'oa_leave',
+      businessKey: `biz_${new Date().getTime()}`,
+    },
+  })
+  const processKey = useWatch({
+    control: form.control,
+    name: 'processKey',
+  })
+  const processForm = useMemo(
+    () => findProcessRuntimeFormByProcessKey(processKey?.trim() ?? ''),
+    [processKey]
+  )
+  const [processFormData, setProcessFormData] = useState<Record<string, unknown>>({})
+
+  const onSubmitForm = form.handleSubmit((values) => {
+    if (!processForm) {
+      form.setError('processKey', {
+        type: 'manual',
+        message: '当前流程还没有注册流程默认表单',
+      })
+      return
+    }
+
+    onSubmit({
+      processKey: values.processKey.trim(),
+      businessKey: values.businessKey?.trim() || undefined,
+      formData: processFormData,
+    })
+  })
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>流程发起表单</CardTitle>
+        <CardDescription>
+          流程标识需要先在静态注册中心命中流程默认表单，发起后自动进入待办处理页。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form {...form}>
+          <form className='space-y-6' onSubmit={onSubmitForm}>
+            <FormField
+              control={form.control}
+              name='processKey'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>流程标识</FormLabel>
+                  <FormControl>
+                    <Input placeholder='例如：oa_leave' {...field} />
+                  </FormControl>
+                  <FormDescription>输入已经发布的流程标识。</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='businessKey'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>业务单号</FormLabel>
+                  <FormControl>
+                    <Input placeholder='例如：biz_20260322_001' {...field} />
+                  </FormControl>
+                  <FormDescription>可选，不填也能发起流程。</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className='space-y-4 rounded-2xl border p-4'>
+              <div className='space-y-1'>
+                <p className='text-sm font-medium'>流程默认表单</p>
+                <p className='text-sm text-muted-foreground'>
+                  发起页始终渲染流程默认表单的代码组件，没有注册时会提示当前流程未接入。
+                </p>
+              </div>
+              {processForm ? (
+                <ProcessFormRenderer
+                  processFormKey={processForm.formKey}
+                  processFormVersion={processForm.formVersion}
+                  value={processFormData}
+                  onChange={setProcessFormData}
+                />
+              ) : (
+                <Alert variant='destructive'>
+                  <AlertTitle>流程默认表单未注册</AlertTitle>
+                  <AlertDescription>
+                    流程标识 {processKey?.trim() || '--'} 还没有绑定可用的流程默认表单代码组件。
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+
+            <div className='flex items-center gap-3'>
+              <Button type='submit' disabled={isPending || !processForm}>
+                {isPending ? (
+                  <>
+                    <Loader2 className='animate-spin' />
+                    发起中
+                  </>
+                ) : (
+                  <>
+                    <Play />
+                    发起并进入待办
+                  </>
+                )}
+              </Button>
+              <Button asChild type='button' variant='outline'>
+                <Link to='/workbench/todos/list'>先看待办列表</Link>
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </CardContent>
+    </Card>
+  )
+}
+
+function TaskRuntimeFormCard({
+  detail,
+  hasNodeForm,
+  showCompletionForm,
+  onSubmit,
+  isPending,
+}: {
+  detail: WorkbenchTaskDetail
+  hasNodeForm: boolean
+  showCompletionForm: boolean
+  onSubmit: (payload: CompleteWorkbenchTaskPayload) => void
+  isPending: boolean
+}) {
+  const form = useForm<TaskActionFormValues>({
+    resolver: zodResolver(taskActionSchema),
+    defaultValues: {
+      action: 'APPROVE',
+      comment: '',
+    },
+  })
+  const [taskFormData, setTaskFormData] = useState<Record<string, unknown>>(
+    detail.taskFormData ?? detail.formData ?? {}
+  )
+  const onSubmitForm = form.handleSubmit((payload) => {
+    onSubmit({
+      action:
+        hasNodeForm && taskFormData.approved === false ? 'REJECT' : payload.action,
+      comment:
+        hasNodeForm && typeof taskFormData.comment === 'string'
+          ? taskFormData.comment.trim() || undefined
+          : payload.comment?.trim() || undefined,
+      taskFormData,
+    })
+  })
+
+  return (
+    <div className='space-y-3 rounded-lg border bg-muted/30 p-4 md:col-span-2'>
+      <div className='space-y-1'>
+        <p className='text-xs text-muted-foreground'>运行表单</p>
+        <p className='text-sm font-medium'>
+          {hasNodeForm ? '节点表单优先' : '流程默认表单回退'}
+        </p>
+      </div>
+      {hasNodeForm ? (
+        <NodeFormRenderer
+          nodeFormKey={detail.nodeFormKey ?? detail.effectiveFormKey}
+          nodeFormVersion={detail.nodeFormVersion ?? detail.effectiveFormVersion}
+          value={taskFormData}
+          onChange={(nextValue) => {
+            setTaskFormData(nextValue)
+          }}
+          fieldBindings={detail.fieldBindings}
+          taskFormData={detail.taskFormData ?? undefined}
+          disabled={detail.status === 'COMPLETED' || !showCompletionForm}
+        />
+      ) : (
+        <ProcessFormRenderer
+          processFormKey={detail.processFormKey}
+          processFormVersion={detail.processFormVersion}
+          value={taskFormData}
+          onChange={(nextValue) => {
+            setTaskFormData(nextValue)
+          }}
+          disabled={detail.status === 'COMPLETED' || !showCompletionForm}
+        />
+      )}
+      <div className='grid gap-2 rounded-md border bg-background p-3 text-xs text-muted-foreground'>
+        <div className='flex flex-wrap gap-3'>
+          <span>
+            流程默认：{detail.processFormKey} · {detail.processFormVersion}
+          </span>
+          <span>生效表单：{detail.effectiveFormKey} · {detail.effectiveFormVersion}</span>
+        </div>
+        <p>提交时会同步带上 `taskFormData`。</p>
+      </div>
+      {showCompletionForm ? (
+        <Form {...form}>
+          <form className='space-y-6 rounded-lg border p-4' onSubmit={onSubmitForm}>
+            <div className='space-y-1'>
+              <p className='text-sm font-medium'>审批处理</p>
+              <p className='text-sm text-muted-foreground'>
+                选择审批动作并填写意见，完成后会自动跳转到下一个待办或返回列表。
+              </p>
+            </div>
+            {!hasNodeForm ? (
+              <>
+                <FormField
+                  control={form.control}
+                  name='action'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>审批动作</FormLabel>
+                      <FormControl>
+                        <select
+                          className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                          {...field}
+                        >
+                          <option value='APPROVE'>同意通过</option>
+                          <option value='REJECT'>驳回</option>
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='comment'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>审批意见</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          className='min-h-36'
+                          placeholder='请输入审批意见'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>审批意见会随任务完成状态一起保存。</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            ) : (
+              <div className='rounded-lg border border-dashed p-3 text-sm text-muted-foreground'>
+                节点表单已接管审批结果与意见输入，提交时会自动根据表单值生成通过/驳回动作。
+              </div>
+            )}
+
+            <div className='flex items-center gap-3'>
+              <Button
+                type='submit'
+                disabled={isPending || detail.status === 'COMPLETED'}
+              >
+                {isPending ? (
+                  <>
+                    <Loader2 className='animate-spin' />
+                    提交中
+                  </>
+                ) : (
+                  '完成任务'
+                )}
+              </Button>
+              <Button asChild type='button' variant='outline'>
+                <Link to='/workbench/todos/list'>返回列表</Link>
+              </Button>
+            </div>
+          </form>
+        </Form>
+      ) : null}
+    </div>
+  )
 }
 
 const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
@@ -174,7 +471,6 @@ const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
 const startProcessSchema = z.object({
   processKey: z.string().min(1, '请输入流程标识'),
   businessKey: z.string().optional(),
-  formDataJson: z.string().min(2, '请输入 JSON 格式的流程表单数据'),
 })
 
 type StartProcessFormValues = z.infer<typeof startProcessSchema>
@@ -369,24 +665,10 @@ export function WorkbenchTodoListPage() {
 
 export function WorkbenchStartPage() {
   const navigate = useNavigate()
-  const form = useForm<StartProcessFormValues>({
-    resolver: zodResolver(startProcessSchema),
-    defaultValues: {
-      processKey: 'oa_leave',
-      businessKey: `biz_${new Date().getTime()}`,
-      formDataJson: JSON.stringify(
-        {
-          days: 3,
-          reason: '请假',
-        },
-        null,
-        2
-      ),
-    },
-  })
 
   const startMutation = useMutation({
-    mutationFn: startWorkbenchProcess,
+    mutationFn: (payload: Parameters<typeof startWorkbenchProcess>[0]) =>
+      startWorkbenchProcess(payload),
     onSuccess: (response) => {
       const firstTask = response.activeTasks[0]
       if (firstTask) {
@@ -406,30 +688,10 @@ export function WorkbenchStartPage() {
     onError: handleServerError,
   })
 
-  const onSubmit = form.handleSubmit((values) => {
-    let formData: Record<string, unknown> = {}
-
-    try {
-      formData = values.formDataJson ? JSON.parse(values.formDataJson) : {}
-    } catch {
-      form.setError('formDataJson', {
-        type: 'manual',
-        message: '流程表单数据必须是合法 JSON',
-      })
-      return
-    }
-
-    startMutation.mutate({
-      processKey: values.processKey.trim(),
-      businessKey: values.businessKey?.trim() || undefined,
-      formData,
-    })
-  })
-
   return (
     <PageShell
       title='发起流程'
-      description='独立的流程发起页，提交后会返回首个待处理任务，形成最小运行闭环。'
+      description='流程中心发起页直接渲染代码表单组件，提交后会返回首个待处理任务。'
       actions={
         <Button asChild variant='outline'>
           <Link to='/workbench/todos/list'>
@@ -440,98 +702,19 @@ export function WorkbenchStartPage() {
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
-        <Card>
-          <CardHeader>
-            <CardTitle>流程发起表单</CardTitle>
-            <CardDescription>
-              流程标识需先在流程设计器里发布对应版本，发起后自动进入待办处理页。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form className='space-y-6' onSubmit={onSubmit}>
-                <FormField
-                  control={form.control}
-                  name='processKey'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>流程标识</FormLabel>
-                      <FormControl>
-                        <Input placeholder='例如：oa_leave' {...field} />
-                      </FormControl>
-                      <FormDescription>输入已经发布的流程标识。</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name='businessKey'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>业务单号</FormLabel>
-                      <FormControl>
-                        <Input placeholder='例如：biz_20260322_001' {...field} />
-                      </FormControl>
-                      <FormDescription>可选，不填也能发起流程。</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name='formDataJson'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>流程表单 JSON</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          className='min-h-40 font-mono text-sm'
-                          placeholder='{"days": 3, "reason": "请假"}'
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        当前版本直接提交 JSON，后续会接入代码表单组件和 AI 填报。
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className='flex items-center gap-3'>
-                  <Button type='submit' disabled={startMutation.isPending}>
-                    {startMutation.isPending ? (
-                      <>
-                        <Loader2 className='animate-spin' />
-                        发起中
-                      </>
-                    ) : (
-                      <>
-                        <Play />
-                        发起并进入待办
-                      </>
-                    )}
-                  </Button>
-                  <Button asChild type='button' variant='outline'>
-                    <Link to='/workbench/todos/list'>先看待办列表</Link>
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
+        <StartProcessRuntimeFormCard
+          onSubmit={(payload) => startMutation.mutate(payload)}
+          isPending={startMutation.isPending}
+        />
 
         <Card>
           <CardHeader>
             <CardTitle>闭环说明</CardTitle>
-            <CardDescription>这是当前最小可运行运行态闭环的使用方式。</CardDescription>
+            <CardDescription>这是当前最小可运行的流程中心发起闭环。</CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
             <p>1. 先在流程设计器发布一个流程版本，例如 `oa_leave`。</p>
-            <p>2. 在这里填写流程标识和 JSON 表单数据，点击发起。</p>
+            <p>2. 这里会自动渲染流程默认表单代码组件，而不是 JSON 文本框。</p>
             <p>3. 系统会自动跳转到首个待办任务处理页，完成后返回工作台待办。</p>
           </CardContent>
         </Card>
@@ -554,14 +737,6 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
     queryFn: () => getWorkbenchTaskActions(taskId),
   })
   const detail = detailQuery.data
-
-  const form = useForm<TaskActionFormValues>({
-    resolver: zodResolver(taskActionSchema),
-    defaultValues: {
-      action: 'APPROVE',
-      comment: '',
-    },
-  })
   const claimForm = useForm<ClaimTaskFormValues>({
     resolver: zodResolver(claimTaskSchema),
     defaultValues: {
@@ -587,10 +762,6 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
       return
     }
 
-    form.reset({
-      action: 'APPROVE',
-      comment: detail.comment ?? '',
-    })
     claimForm.reset({
       comment: '',
     })
@@ -601,7 +772,7 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
     returnForm.reset({
       comment: '',
     })
-  }, [claimForm, detail, form, returnForm, transferForm])
+  }, [claimForm, detail, returnForm, transferForm])
 
   async function refreshWorkbenchQueries() {
     await Promise.all([
@@ -612,11 +783,8 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
   }
 
   const completeMutation = useMutation({
-    mutationFn: (payload: TaskActionFormValues) =>
-      completeWorkbenchTask(taskId, {
-        action: payload.action,
-        comment: payload.comment?.trim() || undefined,
-      }),
+    mutationFn: (payload: CompleteWorkbenchTaskPayload) =>
+      completeWorkbenchTask(taskId, payload),
     onSuccess: async (response) => {
       await refreshWorkbenchQueries()
       const nextTask = response.nextTasks[0]
@@ -695,9 +863,6 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
     return resolveTaskStatusLabel(detail.status)
   }, [detail])
 
-  const onSubmit = form.handleSubmit((values) => {
-    completeMutation.mutate(values)
-  })
   const onClaimSubmit = claimForm.handleSubmit((values) => {
     claimMutation.mutate(values)
   })
@@ -710,6 +875,7 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
   const showCompletionForm = Boolean(
     actionsQuery.data?.canApprove || actionsQuery.data?.canReject
   )
+  const hasNodeForm = Boolean(detail?.nodeFormKey && detail?.nodeFormVersion)
 
   return (
     <PageShell
@@ -851,12 +1017,14 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
                 </dl>
               </div>
 
-              <div className='space-y-2 rounded-lg border bg-muted/30 p-4 md:col-span-2'>
-                <p className='text-xs text-muted-foreground'>流程表单数据</p>
-                <pre className='overflow-auto rounded-md bg-background p-3 text-xs text-muted-foreground'>
-                  {JSON.stringify(detail.formData, null, 2)}
-                </pre>
-              </div>
+              <TaskRuntimeFormCard
+                key={`${detail.taskId}:${detail.updatedAt}:${detail.effectiveFormKey}:${detail.effectiveFormVersion}`}
+                detail={detail}
+                hasNodeForm={hasNodeForm}
+                showCompletionForm={showCompletionForm}
+                onSubmit={(payload) => completeMutation.mutate(payload)}
+                isPending={completeMutation.isPending}
+              />
             </CardContent>
           </Card>
 
@@ -1064,78 +1232,6 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
                     </DialogContent>
                   </Dialog>
                 </div>
-              ) : null}
-
-              {showCompletionForm ? (
-                <Form {...form}>
-                  <form className='space-y-6 rounded-lg border p-4' onSubmit={onSubmit}>
-                    <div className='space-y-1'>
-                      <p className='text-sm font-medium'>审批处理</p>
-                      <p className='text-sm text-muted-foreground'>
-                        选择审批动作并填写意见，完成后会自动跳转到下一个待办或返回列表。
-                      </p>
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name='action'
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>审批动作</FormLabel>
-                          <FormControl>
-                            <select
-                              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
-                              {...field}
-                            >
-                              <option value='APPROVE'>同意通过</option>
-                              <option value='REJECT'>驳回</option>
-                            </select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name='comment'
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>审批意见</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              className='min-h-36'
-                              placeholder='请输入审批意见'
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            审批意见会随任务完成状态一起保存。
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className='flex items-center gap-3'>
-                      <Button
-                        type='submit'
-                        disabled={completeMutation.isPending || detail.status === 'COMPLETED'}
-                      >
-                        {completeMutation.isPending ? (
-                          <>
-                            <Loader2 className='animate-spin' />
-                            提交中
-                          </>
-                        ) : (
-                          '完成任务'
-                        )}
-                      </Button>
-                      <Button asChild type='button' variant='outline'>
-                        <Link to='/workbench/todos/list'>返回列表</Link>
-                      </Button>
-                    </div>
-                  </form>
-                </Form>
               ) : null}
 
               {!actionsQuery.isLoading &&

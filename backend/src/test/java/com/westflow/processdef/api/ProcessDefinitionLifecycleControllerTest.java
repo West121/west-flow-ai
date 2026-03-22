@@ -57,6 +57,7 @@ class ProcessDefinitionLifecycleControllerTest {
         assertThat(detailBody.path("data").path("processDefinitionId").asText()).isEqualTo(draftId);
         assertThat(detailBody.path("data").path("status").asText()).isEqualTo("DRAFT");
         assertThat(detailBody.path("data").path("dsl").path("processKey").asText()).isEqualTo("oa_leave");
+        assertThat(detailBody.path("data").path("dsl").path("processFormKey").asText()).isEqualTo("oa_leave-form");
         assertThat(detailBody.path("data").path("dsl").path("nodes").size()).isEqualTo(3);
 
         JsonNode publishBody1 = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-definitions/publish")
@@ -152,8 +153,8 @@ class ProcessDefinitionLifecycleControllerTest {
                   "processKey": "%s",
                   "processName": "%s",
                   "category": "%s",
-                  "formKey": "%s-form",
-                  "formVersion": "1.0.0",
+                  "processFormKey": "%s-form",
+                  "processFormVersion": "1.0.0",
                   "settings": {
                     "allowWithdraw": true,
                     "allowUrge": true,

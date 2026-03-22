@@ -95,8 +95,8 @@ describe('workflow api', () => {
         processKey: 'oa_leave',
         processName: '请假审批',
         category: 'OA',
-        formKey: 'oa-leave-form',
-        formVersion: '1.0.0',
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
         formFields: [],
         settings: {
           allowWithdraw: true,

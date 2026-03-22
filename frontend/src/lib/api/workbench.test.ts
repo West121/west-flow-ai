@@ -111,6 +111,23 @@ describe('workbench api', () => {
         completedAt: null,
         instanceStatus: 'RUNNING',
         formData: { days: 3 },
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
+        effectiveFormKey: 'oa-leave-approve-form',
+        effectiveFormVersion: '1.0.0',
+        nodeFormKey: 'oa-leave-approve-form',
+        nodeFormVersion: '1.0.0',
+        fieldBindings: [
+          {
+            source: 'PROCESS_FORM',
+            sourceFieldKey: 'days',
+            targetFieldKey: 'approvedDays',
+          },
+        ],
+        taskFormData: {
+          approved: true,
+          comment: '同意',
+        },
         activeTaskIds: ['task_001'],
       })
     )
@@ -164,6 +181,10 @@ describe('workbench api', () => {
       completeWorkbenchTask('task_001', {
         action: 'APPROVE',
         comment: '同意',
+        taskFormData: {
+          approved: true,
+          comment: '同意',
+        },
       })
     ).resolves.toMatchObject({
       completedTaskId: 'task_001',

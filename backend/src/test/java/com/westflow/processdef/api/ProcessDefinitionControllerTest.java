@@ -46,6 +46,7 @@ class ProcessDefinitionControllerTest {
         assertThat(saveBody.path("status").asText()).isEqualTo("DRAFT");
         assertThat(saveBody.path("version").asInt()).isEqualTo(0);
         assertThat(saveBody.path("dsl").path("processKey").asText()).isEqualTo("oa_leave");
+        assertThat(saveBody.path("dsl").path("processFormKey").asText()).isEqualTo("oa_leave-form");
 
         String detailResponse = mockMvc.perform(get("/api/v1/process-definitions/oa_leave:draft")
                         .header("Authorization", "Bearer " + token))
@@ -173,8 +174,8 @@ class ProcessDefinitionControllerTest {
                   "processKey": "%s",
                   "processName": "%s",
                   "category": "%s",
-                  "formKey": "%s-form",
-                  "formVersion": "1.0.0",
+                  "processFormKey": "%s-form",
+                  "processFormVersion": "1.0.0",
                   "settings": {
                     "allowWithdraw": true,
                     "allowUrge": true,

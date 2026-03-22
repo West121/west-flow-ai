@@ -21,6 +21,7 @@ import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
 import com.westflow.processruntime.api.TransferTaskRequest;
+import com.westflow.processruntime.api.WorkflowFieldBinding;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -195,6 +196,9 @@ public class ProcessDemoService {
         task.action = request.action();
         task.operatorUserId = currentUserId;
         task.comment = request.comment();
+        task.taskFormData = request.taskFormData() == null
+                ? Map.of()
+                : new HashMap<>(request.taskFormData());
         task.completedAt = now;
         task.updatedAt = now;
         instance.activeTaskIds.remove(taskId);
@@ -629,6 +633,18 @@ public class ProcessDemoService {
     }
 
     private ProcessTaskDetailResponse toDetailResponse(DemoTask task, DemoProcessInstance instance) {
+        PublishedProcessDefinition definition = processDefinitionService.getById(instance.processDefinitionId);
+        ProcessDslPayload payload = definition.dsl();
+        Graph graph = Graph.from(payload);
+        ProcessDslPayload.Node node = graph.nodeById.get(task.nodeId);
+        Map<String, Object> nodeConfig = node == null ? Map.of() : safeConfig(node);
+        String processFormKey = payload.processFormKey();
+        String processFormVersion = payload.processFormVersion();
+        String nodeFormKey = stringValue(nodeConfig.get("nodeFormKey"));
+        String nodeFormVersion = stringValue(nodeConfig.get("nodeFormVersion"));
+        String effectiveFormKey = nodeFormKey != null ? nodeFormKey : processFormKey;
+        String effectiveFormVersion = nodeFormVersion != null ? nodeFormVersion : processFormVersion;
+
         return new ProcessTaskDetailResponse(
                 task.taskId,
                 task.instanceId,
@@ -650,7 +666,15 @@ public class ProcessDemoService {
                 task.updatedAt,
                 task.completedAt,
                 instance.status,
+                processFormKey,
+                processFormVersion,
+                nodeFormKey,
+                nodeFormVersion,
+                effectiveFormKey,
+                effectiveFormVersion,
+                workflowFieldBindings(nodeConfig.get("fieldBindings")),
                 instance.formData,
+                task.taskFormData,
                 instance.activeTaskIds.stream().sorted().toList()
         );
     }
@@ -759,6 +783,25 @@ public class ProcessDemoService {
         return stringValue.isBlank() ? null : stringValue;
     }
 
+    private List<WorkflowFieldBinding> workflowFieldBindings(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        List<WorkflowFieldBinding> bindings = new ArrayList<>();
+        for (Object item : values) {
+            Map<String, Object> binding = mapValue(item);
+            if (binding.isEmpty()) {
+                continue;
+            }
+            bindings.add(new WorkflowFieldBinding(
+                    stringValue(binding.get("source")),
+                    stringValue(binding.get("sourceFieldKey")),
+                    stringValue(binding.get("targetFieldKey"))
+            ));
+        }
+        return bindings;
+    }
+
     @SuppressWarnings("unchecked")
     private List<String> stringListValue(Object value) {
         if (!(value instanceof List<?> values)) {
@@ -831,6 +874,7 @@ public class ProcessDemoService {
         private final String previousTaskId;
         private final String originTaskId;
         private final OffsetDateTime createdAt;
+        private Map<String, Object> taskFormData = Map.of();
         private String assigneeUserId;
         private OffsetDateTime updatedAt;
         private OffsetDateTime completedAt;

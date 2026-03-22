@@ -21,6 +21,7 @@ class ProcessDslToBpmnServiceTest {
                 "OA",
                 "oa-leave-form",
                 "1.0.0",
+                List.of(),
                 Map.of(
                         "allowWithdraw", true,
                         "allowUrge", true,
