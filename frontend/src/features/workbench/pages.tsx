@@ -63,6 +63,8 @@ import {
 } from '@/features/workbench/automation-sections'
 import {
   formatApprovalSheetText,
+  resolveCountersignMemberStatusLabel,
+  resolveCountersignModeLabel,
   resolveApprovalSheetActingModeLabel,
   resolveApprovalSheetResultLabel,
 } from '@/features/workbench/approval-sheet-helpers'
@@ -77,6 +79,7 @@ import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import {
+  WORKBENCH_RUNTIME_ENDPOINTS,
   addSignWorkbenchTask,
   getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
@@ -108,6 +111,7 @@ const workbenchDoneListRoute = getRouteApi('/_authenticated/workbench/done/list'
 const workbenchInitiatedListRoute = getRouteApi('/_authenticated/workbench/initiated/list')
 const workbenchCopiedListRoute = getRouteApi('/_authenticated/workbench/copied/list')
 
+// 统一把流程相关时间转成中文可读格式。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '--'
@@ -128,6 +132,7 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 待办状态在列表里只展示最直观的中文标签。
 function resolveTaskStatusLabel(status: WorkbenchTaskListItem['status']) {
   switch (status) {
     case 'PENDING_CLAIM':
@@ -148,6 +153,7 @@ function resolveTaskStatusLabel(status: WorkbenchTaskListItem['status']) {
   }
 }
 
+// 不同状态复用同一套 badge 语义。
 function resolveTaskStatusVariant(status: WorkbenchTaskListItem['status']) {
   return status === 'PENDING' ||
     status === 'PENDING_CLAIM' ||
@@ -156,6 +162,7 @@ function resolveTaskStatusVariant(status: WorkbenchTaskListItem['status']) {
     : 'secondary'
 }
 
+// 列表顶部统计只看总数、待处理和已完成。
 function summarizeTasks(records: WorkbenchTaskListItem[]) {
   return {
     total: records.length,
@@ -167,6 +174,7 @@ function summarizeTasks(records: WorkbenchTaskListItem[]) {
   }
 }
 
+// 请求失败时用空分页兜底，保证列表组件结构稳定。
 function buildEmptyApprovalSheetPage(search: { page: number; pageSize: number }) {
   return {
     page: search.page,
@@ -185,6 +193,7 @@ const approvalSheetBusinessTypeOptions = [
 ] as const
 
 // 流程中心列表统一走结构化筛选，避免页面自己拼各种 query。
+// 从结构化筛选里读取当前过滤值。
 function getApprovalSheetFilterValue(
   search: ListQuerySearch,
   field: string
@@ -193,6 +202,7 @@ function getApprovalSheetFilterValue(
   return typeof filter?.value === 'string' ? filter.value : undefined
 }
 
+// 统一更新审批单筛选条件，避免各页面自己拼参数。
 function updateApprovalSheetFilter(
   search: ListQuerySearch,
   navigate: NavigateFn,
@@ -218,6 +228,7 @@ function updateApprovalSheetFilter(
 }
 
 // CC 列表用“已读/已完成”来区分待办状态，和普通待办口径不同。
+// 抄送列表把已阅、已完成和普通待办区分开统计。
 function isCcApprovalSheetRead(record: ApprovalSheetListItem) {
   const latestAction = record.latestAction?.toUpperCase()
   const currentTaskStatus = record.currentTaskStatus?.toUpperCase()
@@ -230,6 +241,7 @@ function isCcApprovalSheetRead(record: ApprovalSheetListItem) {
   )
 }
 
+// 已完成抄送单独按实例或任务状态判断。
 function isCcApprovalSheetCompleted(record: ApprovalSheetListItem) {
   return (
     record.instanceStatus === 'COMPLETED' ||
@@ -237,6 +249,7 @@ function isCcApprovalSheetCompleted(record: ApprovalSheetListItem) {
   )
 }
 
+// CC 列表的统计口径单独算，避免和待办/已办混在一起。
 // CC 列表的统计口径单独算，避免和待办/已办混在一起。
 function summarizeCcApprovalSheets(records: ApprovalSheetListItem[]) {
   return {
@@ -249,6 +262,7 @@ function summarizeCcApprovalSheets(records: ApprovalSheetListItem[]) {
   }
 }
 
+// 审批单列表工具条负责高级筛选和抄送统计展示。
 function ApprovalSheetListToolbar({
   view,
   search,
@@ -354,6 +368,7 @@ function ApprovalSheetListToolbar({
   )
 }
 
+// 动作轨迹按任务节点串起审批动作和办理信息。
 function ApprovalSheetActionTimeline({
   taskTrace,
 }: {
@@ -418,6 +433,83 @@ function ApprovalSheetActionTimeline({
   )
 }
 
+// 会签节点详情单独收口成一个区块，统一展示会签模式、人数进度和票签结果。
+function ApprovalSheetCountersignSection({
+  countersignGroups,
+}: {
+  countersignGroups: WorkbenchTaskDetail['countersignGroups']
+}) {
+  const groups = countersignGroups ?? []
+
+  if (!groups.length) {
+    return null
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>会签进度</CardTitle>
+        <CardDescription>
+          展示当前会签组的模式、成员状态、票权累计和自动结束结果。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-4'>
+        {groups.map((group) => (
+          <div key={group.groupId} className='space-y-3 rounded-lg border p-4'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <Badge variant='secondary'>
+                {resolveCountersignModeLabel(group.approvalMode)}
+              </Badge>
+              <Badge variant='outline'>{group.groupStatus}</Badge>
+              <span className='text-sm font-medium'>{group.nodeName}</span>
+            </div>
+
+            <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
+              <div>总人数：{group.totalCount}</div>
+              <div>已完成：{group.completedCount}</div>
+              <div>处理中：{group.activeCount}</div>
+              <div>等待中：{group.waitingCount}</div>
+            </div>
+
+            {group.approvalMode === 'VOTE' ? (
+              <div className='grid gap-2 rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
+                <div>通过阈值：{group.voteThresholdPercent ?? '--'}%</div>
+                <div>通过票权：{group.approvedWeight ?? '--'}</div>
+                <div>拒绝票权：{group.rejectedWeight ?? '--'}</div>
+                <div>当前决议：{formatApprovalSheetText(group.decisionStatus)}</div>
+              </div>
+            ) : null}
+
+            <div className='space-y-2'>
+              {group.members.map((member) => (
+                <div
+                  key={member.memberId}
+                  className='grid gap-2 rounded-md border border-dashed px-3 py-2 text-sm md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]'
+                >
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <span className='font-medium'>{member.assigneeUserId}</span>
+                    <Badge variant='outline'>第 {member.sequenceNo} 位</Badge>
+                    {member.voteWeight !== null ? (
+                      <Badge variant='secondary'>票权 {member.voteWeight}</Badge>
+                    ) : null}
+                  </div>
+                  <div className='text-muted-foreground'>
+                    状态：{resolveCountersignMemberStatusLabel(member.memberStatus)}
+                  </div>
+                  <div className='font-mono text-xs text-muted-foreground'>
+                    任务：{formatApprovalSheetText(member.taskId)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+// 列表页公共区块把查询、统计和空状态统一起来。
 function ApprovalSheetListPageSection({
   title,
   description,
@@ -466,7 +558,7 @@ function ApprovalSheetListPageSection({
       <ResourceListPage
         title={title}
         description={description}
-        endpoint='/api/v1/process-runtime/demo/approval-sheets/page'
+        endpoint={WORKBENCH_RUNTIME_ENDPOINTS.approvalSheetsPage}
         searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
         search={search}
         navigate={navigate}
@@ -508,6 +600,7 @@ function ApprovalSheetListPageSection({
   )
 }
 
+// 待办页顶部提供离职转办入口。
 function WorkbenchTodoHandoverToolbar() {
   const queryClient = useQueryClient()
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false)
@@ -935,6 +1028,7 @@ const handoverTaskSchema = z.object({
 
 type HandoverTaskFormValues = z.input<typeof handoverTaskSchema>
 
+// 工作台首页只负责把待办、已办和统计卡片串起来。
 export function Dashboard() {
   return (
     <PageShell
@@ -1031,6 +1125,7 @@ export function Dashboard() {
   )
 }
 
+// 待办列表页承接任务查询和操作入口。
 export function WorkbenchTodoListPage() {
   const search = workbenchTodoListRoute.useSearch()
   const navigate = workbenchTodoListRoute.useNavigate()
@@ -1067,7 +1162,7 @@ export function WorkbenchTodoListPage() {
       <ResourceListPage
         title='工作台待办列表'
         description='展示当前运行态待办任务，支持关键词搜索、分页和跳转到独立处理页。'
-        endpoint='/api/v1/process-runtime/demo/tasks/page'
+        endpoint={WORKBENCH_RUNTIME_ENDPOINTS.tasksPage}
         searchPlaceholder='搜索流程标题、节点名称、发起人或业务单号'
         search={search}
         navigate={navigate}
@@ -1100,6 +1195,7 @@ export function WorkbenchTodoListPage() {
   )
 }
 
+// 发起页只展示业务入口和流程模板列表。
 export function WorkbenchStartPage() {
   return (
     <PageShell
@@ -1154,6 +1250,7 @@ export function WorkbenchStartPage() {
   )
 }
 
+// 已办列表页复用审批单列表公共区块。
 export function WorkbenchDoneListPage() {
   const search = workbenchDoneListRoute.useSearch()
   const navigate = workbenchDoneListRoute.useNavigate()
@@ -1177,6 +1274,7 @@ export function WorkbenchDoneListPage() {
   )
 }
 
+// 我发起列表页复用审批单列表公共区块。
 export function WorkbenchInitiatedListPage() {
   const search = workbenchInitiatedListRoute.useSearch()
   const navigate = workbenchInitiatedListRoute.useNavigate()
@@ -1200,6 +1298,7 @@ export function WorkbenchInitiatedListPage() {
   )
 }
 
+// 抄送列表页复用审批单列表公共区块。
 export function WorkbenchCopiedListPage() {
   const search = workbenchCopiedListRoute.useSearch()
   const navigate = workbenchCopiedListRoute.useNavigate()
@@ -1231,6 +1330,7 @@ type WorkbenchTodoDetailPageProps = {
   backLabel?: string
 }
 
+// 待办详情页统一承接任务详情、表单和动作办理。
 export function WorkbenchTodoDetailPage({
   taskId,
   businessType,
@@ -1987,6 +2087,9 @@ export function WorkbenchTodoDetailPage({
                     flowEdges={detail.flowEdges ?? []}
                     taskTrace={detail.taskTrace ?? []}
                     instanceEvents={detail.instanceEvents ?? []}
+                  />
+                  <ApprovalSheetCountersignSection
+                    countersignGroups={detail.countersignGroups ?? []}
                   />
                   <ApprovalSheetActionTimeline taskTrace={detail.taskTrace ?? []} />
                   <ApprovalSheetAutomationActionTimeline

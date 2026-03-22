@@ -279,6 +279,7 @@ function createWorkbenchTaskDetail(
         handleDurationSeconds: null,
       },
     ],
+    countersignGroups: [],
     activeTaskIds: [taskId],
     ...overrides,
   }
@@ -1060,6 +1061,25 @@ describe('workbench pages', () => {
             isAddSignTask: false,
             isRevoked: false,
           },
+          {
+            taskId: 'task_history_008',
+            nodeId: 'or_sign_node_001',
+            nodeName: '负责人或签',
+            status: 'AUTO_FINISHED',
+            assigneeUserId: 'usr_009',
+            candidateUserIds: ['usr_009'],
+            action: null,
+            operatorUserId: null,
+            comment: '或签命中后自动结束',
+            receiveTime: '2026-03-22T10:10:00+08:00',
+            readTime: null,
+            handleStartTime: null,
+            handleEndTime: '2026-03-22T10:11:00+08:00',
+            handleDurationSeconds: 0,
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
         ],
       })
     )
@@ -1090,6 +1110,87 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('委派').length).toBeGreaterThan(0)
     expect(screen.getAllByText('代理代办').length).toBeGreaterThan(0)
     expect(screen.getAllByText('离职转办').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('自动结束').length).toBeGreaterThan(0)
+  })
+
+  it('shows countersign progress and vote summary in approval detail', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_vote_001',
+        activeTaskIds: ['task_vote_001'],
+        countersignGroups: [
+          {
+            groupId: 'tg_vote_001',
+            instanceId: 'pi_001',
+            nodeId: 'approve_manager',
+            nodeName: '负责人票签',
+            approvalMode: 'VOTE',
+            groupStatus: 'RUNNING',
+            totalCount: 3,
+            completedCount: 1,
+            activeCount: 2,
+            waitingCount: 0,
+            voteThresholdPercent: 60,
+            approvedWeight: 40,
+            rejectedWeight: 0,
+            decisionStatus: null,
+            members: [
+              {
+                memberId: 'member_001',
+                taskId: 'task_vote_001',
+                assigneeUserId: 'usr_002',
+                sequenceNo: 1,
+                voteWeight: 40,
+                memberStatus: 'COMPLETED',
+              },
+              {
+                memberId: 'member_002',
+                taskId: 'task_vote_002',
+                assigneeUserId: 'usr_003',
+                sequenceNo: 2,
+                voteWeight: 35,
+                memberStatus: 'ACTIVE',
+              },
+              {
+                memberId: 'member_003',
+                taskId: 'task_vote_003',
+                assigneeUserId: 'usr_004',
+                sequenceNo: 3,
+                voteWeight: 25,
+                memberStatus: 'AUTO_FINISHED',
+              },
+            ],
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_vote_001' />)
+
+    expect(await screen.findByText('会签进度')).toBeInTheDocument()
+    expect(screen.getByText('票签')).toBeInTheDocument()
+    expect(screen.getByText('通过阈值：60%')).toBeInTheDocument()
+    expect(screen.getByText('通过票权：40')).toBeInTheDocument()
+    expect(screen.getByText('拒绝票权：0')).toBeInTheDocument()
+    expect(screen.getByText('负责人票签')).toBeInTheDocument()
+    expect(screen.getByText('票权 40')).toBeInTheDocument()
+    expect(screen.getByText(/状态：自动结束/)).toBeInTheDocument()
   })
 
   it('loads approval-sheet detail through the business locator path', async () => {

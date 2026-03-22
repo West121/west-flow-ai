@@ -143,6 +143,33 @@ export type WorkbenchTaskTraceItem = {
   isTakenBack?: boolean
 }
 
+export type WorkbenchCountersignGroupMember = {
+  memberId: string
+  taskId: string | null
+  assigneeUserId: string
+  sequenceNo: number
+  voteWeight: number | null
+  memberStatus: string
+}
+
+export type WorkbenchCountersignGroup = {
+  groupId: string
+  instanceId: string
+  nodeId: string
+  nodeName: string
+  approvalMode: string
+  groupStatus: string
+  totalCount: number
+  completedCount: number
+  activeCount: number
+  waitingCount: number
+  voteThresholdPercent: number | null
+  approvedWeight: number | null
+  rejectedWeight: number | null
+  decisionStatus: string | null
+  members: WorkbenchCountersignGroupMember[]
+}
+
 export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   action: string | null
   operatorUserId: string | null
@@ -175,6 +202,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   nodeFormVersion: string | null
   fieldBindings: WorkflowFieldBinding[]
   taskFormData: Record<string, unknown> | null
+  countersignGroups?: WorkbenchCountersignGroup[] | null
   activeTaskIds: string[]
 }
 

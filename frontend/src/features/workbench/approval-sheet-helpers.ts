@@ -180,6 +180,8 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   }
 
   switch (item.status) {
+    case 'AUTO_FINISHED':
+      return '自动结束'
     case 'COMPLETED':
       return '已完成'
     case 'TRANSFERRED':
@@ -191,6 +193,42 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
     case 'PENDING':
     default:
       return '待处理'
+  }
+}
+
+// 会签模式文案统一集中在这里，避免详情页和设计器说明口径漂移。
+export function resolveCountersignModeLabel(value: string | null | undefined) {
+  switch (value) {
+    case 'SEQUENTIAL':
+      return '顺序会签'
+    case 'PARALLEL':
+      return '并行会签'
+    case 'OR_SIGN':
+      return '或签'
+    case 'VOTE':
+      return '票签'
+    case 'SINGLE':
+      return '单人审批'
+    default:
+      return value?.trim() || '--'
+  }
+}
+
+// 会签成员状态文案单独映射，便于详情页直接展示每个人当前进度。
+export function resolveCountersignMemberStatusLabel(
+  value: string | null | undefined
+) {
+  switch (value) {
+    case 'COMPLETED':
+      return '已完成'
+    case 'ACTIVE':
+      return '处理中'
+    case 'WAITING':
+      return '等待中'
+    case 'AUTO_FINISHED':
+      return '自动结束'
+    default:
+      return value?.trim() || '--'
   }
 }
 

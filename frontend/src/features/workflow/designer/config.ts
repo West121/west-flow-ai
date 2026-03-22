@@ -71,6 +71,13 @@ const defaultApproverConfig: WorkflowApproverNodeConfig = {
   commentRequired: false,
 }
 
+const defaultApproverVoteRule = defaultApproverConfig.voteRule ?? {
+  thresholdPercent: null,
+  passCondition: 'THRESHOLD_REACHED',
+  rejectCondition: 'REJECT_THRESHOLD',
+  weights: [],
+}
+
 const defaultCcConfig: WorkflowCcNodeConfig = {
   targets: {
     mode: 'USER',
@@ -315,14 +322,14 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
       voteRule: {
         thresholdPercent: normalizeNumber(
           value?.voteRule?.thresholdPercent,
-          defaultApproverConfig.voteRule.thresholdPercent
+          defaultApproverVoteRule.thresholdPercent
         ),
         passCondition: value?.voteRule?.passCondition
           ? String(value.voteRule.passCondition)
-          : defaultApproverConfig.voteRule.passCondition,
+          : defaultApproverVoteRule.passCondition,
         rejectCondition: value?.voteRule?.rejectCondition
           ? String(value.voteRule.rejectCondition)
-          : defaultApproverConfig.voteRule.rejectCondition,
+          : defaultApproverVoteRule.rejectCondition,
         weights: normalizeVoteWeights(value?.voteRule?.weights),
       },
       reapprovePolicy: normalizeReapprovePolicy(value?.reapprovePolicy),

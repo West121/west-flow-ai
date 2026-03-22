@@ -195,6 +195,24 @@ describe('workflow designer dsl mapping', () => {
                   },
                   reapprovePolicy: 'CONTINUE_PROGRESS',
                   autoFinishRemaining: true,
+                  approvalPolicy: {
+                    type: 'VOTE',
+                    voteThreshold: 60,
+                  },
+                  timeoutPolicy: {
+                    enabled: false,
+                    durationMinutes: null,
+                    action: 'APPROVE',
+                  },
+                  reminderPolicy: {
+                    enabled: false,
+                    firstReminderAfterMinutes: null,
+                    repeatIntervalMinutes: null,
+                    maxTimes: null,
+                    channels: ['IN_APP'],
+                  },
+                  operations: ['APPROVE', 'REJECT', 'RETURN'],
+                  commentRequired: false,
                   assignment: {
                     mode: 'USER',
                     userIds: ['usr_002', 'usr_003'],
@@ -204,7 +222,7 @@ describe('workflow designer dsl mapping', () => {
                   },
                 },
               },
-            } as WorkflowNode)
+            } as unknown as WorkflowNode)
           : node
       ),
     } satisfies WorkflowSnapshot
