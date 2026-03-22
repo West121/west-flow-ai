@@ -1088,6 +1088,27 @@ SELECT
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role WHERE id = 'role_process_admin');
 
+INSERT INTO wf_role (
+    id,
+    role_code,
+    role_name,
+    role_category,
+    description,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'role_system_admin',
+    'SYSTEM_ADMIN',
+    '平台管理员',
+    'SYSTEM',
+    '具备全局系统管理与流程管理权限',
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role WHERE id = 'role_system_admin');
+
 INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
 SELECT 'rm_001', 'role_oa_user', 'menu_workbench_dashboard', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_001');
@@ -1131,6 +1152,10 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_002');
 INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
 SELECT 'rds_003', 'role_process_admin', 'COMPANY', 'cmp_001', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_003');
+
+INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
+SELECT 'rds_004', 'role_system_admin', 'ALL', '*', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_004');
 
 INSERT INTO wf_user (
     id,
@@ -1219,6 +1244,35 @@ SELECT
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user WHERE id = 'usr_003');
 
+INSERT INTO wf_user (
+    id,
+    username,
+    display_name,
+    mobile,
+    email,
+    avatar,
+    company_id,
+    active_department_id,
+    active_post_id,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'usr_admin',
+    'admin',
+    '平台管理员',
+    '13600000000',
+    'admin@example.com',
+    '',
+    'cmp_001',
+    'dept_001',
+    'post_001',
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user WHERE id = 'usr_admin');
+
 INSERT INTO wf_user_post (id, user_id, post_id, is_primary, created_at)
 SELECT 'up_001', 'usr_001', 'post_001', TRUE, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_001');
@@ -1230,6 +1284,10 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_002');
 INSERT INTO wf_user_post (id, user_id, post_id, is_primary, created_at)
 SELECT 'up_003', 'usr_003', 'post_003', TRUE, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_003');
+
+INSERT INTO wf_user_post (id, user_id, post_id, is_primary, created_at)
+SELECT 'up_004', 'usr_admin', 'post_001', TRUE, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_004');
 
 INSERT INTO wf_user_role (id, user_id, role_id, created_at)
 SELECT 'ur_001', 'usr_001', 'role_oa_user', CURRENT_TIMESTAMP
@@ -1246,6 +1304,23 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_003');
 INSERT INTO wf_user_role (id, user_id, role_id, created_at)
 SELECT 'ur_004', 'usr_003', 'role_process_admin', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_004');
+
+INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+SELECT 'ur_005', 'usr_admin', 'role_system_admin', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_005');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT
+    'rm_sysadmin_' || m.id,
+    'role_system_admin',
+    m.id,
+    CURRENT_TIMESTAMP
+FROM wf_menu m
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM wf_role_menu rm
+    WHERE rm.id = 'rm_sysadmin_' || m.id
+);
 
 INSERT INTO wf_delegation (id, principal_user_id, delegate_user_id, status, remark, created_at, updated_at)
 SELECT 'dlg_001', 'usr_002', 'usr_001', 'ACTIVE', '默认代理关系', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP

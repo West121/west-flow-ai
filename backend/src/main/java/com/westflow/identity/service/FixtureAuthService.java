@@ -91,15 +91,33 @@ public class FixtureAuthService {
                 List.of("ai:copilot:open")
         );
 
+        FixtureUser admin = new FixtureUser(
+                "usr_admin",
+                "admin",
+                "admin123",
+                "平台管理员",
+                "13600000000",
+                "admin@example.com",
+                "",
+                "cmp_001",
+                "post_001",
+                Map.of("post_001", new PostFixture("post_001", "dept_001", "部门经理")),
+                List.of(),
+                List.of(),
+                List.of("ai:copilot:open", "ai:process:start", "ai:task:handle")
+        );
+
         this.usersByUsername = Map.of(
                 zhangsan.username(), zhangsan,
                 lisi.username(), lisi,
-                wangwu.username(), wangwu
+                wangwu.username(), wangwu,
+                admin.username(), admin
         );
         this.usersById = Map.of(
                 zhangsan.userId(), zhangsan,
                 lisi.userId(), lisi,
-                wangwu.userId(), wangwu
+                wangwu.userId(), wangwu,
+                admin.userId(), admin
         );
     }
 
