@@ -11,11 +11,16 @@ import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
+import com.westflow.processruntime.api.ClaimTaskRequest;
+import com.westflow.processruntime.api.ClaimTaskResponse;
 import com.westflow.processruntime.api.DemoTaskView;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
+import com.westflow.processruntime.api.ReturnTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
+import com.westflow.processruntime.api.TransferTaskRequest;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -59,6 +64,7 @@ public class ProcessDemoService {
     private final ProcessDefinitionService processDefinitionService;
     private final Map<String, DemoProcessInstance> instancesById = new ConcurrentHashMap<>();
     private final Map<String, DemoTask> tasksById = new ConcurrentHashMap<>();
+    private final List<DemoTaskActionLog> actionLogs = new ArrayList<>();
 
     public ProcessDemoService(ProcessDefinitionService processDefinitionService) {
         this.processDefinitionService = processDefinitionService;
@@ -67,6 +73,7 @@ public class ProcessDemoService {
     public synchronized void reset() {
         instancesById.clear();
         tasksById.clear();
+        actionLogs.clear();
     }
 
     public synchronized StartProcessResponse start(StartProcessRequest request) {
@@ -87,7 +94,7 @@ public class ProcessDemoService {
         );
         instancesById.put(instance.instanceId, instance);
 
-        List<DemoTaskView> activeTasks = advanceFromNode(definition, graph, instance, startNode.id());
+        List<DemoTaskView> activeTasks = advanceFromNode(definition, graph, instance, startNode.id(), null, null);
         refreshStatus(instance);
         return new StartProcessResponse(definition.processDefinitionId(), instance.instanceId, instance.status, activeTasks);
     }
@@ -120,20 +127,63 @@ public class ProcessDemoService {
         return toDetailResponse(task, instance);
     }
 
-    public synchronized CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
+    public synchronized TaskActionAvailabilityResponse actions(String taskId) {
         DemoTask task = requireTask(taskId);
-        if (!"PENDING".equals(task.status)) {
+        return actionAvailability(task, currentUserId());
+    }
+
+    public synchronized ClaimTaskResponse claim(String taskId, ClaimTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        String currentUserId = currentUserId();
+
+        if (!"PENDING_CLAIM".equals(task.status)) {
             throw new ContractException(
                     "PROCESS.ACTION_NOT_ALLOWED",
                     HttpStatus.UNPROCESSABLE_ENTITY,
-                    "当前任务不允许重复完成",
+                    "当前任务不支持认领",
+                    Map.of("taskId", taskId, "currentStatus", task.status)
+            );
+        }
+        if (!task.candidateUserIds.contains(currentUserId)) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "当前用户不在任务候选范围内",
+                    Map.of("taskId", taskId, "userId", currentUserId)
+            );
+        }
+
+        task.status = "PENDING";
+        task.assigneeUserId = currentUserId;
+        task.operatorUserId = currentUserId;
+        task.action = "CLAIM";
+        task.comment = request.comment();
+        task.updatedAt = now();
+        logAction(task, "CLAIM", currentUserId, request.comment());
+
+        return new ClaimTaskResponse(task.taskId, task.instanceId, task.status, task.assigneeUserId);
+    }
+
+    public synchronized CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        String currentUserId = request.operatorUserId() == null || request.operatorUserId().isBlank()
+                ? currentUserId()
+                : request.operatorUserId();
+
+        if (!"PENDING".equals(task.status) || task.assigneeUserId == null || !task.assigneeUserId.equals(currentUserId)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不允许由该用户完成",
                     Map.of(
                             "taskId",
                             taskId,
                             "currentStatus",
                             task.status,
                             "action",
-                            request.action()
+                            request.action(),
+                            "userId",
+                            currentUserId
                     )
             );
         }
@@ -143,28 +193,113 @@ public class ProcessDemoService {
         OffsetDateTime now = now();
         task.status = "COMPLETED";
         task.action = request.action();
-        task.operatorUserId = request.operatorUserId() == null || request.operatorUserId().isBlank()
-                ? StpUtil.getLoginIdAsString()
-                : request.operatorUserId();
+        task.operatorUserId = currentUserId;
         task.comment = request.comment();
         task.completedAt = now;
         task.updatedAt = now;
         instance.activeTaskIds.remove(taskId);
         instance.updatedAt = now;
+        logAction(task, request.action(), currentUserId, request.comment());
 
         PublishedProcessDefinition definition = processDefinitionService.getById(instance.processDefinitionId);
         Graph graph = Graph.from(definition.dsl());
-        List<DemoTaskView> nextTasks = continueAlongOutgoing(definition, graph, instance, task.nodeId);
+        List<DemoTaskView> nextTasks = continueAlongOutgoing(definition, graph, instance, task.nodeId, task.taskId, task.originTaskId);
         refreshStatus(instance);
 
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, nextTasks);
+    }
+
+    public synchronized CompleteTaskResponse transfer(String taskId, TransferTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        String currentUserId = currentUserId();
+        requirePendingAssignee(task, currentUserId, "转办");
+
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        OffsetDateTime now = now();
+        task.status = "TRANSFERRED";
+        task.action = "TRANSFER";
+        task.operatorUserId = currentUserId;
+        task.comment = request.comment();
+        task.completedAt = now;
+        task.updatedAt = now;
+        instance.activeTaskIds.remove(task.taskId);
+
+        DemoTask nextTask = createTask(
+                instance,
+                task.nodeId,
+                task.nodeName,
+                Map.of(
+                        "mode", "USER",
+                        "userIds", List.of(request.targetUserId()),
+                        "roleCodes", List.of(),
+                        "departmentRef", "",
+                        "formFieldKey", ""
+                ),
+                task.taskId,
+                task.originTaskId
+        );
+        logAction(task, "TRANSFER", currentUserId, request.comment());
+        refreshStatus(instance);
+        return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
+    }
+
+    public synchronized CompleteTaskResponse returnToPrevious(String taskId, ReturnTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        String currentUserId = currentUserId();
+        requirePendingAssignee(task, currentUserId, "退回");
+
+        String targetStrategy = request.targetStrategy() == null || request.targetStrategy().isBlank()
+                ? "PREVIOUS_USER_TASK"
+                : request.targetStrategy();
+        if (!"PREVIOUS_USER_TASK".equals(targetStrategy)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前仅支持退回上一步人工节点",
+                    Map.of("targetStrategy", targetStrategy)
+            );
+        }
+
+        DemoTask previousTask = task.previousTaskId == null ? null : tasksById.get(task.previousTaskId);
+        if (previousTask == null) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不存在可退回的上一步人工节点",
+                    Map.of("taskId", taskId)
+            );
+        }
+
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        OffsetDateTime now = now();
+        task.status = "RETURNED";
+        task.action = "RETURN";
+        task.operatorUserId = currentUserId;
+        task.comment = request.comment();
+        task.completedAt = now;
+        task.updatedAt = now;
+        instance.activeTaskIds.remove(task.taskId);
+
+        DemoTask nextTask = createTask(
+                instance,
+                previousTask.nodeId,
+                previousTask.nodeName,
+                resolveReturnAssignment(previousTask),
+                task.taskId,
+                previousTask.originTaskId
+        );
+        logAction(task, "RETURN", currentUserId, request.comment());
+        refreshStatus(instance);
+        return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
     }
 
     private List<DemoTaskView> advanceFromNode(
             PublishedProcessDefinition definition,
             Graph graph,
             DemoProcessInstance instance,
-            String nodeId
+            String nodeId,
+            String previousTaskId,
+            String originTaskId
     ) {
         ProcessDslPayload.Node node = graph.nodeById.get(nodeId);
         if (node == null) {
@@ -177,11 +312,11 @@ public class ProcessDemoService {
         }
 
         return switch (node.type()) {
-            case "start", "cc" -> continueAlongOutgoing(definition, graph, instance, node.id());
-            case "approver" -> List.of(createTask(instance, node));
-            case "condition" -> advanceCondition(definition, graph, instance, node);
-            case "parallel_split" -> advanceParallelSplit(definition, graph, instance, node);
-            case "parallel_join" -> advanceParallelJoin(definition, graph, instance, node);
+            case "start", "cc" -> continueAlongOutgoing(definition, graph, instance, node.id(), previousTaskId, originTaskId);
+            case "approver" -> List.of(createTask(instance, node, previousTaskId, originTaskId).toView());
+            case "condition" -> advanceCondition(definition, graph, instance, node, previousTaskId, originTaskId);
+            case "parallel_split" -> advanceParallelSplit(definition, graph, instance, node, previousTaskId, originTaskId);
+            case "parallel_join" -> advanceParallelJoin(definition, graph, instance, node, previousTaskId, originTaskId);
             case "end" -> {
                 instance.reachedEndNodeIds.add(node.id());
                 refreshStatus(instance);
@@ -200,11 +335,13 @@ public class ProcessDemoService {
             PublishedProcessDefinition definition,
             Graph graph,
             DemoProcessInstance instance,
-            String nodeId
+            String nodeId,
+            String previousTaskId,
+            String originTaskId
     ) {
         List<DemoTaskView> tasks = new ArrayList<>();
         for (ProcessDslPayload.Edge edge : graph.outgoingEdges.getOrDefault(nodeId, List.of())) {
-            tasks.addAll(advanceFromNode(definition, graph, instance, edge.target()));
+            tasks.addAll(advanceFromNode(definition, graph, instance, edge.target(), previousTaskId, originTaskId));
         }
         refreshStatus(instance);
         return tasks;
@@ -214,7 +351,9 @@ public class ProcessDemoService {
             PublishedProcessDefinition definition,
             Graph graph,
             DemoProcessInstance instance,
-            ProcessDslPayload.Node node
+            ProcessDslPayload.Node node,
+            String previousTaskId,
+            String originTaskId
     ) {
         List<ProcessDslPayload.Edge> outgoing = graph.outgoingEdges.getOrDefault(node.id(), List.of());
         if (outgoing.isEmpty()) {
@@ -227,18 +366,20 @@ public class ProcessDemoService {
                 .filter(edge -> edge.id().equals(defaultEdgeId))
                 .findFirst()
                 .orElse(outgoing.get(0));
-        return advanceFromNode(definition, graph, instance, selected.target());
+        return advanceFromNode(definition, graph, instance, selected.target(), previousTaskId, originTaskId);
     }
 
     private List<DemoTaskView> advanceParallelSplit(
             PublishedProcessDefinition definition,
             Graph graph,
             DemoProcessInstance instance,
-            ProcessDslPayload.Node node
+            ProcessDslPayload.Node node,
+            String previousTaskId,
+            String originTaskId
     ) {
         List<DemoTaskView> tasks = new ArrayList<>();
         for (ProcessDslPayload.Edge edge : graph.outgoingEdges.getOrDefault(node.id(), List.of())) {
-            tasks.addAll(advanceFromNode(definition, graph, instance, edge.target()));
+            tasks.addAll(advanceFromNode(definition, graph, instance, edge.target(), previousTaskId, originTaskId));
         }
         refreshStatus(instance);
         return tasks;
@@ -248,7 +389,9 @@ public class ProcessDemoService {
             PublishedProcessDefinition definition,
             Graph graph,
             DemoProcessInstance instance,
-            ProcessDslPayload.Node node
+            ProcessDslPayload.Node node,
+            String previousTaskId,
+            String originTaskId
     ) {
         int expectedArrivals = graph.incomingEdges.getOrDefault(node.id(), List.of()).size();
         int currentArrivals = instance.joinArrivals.merge(node.id(), 1, Integer::sum);
@@ -258,18 +401,49 @@ public class ProcessDemoService {
         }
 
         instance.joinArrivals.remove(node.id());
-        return continueAlongOutgoing(definition, graph, instance, node.id());
+        return continueAlongOutgoing(definition, graph, instance, node.id(), previousTaskId, originTaskId);
     }
 
-    private DemoTaskView createTask(DemoProcessInstance instance, ProcessDslPayload.Node node) {
+    private DemoTask createTask(
+            DemoProcessInstance instance,
+            ProcessDslPayload.Node node,
+            String previousTaskId,
+            String originTaskId
+    ) {
+        return createTask(instance, node.id(), node.name(), mapValue(safeConfig(node).get("assignment")), previousTaskId, originTaskId);
+    }
+
+    private DemoTask createTask(
+            DemoProcessInstance instance,
+            String nodeId,
+            String nodeName,
+            Map<String, Object> assignment,
+            String previousTaskId,
+            String originTaskId
+    ) {
         String taskId = newId("task");
-        Map<String, Object> assignment = mapValue(safeConfig(node).get("assignment"));
         OffsetDateTime now = now();
-        DemoTask task = new DemoTask(taskId, instance.instanceId, node.id(), node.name(), assignment, now, now);
+        List<String> candidateUserIds = stringListValue(assignment.get("userIds"));
+        String assigneeUserId = candidateUserIds.size() == 1 ? candidateUserIds.get(0) : null;
+        String status = candidateUserIds.size() > 1 ? "PENDING_CLAIM" : "PENDING";
+        DemoTask task = new DemoTask(
+                taskId,
+                instance.instanceId,
+                nodeId,
+                nodeName,
+                new HashMap<>(assignment),
+                candidateUserIds,
+                assigneeUserId,
+                previousTaskId,
+                originTaskId == null ? taskId : originTaskId,
+                now,
+                now,
+                status
+        );
         tasksById.put(taskId, task);
         instance.activeTaskIds.add(taskId);
         refreshStatus(instance);
-        return task.toView();
+        return task;
     }
 
     private void refreshStatus(DemoProcessInstance instance) {
@@ -446,7 +620,8 @@ public class ProcessDemoService {
                 task.nodeName,
                 task.status,
                 stringValue(task.assignment.get("mode")),
-                stringListValue(task.assignment.get("userIds")),
+                task.candidateUserIds,
+                task.assigneeUserId,
                 task.createdAt,
                 task.updatedAt,
                 task.completedAt
@@ -466,7 +641,8 @@ public class ProcessDemoService {
                 task.nodeName,
                 task.status,
                 stringValue(task.assignment.get("mode")),
-                stringListValue(task.assignment.get("userIds")),
+                task.candidateUserIds,
+                task.assigneeUserId,
                 task.action,
                 task.operatorUserId,
                 task.comment,
@@ -477,6 +653,58 @@ public class ProcessDemoService {
                 instance.formData,
                 instance.activeTaskIds.stream().sorted().toList()
         );
+    }
+
+    private TaskActionAvailabilityResponse actionAvailability(DemoTask task, String userId) {
+        boolean canClaim = "PENDING_CLAIM".equals(task.status) && task.candidateUserIds.contains(userId);
+        boolean canHandle = "PENDING".equals(task.status) && userId.equals(task.assigneeUserId);
+        return new TaskActionAvailabilityResponse(
+                canClaim,
+                canHandle,
+                canHandle,
+                canHandle,
+                canHandle && task.previousTaskId != null
+        );
+    }
+
+    private Map<String, Object> resolveReturnAssignment(DemoTask previousTask) {
+        if (previousTask.assigneeUserId != null && !previousTask.assigneeUserId.isBlank()) {
+            return new HashMap<>(Map.of(
+                    "mode", "USER",
+                    "userIds", List.of(previousTask.assigneeUserId),
+                    "roleCodes", List.of(),
+                    "departmentRef", "",
+                    "formFieldKey", ""
+            ));
+        }
+        return new HashMap<>(previousTask.assignment);
+    }
+
+    private void requirePendingAssignee(DemoTask task, String userId, String actionLabel) {
+        if (!"PENDING".equals(task.status) || task.assigneeUserId == null || !task.assigneeUserId.equals(userId)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不允许执行" + actionLabel,
+                    Map.of("taskId", task.taskId, "status", task.status, "userId", userId)
+            );
+        }
+    }
+
+    private void logAction(DemoTask task, String action, String operatorUserId, String comment) {
+        actionLogs.add(new DemoTaskActionLog(
+                newId("tal"),
+                task.instanceId,
+                task.taskId,
+                action,
+                operatorUserId,
+                comment,
+                now()
+        ));
+    }
+
+    private String currentUserId() {
+        return StpUtil.getLoginIdAsString();
     }
 
     private DemoTask requireTask(String taskId) {
@@ -599,10 +827,14 @@ public class ProcessDemoService {
         private final String nodeId;
         private final String nodeName;
         private final Map<String, Object> assignment;
+        private final List<String> candidateUserIds;
+        private final String previousTaskId;
+        private final String originTaskId;
         private final OffsetDateTime createdAt;
+        private String assigneeUserId;
         private OffsetDateTime updatedAt;
         private OffsetDateTime completedAt;
-        private String status = "PENDING";
+        private String status;
         private String action;
         private String operatorUserId;
         private String comment;
@@ -613,16 +845,26 @@ public class ProcessDemoService {
                 String nodeId,
                 String nodeName,
                 Map<String, Object> assignment,
+                List<String> candidateUserIds,
+                String assigneeUserId,
+                String previousTaskId,
+                String originTaskId,
                 OffsetDateTime createdAt,
-                OffsetDateTime updatedAt
+                OffsetDateTime updatedAt,
+                String status
         ) {
             this.taskId = taskId;
             this.instanceId = instanceId;
             this.nodeId = nodeId;
             this.nodeName = nodeName;
             this.assignment = assignment;
+            this.candidateUserIds = candidateUserIds;
+            this.assigneeUserId = assigneeUserId;
+            this.previousTaskId = previousTaskId;
+            this.originTaskId = originTaskId;
             this.createdAt = createdAt;
             this.updatedAt = updatedAt;
+            this.status = status;
         }
 
         private String taskId() {
@@ -648,9 +890,21 @@ public class ProcessDemoService {
                     nodeName,
                     status,
                     stringValue(assignment.get("mode")),
-                    stringListValue(assignment.get("userIds"))
+                    candidateUserIds,
+                    assigneeUserId
             );
         }
+    }
+
+    private record DemoTaskActionLog(
+            String actionLogId,
+            String instanceId,
+            String taskId,
+            String action,
+            String operatorUserId,
+            String comment,
+            OffsetDateTime createdAt
+    ) {
     }
 
     private static final class DemoProcessInstance {

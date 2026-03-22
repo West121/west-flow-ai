@@ -16,6 +16,7 @@ public record ProcessTaskListItemResponse(
         String status,
         String assignmentMode,
         List<String> candidateUserIds,
+        String assigneeUserId,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         OffsetDateTime completedAt

@@ -4,7 +4,7 @@ import {
   normalizeEdgeCondition,
   normalizeNodeConfig,
 } from './config'
-import { type WorkflowSnapshot } from './types'
+import { type WorkflowProcessFormField, type WorkflowSnapshot } from './types'
 
 export type ProcessDefinitionMeta = {
   processKey: string
@@ -12,6 +12,7 @@ export type ProcessDefinitionMeta = {
   category: string
   formKey: string
   formVersion: string
+  formFields: WorkflowProcessFormField[]
 }
 
 export type ProcessDefinitionDslNodeType =
@@ -30,6 +31,7 @@ export type ProcessDefinitionDslPayload = {
   category: string
   formKey: string
   formVersion: string
+  formFields: WorkflowProcessFormField[]
   settings: {
     allowWithdraw: boolean
     allowUrge: boolean
@@ -128,6 +130,7 @@ export function workflowSnapshotToProcessDefinitionDsl(
     category: meta.category,
     formKey: meta.formKey,
     formVersion: meta.formVersion,
+    formFields: meta.formFields,
     settings: {
       allowWithdraw: true,
       allowUrge: true,

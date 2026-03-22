@@ -92,6 +92,7 @@ const defaultDefinitionMeta: ProcessDefinitionMeta = {
   category: 'OA',
   formKey: 'oa-leave-form',
   formVersion: '1.0.0',
+  formFields: [],
 }
 
 function resolveStatusLabel(status: string): DefinitionRow['status'] {
@@ -398,6 +399,7 @@ function WorkflowDesignerWorkspace({
             category: detailQuery.data.category,
             formKey: detailQuery.data.dsl.formKey,
             formVersion: detailQuery.data.dsl.formVersion,
+            formFields: detailQuery.data.dsl.formFields ?? [],
           }
 
     return {

@@ -3,6 +3,7 @@ import {
   type WorkflowCcNodeConfig,
   type WorkflowConditionNodeConfig,
   type WorkflowEdgeConditionType,
+  type WorkflowFieldBinding,
   type WorkflowNodeConfigMap,
   type WorkflowNodeKind,
   type WorkflowNodeTone,
@@ -31,6 +32,9 @@ const defaultApproverConfig: WorkflowApproverNodeConfig = {
     departmentRef: '',
     formFieldKey: '',
   },
+  nodeFormKey: '',
+  nodeFormVersion: '',
+  fieldBindings: [],
   approvalPolicy: {
     type: 'SEQUENTIAL',
     voteThreshold: null,
@@ -51,6 +55,8 @@ const defaultCcConfig: WorkflowCcNodeConfig = {
 
 const defaultConditionConfig: WorkflowConditionNodeConfig = {
   defaultEdgeId: '',
+  expressionMode: 'EXPRESSION',
+  expressionFieldKey: '',
 }
 
 const defaultStartConfig: WorkflowStartNodeConfig = {
@@ -58,6 +64,22 @@ const defaultStartConfig: WorkflowStartNodeConfig = {
 }
 
 const emptyConfig = {}
+
+function normalizeFieldBindings(value: unknown): WorkflowFieldBinding[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => item as Partial<WorkflowFieldBinding> | null | undefined)
+    .filter((item): item is Partial<WorkflowFieldBinding> => Boolean(item))
+    .map<WorkflowFieldBinding>((item) => ({
+      source: item.source === 'NODE_FORM' ? 'NODE_FORM' : 'PROCESS_FORM',
+      sourceFieldKey: item.sourceFieldKey ? String(item.sourceFieldKey) : '',
+      targetFieldKey: item.targetFieldKey ? String(item.targetFieldKey) : '',
+    }))
+    .filter((item) => item.sourceFieldKey && item.targetFieldKey)
+}
 
 export function defaultNodeConfig<K extends WorkflowNodeKind>(
   kind: K
@@ -158,6 +180,9 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
           ? String(value.assignment.formFieldKey)
           : defaultApproverConfig.assignment.formFieldKey,
       },
+      nodeFormKey: value?.nodeFormKey ? String(value.nodeFormKey) : '',
+      nodeFormVersion: value?.nodeFormVersion ? String(value.nodeFormVersion) : '',
+      fieldBindings: normalizeFieldBindings(value?.fieldBindings),
       approvalPolicy: {
         type: value?.approvalPolicy?.type ?? defaultApproverConfig.approvalPolicy.type,
         voteThreshold:
@@ -178,6 +203,11 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
     const value = config as Partial<WorkflowConditionNodeConfig> | null | undefined
     return {
       defaultEdgeId: value?.defaultEdgeId ? String(value.defaultEdgeId) : '',
+      expressionMode:
+        value?.expressionMode === 'FIELD_COMPARE'
+          ? 'FIELD_COMPARE'
+          : defaultConditionConfig.expressionMode,
+      expressionFieldKey: value?.expressionFieldKey ? String(value.expressionFieldKey) : '',
     } as WorkflowNodeConfigMap[K]
   }
 

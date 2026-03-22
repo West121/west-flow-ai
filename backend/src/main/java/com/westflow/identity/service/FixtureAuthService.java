@@ -57,8 +57,32 @@ public class FixtureAuthService {
                 List.of("ai:copilot:open")
         );
 
-        this.usersByUsername = Map.of(zhangsan.username(), zhangsan, lisi.username(), lisi);
-        this.usersById = Map.of(zhangsan.userId(), zhangsan, lisi.userId(), lisi);
+        FixtureUser wangwu = new FixtureUser(
+                "usr_003",
+                "wangwu",
+                "password123",
+                "王五",
+                "13700000000",
+                "wangwu@example.com",
+                "",
+                "cmp_001",
+                "post_003",
+                Map.of("post_003", new PostFixture("post_003", "dept_003", "普通员工")),
+                List.of(),
+                List.of(),
+                List.of("ai:copilot:open")
+        );
+
+        this.usersByUsername = Map.of(
+                zhangsan.username(), zhangsan,
+                lisi.username(), lisi,
+                wangwu.username(), wangwu
+        );
+        this.usersById = Map.of(
+                zhangsan.userId(), zhangsan,
+                lisi.userId(), lisi,
+                wangwu.userId(), wangwu
+        );
     }
 
     public LoginResponse login(LoginRequest request) {

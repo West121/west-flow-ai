@@ -170,4 +170,98 @@ describe('workbench api', () => {
       status: 'COMPLETED',
     })
   })
+
+  it('supports claim transfer return and action capability APIs', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        canClaim: true,
+        canApprove: false,
+        canReject: false,
+        canTransfer: false,
+        canReturn: false,
+      })
+    )
+    postMock
+      .mockResolvedValueOnce(
+        okResponse({
+          taskId: 'task_001',
+          status: 'PENDING',
+          assigneeUserId: 'usr_001',
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          completedTaskId: 'task_001',
+          status: 'TRANSFERRED',
+          nextTasks: [
+            {
+              taskId: 'task_002',
+              nodeId: 'approve_manager',
+              nodeName: '部门负责人审批',
+              status: 'PENDING',
+              assignmentMode: 'USER',
+              candidateUserIds: ['usr_003'],
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          completedTaskId: 'task_002',
+          status: 'RETURNED',
+          nextTasks: [
+            {
+              taskId: 'task_003',
+              nodeId: 'approve_previous',
+              nodeName: '上一步审批',
+              status: 'PENDING',
+              assignmentMode: 'USER',
+              candidateUserIds: ['usr_001'],
+            },
+          ],
+        })
+      )
+
+    const {
+      claimWorkbenchTask,
+      getWorkbenchTaskActions,
+      returnWorkbenchTask,
+      transferWorkbenchTask,
+    } = await import('./workbench')
+
+    await expect(getWorkbenchTaskActions('task_001')).resolves.toEqual({
+      canClaim: true,
+      canApprove: false,
+      canReject: false,
+      canTransfer: false,
+      canReturn: false,
+    })
+    await expect(
+      claimWorkbenchTask('task_001', {
+        comment: '认领处理',
+      })
+    ).resolves.toMatchObject({
+      taskId: 'task_001',
+      status: 'PENDING',
+      assigneeUserId: 'usr_001',
+    })
+    await expect(
+      transferWorkbenchTask('task_001', {
+        targetUserId: 'usr_003',
+        comment: '转给财务',
+      })
+    ).resolves.toMatchObject({
+      completedTaskId: 'task_001',
+      status: 'TRANSFERRED',
+    })
+    await expect(
+      returnWorkbenchTask('task_002', {
+        targetStrategy: 'PREVIOUS_USER_TASK',
+        comment: '退回补充信息',
+      })
+    ).resolves.toMatchObject({
+      completedTaskId: 'task_002',
+      status: 'RETURNED',
+    })
+  })
 })

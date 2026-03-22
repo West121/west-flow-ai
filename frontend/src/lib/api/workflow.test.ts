@@ -97,6 +97,7 @@ describe('workflow api', () => {
         category: 'OA',
         formKey: 'oa-leave-form',
         formVersion: '1.0.0',
+        formFields: [],
         settings: {
           allowWithdraw: true,
           allowUrge: true,

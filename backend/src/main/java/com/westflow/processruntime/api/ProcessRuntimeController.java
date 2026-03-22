@@ -41,6 +41,21 @@ public class ProcessRuntimeController {
         return ApiResponse.success(processDemoService.detail(taskId));
     }
 
+    @GetMapping("/tasks/{taskId}/actions")
+    @SaCheckLogin
+    public ApiResponse<TaskActionAvailabilityResponse> actions(@PathVariable String taskId) {
+        return ApiResponse.success(processDemoService.actions(taskId));
+    }
+
+    @PostMapping("/tasks/{taskId}/claim")
+    @SaCheckLogin
+    public ApiResponse<ClaimTaskResponse> claim(
+            @PathVariable String taskId,
+            @RequestBody(required = false) ClaimTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.claim(taskId, request == null ? new ClaimTaskRequest(null) : request));
+    }
+
     @PostMapping("/tasks/{taskId}/complete")
     @SaCheckLogin
     public ApiResponse<CompleteTaskResponse> complete(
@@ -48,5 +63,23 @@ public class ProcessRuntimeController {
             @Valid @RequestBody CompleteTaskRequest request
     ) {
         return ApiResponse.success(processDemoService.complete(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/transfer")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> transfer(
+            @PathVariable String taskId,
+            @Valid @RequestBody TransferTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.transfer(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/return")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> returnTask(
+            @PathVariable String taskId,
+            @RequestBody(required = false) ReturnTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.returnToPrevious(taskId, request == null ? new ReturnTaskRequest(null, null) : request));
     }
 }

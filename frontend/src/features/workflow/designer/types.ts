@@ -23,6 +23,27 @@ export type WorkflowApproverApprovalPolicyType =
   | 'VOTE'
 
 export type WorkflowCcTargetMode = 'USER' | 'ROLE' | 'DEPARTMENT'
+export type WorkflowConditionExpressionMode = 'EXPRESSION' | 'FIELD_COMPARE'
+export type WorkflowFormFieldValueType =
+  | 'string'
+  | 'number'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+
+export type WorkflowFieldBindingSource = 'PROCESS_FORM' | 'NODE_FORM'
+
+export type WorkflowFieldBinding = {
+  source: WorkflowFieldBindingSource
+  sourceFieldKey: string
+  targetFieldKey: string
+}
+
+export type WorkflowProcessFormField = {
+  fieldKey: string
+  label: string
+  valueType: WorkflowFormFieldValueType
+}
 
 export type WorkflowEdgeConditionType = 'EXPRESSION'
 
@@ -38,6 +59,9 @@ export type WorkflowApproverNodeConfig = {
     departmentRef: string
     formFieldKey: string
   }
+  nodeFormKey?: string
+  nodeFormVersion?: string
+  fieldBindings?: WorkflowFieldBinding[]
   approvalPolicy: {
     type: WorkflowApproverApprovalPolicyType
     voteThreshold: number | null
@@ -48,6 +72,8 @@ export type WorkflowApproverNodeConfig = {
 
 export type WorkflowConditionNodeConfig = {
   defaultEdgeId: string
+  expressionMode?: WorkflowConditionExpressionMode
+  expressionFieldKey?: string
 }
 
 export type WorkflowCcNodeConfig = {

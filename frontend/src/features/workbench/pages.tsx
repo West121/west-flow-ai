@@ -69,11 +69,25 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function resolveTaskStatusLabel(status: WorkbenchTaskListItem['status']) {
-  return status === 'PENDING' ? '待处理' : '已完成'
+  switch (status) {
+    case 'PENDING_CLAIM':
+      return '待认领'
+    case 'PENDING':
+      return '待处理'
+    case 'TRANSFERRED':
+      return '已转办'
+    case 'RETURNED':
+      return '已退回'
+    case 'COMPLETED':
+    default:
+      return '已完成'
+  }
 }
 
 function resolveTaskStatusVariant(status: WorkbenchTaskListItem['status']) {
-  return status === 'PENDING' ? 'destructive' : 'secondary'
+  return status === 'PENDING' || status === 'PENDING_CLAIM'
+    ? 'destructive'
+    : 'secondary'
 }
 
 function summarizeTasks(records: WorkbenchTaskListItem[]) {
@@ -609,7 +623,14 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
                 <div>
                   <CardTitle className='flex items-center gap-3'>
                     {detail.processName}
-                    <Badge variant={detail.status === 'PENDING' ? 'destructive' : 'secondary'}>
+                    <Badge
+                      variant={
+                        detail.status === 'PENDING' ||
+                        detail.status === 'PENDING_CLAIM'
+                          ? 'destructive'
+                          : 'secondary'
+                      }
+                    >
                       {actionLabel}
                     </Badge>
                   </CardTitle>
@@ -661,6 +682,10 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>处理方式</dt>
                     <dd>{detail.assignmentMode ?? '--'}</dd>
+                  </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>当前办理人</dt>
+                    <dd>{detail.assigneeUserId ?? '--'}</dd>
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>候选人</dt>

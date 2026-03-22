@@ -26,6 +26,7 @@ import {
   parseListValue,
 } from './config'
 import {
+  type WorkflowFieldBinding,
   type WorkflowApproverApprovalPolicyType,
   type WorkflowApproverAssignmentMode,
   type WorkflowCcTargetMode,
@@ -86,6 +87,9 @@ const nodeConfigFormSchema = z
       roleCodes: z.string(),
       departmentRef: z.string(),
       formFieldKey: z.string(),
+      nodeFormKey: z.string(),
+      nodeFormVersion: z.string(),
+      fieldBindingsJson: z.string(),
       approvalPolicyType: z.enum(['SEQUENTIAL', 'PARALLEL', 'VOTE']),
       voteThreshold: z.string(),
       operations: z.object({
@@ -105,6 +109,8 @@ const nodeConfigFormSchema = z
     }),
     condition: z.object({
       defaultEdgeId: z.string(),
+      expressionMode: z.string(),
+      expressionFieldKey: z.string(),
       branches: z.array(branchSchema),
     }),
     parallel: z.object({}),
@@ -141,6 +147,50 @@ const nodeConfigFormSchema = z
           code: z.ZodIssueCode.custom,
           message: '请输入表单字段编码',
           path: ['approver', 'formFieldKey'],
+        })
+      }
+      if (!values.approver.nodeFormKey.trim() && values.approver.fieldBindingsJson.trim() !== '[]') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '配置字段绑定前请先填写节点表单编码',
+          path: ['approver', 'nodeFormKey'],
+        })
+      }
+      try {
+        const parsedBindings = JSON.parse(values.approver.fieldBindingsJson)
+        if (!Array.isArray(parsedBindings)) {
+          throw new Error('not array')
+        }
+        parsedBindings.forEach((binding, index) => {
+          const candidate = binding as Partial<WorkflowFieldBinding>
+          if (
+            !candidate ||
+            !candidate.sourceFieldKey?.trim() ||
+            !candidate.targetFieldKey?.trim()
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '字段绑定里的 sourceFieldKey 和 targetFieldKey 不能为空',
+              path: ['approver', 'fieldBindingsJson'],
+            })
+          }
+          if (
+            candidate.source !== 'PROCESS_FORM' &&
+            candidate.source !== 'NODE_FORM'
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '字段绑定来源必须是 PROCESS_FORM 或 NODE_FORM',
+              path: ['approver', 'fieldBindingsJson'],
+            })
+          }
+          void index
+        })
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '字段绑定必须是合法的 JSON 数组',
+          path: ['approver', 'fieldBindingsJson'],
         })
       }
 
@@ -207,6 +257,17 @@ const nodeConfigFormSchema = z
         })
       }
 
+      if (
+        values.condition.expressionMode === 'FIELD_COMPARE' &&
+        !values.condition.expressionFieldKey.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '字段表达式模式需要填写表单字段编码',
+          path: ['condition', 'expressionFieldKey'],
+        })
+      }
+
       values.condition.branches.forEach((branch, index) => {
         if (branch.edgeId !== values.condition.defaultEdgeId && !branch.conditionExpression.trim()) {
           ctx.addIssue({
@@ -260,6 +321,13 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
       ),
       departmentRef: String(assignment.departmentRef ?? ''),
       formFieldKey: String(assignment.formFieldKey ?? ''),
+      nodeFormKey: String(config.nodeFormKey ?? ''),
+      nodeFormVersion: String(config.nodeFormVersion ?? ''),
+      fieldBindingsJson: JSON.stringify(
+        Array.isArray(config.fieldBindings) ? config.fieldBindings : [],
+        null,
+        2
+      ),
       approvalPolicyType:
         (approvalPolicy.type as WorkflowApproverApprovalPolicyType) ?? 'SEQUENTIAL',
       voteThreshold:
@@ -294,6 +362,11 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
         typeof config.defaultEdgeId === 'string' && config.defaultEdgeId.trim().length > 0
           ? config.defaultEdgeId
           : outgoingEdges[0]?.id ?? '',
+      expressionMode:
+        typeof config.expressionMode === 'string' && config.expressionMode.trim().length > 0
+          ? String(config.expressionMode)
+          : 'EXPRESSION',
+      expressionFieldKey: String(config.expressionFieldKey ?? ''),
       branches: branchDefaults,
     },
     parallel: {},
@@ -302,6 +375,30 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
 }
 
 function buildNodePatch(values: NodeConfigFormValues) {
+  function parseBindings(json: string): WorkflowFieldBinding[] {
+    try {
+      const parsed = JSON.parse(json)
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+      return parsed
+        .map((binding) => binding as Partial<WorkflowFieldBinding>)
+        .filter(
+          (binding): binding is Partial<WorkflowFieldBinding> =>
+            Boolean(binding)
+        )
+        .map<WorkflowFieldBinding>((binding) => ({
+          source:
+            binding.source === 'NODE_FORM' ? 'NODE_FORM' : 'PROCESS_FORM',
+          sourceFieldKey: binding.sourceFieldKey?.trim() ?? '',
+          targetFieldKey: binding.targetFieldKey?.trim() ?? '',
+        }))
+        .filter((binding) => binding.sourceFieldKey && binding.targetFieldKey)
+    } catch {
+      return []
+    }
+  }
+
   switch (values.kind) {
     case 'start':
       return {
@@ -319,6 +416,9 @@ function buildNodePatch(values: NodeConfigFormValues) {
             departmentRef: values.approver.departmentRef.trim(),
             formFieldKey: values.approver.formFieldKey.trim(),
           },
+          nodeFormKey: values.approver.nodeFormKey.trim(),
+          nodeFormVersion: values.approver.nodeFormVersion.trim(),
+          fieldBindings: parseBindings(values.approver.fieldBindingsJson),
           approvalPolicy: {
             type: values.approver.approvalPolicyType,
             voteThreshold:
@@ -348,6 +448,8 @@ function buildNodePatch(values: NodeConfigFormValues) {
       return {
         config: {
           defaultEdgeId: values.condition.defaultEdgeId,
+          expressionMode: values.condition.expressionMode,
+          expressionFieldKey: values.condition.expressionFieldKey.trim(),
         },
       }
     default:
@@ -400,6 +502,9 @@ export function NodeConfigPanel({
             roleCodes: '',
             departmentRef: '',
             formFieldKey: '',
+            nodeFormKey: '',
+            nodeFormVersion: '',
+            fieldBindingsJson: '[]',
             approvalPolicyType: 'SEQUENTIAL',
             voteThreshold: '',
             operations: {
@@ -419,6 +524,8 @@ export function NodeConfigPanel({
           },
           condition: {
             defaultEdgeId: '',
+            expressionMode: 'EXPRESSION',
+            expressionFieldKey: '',
             branches: [],
           },
           parallel: {},
@@ -439,6 +546,10 @@ export function NodeConfigPanel({
   const selectedBranches = useWatch({
     control: form.control,
     name: 'condition.branches',
+  })
+  const selectedConditionMode = useWatch({
+    control: form.control,
+    name: 'condition.expressionMode',
   })
   const operationsError =
     (form.formState.errors.approver?.operations as { message?: string } | undefined)
@@ -675,6 +786,58 @@ export function NodeConfigPanel({
 
             <FormField
               control={form.control}
+              name='approver.nodeFormKey'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>节点表单编码</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder='oa-leave-approve-form' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='approver.nodeFormVersion'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>节点表单版本</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder='1.0.0' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='approver.fieldBindingsJson'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>字段绑定 JSON</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      rows={4}
+                      className='font-mono text-xs'
+                      placeholder='[
+  {"source":"PROCESS_FORM","sourceFieldKey":"days","targetFieldKey":"approvedDays"}
+]'
+                    />
+                  </FormControl>
+                  <p className='text-xs text-muted-foreground'>
+                    目前用 JSON 数组承接，后续再拆成更细的可视化绑定编辑器。
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name='approver.approvalPolicyType'
               render={({ field }) => (
                 <FormItem>
@@ -867,6 +1030,44 @@ export function NodeConfigPanel({
               <Check className='size-4 text-primary' />
               条件节点
             </div>
+
+            <FormField
+              control={form.control}
+              name='condition.expressionMode'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>表达式模式</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue placeholder='请选择表达式模式' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='EXPRESSION'>手写表达式</SelectItem>
+                        <SelectItem value='FIELD_COMPARE'>字段表达式</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {selectedConditionMode === 'FIELD_COMPARE' ? (
+              <FormField
+                control={form.control}
+                name='condition.expressionFieldKey'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>表单字段编码</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='applicant.amount' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
 
             <FormField
               control={form.control}

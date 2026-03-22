@@ -17,6 +17,7 @@ public record ProcessTaskDetailResponse(
         String status,
         String assignmentMode,
         List<String> candidateUserIds,
+        String assigneeUserId,
         String action,
         String operatorUserId,
         String comment,

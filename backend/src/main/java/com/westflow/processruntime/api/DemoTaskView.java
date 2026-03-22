@@ -8,6 +8,7 @@ public record DemoTaskView(
         String nodeName,
         String status,
         String assignmentMode,
-        List<String> candidateUserIds
+        List<String> candidateUserIds,
+        String assigneeUserId
 ) {
 }

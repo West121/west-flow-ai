@@ -231,15 +231,158 @@ class ProcessRuntimeControllerTest {
         assertThat(body.path("path").asText()).isEqualTo("/api/v1/process-definitions/publish");
     }
 
+    @Test
+    void shouldSupportClaimTransferAndReturnActions() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validClaimableProcessDsl()))
+                .andExpect(status().isOk());
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_claim_leave",
+                                  "businessKey": "biz_claim_001",
+                                  "formData": {
+                                    "days": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String taskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+        assertThat(startBody.path("data").path("activeTasks").get(0).path("status").asText()).isEqualTo("PENDING_CLAIM");
+
+        String actionsResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode actionsBody = objectMapper.readTree(actionsResponse);
+        assertThat(actionsBody.path("data").path("canClaim").asBoolean()).isTrue();
+
+        String claimResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "我来处理"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode claimBody = objectMapper.readTree(claimResponse);
+        assertThat(claimBody.path("data").path("status").asText()).isEqualTo("PENDING");
+        assertThat(claimBody.path("data").path("assigneeUserId").asText()).isEqualTo("usr_001");
+
+        String transferResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/transfer", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "转给王五"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode transferBody = objectMapper.readTree(transferResponse);
+        String transferredTaskId = transferBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+        assertThat(transferBody.path("data").path("status").asText()).isEqualTo("RUNNING");
+        assertThat(transferBody.path("data").path("nextTasks").get(0).path("candidateUserIds").get(0).asText()).isEqualTo("usr_003");
+
+        String receiverToken = login("wangwu");
+        String returnResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/return", transferredTaskId)
+                        .header("Authorization", "Bearer " + receiverToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "PREVIOUS_USER_TASK",
+                                  "comment": "退回补充材料"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode returnBody = objectMapper.readTree(returnResponse);
+        assertThat(returnBody.path("data").path("nextTasks").size()).isEqualTo(1);
+        assertThat(returnBody.path("data").path("nextTasks").get(0).path("status").asText()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void shouldRejectClaimWhenCurrentUserIsNotCandidate() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validClaimableProcessDsl()))
+                .andExpect(status().isOk());
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_claim_leave",
+                                  "businessKey": "biz_claim_002",
+                                  "formData": {
+                                    "days": 1
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String taskId = objectMapper.readTree(startResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        String nonCandidateToken = login("wangwu");
+        mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + nonCandidateToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "越权认领"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+    }
+
     private String login() throws Exception {
+        return login("zhangsan");
+    }
+
+    private String login(String username) throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "username": "zhangsan",
+                                  "username": "%s",
                                   "password": "password123"
                                 }
-                                """))
+                                """.formatted(username)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -319,6 +462,79 @@ class ProcessRuntimeControllerTest {
                       "target": "end_1",
                       "priority": 20,
                       "label": "审批通过"
+                    }
+                  ]
+                }
+                """;
+    }
+
+    private String validClaimableProcessDsl() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_claim_leave",
+                  "processName": "公共认领请假审批",
+                  "category": "OA",
+                  "formKey": "oa-claim-leave-form",
+                  "formVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "共享审批池",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_001", "usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN", "TRANSFER"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
                     }
                   ]
                 }

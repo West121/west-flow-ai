@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { type WorkflowSnapshot } from './types'
+import { type WorkflowNode, type WorkflowSnapshot } from './types'
 import {
+  type ProcessDefinitionDetailResponse,
   processDefinitionDetailToWorkflowSnapshot,
   workflowSnapshotToProcessDefinitionDsl,
 } from './dsl'
@@ -85,6 +86,7 @@ describe('workflow designer dsl mapping', () => {
       category: 'OA',
       formKey: 'oa-leave-form',
       formVersion: '1.0.0',
+      formFields: [],
     })
 
     expect(dsl.processKey).toBe('oa_leave')
@@ -98,6 +100,64 @@ describe('workflow designer dsl mapping', () => {
     })
     expect(dsl.edges).toHaveLength(2)
     expect(dsl.edges[0]?.source).toBe('start_1')
+  })
+
+  it('persists process form fields and node field bindings in the DSL', () => {
+    const snapshotWithForms = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1'
+          ? ({
+              ...node,
+              data: {
+                ...node.data,
+                config: {
+                  ...(node.data.config as object),
+                  nodeFormKey: 'oa-leave-approve-form',
+                  nodeFormVersion: '2.0.0',
+                  fieldBindings: [
+                    {
+                      source: 'PROCESS_FORM',
+                      sourceFieldKey: 'days',
+                      targetFieldKey: 'approvedDays',
+                    },
+                  ],
+                },
+              },
+            } as WorkflowNode)
+          : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const meta = {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      formKey: 'oa-leave-form',
+      formVersion: '1.0.0',
+      formFields: [
+        { fieldKey: 'days', label: '请假天数', valueType: 'number' },
+        { fieldKey: 'reason', label: '请假原因', valueType: 'string' },
+      ],
+    } satisfies Parameters<typeof workflowSnapshotToProcessDefinitionDsl>[1]
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithForms, meta)
+
+    expect(dsl.formFields).toEqual([
+      { fieldKey: 'days', label: '请假天数', valueType: 'number' },
+      { fieldKey: 'reason', label: '请假原因', valueType: 'string' },
+    ])
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      nodeFormKey: 'oa-leave-approve-form',
+      nodeFormVersion: '2.0.0',
+      fieldBindings: [
+        {
+          source: 'PROCESS_FORM',
+          sourceFieldKey: 'days',
+          targetFieldKey: 'approvedDays',
+        },
+      ],
+    })
   })
 
   it('hydrates the designer snapshot from the persisted process definition detail', () => {
@@ -117,6 +177,7 @@ describe('workflow designer dsl mapping', () => {
         category: 'OA',
         formKey: 'oa-leave-form',
         formVersion: '1.0.0',
+        formFields: [],
         settings: {
           allowWithdraw: true,
           allowUrge: true,
@@ -150,6 +211,7 @@ describe('workflow designer dsl mapping', () => {
         category: 'OA',
         formKey: 'oa-leave-form',
         formVersion: '1.0.0',
+        formFields: [],
         settings: {
           allowWithdraw: true,
           allowUrge: true,
@@ -317,6 +379,7 @@ describe('workflow designer dsl mapping', () => {
       category: 'OA',
       formKey: 'oa-leave-form',
       formVersion: '1.0.0',
+      formFields: [],
     })
 
     expect(dsl.nodes.find((node) => node.id === 'condition_1')?.config).toMatchObject({
@@ -347,5 +410,112 @@ describe('workflow designer dsl mapping', () => {
         type: 'EXPRESSION',
         expression: 'amount > 1000',
       })
+  })
+
+  it('hydrates condition field expressions and node form metadata from persisted DSL', () => {
+    const detail = {
+      processDefinitionId: 'oa_leave:4',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 4,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl: {
+        dslVersion: '1.0.0',
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        category: 'OA',
+        formKey: 'oa-leave-form',
+        formVersion: '1.0.0',
+        formFields: [{ fieldKey: 'amount', label: '金额', valueType: 'number' }],
+        settings: {
+          allowWithdraw: true,
+          allowUrge: true,
+          allowTransfer: true,
+        },
+        nodes: [
+          {
+            id: 'condition_1',
+            type: 'condition',
+            name: '金额条件',
+            description: '根据金额大小决定审批路径',
+            position: { x: 320, y: 100 },
+            config: {
+              defaultEdgeId: 'edge_default',
+              expressionMode: 'FIELD_COMPARE',
+              expressionFieldKey: 'amount',
+            },
+            ui: { width: 240, height: 88 },
+          },
+          {
+            id: 'approve_1',
+            type: 'approver',
+            name: '财务审批',
+            description: '财务审批节点',
+            position: { x: 540, y: 100 },
+            config: {
+              assignment: {
+                mode: 'USER',
+                userIds: ['usr_002'],
+                roleCodes: [],
+                departmentRef: '',
+                formFieldKey: '',
+              },
+              approvalPolicy: {
+                type: 'SEQUENTIAL',
+                voteThreshold: null,
+              },
+              operations: ['APPROVE', 'REJECT', 'RETURN'],
+              commentRequired: false,
+              nodeFormKey: 'finance-approve-form',
+              nodeFormVersion: '1.0.0',
+              fieldBindings: [
+                {
+                  source: 'PROCESS_FORM',
+                  sourceFieldKey: 'amount',
+                  targetFieldKey: 'approvedAmount',
+                },
+              ],
+            },
+            ui: { width: 240, height: 88 },
+          },
+        ],
+        edges: [
+          {
+            id: 'edge_default',
+            source: 'condition_1',
+            target: 'approve_1',
+            priority: 1,
+            label: '默认通过',
+            condition: {
+              type: 'EXPRESSION',
+              expression: 'amount > 1000',
+            },
+          },
+        ],
+      },
+      bpmnXml: '<process />',
+    } satisfies ProcessDefinitionDetailResponse
+
+    const hydrated = processDefinitionDetailToWorkflowSnapshot(detail)
+
+    expect(hydrated.nodes[0]?.data.config).toMatchObject({
+      defaultEdgeId: 'edge_default',
+      expressionMode: 'FIELD_COMPARE',
+      expressionFieldKey: 'amount',
+    })
+    expect(hydrated.nodes[1]?.data.config).toMatchObject({
+      nodeFormKey: 'finance-approve-form',
+      nodeFormVersion: '1.0.0',
+      fieldBindings: [
+        {
+          source: 'PROCESS_FORM',
+          sourceFieldKey: 'amount',
+          targetFieldKey: 'approvedAmount',
+        },
+      ],
+    })
   })
 })
