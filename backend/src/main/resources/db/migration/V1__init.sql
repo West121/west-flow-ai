@@ -1,0 +1,58 @@
+CREATE TABLE IF NOT EXISTS wf_user (
+    id VARCHAR(64) PRIMARY KEY,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    display_name VARCHAR(128) NOT NULL,
+    mobile VARCHAR(32) NOT NULL,
+    email VARCHAR(128) NOT NULL,
+    avatar VARCHAR(255) NOT NULL DEFAULT '',
+    company_id VARCHAR(64) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_post (
+    id VARCHAR(64) PRIMARY KEY,
+    department_id VARCHAR(64) NOT NULL,
+    post_name VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_user_post (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    post_id VARCHAR(64) NOT NULL,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_delegation (
+    id VARCHAR(64) PRIMARY KEY,
+    principal_user_id VARCHAR(64) NOT NULL,
+    delegate_user_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_request_audit_log (
+    id VARCHAR(64) PRIMARY KEY,
+    request_id VARCHAR(64) NOT NULL,
+    path VARCHAR(255) NOT NULL,
+    method VARCHAR(16) NOT NULL,
+    login_id VARCHAR(64),
+    status_code INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_process_definition (
+    id VARCHAR(64) PRIMARY KEY,
+    process_key VARCHAR(128) NOT NULL,
+    process_name VARCHAR(255) NOT NULL,
+    category VARCHAR(128),
+    version INTEGER NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    dsl_json TEXT NOT NULL,
+    bpmn_xml TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (process_key, version)
+);

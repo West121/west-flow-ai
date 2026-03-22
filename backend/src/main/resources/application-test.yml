@@ -1,0 +1,35 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.flowable.spring.boot.ProcessEngineAutoConfiguration
+      - org.flowable.spring.boot.ProcessEngineServicesAutoConfiguration
+      - org.flowable.spring.boot.EndpointAutoConfiguration
+      - org.flowable.spring.boot.actuate.info.FlowableInfoAutoConfiguration
+      - org.flowable.spring.boot.idm.IdmEngineAutoConfiguration
+      - org.flowable.spring.boot.idm.IdmEngineServicesAutoConfiguration
+      - org.flowable.spring.boot.eventregistry.EventRegistryAutoConfiguration
+      - org.flowable.spring.boot.eventregistry.EventRegistryServicesAutoConfiguration
+      - com.yomahub.liteflow.springboot.config.LiteflowMainAutoConfiguration
+      - com.yomahub.liteflow.springboot.config.LiteflowPropertyAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:westflow;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  flyway:
+    enabled: true
+
+flowable:
+  database-schema-update: false
+  async-executor-activate: false
+
+liteflow:
+  enabled: false
+
+spring.ai:
+  openai:
+    api-key: test-key
