@@ -207,6 +207,33 @@ CREATE TABLE IF NOT EXISTS wf_process_definition (
     UNIQUE (process_key, version)
 );
 
+CREATE TABLE IF NOT EXISTS wf_task_group (
+    id VARCHAR(64) PRIMARY KEY,
+    process_instance_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(128) NOT NULL,
+    node_name VARCHAR(255) NOT NULL,
+    approval_mode VARCHAR(32) NOT NULL,
+    reapprove_policy VARCHAR(32),
+    group_status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_task_group_member (
+    id VARCHAR(64) PRIMARY KEY,
+    task_group_id VARCHAR(64) NOT NULL,
+    process_instance_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(128) NOT NULL,
+    task_id VARCHAR(64),
+    assignee_user_id VARCHAR(64) NOT NULL,
+    sequence_no INTEGER NOT NULL,
+    vote_weight INTEGER,
+    member_status VARCHAR(32) NOT NULL,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS publisher_user_id VARCHAR(64);
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(64);
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS flowable_definition_id VARCHAR(128);

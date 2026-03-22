@@ -31,6 +31,7 @@ public class FlowableRuntimeStartService {
     private final FlowableEngineFacade flowableEngineFacade;
     private final ProcessDefinitionService processDefinitionService;
     private final WorkflowOperationLogService workflowOperationLogService;
+    private final FlowableCountersignService flowableCountersignService;
 
     /**
      * 启动指定流程定义的最新发布版本。
@@ -50,6 +51,7 @@ public class FlowableRuntimeStartService {
                 .stream()
                 .map(this::toTaskView)
                 .toList();
+        flowableCountersignService.initializeTaskGroups(instance.getProcessDefinitionId(), instance.getProcessInstanceId());
         String status = activeTasks.isEmpty() ? "COMPLETED" : "RUNNING";
         workflowOperationLogService.record(new WorkflowOperationLogService.RecordCommand(
                 instance.getProcessInstanceId(),
@@ -91,7 +93,30 @@ public class FlowableRuntimeStartService {
         variables.put("westflowBusinessType", request.businessType());
         variables.put("westflowBusinessKey", request.businessKey());
         variables.put("westflowInitiatorUserId", StpUtil.getLoginIdAsString());
+        definition.dsl().nodes().stream()
+                .filter(node -> "approver".equals(node.type()))
+                .forEach(node -> appendCountersignStartVariables(variables, node));
         return variables;
+    }
+
+    /**
+     * 会签节点在发起时预置处理人集合，供 Flowable 多实例用户任务直接消费。
+     */
+    private void appendCountersignStartVariables(Map<String, Object> variables, com.westflow.processdef.model.ProcessDslPayload.Node node) {
+        Map<String, Object> config = mapValue(node.config());
+        if (!config.containsKey("approvalMode")) {
+            return;
+        }
+        String approvalMode = stringValue(config.get("approvalMode"));
+        if (!List.of("SEQUENTIAL", "PARALLEL", "OR_SIGN", "VOTE").contains(approvalMode)) {
+            return;
+        }
+        Map<String, Object> assignment = mapValue(config.get("assignment"));
+        List<String> userIds = stringListValue(assignment.get("userIds"));
+        if (userIds.size() < 2) {
+            return;
+        }
+        variables.put("wfCountersignAssignees_" + node.id(), userIds);
     }
 
     /**
@@ -153,5 +178,29 @@ public class FlowableRuntimeStartService {
 
         private IdentityLinkType() {
         }
+    }
+
+    private Map<String, Object> mapValue(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
+        return result;
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof List<?> values) || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream().map(String::valueOf).filter(item -> !item.isBlank()).toList();
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String stringValue = String.valueOf(value);
+        return stringValue.isBlank() ? null : stringValue;
     }
 }

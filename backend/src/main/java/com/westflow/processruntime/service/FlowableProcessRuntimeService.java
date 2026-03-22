@@ -88,6 +88,7 @@ public class FlowableProcessRuntimeService {
     private final FlowableEngineFacade flowableEngineFacade;
     private final FlowableRuntimeStartService flowableRuntimeStartService;
     private final FlowableTaskActionService flowableTaskActionService;
+    private final FlowableCountersignService flowableCountersignService;
     private final ProcessDefinitionService processDefinitionService;
     private final ApprovalSheetQueryService approvalSheetQueryService;
     private final ProcessRuntimeTraceStore traceStore;
@@ -411,6 +412,11 @@ public class FlowableProcessRuntimeService {
         appendComment(task, request.comment());
         flowableEngineFacade.taskService().setVariableLocal(taskId, "westflowTaskKind", taskKind);
         flowableTaskActionService.complete(taskId, variables);
+        flowableCountersignService.syncAfterTaskCompleted(
+                task.getProcessDefinitionId(),
+                task.getProcessInstanceId(),
+                taskId
+        );
         List<DemoTaskView> nextTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(task.getProcessInstanceId())

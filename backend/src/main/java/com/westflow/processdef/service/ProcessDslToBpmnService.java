@@ -14,6 +14,7 @@ import org.flowable.bpmn.model.ExtensionAttribute;
 import org.flowable.bpmn.model.FlowElement;
 import org.flowable.bpmn.model.ImplementationType;
 import org.flowable.bpmn.model.IntermediateCatchEvent;
+import org.flowable.bpmn.model.MultiInstanceLoopCharacteristics;
 import org.flowable.bpmn.model.ParallelGateway;
 import org.flowable.bpmn.model.Process;
 import org.flowable.bpmn.model.SequenceFlow;
@@ -91,7 +92,11 @@ public class ProcessDslToBpmnService {
         task.setName(node.name());
         Map<String, Object> assignment = mapValue(config.get("assignment"));
         List<String> userIds = stringListValue(assignment.get("userIds"));
-        if (userIds.size() == 1) {
+        String approvalMode = resolveApprovalMode(config);
+        if (isCountersignApprovalMode(config, approvalMode) && userIds.size() > 1) {
+            task.setAssignee("${" + countersignElementVariable(node.id()) + "}");
+            task.setLoopCharacteristics(buildCountersignLoopCharacteristics(node.id(), approvalMode));
+        } else if (userIds.size() == 1) {
             task.setAssignee(userIds.get(0));
         } else if (!userIds.isEmpty()) {
             task.setCandidateUsers(userIds);
@@ -241,6 +246,15 @@ public class ProcessDslToBpmnService {
         Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
         attrs.put("approvalPolicyType", stringValue(approvalPolicy.get("type")));
         attrs.put("voteThreshold", stringValue(approvalPolicy.get("voteThreshold")));
+        attrs.put("approvalMode", resolveApprovalMode(config));
+        attrs.put("reapprovePolicy", stringValue(config.get("reapprovePolicy")));
+        attrs.put("autoFinishRemaining", booleanValue(config.get("autoFinishRemaining")));
+
+        Map<String, Object> voteRule = mapValue(config.get("voteRule"));
+        attrs.put("voteThresholdPercent", stringValue(voteRule.get("thresholdPercent")));
+        attrs.put("votePassCondition", stringValue(voteRule.get("passCondition")));
+        attrs.put("voteRejectCondition", stringValue(voteRule.get("rejectCondition")));
+        attrs.put("voteWeights", stringValue(voteRule.get("weights")));
 
         Map<String, Object> timeoutPolicy = mapValue(config.get("timeoutPolicy"));
         attrs.put("timeoutEnabled", booleanValue(timeoutPolicy.get("enabled")));
@@ -261,6 +275,37 @@ public class ProcessDslToBpmnService {
         attrs.put("targetDepartmentRef", stringValue(targets.get("departmentRef")));
 
         return attrs;
+    }
+
+    // 会签模式统一映射到 Flowable 多实例用户任务。
+    private MultiInstanceLoopCharacteristics buildCountersignLoopCharacteristics(String nodeId, String approvalMode) {
+        MultiInstanceLoopCharacteristics loop = new MultiInstanceLoopCharacteristics();
+        loop.setSequential("SEQUENTIAL".equals(approvalMode));
+        loop.setInputDataItem("${" + countersignCollectionVariable(nodeId) + "}");
+        loop.setElementVariable(countersignElementVariable(nodeId));
+        return loop;
+    }
+
+    private String resolveApprovalMode(Map<String, Object> config) {
+        String approvalMode = stringValue(config.get("approvalMode"));
+        if (approvalMode != null) {
+            return approvalMode;
+        }
+        Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
+        return stringValue(approvalPolicy.get("type"));
+    }
+
+    private boolean isCountersignApprovalMode(Map<String, Object> config, String approvalMode) {
+        return config.containsKey("approvalMode")
+                && List.of("SEQUENTIAL", "PARALLEL", "OR_SIGN", "VOTE").contains(approvalMode);
+    }
+
+    private String countersignCollectionVariable(String nodeId) {
+        return "wfCountersignAssignees_" + nodeId;
+    }
+
+    private String countersignElementVariable(String nodeId) {
+        return "wfCountersignAssignee_" + nodeId;
     }
 
     // 统一写入 westflow 扩展属性，兼顾可部署和可回读。

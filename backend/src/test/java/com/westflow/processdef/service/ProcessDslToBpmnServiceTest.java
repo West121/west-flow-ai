@@ -178,6 +178,38 @@ class ProcessDslToBpmnServiceTest {
         );
     }
 
+    @Test
+    void shouldConvertSequentialCountersignIntoMultiInstanceUserTask() {
+        ProcessDslPayload payload = countersignPayload("SEQUENTIAL");
+
+        String xml = service.convert(payload, "oa_countersign:1", 1);
+
+        assertThat(xml).contains(
+                "id=\"approve_countersign\"",
+                "<multiInstanceLoopCharacteristics",
+                "isSequential=\"true\"",
+                "flowable:collection=\"${wfCountersignAssignees_approve_countersign}\"",
+                "flowable:elementVariable=\"wfCountersignAssignee_approve_countersign\"",
+                "flowable:assignee=\"${wfCountersignAssignee_approve_countersign}\""
+        );
+    }
+
+    @Test
+    void shouldConvertParallelCountersignIntoMultiInstanceUserTask() {
+        ProcessDslPayload payload = countersignPayload("PARALLEL");
+
+        String xml = service.convert(payload, "oa_countersign:1", 1);
+
+        assertThat(xml).contains(
+                "id=\"approve_countersign\"",
+                "<multiInstanceLoopCharacteristics",
+                "isSequential=\"false\"",
+                "flowable:collection=\"${wfCountersignAssignees_approve_countersign}\"",
+                "flowable:elementVariable=\"wfCountersignAssignee_approve_countersign\"",
+                "flowable:assignee=\"${wfCountersignAssignee_approve_countersign}\""
+        );
+    }
+
     private ProcessDslPayload.Node node(
             String id,
             String type,
@@ -210,5 +242,42 @@ class ProcessDslToBpmnServiceTest {
             Map<String, Object> condition
     ) {
         return new ProcessDslPayload.Edge(id, source, target, priority, id, condition);
+    }
+
+    private ProcessDslPayload countersignPayload(String approvalMode) {
+        return new ProcessDslPayload(
+                "1.0.0",
+                "oa_countersign",
+                "会签审批",
+                "OA",
+                "oa-countersign-form",
+                "1.0.0",
+                List.of(),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of()),
+                        node("approve_countersign", "approver", "会签审批", Map.of(
+                                "approvalMode", approvalMode,
+                                "reapprovePolicy", "RESTART_ALL",
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002", "usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN")
+                        )),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_countersign", 1, null),
+                        edge("edge_2", "approve_countersign", "end_1", 2, null)
+                )
+        );
     }
 }
