@@ -1,69 +1,203 @@
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import { z } from 'zod'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
-import { getRouteApi, Link } from '@tanstack/react-router'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
+import {
+  AlertCircle,
+  ArrowLeft,
+  BadgeCheck,
+  BriefcaseBusiness,
+  Building2,
+  Loader2,
+  Mail,
+  Phone,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ResourceDetailPage } from '@/features/shared/crud/resource-detail-page'
-import { ResourceFormPage } from '@/features/shared/crud/resource-form-page'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { getApiErrorResponse } from '@/lib/api/client'
+import {
+  createSystemUser,
+  getSystemUserDetail,
+  getSystemUserFormOptions,
+  listSystemUsers,
+  updateSystemUser,
+  type SaveSystemUserPayload,
+  type SystemUserDetail,
+  type SystemUserRecord,
+} from '@/lib/api/system-users'
+import { handleServerError } from '@/lib/handle-server-error'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import { PageShell } from '@/features/shared/page-shell'
 
 const usersListRoute = getRouteApi('/_authenticated/system/users/list')
 
+const systemUserFormSchema = z.object({
+  displayName: z.string().min(2, '用户姓名至少需要 2 个字符'),
+  username: z
+    .string()
+    .min(2, '登录账号至少需要 2 个字符')
+    .regex(/^[a-zA-Z0-9_-]+$/, '登录账号仅支持字母、数字、下划线和中划线'),
+  mobile: z.string().regex(/^1\d{10}$/, '请输入 11 位手机号'),
+  email: z.email('请输入正确的邮箱地址'),
+  companyId: z.string().min(1, '请选择所属公司'),
+  primaryPostId: z.string().min(1, '请选择主岗位'),
+  enabled: z.boolean(),
+})
+
+type SystemUserFormValues = z.infer<typeof systemUserFormSchema>
+type SubmitAction = 'list' | 'continue'
+
 type UserRow = {
-  id: string
-  name: string
+  userId: string
+  displayName: string
   username: string
-  department: string
-  post: string
+  mobile: string
+  email: string
+  departmentName: string
+  postName: string
   status: '启用' | '停用'
+  createdAt: string
 }
 
-const userRows: UserRow[] = [
-  {
-    id: 'usr_001',
-    name: '张三',
-    username: 'zhangsan',
-    department: '财务部',
-    post: '报销审核岗',
-    status: '启用',
-  },
-  {
-    id: 'usr_002',
-    name: '李四',
-    username: 'lisi',
-    department: '人力资源部',
-    post: '请假复核岗',
-    status: '启用',
-  },
-  {
-    id: 'usr_003',
-    name: '王五',
-    username: 'wangwu',
-    department: '信息管理部',
-    post: '流程管理员',
-    status: '停用',
-  },
-]
+function formatDateTime(value: string) {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function resolveStatusLabel(status: SystemUserRecord['status']) {
+  return status === 'ENABLED' ? '启用' : '停用'
+}
+
+function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
+  return {
+    displayName: detail?.displayName ?? '',
+    username: detail?.username ?? '',
+    mobile: detail?.mobile ?? '',
+    email: detail?.email ?? '',
+    companyId: detail?.companyId ?? '',
+    primaryPostId: detail?.postId ?? '',
+    enabled: detail?.enabled ?? true,
+  }
+}
+
+function isSystemUserField(
+  field: string
+): field is keyof SystemUserFormValues {
+  return (
+    field === 'displayName' ||
+    field === 'username' ||
+    field === 'mobile' ||
+    field === 'email' ||
+    field === 'companyId' ||
+    field === 'primaryPostId' ||
+    field === 'enabled'
+  )
+}
+
+function applySystemUserFieldErrors(
+  form: UseFormReturn<SystemUserFormValues>,
+  error: unknown
+) {
+  const apiError = getApiErrorResponse(error)
+
+  apiError?.fieldErrors?.forEach((fieldError) => {
+    if (isSystemUserField(fieldError.field)) {
+      form.setError(fieldError.field, {
+        type: 'server',
+        message: fieldError.message,
+      })
+    }
+  })
+
+  if (apiError?.code === 'BIZ.USERNAME_DUPLICATED') {
+    form.setError('username', {
+      type: 'server',
+      message: apiError.message,
+    })
+  }
+
+  return apiError
+}
 
 const userColumns: ColumnDef<UserRow>[] = [
   {
-    accessorKey: 'name',
+    accessorKey: 'displayName',
     header: '用户姓名',
     cell: ({ row }) => (
       <div className='flex flex-col gap-1'>
-        <span className='font-medium'>{row.original.name}</span>
+        <span className='font-medium'>{row.original.displayName}</span>
         <span className='text-xs text-muted-foreground'>
-          {row.original.username}
+          @{row.original.username}
         </span>
       </div>
     ),
   },
   {
-    accessorKey: 'department',
+    accessorKey: 'departmentName',
     header: '所属部门',
   },
   {
-    accessorKey: 'post',
+    accessorKey: 'postName',
     header: '当前岗位',
+  },
+  {
+    accessorKey: 'mobile',
+    header: '手机号',
   },
   {
     accessorKey: 'status',
@@ -75,20 +209,29 @@ const userColumns: ColumnDef<UserRow>[] = [
     ),
   },
   {
+    accessorKey: 'createdAt',
+    header: '创建时间',
+    cell: ({ row }) => (
+      <span className='text-sm text-muted-foreground'>
+        {row.original.createdAt}
+      </span>
+    ),
+  },
+  {
     id: 'action',
     header: '操作',
     enableSorting: false,
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
         <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link to='/system/users/$userId' params={{ userId: row.original.id }}>
+          <Link to='/system/users/$userId' params={{ userId: row.original.userId }}>
             详情
           </Link>
         </Button>
         <Button asChild variant='ghost' className='h-8 px-2'>
           <Link
             to='/system/users/$userId/edit'
-            params={{ userId: row.original.id }}
+            params={{ userId: row.original.userId }}
           >
             编辑
           </Link>
@@ -98,117 +241,786 @@ const userColumns: ColumnDef<UserRow>[] = [
   },
 ]
 
-const userFormSections = [
-  {
-    title: '基础信息',
-    description: '当前为表单骨架，后续接入字段校验、组织选择器和 AI 智能填报入口。',
-    fields: [
-      { label: '用户姓名', value: '请输入真实姓名', hint: '支持唯一性校验。' },
-      { label: '登录账号', value: '请输入英文账号', hint: '与统一认证账号绑定。' },
-      { label: '手机号', value: '请输入手机号', hint: '用于通知与找回身份。' },
-      { label: '邮箱', value: '请输入邮箱地址', hint: '后续支持邮件通知。' },
-    ],
-  },
-  {
-    title: '组织身份',
-    description: '岗位、部门、角色与数据范围统一在这里维护，切换上下文后联动当前用户模型。',
-    fields: [
-      { label: '所属公司', value: '选择公司', hint: '对齐 current-user.companyId。' },
-      { label: '主部门', value: '选择主部门', hint: '对齐 activeDepartmentId。' },
-      { label: '主岗位', value: '选择主岗位', hint: '对齐 activePostId。' },
-      { label: '角色集合', value: '选择角色', hint: '支持多个角色并联。' },
-    ],
-  },
-]
+function PageErrorState({
+  title,
+  description,
+  retry,
+  listHref,
+}: {
+  title: string
+  description: string
+  retry?: () => void
+  listHref?: string
+}) {
+  return (
+    <PageShell title={title} description={description}>
+      <Alert variant='destructive'>
+        <AlertCircle />
+        <AlertTitle>页面加载失败</AlertTitle>
+        <AlertDescription>
+          数据请求未成功，请稍后重试或返回列表页继续其他操作。
+        </AlertDescription>
+      </Alert>
+
+      <div className='flex flex-wrap gap-2'>
+        {retry ? (
+          <Button onClick={retry}>
+            <RefreshCw data-icon='inline-start' />
+            重新加载
+          </Button>
+        ) : null}
+        {listHref ? (
+          <Button asChild variant='outline'>
+            <Link to={listHref}>
+              <ArrowLeft data-icon='inline-start' />
+              返回列表
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+    </PageShell>
+  )
+}
+
+function PageLoadingState({
+  title,
+  description,
+  sidebar,
+}: {
+  title: string
+  description: string
+  sidebar?: ReactNode
+}) {
+  return (
+    <PageShell title={title} description={description}>
+      <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
+        <div className='flex flex-col gap-4'>
+          <Card>
+            <CardHeader>
+              <Skeleton className='h-6 w-40' />
+              <Skeleton className='h-4 w-full max-w-xl' />
+            </CardHeader>
+            <CardContent className='grid gap-4 md:grid-cols-2'>
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className='flex flex-col gap-2'>
+                  <Skeleton className='h-4 w-20' />
+                  <Skeleton className='h-10 w-full' />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+        <div className='flex flex-col gap-4'>
+          {sidebar ?? (
+            <Card>
+              <CardHeader>
+                <Skeleton className='h-6 w-32' />
+                <Skeleton className='h-4 w-full' />
+              </CardHeader>
+              <CardContent className='flex flex-col gap-3'>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className='h-16 w-full' />
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+    </PageShell>
+  )
+}
+
+function UserDetailMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof UserRound
+  label: string
+  value: string
+}) {
+  return (
+    <div className='rounded-lg border bg-muted/20 p-4'>
+      <div className='flex items-center gap-2 text-sm text-muted-foreground'>
+        <Icon className='size-4' />
+        <span>{label}</span>
+      </div>
+      <p className='mt-3 text-sm font-medium'>{value}</p>
+    </div>
+  )
+}
+
+function SystemUserFormPage({
+  mode,
+  userId,
+}: {
+  mode: 'create' | 'edit'
+  userId?: string
+}) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [submitAction, setSubmitAction] = useState<SubmitAction>('list')
+  const isEdit = mode === 'edit'
+  const form = useForm<SystemUserFormValues>({
+    resolver: zodResolver(systemUserFormSchema),
+    defaultValues: toFormValues(),
+    mode: 'onBlur',
+  })
+
+  const optionsQuery = useQuery({
+    queryKey: ['system-user-form-options'],
+    queryFn: getSystemUserFormOptions,
+  })
+
+  const detailQuery = useQuery({
+    queryKey: ['system-user', userId],
+    queryFn: () => getSystemUserDetail(userId!),
+    enabled: isEdit && Boolean(userId),
+  })
+
+  useEffect(() => {
+    if (detailQuery.data) {
+      form.reset(toFormValues(detailQuery.data))
+    }
+  }, [detailQuery.data, form])
+
+  const createMutation = useMutation({
+    mutationFn: createSystemUser,
+    onError: () => undefined,
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: SaveSystemUserPayload }) =>
+      updateSystemUser(id, payload),
+    onError: () => undefined,
+  })
+
+  const selectedCompanyId = useWatch({
+    control: form.control,
+    name: 'companyId',
+  })
+  const selectedPostId = useWatch({
+    control: form.control,
+    name: 'primaryPostId',
+  })
+  const enabled = useWatch({
+    control: form.control,
+    name: 'enabled',
+  })
+  const displayName = useWatch({
+    control: form.control,
+    name: 'displayName',
+  })
+  const selectedCompany = optionsQuery.data?.companies.find(
+    (company) => company.id === selectedCompanyId
+  )
+  const selectedPost = optionsQuery.data?.posts.find(
+    (post) => post.id === selectedPostId
+  )
+  const isSubmitting = createMutation.isPending || updateMutation.isPending
+  const isInitialLoading =
+    optionsQuery.isLoading || (isEdit && detailQuery.isLoading)
+
+  async function onSubmit(values: SystemUserFormValues) {
+    form.clearErrors()
+
+    try {
+      const payload: SaveSystemUserPayload = values
+      const result = isEdit
+        ? await updateMutation.mutateAsync({ id: userId!, payload })
+        : await createMutation.mutateAsync(payload)
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['system-users'] }),
+        queryClient.invalidateQueries({ queryKey: ['system-user', result.userId] }),
+      ])
+
+      const nextUserId = result.userId
+      const successMessage = isEdit ? '系统用户已更新' : '系统用户已创建'
+      toast.success(successMessage)
+
+      if (submitAction === 'continue') {
+        startTransition(() => {
+          navigate({
+            to: '/system/users/$userId/edit',
+            params: { userId: nextUserId },
+            replace: isEdit,
+          })
+        })
+        return
+      }
+
+      startTransition(() => {
+        navigate({
+          to: '/system/users/list',
+        })
+      })
+    } catch (error) {
+      const apiError = applySystemUserFieldErrors(form, error)
+
+      if (!apiError || (!apiError.fieldErrors?.length && apiError.code !== 'BIZ.USERNAME_DUPLICATED')) {
+        handleServerError(error)
+      }
+    }
+  }
+
+  if (isInitialLoading) {
+    return (
+      <PageLoadingState
+        title={isEdit ? '编辑系统用户' : '新建系统用户'}
+        description='正在加载表单选项与用户数据，请稍候。'
+      />
+    )
+  }
+
+  if (optionsQuery.isError || (isEdit && detailQuery.isError)) {
+    return (
+      <PageErrorState
+        title={isEdit ? '编辑系统用户' : '新建系统用户'}
+        description='页面需要的组织和用户数据未能加载完成。'
+        retry={() => {
+          void optionsQuery.refetch()
+          if (isEdit) {
+            void detailQuery.refetch()
+          }
+        }}
+        listHref='/system/users/list'
+      />
+    )
+  }
+
+  return (
+    <PageShell
+      title={isEdit ? '编辑系统用户' : '新建系统用户'}
+      description={
+        isEdit
+          ? '编辑页独立承载账号、组织身份和启用状态维护，保存后可返回列表或继续编辑。'
+          : '创建页独立承载系统用户录入，不使用弹窗或抽屉代替正式表单页面。'
+      }
+      actions={
+        <>
+          <Button
+            type='submit'
+            form='system-user-form'
+            disabled={isSubmitting}
+            onClick={() => setSubmitAction('list')}
+          >
+            {isSubmitting ? (
+              <Loader2 className='animate-spin' data-icon='inline-start' />
+            ) : (
+              <Save data-icon='inline-start' />
+            )}
+            保存并返回列表
+          </Button>
+          <Button
+            type='submit'
+            form='system-user-form'
+            variant='outline'
+            disabled={isSubmitting}
+            onClick={() => setSubmitAction('continue')}
+          >
+            {isSubmitting ? (
+              <Loader2 className='animate-spin' data-icon='inline-start' />
+            ) : (
+              <Save data-icon='inline-start' />
+            )}
+            保存并继续编辑
+          </Button>
+          <Button asChild variant='ghost'>
+            <Link to='/system/users/list'>
+              <ArrowLeft data-icon='inline-start' />
+              返回列表
+            </Link>
+          </Button>
+        </>
+      }
+    >
+      <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
+        <Form {...form}>
+          <form
+            id='system-user-form'
+            onSubmit={form.handleSubmit(onSubmit)}
+            className='flex flex-col gap-4'
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle>基础信息</CardTitle>
+                <CardDescription>
+                  维护用户姓名、登录账号和通知联系方式。登录账号支持唯一性校验。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='grid gap-4 md:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='displayName'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>用户姓名</FormLabel>
+                      <FormControl>
+                        <Input placeholder='请输入真实姓名' {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        用于审批记录展示、待办卡片与审计日志。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='username'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>登录账号</FormLabel>
+                      <FormControl>
+                        <Input placeholder='请输入登录账号' {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        建议与统一认证账号保持一致，避免后续身份映射冲突。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='mobile'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>手机号</FormLabel>
+                      <FormControl>
+                        <Input placeholder='请输入 11 位手机号' {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        用于催办、超时提醒和登录保护通知。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='email'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>邮箱地址</FormLabel>
+                      <FormControl>
+                        <Input placeholder='请输入邮箱地址' {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        后续可用于邮件提醒和 AI 审批摘要分发。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>组织身份</CardTitle>
+                <CardDescription>
+                  当前先维护公司与主岗位。主部门由所选岗位自动回填，后续可继续扩展兼任岗位与角色授权。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='grid gap-4 md:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='companyId'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>所属公司</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={isSubmitting}
+                      >
+                        <FormControl>
+                          <SelectTrigger className='w-full'>
+                            <SelectValue placeholder='请选择所属公司' />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>公司列表</SelectLabel>
+                            {optionsQuery.data?.companies.map((company) => (
+                              <SelectItem key={company.id} value={company.id}>
+                                {company.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        业务数据隔离和 AI 能力授权将以公司维度继续扩展。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='primaryPostId'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>主岗位</FormLabel>
+                      <Select
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        disabled={isSubmitting}
+                      >
+                        <FormControl>
+                          <SelectTrigger className='w-full'>
+                            <SelectValue placeholder='请选择主岗位' />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectGroup>
+                            <SelectLabel>岗位列表</SelectLabel>
+                            {optionsQuery.data?.posts.map((post) => (
+                              <SelectItem key={post.id} value={post.id}>
+                                {post.name} / {post.departmentName}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        选中主岗位后，审批待办和权限上下文将默认落到对应部门。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='enabled'
+                  render={({ field }) => (
+                    <FormItem className='rounded-lg border p-4 md:col-span-2'>
+                      <div className='flex items-center justify-between gap-4'>
+                        <div className='grid gap-1'>
+                          <FormLabel>启用状态</FormLabel>
+                          <FormDescription>
+                            停用后用户不可登录，也不会再出现在新的审批指派候选中。
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={isSubmitting}
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </form>
+        </Form>
+
+        <div className='flex flex-col gap-4'>
+          <Card>
+            <CardHeader>
+              <CardTitle>当前预览</CardTitle>
+              <CardDescription>
+                随表单实时预览当前用户最终会写入的主身份上下文。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='flex flex-col gap-3'>
+              <UserDetailMetric
+                icon={UserRound}
+                label='显示名称'
+                value={displayName || '待填写'}
+              />
+              <UserDetailMetric
+                icon={Building2}
+                label='所属公司'
+                value={selectedCompany?.name || '待选择'}
+              />
+              <UserDetailMetric
+                icon={BriefcaseBusiness}
+                label='主岗位 / 主部门'
+                value={
+                  selectedPost
+                    ? `${selectedPost.name} / ${selectedPost.departmentName}`
+                    : '待选择'
+                }
+              />
+              <UserDetailMetric
+                icon={BadgeCheck}
+                label='状态'
+                value={enabled ? '启用' : '停用'}
+              />
+            </CardContent>
+          </Card>
+
+          <Alert>
+            <ShieldCheck />
+            <AlertTitle>页面规则</AlertTitle>
+            <AlertDescription>
+              当前功能严格遵循独立 CRUD 页面规范，不使用弹窗代替正式创建页和编辑页。
+            </AlertDescription>
+          </Alert>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>后续扩展</CardTitle>
+              <CardDescription>
+                下一阶段会继续把兼任岗位、角色绑定、代理关系和数据权限加进这个表单页面。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
+              <p>1. 兼任岗位与切换上下文</p>
+              <p>2. 角色与菜单权限矩阵</p>
+              <p>3. 代理、委派、离职转办设置</p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </PageShell>
+  )
+}
 
 export function UsersListPage() {
   const search = usersListRoute.useSearch()
   const navigate = usersListRoute.useNavigate()
+  const query = useQuery({
+    queryKey: ['system-users', search],
+    queryFn: () => listSystemUsers(search),
+    placeholderData: (previous) => previous,
+  })
+
+  const rows = useMemo<UserRow[]>(
+    () =>
+      (query.data?.records ?? []).map((record) => ({
+        userId: record.userId,
+        displayName: record.displayName,
+        username: record.username,
+        mobile: record.mobile,
+        email: record.email,
+        departmentName: record.departmentName || '-',
+        postName: record.postName || '-',
+        status: resolveStatusLabel(record.status),
+        createdAt: formatDateTime(record.createdAt),
+      })),
+    [query.data?.records]
+  )
+
+  const summaries = useMemo(() => {
+    const records = query.data?.records ?? []
+    const enabledCount = records.filter(
+      (record) => record.status === 'ENABLED'
+    ).length
+    const departmentCount = new Set(
+      records.map((record) => record.departmentName).filter(Boolean)
+    ).size
+
+    return [
+      {
+        label: '用户总量',
+        value: `${query.data?.total ?? 0}`,
+        hint: '列表已接到真实分页接口，支持关键字模糊查询与排序联调。',
+      },
+      {
+        label: '当前页启用',
+        value: `${enabledCount}`,
+        hint: '停用用户不会再进入新的审批候选范围。',
+      },
+      {
+        label: '当前页部门数',
+        value: `${departmentCount}`,
+        hint: '按当前查询结果统计，便于核对组织覆盖范围。',
+      },
+    ]
+  }, [query.data])
 
   return (
-    <ResourceListPage
+    <ResourceListPage<UserRow>
       title='系统用户列表'
-      description='用户列表页按 M0 查询协议保留关键词、排序和分页态。详情、创建、编辑均拆分为独立页面。'
+      description='系统用户列表页已接通真实后端分页接口，保留关键词模糊查询、分页、排序和独立详情/编辑页面跳转。'
       endpoint='/api/v1/system/users/page'
-      searchPlaceholder='搜索姓名、账号、部门或岗位'
+      searchPlaceholder='搜索姓名、账号、手机号、邮箱、部门或岗位'
       search={search}
       navigate={navigate}
       columns={userColumns}
-      data={userRows}
+      data={rows}
       createAction={{ label: '新建系统用户', href: '/system/users/create' }}
-      summaries={[
-        {
-          label: '在岗用户',
-          value: '86',
-          hint: '后续由组织架构接口返回真实在岗人数。',
-        },
-        {
-          label: '兼任岗位',
-          value: '14',
-          hint: '对应 auth.currentUser.partTimePosts 能力模型。',
-        },
-        {
-          label: '代理关系',
-          value: '5',
-          hint: '与流程委派、代理链路保持一致。',
-        },
-      ]}
+      summaries={summaries}
     />
   )
 }
 
 export function UserCreatePage() {
-  return (
-    <ResourceFormPage
-      title='新建系统用户'
-      description='创建页作为独立表单页面存在，不借助弹窗或抽屉承载复杂录入。'
-      listHref='/system/users/list'
-      sections={userFormSections}
-    />
-  )
+  return <SystemUserFormPage mode='create' />
 }
 
 export function UserEditPage({ userId }: { userId: string }) {
-  return (
-    <ResourceFormPage
-      title='编辑系统用户'
-      description={`正在编辑用户 ${userId} 的组织身份、权限与联系信息。保存后将回写统一 current-user 上下文模型。`}
-      listHref='/system/users/list'
-      sections={userFormSections}
-    />
-  )
+  return <SystemUserFormPage mode='edit' userId={userId} />
 }
 
 export function UserDetailPage({ userId }: { userId: string }) {
+  const query = useQuery({
+    queryKey: ['system-user', userId],
+    queryFn: () => getSystemUserDetail(userId),
+  })
+
+  if (query.isLoading) {
+    return (
+      <PageLoadingState
+        title='系统用户详情'
+        description='正在加载用户详情和组织身份信息，请稍候。'
+        sidebar={
+          <Card>
+            <CardHeader>
+              <Skeleton className='h-6 w-28' />
+              <Skeleton className='h-4 w-full' />
+            </CardHeader>
+            <CardContent className='flex flex-col gap-3'>
+              <Skeleton className='h-10 w-24' />
+              <Skeleton className='h-10 w-28' />
+              <Skeleton className='h-10 w-32' />
+            </CardContent>
+          </Card>
+        }
+      />
+    )
+  }
+
+  if (query.isError || !query.data) {
+    return (
+      <PageErrorState
+        title='系统用户详情'
+        description='用户详情数据未能成功加载。'
+        retry={() => void query.refetch()}
+        listHref='/system/users/list'
+      />
+    )
+  }
+
+  const detail = query.data
+
   return (
-    <ResourceDetailPage
+    <PageShell
       title='系统用户详情'
-      description={`用户 ${userId} 的详情页独立承载组织身份、权限集合和 AI 能力概览，返回列表时保留原查询态。`}
-      editHref={`/system/users/${userId}/edit`}
-      listHref='/system/users/list'
-      statusBadges={['启用中', '财务部', '报销审核岗']}
-      sections={[
-        {
-          title: '身份信息',
-          description: '对齐 auth/current-user 契约的基础字段。',
-          items: [
-            { label: '用户 ID', value: userId },
-            { label: '用户名', value: 'zhangsan' },
-            { label: '显示名称', value: '张三' },
-            { label: '手机号', value: '13800000000' },
-          ],
-        },
-        {
-          title: '组织与权限',
-          description: '围绕岗位、角色、数据范围和 AI 能力聚合展示。',
-          items: [
-            { label: '主部门', value: '财务部' },
-            { label: '主岗位', value: '报销审核岗' },
-            { label: '角色集合', value: 'OA_USER, DEPT_MANAGER' },
-            { label: 'AI 能力', value: 'ai:copilot:open, ai:task:handle' },
-          ],
-        },
-      ]}
-    />
+      description='详情页独立展示基础身份、组织归属和当前启用状态，便于后续继续扩展角色、代理和 AI 能力信息。'
+      actions={
+        <>
+          <Button asChild>
+            <Link to='/system/users/$userId/edit' params={{ userId }}>
+              <Save data-icon='inline-start' />
+              编辑用户
+            </Link>
+          </Button>
+          <Button asChild variant='ghost'>
+            <Link to='/system/users/list'>
+              <ArrowLeft data-icon='inline-start' />
+              返回列表
+            </Link>
+          </Button>
+        </>
+      }
+    >
+      <div className='flex flex-wrap gap-2'>
+        <Badge variant='secondary'>
+          {detail.enabled ? '启用中' : '已停用'}
+        </Badge>
+        <Badge variant='secondary'>{detail.companyName}</Badge>
+        <Badge variant='secondary'>{detail.departmentName}</Badge>
+        <Badge variant='secondary'>{detail.postName}</Badge>
+      </div>
+
+      <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
+        <div className='grid gap-4 lg:grid-cols-2'>
+          <Card>
+            <CardHeader>
+              <CardTitle>基础信息</CardTitle>
+              <CardDescription>对齐当前用户上下文的账号和联系字段。</CardDescription>
+            </CardHeader>
+            <CardContent className='grid gap-3 sm:grid-cols-2'>
+              <UserDetailMetric
+                icon={UserRound}
+                label='用户姓名'
+                value={detail.displayName}
+              />
+              <UserDetailMetric
+                icon={BadgeCheck}
+                label='登录账号'
+                value={detail.username}
+              />
+              <UserDetailMetric
+                icon={Phone}
+                label='手机号'
+                value={detail.mobile}
+              />
+              <UserDetailMetric
+                icon={Mail}
+                label='邮箱地址'
+                value={detail.email}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>组织身份</CardTitle>
+              <CardDescription>
+                当前阶段聚焦公司、部门和主岗位，后续会在这里继续扩展角色与代理链路。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='grid gap-3 sm:grid-cols-2'>
+              <UserDetailMetric
+                icon={Building2}
+                label='所属公司'
+                value={detail.companyName}
+              />
+              <UserDetailMetric
+                icon={Building2}
+                label='主部门'
+                value={detail.departmentName}
+              />
+              <UserDetailMetric
+                icon={BriefcaseBusiness}
+                label='主岗位'
+                value={detail.postName}
+              />
+              <UserDetailMetric
+                icon={ShieldCheck}
+                label='当前状态'
+                value={detail.enabled ? '启用' : '停用'}
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className='flex flex-col gap-4'>
+          <Card>
+            <CardHeader>
+              <CardTitle>身份摘要</CardTitle>
+              <CardDescription>
+                当前是第一版真实详情页，后续会继续扩展角色集合、代理关系和 AI 权限摘要。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
+              <p>用户 ID：{detail.userId}</p>
+              <p>公司 ID：{detail.companyId}</p>
+              <p>部门 ID：{detail.departmentId}</p>
+              <p>岗位 ID：{detail.postId}</p>
+            </CardContent>
+          </Card>
+
+          <Alert>
+            <ShieldCheck />
+            <AlertTitle>页面定位</AlertTitle>
+            <AlertDescription>
+              详情、编辑、创建均已拆成独立页面，符合平台统一 CRUD 规范，不再依赖弹窗式维护。
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    </PageShell>
   )
 }
