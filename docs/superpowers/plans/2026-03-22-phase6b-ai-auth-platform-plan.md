@@ -2,13 +2,56 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 用真实数据库登录替换 fixture，并交付完整 AI Copilot 平台，同时预置 OA/PLM 完整流程定义 SQL 与启动同步。
+**Goal:** 用真实数据库登录替换 fixture，并在 `Spring Boot 3.5.12 + Spring AI 1.1.2 + Spring AI Alibaba 1.1.2.0` 基线上交付完整 AI Copilot 平台，同时预置 OA/PLM 完整流程定义 SQL 与启动同步。
 
-**Architecture:** 先收口认证主链路，把登录、当前用户上下文、AI 能力权限改成统一从数据库聚合；随后构建统一 AI Gateway，把 Agent、MCP、Skill 和平台工具挂到同一工具注册中心；最后以 SQL 种子和启动同步器补齐 OA/PLM 完整流程定义，保证本地启动即可测试。
+**Architecture:** 先升级技术基线并收口认证主链路，把登录、当前用户上下文、AI 能力权限改成统一从数据库聚合；随后构建统一 AI Gateway，把 Agent、MCP、Skill 和平台工具挂到同一工具注册中心，并基于 Spring AI Alibaba 的 `Supervisor / Routing / Skills` 建立多智能体编排层；最后以 SQL 种子和启动同步器补齐 OA/PLM 完整流程定义，保证本地启动即可测试。
 
-**Tech Stack:** `Spring Boot`, `Sa-Token`, `MyBatis-Plus`, `PostgreSQL`, `Flyway`, `Flowable`, `Spring AI`, `React 19`, `TanStack Query`, `TanStack Router`, `zustand`, `shadcn/ui`
+**Tech Stack:** `Spring Boot 3.5.12`, `Sa-Token`, `MyBatis-Plus`, `PostgreSQL`, `Flyway`, `Flowable`, `Spring AI 1.1.2`, `Spring AI Alibaba 1.1.2.0`, `React 19`, `TanStack Query`, `TanStack Router`, `zustand`, `shadcn/ui`
 
 ---
+
+## Chunk 0: AI 技术栈升级基线
+
+### Task 0: 升级 Spring Boot / Spring AI / Spring AI Alibaba 版本基线
+
+**Files:**
+- Modify: `backend/pom.xml`
+- Modify: `backend/src/main/resources/application.yml`
+- Modify: `backend/src/main/resources/application-local.yml`
+- Test: `backend/src/test/resources/application-test.yml`
+
+- [ ] **Step 1: 先写验证清单**
+
+确认以下内容在升级后必须回归：
+- 后端应用可启动
+- Flowable 只保留 BPMN 主链路
+- 现有 AI Controller 单测可跑
+- 现有认证、PLM、流程定义同步测试可跑
+
+- [ ] **Step 2: 升级依赖管理**
+
+在 `backend/pom.xml` 中：
+- 将 `spring-boot-starter-parent` 升级到 `3.5.12`
+- 将 `spring-ai.version` 升级到 `1.1.2`
+- 引入 `spring-ai-alibaba-bom:1.1.2.0`
+- 补齐 `spring-ai-alibaba-agent-framework`、按需的 `graph`/`skills` 相关依赖
+- 保持 Flowable 仅使用 BPMN/Process Engine 所需 starter
+
+- [ ] **Step 3: 对齐配置键**
+
+检查并修正 `application*.yml` 中的 AI 配置项，确保与 `Spring AI 1.1.2` 和 `Spring AI Alibaba 1.1.2.0` 对齐。
+
+- [ ] **Step 4: 跑技术基线测试**
+
+Run: `mvn -f backend/pom.xml -Dtest=AuthControllerTest,AiCopilotControllerTest,AiCopilotServiceTest,PLMControllerTest,PublishedDefinitionBootstrapServiceTest test`
+Expected: PASS
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add backend/pom.xml backend/src/main/resources/application.yml backend/src/main/resources/application-local.yml backend/src/test/resources/application-test.yml
+git commit -m "build: 升级spring boot与spring ai技术基线"
+```
 
 ## Chunk 1: 真实数据库登录
 

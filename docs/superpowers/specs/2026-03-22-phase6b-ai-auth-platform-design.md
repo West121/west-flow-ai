@@ -1,5 +1,25 @@
 # Phase 6B：真实登录与完整 AI Copilot 平台设计
 
+## 0. 技术基线
+
+本阶段 AI 平台的版本基线固定为：
+
+- `Spring Boot 3.5.12`
+- `Spring AI 1.1.2`
+- `Spring AI Alibaba 1.1.2.0`
+
+版本选择原则：
+
+- `Spring Boot 3.5.12` 作为统一 Spring 基线，减少 AI Starter 与自动配置的兼容偏差
+- `Spring AI 1.1.2` 负责模型调用、`ChatClient`、Tool Calling、MCP Client 等基础能力
+- `Spring AI Alibaba 1.1.2.0` 负责 `Agent Skills`、`Supervisor`、`Routing`、Graph Workflow 等多智能体能力
+
+AI 技术栈分层固定为：
+
+- `Spring AI`：模型与工具底座
+- `Spring AI Alibaba`：Agent 编排与 Skill/MCP 组合能力
+- 平台自研层：会话、确认、审计、权限、业务工具注册
+
 ## 1. 目标
 
 本阶段一次性收口三条主线：
@@ -14,6 +34,7 @@
 - 真实权限、菜单、数据权限、AI 能力联动
 - 全局唯一 `AI Copilot` 入口
 - `Agent / MCP / Skill / 平台工具` 统一编排
+- `Supervisor / Routing / Skills` 多智能体能力可用于正式业务链路
 - `OA / PLM` 关键流程定义可直接测试
 
 ## 2. 范围边界
@@ -31,6 +52,7 @@
 - 读操作直执、写操作强制确认
 - `OA + PLM` 完整流程定义 SQL 种子
 - 启动后自动同步发布定义到 `Flowable`
+- `Spring Boot 3.5.12 + Spring AI 1.1.2 + Spring AI Alibaba 1.1.2.0` 统一技术栈升级
 
 ### 2.2 本阶段明确不做
 
@@ -145,6 +167,13 @@
 - `ai/skill`
 - `ai/audit`
 
+同时新增 `ai/orchestration` 层，专门承接 `Spring AI Alibaba` 多智能体编排：
+
+- `ai/orchestration/supervisor`
+- `ai/orchestration/routing`
+- `ai/orchestration/graph`
+- `ai/orchestration/skills`
+
 核心服务：
 
 - `AiCopilotGatewayService`
@@ -156,6 +185,13 @@
 - `McpAdapterRegistry`
 - `SkillAdapterRegistry`
 - `AiAuditService`
+
+框架边界：
+
+- `AiCopilotGatewayService` 负责统一入口、上下文组装、权限前置校验、确认策略和响应落库
+- `Spring AI ChatClient` 负责模型请求、基础 Tool Calling 和 MCP Client
+- `Spring AI Alibaba` 负责 `SupervisorAgent`、`LlmRoutingAgent`、`Agent Skills`、Graph Workflow 等高级编排
+- `ToolExecutionService` 仍然是平台唯一工具执行入口，防止 Agent 直接绕过权限和审计
 
 ### 4.4 Agent 目录
 
@@ -169,6 +205,12 @@
 - PLM 助手
 
 这些 Agent 不单独做前端入口，统一由 Copilot 调度。
+
+Agent 编排策略：
+
+- `Supervisor`：用于复杂多步任务，如“先查待办，再解释流程，再生成操作确认卡”
+- `Routing`：用于按问题类型在流程设计、待办处理、统计问答、PLM 助手之间路由
+- `Skill`：用于封装可复用能力块，例如“解释审批轨迹”“生成发起参数建议”“总结会签结果”
 
 ### 4.5 Tool 分类
 
@@ -221,6 +263,8 @@
 - 用户点击确认后才执行
 - 每次确认必须进入审计日志
 
+该规则必须对所有 Agent、Skill、MCP Tool 生效，不能因多智能体编排而绕过。
+
 ### 4.7 上下文模型
 
 每次对话自动附带：
@@ -235,6 +279,16 @@
 - 最近工具调用结果
 
 AI 不允许绕过现有菜单权限、数据权限和流程动作权限。
+
+### 4.8 Framework 接入原则
+
+为避免 AI 平台失控，接入规则固定如下：
+
+- `Spring AI` 只作为底层模型与工具抽象，不直接在 Controller 中拼装复杂业务流
+- `Spring AI Alibaba` 只放在 `ai/orchestration/**`，避免与平台业务层耦合
+- 所有对业务写操作的最终执行，必须回落到平台自己的 `ToolExecutionService`
+- `MCP` 工具与 `Skill` 工具都必须先注册元数据、权限点、参数模式和确认策略，才能暴露给 Copilot
+- `OA + PLM + 流程平台` 三类业务工具使用统一注册机制，不允许各自私接模型客户端
 
 ## 5. OA + PLM 完整流程定义 SQL 种子
 
