@@ -363,6 +363,16 @@ export const sidebarData: SidebarData = {
           icon: Network,
         },
         {
+          title: '流程版本',
+          url: '/workflow/versions/list',
+          icon: ScrollText,
+        },
+        {
+          title: '流程发布记录',
+          url: '/workflow/publish-records/list',
+          icon: BookText,
+        },
+        {
           title: '流程设计器',
           icon: FolderKanban,
           items: [
@@ -371,6 +381,26 @@ export const sidebarData: SidebarData = {
               url: '/workflow/designer',
             },
           ],
+        },
+        {
+          title: '流程实例监控',
+          url: '/workflow/instances/list',
+          icon: Gauge,
+        },
+        {
+          title: '流程操作日志',
+          url: '/workflow/operation-logs/list',
+          icon: ScrollText,
+        },
+        {
+          title: '审批意见配置',
+          url: '/workflow/opinion-configs/list',
+          icon: SquareMenu,
+        },
+        {
+          title: '业务流程绑定',
+          url: '/workflow/bindings/list',
+          icon: ArrowRightLeft,
         },
       ],
     },

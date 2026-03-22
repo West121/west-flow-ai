@@ -28,7 +28,15 @@ import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedOaQueryRouteImport } from './routes/_authenticated/oa/query'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedWorkflowVersionsListRouteImport } from './routes/_authenticated/workflow/versions/list'
+import { Route as AuthenticatedWorkflowPublishRecordsListRouteImport } from './routes/_authenticated/workflow/publish-records/list'
+import { Route as AuthenticatedWorkflowOpinionConfigsListRouteImport } from './routes/_authenticated/workflow/opinion-configs/list'
+import { Route as AuthenticatedWorkflowOpinionConfigsCreateRouteImport } from './routes/_authenticated/workflow/opinion-configs/create'
+import { Route as AuthenticatedWorkflowOperationLogsListRouteImport } from './routes/_authenticated/workflow/operation-logs/list'
+import { Route as AuthenticatedWorkflowInstancesListRouteImport } from './routes/_authenticated/workflow/instances/list'
 import { Route as AuthenticatedWorkflowDefinitionsListRouteImport } from './routes/_authenticated/workflow/definitions/list'
+import { Route as AuthenticatedWorkflowBindingsListRouteImport } from './routes/_authenticated/workflow/bindings/list'
+import { Route as AuthenticatedWorkflowBindingsCreateRouteImport } from './routes/_authenticated/workflow/bindings/create'
 import { Route as AuthenticatedWorkbenchTodosListRouteImport } from './routes/_authenticated/workbench/todos/list'
 import { Route as AuthenticatedWorkbenchTodosTaskIdRouteImport } from './routes/_authenticated/workbench/todos/$taskId'
 import { Route as AuthenticatedWorkbenchInitiatedListRouteImport } from './routes/_authenticated/workbench/initiated/list'
@@ -67,6 +75,12 @@ import { Route as AuthenticatedOaExpenseCreateRouteImport } from './routes/_auth
 import { Route as AuthenticatedOaExpenseBillIdRouteImport } from './routes/_authenticated/oa/expense/$billId'
 import { Route as AuthenticatedOaCommonCreateRouteImport } from './routes/_authenticated/oa/common/create'
 import { Route as AuthenticatedOaCommonBillIdRouteImport } from './routes/_authenticated/oa/common/$billId'
+import { Route as AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRouteImport } from './routes/_authenticated/workflow/versions/$processDefinitionId/index'
+import { Route as AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRouteImport } from './routes/_authenticated/workflow/publish-records/$processDefinitionId/index'
+import { Route as AuthenticatedWorkflowOpinionConfigsConfigIdIndexRouteImport } from './routes/_authenticated/workflow/opinion-configs/$configId/index'
+import { Route as AuthenticatedWorkflowOperationLogsLogIdIndexRouteImport } from './routes/_authenticated/workflow/operation-logs/$logId/index'
+import { Route as AuthenticatedWorkflowInstancesInstanceIdIndexRouteImport } from './routes/_authenticated/workflow/instances/$instanceId/index'
+import { Route as AuthenticatedWorkflowBindingsBindingIdIndexRouteImport } from './routes/_authenticated/workflow/bindings/$bindingId/index'
 import { Route as AuthenticatedSystemUsersUserIdIndexRouteImport } from './routes/_authenticated/system/users/$userId/index'
 import { Route as AuthenticatedSystemTriggersTriggerIdIndexRouteImport } from './routes/_authenticated/system/triggers/$triggerId/index'
 import { Route as AuthenticatedSystemRolesRoleIdIndexRouteImport } from './routes/_authenticated/system/roles/$roleId/index'
@@ -80,6 +94,8 @@ import { Route as AuthenticatedSystemDictItemsDictItemIdIndexRouteImport } from 
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdIndexRouteImport } from './routes/_authenticated/system/departments/$departmentId/index'
 import { Route as AuthenticatedSystemCompaniesCompanyIdIndexRouteImport } from './routes/_authenticated/system/companies/$companyId/index'
 import { Route as AuthenticatedSystemAgentsAgentIdIndexRouteImport } from './routes/_authenticated/system/agents/$agentId/index'
+import { Route as AuthenticatedWorkflowOpinionConfigsConfigIdEditRouteImport } from './routes/_authenticated/workflow/opinion-configs/$configId/edit'
+import { Route as AuthenticatedWorkflowBindingsBindingIdEditRouteImport } from './routes/_authenticated/workflow/bindings/$bindingId/edit'
 import { Route as AuthenticatedSystemUsersUserIdEditRouteImport } from './routes/_authenticated/system/users/$userId/edit'
 import { Route as AuthenticatedSystemTriggersTriggerIdEditRouteImport } from './routes/_authenticated/system/triggers/$triggerId/edit'
 import { Route as AuthenticatedSystemRolesRoleIdEditRouteImport } from './routes/_authenticated/system/roles/$roleId/edit'
@@ -215,10 +231,58 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedWorkflowVersionsListRoute =
+  AuthenticatedWorkflowVersionsListRouteImport.update({
+    id: '/workflow/versions/list',
+    path: '/workflow/versions/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowPublishRecordsListRoute =
+  AuthenticatedWorkflowPublishRecordsListRouteImport.update({
+    id: '/workflow/publish-records/list',
+    path: '/workflow/publish-records/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowOpinionConfigsListRoute =
+  AuthenticatedWorkflowOpinionConfigsListRouteImport.update({
+    id: '/workflow/opinion-configs/list',
+    path: '/workflow/opinion-configs/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowOpinionConfigsCreateRoute =
+  AuthenticatedWorkflowOpinionConfigsCreateRouteImport.update({
+    id: '/workflow/opinion-configs/create',
+    path: '/workflow/opinion-configs/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowOperationLogsListRoute =
+  AuthenticatedWorkflowOperationLogsListRouteImport.update({
+    id: '/workflow/operation-logs/list',
+    path: '/workflow/operation-logs/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowInstancesListRoute =
+  AuthenticatedWorkflowInstancesListRouteImport.update({
+    id: '/workflow/instances/list',
+    path: '/workflow/instances/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedWorkflowDefinitionsListRoute =
   AuthenticatedWorkflowDefinitionsListRouteImport.update({
     id: '/workflow/definitions/list',
     path: '/workflow/definitions/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowBindingsListRoute =
+  AuthenticatedWorkflowBindingsListRouteImport.update({
+    id: '/workflow/bindings/list',
+    path: '/workflow/bindings/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowBindingsCreateRoute =
+  AuthenticatedWorkflowBindingsCreateRouteImport.update({
+    id: '/workflow/bindings/create',
+    path: '/workflow/bindings/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedWorkbenchTodosListRoute =
@@ -449,6 +513,44 @@ const AuthenticatedOaCommonBillIdRoute =
     path: '/oa/common/$billId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute =
+  AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRouteImport.update({
+    id: '/workflow/versions/$processDefinitionId/',
+    path: '/workflow/versions/$processDefinitionId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute =
+  AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRouteImport.update(
+    {
+      id: '/workflow/publish-records/$processDefinitionId/',
+      path: '/workflow/publish-records/$processDefinitionId/',
+      getParentRoute: () => AuthenticatedRouteRoute,
+    } as any,
+  )
+const AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute =
+  AuthenticatedWorkflowOpinionConfigsConfigIdIndexRouteImport.update({
+    id: '/workflow/opinion-configs/$configId/',
+    path: '/workflow/opinion-configs/$configId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowOperationLogsLogIdIndexRoute =
+  AuthenticatedWorkflowOperationLogsLogIdIndexRouteImport.update({
+    id: '/workflow/operation-logs/$logId/',
+    path: '/workflow/operation-logs/$logId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowInstancesInstanceIdIndexRoute =
+  AuthenticatedWorkflowInstancesInstanceIdIndexRouteImport.update({
+    id: '/workflow/instances/$instanceId/',
+    path: '/workflow/instances/$instanceId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowBindingsBindingIdIndexRoute =
+  AuthenticatedWorkflowBindingsBindingIdIndexRouteImport.update({
+    id: '/workflow/bindings/$bindingId/',
+    path: '/workflow/bindings/$bindingId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemUsersUserIdIndexRoute =
   AuthenticatedSystemUsersUserIdIndexRouteImport.update({
     id: '/system/users/$userId/',
@@ -525,6 +627,18 @@ const AuthenticatedSystemAgentsAgentIdIndexRoute =
   AuthenticatedSystemAgentsAgentIdIndexRouteImport.update({
     id: '/system/agents/$agentId/',
     path: '/system/agents/$agentId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute =
+  AuthenticatedWorkflowOpinionConfigsConfigIdEditRouteImport.update({
+    id: '/workflow/opinion-configs/$configId/edit',
+    path: '/workflow/opinion-configs/$configId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkflowBindingsBindingIdEditRoute =
+  AuthenticatedWorkflowBindingsBindingIdEditRouteImport.update({
+    id: '/workflow/bindings/$bindingId/edit',
+    path: '/workflow/bindings/$bindingId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemUsersUserIdEditRoute =
@@ -777,7 +891,15 @@ export interface FileRoutesByFullPath {
   '/workbench/initiated/list': typeof AuthenticatedWorkbenchInitiatedListRoute
   '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
+  '/workflow/bindings/create': typeof AuthenticatedWorkflowBindingsCreateRoute
+  '/workflow/bindings/list': typeof AuthenticatedWorkflowBindingsListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
+  '/workflow/instances/list': typeof AuthenticatedWorkflowInstancesListRoute
+  '/workflow/operation-logs/list': typeof AuthenticatedWorkflowOperationLogsListRoute
+  '/workflow/opinion-configs/create': typeof AuthenticatedWorkflowOpinionConfigsCreateRoute
+  '/workflow/opinion-configs/list': typeof AuthenticatedWorkflowOpinionConfigsListRoute
+  '/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
+  '/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
@@ -799,6 +921,8 @@ export interface FileRoutesByFullPath {
   '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/system/triggers/$triggerId/edit': typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
+  '/workflow/bindings/$bindingId/edit': typeof AuthenticatedWorkflowBindingsBindingIdEditRoute
+  '/workflow/opinion-configs/$configId/edit': typeof AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute
   '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
@@ -812,6 +936,12 @@ export interface FileRoutesByFullPath {
   '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
   '/system/triggers/$triggerId': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
+  '/workflow/bindings/$bindingId': typeof AuthenticatedWorkflowBindingsBindingIdIndexRoute
+  '/workflow/instances/$instanceId': typeof AuthenticatedWorkflowInstancesInstanceIdIndexRoute
+  '/workflow/operation-logs/$logId': typeof AuthenticatedWorkflowOperationLogsLogIdIndexRoute
+  '/workflow/opinion-configs/$configId': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
+  '/workflow/publish-records/$processDefinitionId': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
+  '/workflow/versions/$processDefinitionId': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
   '/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
   '/system/logs/audit/$logId': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
@@ -879,7 +1009,15 @@ export interface FileRoutesByTo {
   '/workbench/initiated/list': typeof AuthenticatedWorkbenchInitiatedListRoute
   '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
+  '/workflow/bindings/create': typeof AuthenticatedWorkflowBindingsCreateRoute
+  '/workflow/bindings/list': typeof AuthenticatedWorkflowBindingsListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
+  '/workflow/instances/list': typeof AuthenticatedWorkflowInstancesListRoute
+  '/workflow/operation-logs/list': typeof AuthenticatedWorkflowOperationLogsListRoute
+  '/workflow/opinion-configs/create': typeof AuthenticatedWorkflowOpinionConfigsCreateRoute
+  '/workflow/opinion-configs/list': typeof AuthenticatedWorkflowOpinionConfigsListRoute
+  '/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
+  '/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
@@ -901,6 +1039,8 @@ export interface FileRoutesByTo {
   '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/system/triggers/$triggerId/edit': typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
+  '/workflow/bindings/$bindingId/edit': typeof AuthenticatedWorkflowBindingsBindingIdEditRoute
+  '/workflow/opinion-configs/$configId/edit': typeof AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute
   '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
@@ -914,6 +1054,12 @@ export interface FileRoutesByTo {
   '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
   '/system/triggers/$triggerId': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
+  '/workflow/bindings/$bindingId': typeof AuthenticatedWorkflowBindingsBindingIdIndexRoute
+  '/workflow/instances/$instanceId': typeof AuthenticatedWorkflowInstancesInstanceIdIndexRoute
+  '/workflow/operation-logs/$logId': typeof AuthenticatedWorkflowOperationLogsLogIdIndexRoute
+  '/workflow/opinion-configs/$configId': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
+  '/workflow/publish-records/$processDefinitionId': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
+  '/workflow/versions/$processDefinitionId': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
   '/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
   '/system/logs/audit/$logId': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
@@ -984,7 +1130,15 @@ export interface FileRoutesById {
   '/_authenticated/workbench/initiated/list': typeof AuthenticatedWorkbenchInitiatedListRoute
   '/_authenticated/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/_authenticated/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
+  '/_authenticated/workflow/bindings/create': typeof AuthenticatedWorkflowBindingsCreateRoute
+  '/_authenticated/workflow/bindings/list': typeof AuthenticatedWorkflowBindingsListRoute
   '/_authenticated/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
+  '/_authenticated/workflow/instances/list': typeof AuthenticatedWorkflowInstancesListRoute
+  '/_authenticated/workflow/operation-logs/list': typeof AuthenticatedWorkflowOperationLogsListRoute
+  '/_authenticated/workflow/opinion-configs/create': typeof AuthenticatedWorkflowOpinionConfigsCreateRoute
+  '/_authenticated/workflow/opinion-configs/list': typeof AuthenticatedWorkflowOpinionConfigsListRoute
+  '/_authenticated/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
+  '/_authenticated/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
   '/_authenticated/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/_authenticated/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/_authenticated/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
@@ -1006,6 +1160,8 @@ export interface FileRoutesById {
   '/_authenticated/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/_authenticated/system/triggers/$triggerId/edit': typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   '/_authenticated/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
+  '/_authenticated/workflow/bindings/$bindingId/edit': typeof AuthenticatedWorkflowBindingsBindingIdEditRoute
+  '/_authenticated/workflow/opinion-configs/$configId/edit': typeof AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute
   '/_authenticated/system/agents/$agentId/': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/_authenticated/system/companies/$companyId/': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/_authenticated/system/departments/$departmentId/': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
@@ -1019,6 +1175,12 @@ export interface FileRoutesById {
   '/_authenticated/system/roles/$roleId/': typeof AuthenticatedSystemRolesRoleIdIndexRoute
   '/_authenticated/system/triggers/$triggerId/': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   '/_authenticated/system/users/$userId/': typeof AuthenticatedSystemUsersUserIdIndexRoute
+  '/_authenticated/workflow/bindings/$bindingId/': typeof AuthenticatedWorkflowBindingsBindingIdIndexRoute
+  '/_authenticated/workflow/instances/$instanceId/': typeof AuthenticatedWorkflowInstancesInstanceIdIndexRoute
+  '/_authenticated/workflow/operation-logs/$logId/': typeof AuthenticatedWorkflowOperationLogsLogIdIndexRoute
+  '/_authenticated/workflow/opinion-configs/$configId/': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
+  '/_authenticated/workflow/publish-records/$processDefinitionId/': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
+  '/_authenticated/workflow/versions/$processDefinitionId/': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
   '/_authenticated/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/_authenticated/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
   '/_authenticated/system/logs/audit/$logId/': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
@@ -1089,7 +1251,15 @@ export interface FileRouteTypes {
     | '/workbench/initiated/list'
     | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
+    | '/workflow/bindings/create'
+    | '/workflow/bindings/list'
     | '/workflow/definitions/list'
+    | '/workflow/instances/list'
+    | '/workflow/operation-logs/list'
+    | '/workflow/opinion-configs/create'
+    | '/workflow/opinion-configs/list'
+    | '/workflow/publish-records/list'
+    | '/workflow/versions/list'
     | '/system/agents/$agentId/edit'
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
@@ -1111,6 +1281,8 @@ export interface FileRouteTypes {
     | '/system/roles/$roleId/edit'
     | '/system/triggers/$triggerId/edit'
     | '/system/users/$userId/edit'
+    | '/workflow/bindings/$bindingId/edit'
+    | '/workflow/opinion-configs/$configId/edit'
     | '/system/agents/$agentId'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
@@ -1124,6 +1296,12 @@ export interface FileRouteTypes {
     | '/system/roles/$roleId'
     | '/system/triggers/$triggerId'
     | '/system/users/$userId'
+    | '/workflow/bindings/$bindingId'
+    | '/workflow/instances/$instanceId'
+    | '/workflow/operation-logs/$logId'
+    | '/workflow/opinion-configs/$configId'
+    | '/workflow/publish-records/$processDefinitionId'
+    | '/workflow/versions/$processDefinitionId'
     | '/system/monitor/notification-channels/health/list'
     | '/system/notifications/templates/$templateId/edit'
     | '/system/logs/audit/$logId'
@@ -1191,7 +1369,15 @@ export interface FileRouteTypes {
     | '/workbench/initiated/list'
     | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
+    | '/workflow/bindings/create'
+    | '/workflow/bindings/list'
     | '/workflow/definitions/list'
+    | '/workflow/instances/list'
+    | '/workflow/operation-logs/list'
+    | '/workflow/opinion-configs/create'
+    | '/workflow/opinion-configs/list'
+    | '/workflow/publish-records/list'
+    | '/workflow/versions/list'
     | '/system/agents/$agentId/edit'
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
@@ -1213,6 +1399,8 @@ export interface FileRouteTypes {
     | '/system/roles/$roleId/edit'
     | '/system/triggers/$triggerId/edit'
     | '/system/users/$userId/edit'
+    | '/workflow/bindings/$bindingId/edit'
+    | '/workflow/opinion-configs/$configId/edit'
     | '/system/agents/$agentId'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
@@ -1226,6 +1414,12 @@ export interface FileRouteTypes {
     | '/system/roles/$roleId'
     | '/system/triggers/$triggerId'
     | '/system/users/$userId'
+    | '/workflow/bindings/$bindingId'
+    | '/workflow/instances/$instanceId'
+    | '/workflow/operation-logs/$logId'
+    | '/workflow/opinion-configs/$configId'
+    | '/workflow/publish-records/$processDefinitionId'
+    | '/workflow/versions/$processDefinitionId'
     | '/system/monitor/notification-channels/health/list'
     | '/system/notifications/templates/$templateId/edit'
     | '/system/logs/audit/$logId'
@@ -1295,7 +1489,15 @@ export interface FileRouteTypes {
     | '/_authenticated/workbench/initiated/list'
     | '/_authenticated/workbench/todos/$taskId'
     | '/_authenticated/workbench/todos/list'
+    | '/_authenticated/workflow/bindings/create'
+    | '/_authenticated/workflow/bindings/list'
     | '/_authenticated/workflow/definitions/list'
+    | '/_authenticated/workflow/instances/list'
+    | '/_authenticated/workflow/operation-logs/list'
+    | '/_authenticated/workflow/opinion-configs/create'
+    | '/_authenticated/workflow/opinion-configs/list'
+    | '/_authenticated/workflow/publish-records/list'
+    | '/_authenticated/workflow/versions/list'
     | '/_authenticated/system/agents/$agentId/edit'
     | '/_authenticated/system/companies/$companyId/edit'
     | '/_authenticated/system/departments/$departmentId/edit'
@@ -1317,6 +1519,8 @@ export interface FileRouteTypes {
     | '/_authenticated/system/roles/$roleId/edit'
     | '/_authenticated/system/triggers/$triggerId/edit'
     | '/_authenticated/system/users/$userId/edit'
+    | '/_authenticated/workflow/bindings/$bindingId/edit'
+    | '/_authenticated/workflow/opinion-configs/$configId/edit'
     | '/_authenticated/system/agents/$agentId/'
     | '/_authenticated/system/companies/$companyId/'
     | '/_authenticated/system/departments/$departmentId/'
@@ -1330,6 +1534,12 @@ export interface FileRouteTypes {
     | '/_authenticated/system/roles/$roleId/'
     | '/_authenticated/system/triggers/$triggerId/'
     | '/_authenticated/system/users/$userId/'
+    | '/_authenticated/workflow/bindings/$bindingId/'
+    | '/_authenticated/workflow/instances/$instanceId/'
+    | '/_authenticated/workflow/operation-logs/$logId/'
+    | '/_authenticated/workflow/opinion-configs/$configId/'
+    | '/_authenticated/workflow/publish-records/$processDefinitionId/'
+    | '/_authenticated/workflow/versions/$processDefinitionId/'
     | '/_authenticated/system/monitor/notification-channels/health/list'
     | '/_authenticated/system/notifications/templates/$templateId/edit'
     | '/_authenticated/system/logs/audit/$logId/'
@@ -1487,11 +1697,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/workflow/versions/list': {
+      id: '/_authenticated/workflow/versions/list'
+      path: '/workflow/versions/list'
+      fullPath: '/workflow/versions/list'
+      preLoaderRoute: typeof AuthenticatedWorkflowVersionsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/publish-records/list': {
+      id: '/_authenticated/workflow/publish-records/list'
+      path: '/workflow/publish-records/list'
+      fullPath: '/workflow/publish-records/list'
+      preLoaderRoute: typeof AuthenticatedWorkflowPublishRecordsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/opinion-configs/list': {
+      id: '/_authenticated/workflow/opinion-configs/list'
+      path: '/workflow/opinion-configs/list'
+      fullPath: '/workflow/opinion-configs/list'
+      preLoaderRoute: typeof AuthenticatedWorkflowOpinionConfigsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/opinion-configs/create': {
+      id: '/_authenticated/workflow/opinion-configs/create'
+      path: '/workflow/opinion-configs/create'
+      fullPath: '/workflow/opinion-configs/create'
+      preLoaderRoute: typeof AuthenticatedWorkflowOpinionConfigsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/operation-logs/list': {
+      id: '/_authenticated/workflow/operation-logs/list'
+      path: '/workflow/operation-logs/list'
+      fullPath: '/workflow/operation-logs/list'
+      preLoaderRoute: typeof AuthenticatedWorkflowOperationLogsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/instances/list': {
+      id: '/_authenticated/workflow/instances/list'
+      path: '/workflow/instances/list'
+      fullPath: '/workflow/instances/list'
+      preLoaderRoute: typeof AuthenticatedWorkflowInstancesListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/workflow/definitions/list': {
       id: '/_authenticated/workflow/definitions/list'
       path: '/workflow/definitions/list'
       fullPath: '/workflow/definitions/list'
       preLoaderRoute: typeof AuthenticatedWorkflowDefinitionsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/bindings/list': {
+      id: '/_authenticated/workflow/bindings/list'
+      path: '/workflow/bindings/list'
+      fullPath: '/workflow/bindings/list'
+      preLoaderRoute: typeof AuthenticatedWorkflowBindingsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/bindings/create': {
+      id: '/_authenticated/workflow/bindings/create'
+      path: '/workflow/bindings/create'
+      fullPath: '/workflow/bindings/create'
+      preLoaderRoute: typeof AuthenticatedWorkflowBindingsCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workbench/todos/list': {
@@ -1760,6 +2026,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOaCommonBillIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/workflow/versions/$processDefinitionId/': {
+      id: '/_authenticated/workflow/versions/$processDefinitionId/'
+      path: '/workflow/versions/$processDefinitionId'
+      fullPath: '/workflow/versions/$processDefinitionId'
+      preLoaderRoute: typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/publish-records/$processDefinitionId/': {
+      id: '/_authenticated/workflow/publish-records/$processDefinitionId/'
+      path: '/workflow/publish-records/$processDefinitionId'
+      fullPath: '/workflow/publish-records/$processDefinitionId'
+      preLoaderRoute: typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/opinion-configs/$configId/': {
+      id: '/_authenticated/workflow/opinion-configs/$configId/'
+      path: '/workflow/opinion-configs/$configId'
+      fullPath: '/workflow/opinion-configs/$configId'
+      preLoaderRoute: typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/operation-logs/$logId/': {
+      id: '/_authenticated/workflow/operation-logs/$logId/'
+      path: '/workflow/operation-logs/$logId'
+      fullPath: '/workflow/operation-logs/$logId'
+      preLoaderRoute: typeof AuthenticatedWorkflowOperationLogsLogIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/instances/$instanceId/': {
+      id: '/_authenticated/workflow/instances/$instanceId/'
+      path: '/workflow/instances/$instanceId'
+      fullPath: '/workflow/instances/$instanceId'
+      preLoaderRoute: typeof AuthenticatedWorkflowInstancesInstanceIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/bindings/$bindingId/': {
+      id: '/_authenticated/workflow/bindings/$bindingId/'
+      path: '/workflow/bindings/$bindingId'
+      fullPath: '/workflow/bindings/$bindingId'
+      preLoaderRoute: typeof AuthenticatedWorkflowBindingsBindingIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/users/$userId/': {
       id: '/_authenticated/system/users/$userId/'
       path: '/system/users/$userId'
@@ -1849,6 +2157,20 @@ declare module '@tanstack/react-router' {
       path: '/system/agents/$agentId'
       fullPath: '/system/agents/$agentId'
       preLoaderRoute: typeof AuthenticatedSystemAgentsAgentIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/opinion-configs/$configId/edit': {
+      id: '/_authenticated/workflow/opinion-configs/$configId/edit'
+      path: '/workflow/opinion-configs/$configId/edit'
+      fullPath: '/workflow/opinion-configs/$configId/edit'
+      preLoaderRoute: typeof AuthenticatedWorkflowOpinionConfigsConfigIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workflow/bindings/$bindingId/edit': {
+      id: '/_authenticated/workflow/bindings/$bindingId/edit'
+      path: '/workflow/bindings/$bindingId/edit'
+      fullPath: '/workflow/bindings/$bindingId/edit'
+      preLoaderRoute: typeof AuthenticatedWorkflowBindingsBindingIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/users/$userId/edit': {
@@ -2140,7 +2462,15 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkbenchInitiatedListRoute: typeof AuthenticatedWorkbenchInitiatedListRoute
   AuthenticatedWorkbenchTodosTaskIdRoute: typeof AuthenticatedWorkbenchTodosTaskIdRoute
   AuthenticatedWorkbenchTodosListRoute: typeof AuthenticatedWorkbenchTodosListRoute
+  AuthenticatedWorkflowBindingsCreateRoute: typeof AuthenticatedWorkflowBindingsCreateRoute
+  AuthenticatedWorkflowBindingsListRoute: typeof AuthenticatedWorkflowBindingsListRoute
   AuthenticatedWorkflowDefinitionsListRoute: typeof AuthenticatedWorkflowDefinitionsListRoute
+  AuthenticatedWorkflowInstancesListRoute: typeof AuthenticatedWorkflowInstancesListRoute
+  AuthenticatedWorkflowOperationLogsListRoute: typeof AuthenticatedWorkflowOperationLogsListRoute
+  AuthenticatedWorkflowOpinionConfigsCreateRoute: typeof AuthenticatedWorkflowOpinionConfigsCreateRoute
+  AuthenticatedWorkflowOpinionConfigsListRoute: typeof AuthenticatedWorkflowOpinionConfigsListRoute
+  AuthenticatedWorkflowPublishRecordsListRoute: typeof AuthenticatedWorkflowPublishRecordsListRoute
+  AuthenticatedWorkflowVersionsListRoute: typeof AuthenticatedWorkflowVersionsListRoute
   AuthenticatedSystemAgentsAgentIdEditRoute: typeof AuthenticatedSystemAgentsAgentIdEditRoute
   AuthenticatedSystemCompaniesCompanyIdEditRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
@@ -2162,6 +2492,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemRolesRoleIdEditRoute: typeof AuthenticatedSystemRolesRoleIdEditRoute
   AuthenticatedSystemTriggersTriggerIdEditRoute: typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   AuthenticatedSystemUsersUserIdEditRoute: typeof AuthenticatedSystemUsersUserIdEditRoute
+  AuthenticatedWorkflowBindingsBindingIdEditRoute: typeof AuthenticatedWorkflowBindingsBindingIdEditRoute
+  AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute: typeof AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute
   AuthenticatedSystemAgentsAgentIdIndexRoute: typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   AuthenticatedSystemCompaniesCompanyIdIndexRoute: typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   AuthenticatedSystemDepartmentsDepartmentIdIndexRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
@@ -2175,6 +2507,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemRolesRoleIdIndexRoute: typeof AuthenticatedSystemRolesRoleIdIndexRoute
   AuthenticatedSystemTriggersTriggerIdIndexRoute: typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   AuthenticatedSystemUsersUserIdIndexRoute: typeof AuthenticatedSystemUsersUserIdIndexRoute
+  AuthenticatedWorkflowBindingsBindingIdIndexRoute: typeof AuthenticatedWorkflowBindingsBindingIdIndexRoute
+  AuthenticatedWorkflowInstancesInstanceIdIndexRoute: typeof AuthenticatedWorkflowInstancesInstanceIdIndexRoute
+  AuthenticatedWorkflowOperationLogsLogIdIndexRoute: typeof AuthenticatedWorkflowOperationLogsLogIdIndexRoute
+  AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute: typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
+  AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute: typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
+  AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute: typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
   AuthenticatedSystemMonitorNotificationChannelsHealthListRoute: typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute: typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
   AuthenticatedSystemLogsAuditLogIdIndexRoute: typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
@@ -2245,8 +2583,24 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWorkbenchTodosTaskIdRoute:
     AuthenticatedWorkbenchTodosTaskIdRoute,
   AuthenticatedWorkbenchTodosListRoute: AuthenticatedWorkbenchTodosListRoute,
+  AuthenticatedWorkflowBindingsCreateRoute:
+    AuthenticatedWorkflowBindingsCreateRoute,
+  AuthenticatedWorkflowBindingsListRoute:
+    AuthenticatedWorkflowBindingsListRoute,
   AuthenticatedWorkflowDefinitionsListRoute:
     AuthenticatedWorkflowDefinitionsListRoute,
+  AuthenticatedWorkflowInstancesListRoute:
+    AuthenticatedWorkflowInstancesListRoute,
+  AuthenticatedWorkflowOperationLogsListRoute:
+    AuthenticatedWorkflowOperationLogsListRoute,
+  AuthenticatedWorkflowOpinionConfigsCreateRoute:
+    AuthenticatedWorkflowOpinionConfigsCreateRoute,
+  AuthenticatedWorkflowOpinionConfigsListRoute:
+    AuthenticatedWorkflowOpinionConfigsListRoute,
+  AuthenticatedWorkflowPublishRecordsListRoute:
+    AuthenticatedWorkflowPublishRecordsListRoute,
+  AuthenticatedWorkflowVersionsListRoute:
+    AuthenticatedWorkflowVersionsListRoute,
   AuthenticatedSystemAgentsAgentIdEditRoute:
     AuthenticatedSystemAgentsAgentIdEditRoute,
   AuthenticatedSystemCompaniesCompanyIdEditRoute:
@@ -2287,6 +2641,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemTriggersTriggerIdEditRoute,
   AuthenticatedSystemUsersUserIdEditRoute:
     AuthenticatedSystemUsersUserIdEditRoute,
+  AuthenticatedWorkflowBindingsBindingIdEditRoute:
+    AuthenticatedWorkflowBindingsBindingIdEditRoute,
+  AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute:
+    AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute,
   AuthenticatedSystemAgentsAgentIdIndexRoute:
     AuthenticatedSystemAgentsAgentIdIndexRoute,
   AuthenticatedSystemCompaniesCompanyIdIndexRoute:
@@ -2313,6 +2671,18 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemTriggersTriggerIdIndexRoute,
   AuthenticatedSystemUsersUserIdIndexRoute:
     AuthenticatedSystemUsersUserIdIndexRoute,
+  AuthenticatedWorkflowBindingsBindingIdIndexRoute:
+    AuthenticatedWorkflowBindingsBindingIdIndexRoute,
+  AuthenticatedWorkflowInstancesInstanceIdIndexRoute:
+    AuthenticatedWorkflowInstancesInstanceIdIndexRoute,
+  AuthenticatedWorkflowOperationLogsLogIdIndexRoute:
+    AuthenticatedWorkflowOperationLogsLogIdIndexRoute,
+  AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute:
+    AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute,
+  AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute:
+    AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute,
+  AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute:
+    AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute,
   AuthenticatedSystemMonitorNotificationChannelsHealthListRoute:
     AuthenticatedSystemMonitorNotificationChannelsHealthListRoute,
   AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute:

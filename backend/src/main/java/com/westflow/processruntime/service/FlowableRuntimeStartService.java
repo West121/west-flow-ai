@@ -18,6 +18,7 @@ import org.flowable.identitylink.api.IdentityLink;
 import org.flowable.task.api.Task;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
+import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 
 /**
  * 基于真实 Flowable 引擎发起流程实例，并回填最小活动任务视图。
@@ -29,6 +30,7 @@ public class FlowableRuntimeStartService {
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final ProcessDefinitionService processDefinitionService;
+    private final WorkflowOperationLogService workflowOperationLogService;
 
     /**
      * 启动指定流程定义的最新发布版本。
@@ -49,6 +51,28 @@ public class FlowableRuntimeStartService {
                 .map(this::toTaskView)
                 .toList();
         String status = activeTasks.isEmpty() ? "COMPLETED" : "RUNNING";
+        workflowOperationLogService.record(new WorkflowOperationLogService.RecordCommand(
+                instance.getProcessInstanceId(),
+                definition.processDefinitionId(),
+                instance.getProcessDefinitionId(),
+                request.businessType(),
+                request.businessKey(),
+                activeTasks.isEmpty() ? null : activeTasks.get(0).taskId(),
+                activeTasks.isEmpty() ? null : activeTasks.get(0).nodeId(),
+                "START_PROCESS",
+                "发起流程",
+                "INSTANCE",
+                StpUtil.getLoginIdAsString(),
+                null,
+                null,
+                null,
+                null,
+                Map.of(
+                        "processKey", definition.processKey(),
+                        "status", status
+                ),
+                java.time.Instant.now()
+        ));
         return new StartProcessResponse(definition.processDefinitionId(), instance.getProcessInstanceId(), status, activeTasks);
     }
 

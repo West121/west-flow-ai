@@ -199,10 +199,17 @@ CREATE TABLE IF NOT EXISTS wf_process_definition (
     status VARCHAR(32) NOT NULL,
     dsl_json TEXT NOT NULL,
     bpmn_xml TEXT NOT NULL,
+    publisher_user_id VARCHAR(64),
+    deployment_id VARCHAR(64),
+    flowable_definition_id VARCHAR(128),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (process_key, version)
 );
+
+ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS publisher_user_id VARCHAR(64);
+ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(64);
+ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS flowable_definition_id VARCHAR(128);
 
 INSERT INTO wf_company (id, company_name, created_at)
 SELECT 'cmp_001', '西流科技', CURRENT_TIMESTAMP
@@ -1224,6 +1231,68 @@ CREATE TABLE IF NOT EXISTS wf_business_process_link (
     status VARCHAR(32) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_workflow_operation_log (
+    id VARCHAR(64) PRIMARY KEY,
+    process_instance_id VARCHAR(64),
+    process_definition_id VARCHAR(64),
+    flowable_definition_id VARCHAR(128),
+    business_type VARCHAR(64),
+    business_id VARCHAR(64),
+    task_id VARCHAR(64),
+    node_id VARCHAR(128),
+    action_type VARCHAR(64) NOT NULL,
+    action_name VARCHAR(128) NOT NULL,
+    action_category VARCHAR(64),
+    operator_user_id VARCHAR(64),
+    target_user_id VARCHAR(64),
+    source_task_id VARCHAR(64),
+    target_task_id VARCHAR(64),
+    comment_text TEXT,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_approval_opinion_config (
+    id VARCHAR(64) PRIMARY KEY,
+    config_code VARCHAR(128) NOT NULL,
+    config_name VARCHAR(255) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    quick_opinions_json TEXT NOT NULL DEFAULT '[]',
+    toolbar_actions_json TEXT NOT NULL DEFAULT '[]',
+    button_strategies_json TEXT NOT NULL DEFAULT '[]',
+    remark VARCHAR(512),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (config_code)
+);
+
+INSERT INTO wf_approval_opinion_config (
+    id,
+    config_code,
+    config_name,
+    enabled,
+    quick_opinions_json,
+    toolbar_actions_json,
+    button_strategies_json,
+    remark,
+    created_at,
+    updated_at
+)
+SELECT
+    'opcfg_001',
+    'DEFAULT_APPROVAL',
+    '默认审批意见配置',
+    TRUE,
+    '["同意","请补充材料后再提交","请优先线下沟通"]',
+    '["quickOpinion","mention","attachment","history"]',
+    '[{"actionType":"APPROVE","requireOpinion":false},{"actionType":"REJECT","requireOpinion":true},{"actionType":"RETURN","requireOpinion":true}]',
+    '流程管理后台默认审批意见配置',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (
+    SELECT 1 FROM wf_approval_opinion_config WHERE id = 'opcfg_001'
 );
 
 CREATE TABLE IF NOT EXISTS oa_leave_bill (

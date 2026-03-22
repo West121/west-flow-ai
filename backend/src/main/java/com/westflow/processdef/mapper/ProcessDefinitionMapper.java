@@ -22,6 +22,9 @@ public interface ProcessDefinitionMapper {
               status,
               dsl_json,
               bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
               created_at,
               updated_at
             FROM wf_process_definition
@@ -39,6 +42,9 @@ public interface ProcessDefinitionMapper {
               status,
               dsl_json,
               bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
               created_at,
               updated_at
             FROM wf_process_definition
@@ -59,6 +65,9 @@ public interface ProcessDefinitionMapper {
               status,
               dsl_json,
               bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
               created_at,
               updated_at
             FROM wf_process_definition
@@ -86,6 +95,9 @@ public interface ProcessDefinitionMapper {
               status,
               dsl_json,
               bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
               created_at,
               updated_at
             FROM wf_process_definition
@@ -133,6 +145,9 @@ public interface ProcessDefinitionMapper {
             "  status,",
             "  dsl_json,",
             "  bpmn_xml,",
+            "  publisher_user_id,",
+            "  deployment_id,",
+            "  flowable_definition_id,",
             "  created_at,",
             "  updated_at",
             "FROM wf_process_definition",
@@ -176,6 +191,9 @@ public interface ProcessDefinitionMapper {
               status,
               dsl_json,
               bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
               created_at,
               updated_at
             ) VALUES (
@@ -187,6 +205,9 @@ public interface ProcessDefinitionMapper {
               #{status},
               #{dslJson},
               #{bpmnXml},
+              #{publisherUserId},
+              #{deploymentId},
+              #{flowableDefinitionId},
               #{createdAt},
               #{updatedAt}
             )
@@ -202,6 +223,9 @@ public interface ProcessDefinitionMapper {
                 status = #{status},
                 dsl_json = #{dslJson},
                 bpmn_xml = #{bpmnXml},
+                publisher_user_id = #{publisherUserId},
+                deployment_id = #{deploymentId},
+                flowable_definition_id = #{flowableDefinitionId},
                 updated_at = #{updatedAt}
             WHERE id = #{processDefinitionId}
             """)

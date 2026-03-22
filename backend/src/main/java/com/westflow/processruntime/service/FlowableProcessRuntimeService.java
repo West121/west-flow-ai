@@ -43,6 +43,7 @@ import com.westflow.processruntime.api.UrgeTaskRequest;
 import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WakeUpInstanceRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
+import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -62,6 +63,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
@@ -90,6 +92,7 @@ public class FlowableProcessRuntimeService {
     private final ApprovalSheetQueryService approvalSheetQueryService;
     private final ProcessRuntimeTraceStore traceStore;
     private final JdbcTemplate jdbcTemplate;
+    private final WorkflowOperationLogService workflowOperationLogService;
 
     /**
      * 发起真实 Flowable 流程实例。
@@ -1748,7 +1751,8 @@ public class FlowableProcessRuntimeService {
             String delegatedByUserId,
             String handoverFromUserId
     ) {
-        traceStore.appendInstanceEvent(new ProcessInstanceEventResponse(
+        Map<String, Object> processVariables = runtimeOrHistoricVariables(instanceId);
+        ProcessInstanceEventResponse event = new ProcessInstanceEventResponse(
                 instanceId + "::" + eventType + "::" + UUID.randomUUID(),
                 instanceId,
                 taskId,
@@ -1769,6 +1773,26 @@ public class FlowableProcessRuntimeService {
                 actingForUserId,
                 delegatedByUserId,
                 handoverFromUserId
+        );
+        traceStore.appendInstanceEvent(event);
+        workflowOperationLogService.record(new WorkflowOperationLogService.RecordCommand(
+                instanceId,
+                stringValue(processVariables.get("westflowProcessDefinitionId")),
+                activeFlowableDefinitionId(instanceId),
+                stringValue(processVariables.get("westflowBusinessType")),
+                stringValue(processVariables.get("westflowBusinessKey")),
+                taskId,
+                nodeId,
+                eventType,
+                eventName,
+                actionCategory,
+                currentUserId(),
+                targetUserId,
+                sourceTaskId,
+                targetTaskId,
+                details == null ? null : stringValue(details.get("comment")),
+                event.details(),
+                java.time.Instant.now()
         ));
     }
 
@@ -2099,6 +2123,36 @@ public class FlowableProcessRuntimeService {
     private Map<String, Object> runtimeVariables(String processInstanceId) {
         Map<String, Object> variables = flowableEngineFacade.runtimeService().getVariables(processInstanceId);
         return variables == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(variables));
+    }
+
+    /**
+     * 优先读取运行时变量；流程已经结束或被删除时回退到历史变量，避免动作收尾阶段再抛找不到实例。
+     */
+    private Map<String, Object> runtimeOrHistoricVariables(String processInstanceId) {
+        try {
+            Map<String, Object> runtimeValues = runtimeVariables(processInstanceId);
+            if (!runtimeValues.isEmpty()) {
+                return runtimeValues;
+            }
+        } catch (FlowableObjectNotFoundException exception) {
+            // 流程实例已结束或已删除时，继续走历史变量兜底。
+        }
+        return historicVariables(processInstanceId);
+    }
+
+    private String activeFlowableDefinitionId(String processInstanceId) {
+        ProcessInstance runtimeInstance = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (runtimeInstance != null) {
+            return runtimeInstance.getProcessDefinitionId();
+        }
+        HistoricProcessInstance historicInstance = flowableEngineFacade.historyService()
+                .createHistoricProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        return historicInstance == null ? null : historicInstance.getProcessDefinitionId();
     }
 
     private Map<String, Object> historicVariables(String processInstanceId) {

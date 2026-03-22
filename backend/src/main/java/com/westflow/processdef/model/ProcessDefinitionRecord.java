@@ -12,6 +12,9 @@ public record ProcessDefinitionRecord(
         String status,
         String dslJson,
         String bpmnXml,
+        String publisherUserId,
+        String deploymentId,
+        String flowableDefinitionId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

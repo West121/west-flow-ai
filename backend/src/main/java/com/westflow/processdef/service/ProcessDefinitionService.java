@@ -1,5 +1,6 @@
 package com.westflow.processdef.service;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.common.error.ContractException;
@@ -16,14 +17,17 @@ import com.westflow.processdef.model.PublishedProcessDefinition;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.RepositoryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 
 @Service
 @RequiredArgsConstructor
@@ -47,6 +51,7 @@ public class ProcessDefinitionService {
     private final ProcessDslToBpmnService processDslToBpmnService;
     private final ObjectMapper objectMapper;
     private final RepositoryService repositoryService;
+    private final WorkflowOperationLogService workflowOperationLogService;
 
     @Transactional
     public synchronized ProcessDefinitionDetailResponse saveDraft(ProcessDslPayload payload) {
@@ -64,6 +69,9 @@ public class ProcessDefinitionService {
                 STATUS_DRAFT,
                 serializeDsl(payload),
                 "",
+                null,
+                null,
+                null,
                 existingDraft == null ? now : existingDraft.createdAt(),
                 now
         );
@@ -86,6 +94,12 @@ public class ProcessDefinitionService {
         String processDefinitionId = publishProcessDefinitionId(payload.processKey(), version);
         String bpmnXml = processDslToBpmnService.convert(payload, processDefinitionId, version);
         LocalDateTime now = now();
+        PublishArtifacts publishArtifacts = deployToFlowable(
+                processDefinitionId,
+                payload.processKey(),
+                normalizeCategory(payload.category()),
+                bpmnXml
+        );
 
         ProcessDefinitionRecord publishedRecord = new ProcessDefinitionRecord(
                 processDefinitionId,
@@ -96,12 +110,37 @@ public class ProcessDefinitionService {
                 STATUS_PUBLISHED,
                 serializeDsl(payload),
                 bpmnXml,
+                currentUserId(),
+                publishArtifacts.deploymentId(),
+                publishArtifacts.flowableDefinitionId(),
                 now,
                 now
         );
 
         processDefinitionMapper.insertDefinition(publishedRecord);
-        deployToFlowable(publishedRecord);
+        workflowOperationLogService.record(new WorkflowOperationLogService.RecordCommand(
+                null,
+                publishedRecord.processDefinitionId(),
+                publishedRecord.flowableDefinitionId(),
+                null,
+                null,
+                null,
+                null,
+                "PUBLISH_DEFINITION",
+                "发布流程定义",
+                "DEFINITION",
+                currentUserId(),
+                null,
+                null,
+                null,
+                null,
+                new LinkedHashMap<>(Map.of(
+                        "processKey", publishedRecord.processKey(),
+                        "version", publishedRecord.version(),
+                        "deploymentId", publishedRecord.deploymentId()
+                )),
+                java.time.Instant.now()
+        ));
         return toDetailResponse(publishedRecord, payload);
     }
 
@@ -199,13 +238,22 @@ public class ProcessDefinitionService {
     }
 
     // 将已发布的 BPMN 同步部署到真实 Flowable 引擎。
-    private void deployToFlowable(ProcessDefinitionRecord record) {
-        repositoryService.createDeployment()
-                .name(record.processDefinitionId())
-                .key(record.processKey())
-                .category(record.category())
-                .addString(record.processKey() + ".bpmn20.xml", record.bpmnXml())
+    private PublishArtifacts deployToFlowable(String deploymentName, String processKey, String category, String bpmnXml) {
+        Deployment deployment = repositoryService.createDeployment()
+                .name(deploymentName)
+                .key(processKey)
+                .category(category)
+                .addString(processKey + ".bpmn20.xml", bpmnXml)
                 .deploy();
+        org.flowable.engine.repository.ProcessDefinition flowableDefinition = repositoryService.createProcessDefinitionQuery()
+                .deploymentId(deployment.getId())
+                .processDefinitionKey(processKey)
+                .latestVersion()
+                .singleResult();
+        return new PublishArtifacts(
+                deployment.getId(),
+                flowableDefinition == null ? null : flowableDefinition.getId()
+        );
     }
 
     // 组装列表页的单行摘要数据。
@@ -308,6 +356,10 @@ public class ProcessDefinitionService {
         return dateTime == null ? null : dateTime.atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime();
     }
 
+    private String currentUserId() {
+        return StpUtil.isLogin() ? StpUtil.getLoginIdAsString() : "system";
+    }
+
     // 分类字段空值归一为 null，方便持久化和筛选。
     private String normalizeCategory(String category) {
         return normalizeNullable(category);
@@ -356,6 +408,12 @@ public class ProcessDefinitionService {
     private record QueryCriteria(
             String status,
             String category
+    ) {
+    }
+
+    private record PublishArtifacts(
+            String deploymentId,
+            String flowableDefinitionId
     ) {
     }
 }
