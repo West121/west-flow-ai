@@ -66,6 +66,7 @@ class FlowableRuntimeStartServiceTest {
         repositoryService.createDeploymentQuery().list()
                 .forEach(deployment -> repositoryService.deleteDeployment(deployment.getId(), true));
         jdbcTemplate.update("DELETE FROM wf_process_definition");
+        jdbcTemplate.update("DELETE FROM wf_task_vote_snapshot");
         jdbcTemplate.update("DELETE FROM wf_task_group_member");
         jdbcTemplate.update("DELETE FROM wf_task_group");
     }
@@ -363,6 +364,110 @@ class FlowableRuntimeStartServiceTest {
         });
     }
 
+    @Test
+    void shouldCompleteOrSignAfterAnySingleApprovalAndAutoFinishRemainingMembers() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload("OR_SIGN"));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_or_sign_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 1, "reason", "或签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId())).hasSize(2);
+
+        String firstTaskId = response.activeTasks().stream()
+                .filter(task -> "usr_002".equals(task.assigneeUserId()))
+                .findFirst()
+                .orElseThrow()
+                .taskId();
+
+        StpUtil.login("lisi");
+        var completeResponse = flowableProcessRuntimeService.complete(firstTaskId, new CompleteTaskRequest(
+                "APPROVE",
+                "usr_002",
+                "任意一人同意即可",
+                java.util.Map.of()
+        ));
+
+        assertThat(completeResponse.status()).isEqualTo("COMPLETED");
+        assertThat(flowableEngineTasks(response.instanceId())).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_task_group WHERE process_instance_id = ? AND group_status = 'COMPLETED'",
+                Integer.class,
+                response.instanceId()
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_task_group_member WHERE process_instance_id = ? AND member_status = 'COMPLETED'",
+                Integer.class,
+                response.instanceId()
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_task_group_member WHERE process_instance_id = ? AND member_status = 'AUTO_FINISHED'",
+                Integer.class,
+                response.instanceId()
+        )).isEqualTo(1);
+    }
+
+    @Test
+    void shouldResolveVoteCountersignAfterThresholdReached() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload("VOTE"));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_vote_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 2, "reason", "票签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId())).hasSize(3);
+
+        String firstTaskId = response.activeTasks().stream()
+                .filter(task -> "usr_002".equals(task.assigneeUserId()))
+                .findFirst()
+                .orElseThrow()
+                .taskId();
+        StpUtil.login("lisi");
+        var firstComplete = flowableProcessRuntimeService.complete(firstTaskId, new CompleteTaskRequest(
+                "APPROVE",
+                "usr_002",
+                "40票同意",
+                java.util.Map.of()
+        ));
+        assertThat(firstComplete.status()).isEqualTo("RUNNING");
+        assertThat(flowableEngineTasks(response.instanceId())).hasSize(2);
+
+        String secondTaskId = firstComplete.nextTasks().stream()
+                .filter(task -> "usr_003".equals(task.assigneeUserId()))
+                .findFirst()
+                .orElseThrow()
+                .taskId();
+        StpUtil.login("wangwu");
+        var secondComplete = flowableProcessRuntimeService.complete(secondTaskId, new CompleteTaskRequest(
+                "APPROVE",
+                "usr_003",
+                "35票同意，达到阈值",
+                java.util.Map.of()
+        ));
+
+        assertThat(secondComplete.status()).isEqualTo("COMPLETED");
+        assertThat(flowableEngineTasks(response.instanceId())).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT decision_status FROM wf_task_vote_snapshot WHERE process_instance_id = ? AND node_id = ?",
+                String.class,
+                response.instanceId(),
+                "approve_countersign"
+        )).isEqualTo("APPROVED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_task_group_member WHERE process_instance_id = ? AND member_status = 'AUTO_FINISHED'",
+                Integer.class,
+                response.instanceId()
+        )).isEqualTo(1);
+    }
+
     private List<Task> flowableEngineTasks(String instanceId) {
         return taskService.createTaskQuery()
                 .processInstanceId(instanceId)
@@ -403,14 +508,15 @@ class FlowableRuntimeStartServiceTest {
                       "config": {
                         "approvalMode": "%s",
                         "reapprovePolicy": "RESTART_ALL",
+                        "autoFinishRemaining": %s,
                         "assignment": {
                           "mode": "USER",
-                          "userIds": ["usr_002", "usr_003"],
+                          "userIds": %s,
                           "roleCodes": [],
                           "departmentRef": "",
                           "formFieldKey": ""
                         },
-                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                        "operations": ["APPROVE", "REJECT", "RETURN"]%s
                       },
                       "ui": {"width": 240, "height": 88}
                     },
@@ -440,6 +546,41 @@ class FlowableRuntimeStartServiceTest {
                     }
                   ]
                 }
-                """.formatted(approvalMode), ProcessDslPayload.class);
+                """.formatted(
+                        approvalMode,
+                        requiresAutoFinishRemaining(approvalMode),
+                        voteUserIds(approvalMode),
+                        voteRuleFragment(approvalMode)
+                ), ProcessDslPayload.class);
+    }
+
+    private String voteUserIds(String approvalMode) {
+        return switch (approvalMode) {
+            case "VOTE" -> "[\"usr_002\", \"usr_003\", \"usr_004\"]";
+            default -> "[\"usr_002\", \"usr_003\"]";
+        };
+    }
+
+    private boolean requiresAutoFinishRemaining(String approvalMode) {
+        return "OR_SIGN".equals(approvalMode) || "VOTE".equals(approvalMode);
+    }
+
+    private String voteRuleFragment(String approvalMode) {
+        if (!"VOTE".equals(approvalMode)) {
+            return "";
+        }
+        return """
+                        ,
+                        "voteRule": {
+                          "thresholdPercent": 60,
+                          "passCondition": "GREATER_THAN_OR_EQUAL",
+                          "rejectCondition": "GREATER_THAN_OR_EQUAL",
+                          "weights": [
+                            {"userId": "usr_002", "weight": 40},
+                            {"userId": "usr_003", "weight": 35},
+                            {"userId": "usr_004", "weight": 25}
+                          ]
+                        }
+                """;
     }
 }

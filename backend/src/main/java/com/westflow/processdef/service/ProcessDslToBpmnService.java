@@ -2,6 +2,7 @@ package com.westflow.processdef.service;
 
 import com.westflow.processdef.model.ProcessDslPayload;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -254,7 +255,7 @@ public class ProcessDslToBpmnService {
         attrs.put("voteThresholdPercent", stringValue(voteRule.get("thresholdPercent")));
         attrs.put("votePassCondition", stringValue(voteRule.get("passCondition")));
         attrs.put("voteRejectCondition", stringValue(voteRule.get("rejectCondition")));
-        attrs.put("voteWeights", stringValue(voteRule.get("weights")));
+        attrs.put("voteWeights", serializeVoteWeights(voteRule.get("weights")));
 
         Map<String, Object> timeoutPolicy = mapValue(config.get("timeoutPolicy"));
         attrs.put("timeoutEnabled", booleanValue(timeoutPolicy.get("enabled")));
@@ -283,6 +284,11 @@ public class ProcessDslToBpmnService {
         loop.setSequential("SEQUENTIAL".equals(approvalMode));
         loop.setInputDataItem("${" + countersignCollectionVariable(nodeId) + "}");
         loop.setElementVariable(countersignElementVariable(nodeId));
+        if ("OR_SIGN".equals(approvalMode)) {
+            loop.setCompletionCondition("${" + countersignDecisionVariable(nodeId) + " == 'APPROVED'}");
+        } else if ("VOTE".equals(approvalMode)) {
+            loop.setCompletionCondition("${" + countersignDecisionVariable(nodeId) + " == 'APPROVED' || " + countersignDecisionVariable(nodeId) + " == 'REJECTED'}");
+        }
         return loop;
     }
 
@@ -306,6 +312,10 @@ public class ProcessDslToBpmnService {
 
     private String countersignElementVariable(String nodeId) {
         return "wfCountersignAssignee_" + nodeId;
+    }
+
+    private String countersignDecisionVariable(String nodeId) {
+        return "wfCountersignDecision_" + nodeId;
     }
 
     // 统一写入 westflow 扩展属性，兼顾可部署和可回读。
@@ -346,6 +356,30 @@ public class ProcessDslToBpmnService {
     private String joinValues(Object value) {
         List<String> values = stringListValue(value);
         return values.isEmpty() ? null : String.join(",", values);
+    }
+
+    private String serializeVoteWeights(Object value) {
+        if (!(value instanceof List<?> weights) || weights.isEmpty()) {
+            return null;
+        }
+        List<String> items = new ArrayList<>();
+        for (Object weightItem : weights) {
+            if (!(weightItem instanceof Map<?, ?> weightMap)) {
+                continue;
+            }
+            Object userId = weightMap.get("userId");
+            Object weight = weightMap.get("weight");
+            if (userId == null || weight == null) {
+                continue;
+            }
+            String userIdText = String.valueOf(userId).trim();
+            String weightText = String.valueOf(weight).trim();
+            if (userIdText.isBlank() || weightText.isBlank()) {
+                continue;
+            }
+            items.add(userIdText + ":" + weightText);
+        }
+        return items.isEmpty() ? null : String.join(",", items);
     }
 
     private String stringValue(Object value) {

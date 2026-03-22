@@ -17,7 +17,9 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.task.api.Task;
+import org.flowable.task.api.history.HistoricTaskInstance;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -48,12 +50,68 @@ public class FlowableCountersignService {
     }
 
     /**
+     * 在任务完成前计算会签决议变量，确保 Flowable 在本次完成动作里就能命中完成条件。
+     */
+    public Map<String, Object> prepareCompletionVariables(
+            String processDefinitionId,
+            Task task,
+            String action
+    ) {
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
+        if (model == null || task == null) {
+            return Map.of();
+        }
+        CountersignNodeMetadata metadata = resolveCountersignMetadata(model, task.getTaskDefinitionKey());
+        if (metadata == null) {
+            return Map.of();
+        }
+        if ("OR_SIGN".equals(metadata.approvalMode())) {
+            if (!"APPROVE".equals(action)) {
+                return Map.of();
+            }
+            return Map.of(countersignDecisionVariable(metadata.nodeId()), "APPROVED");
+        }
+        if (!"VOTE".equals(metadata.approvalMode())) {
+            return Map.of();
+        }
+        TaskGroupMemberRecord member = findMemberByTaskId(task.getId()).orElse(null);
+        if (member == null || member.voteWeight() == null || member.voteWeight() <= 0) {
+            return Map.of();
+        }
+        VoteSnapshotRecord snapshot = findVoteSnapshot(task.getProcessInstanceId(), metadata.nodeId())
+                .orElseGet(() -> createVoteSnapshot(task.getProcessInstanceId(), metadata));
+        int approvedWeight = snapshot.approvedWeight();
+        int rejectedWeight = snapshot.rejectedWeight();
+        if ("APPROVE".equals(action)) {
+            approvedWeight += member.voteWeight();
+        } else if ("REJECT".equals(action)) {
+            rejectedWeight += member.voteWeight();
+        } else {
+            return Map.of();
+        }
+        String decision = null;
+        if (approvedWeight * 100 >= snapshot.totalWeight() * snapshot.thresholdPercent()) {
+            decision = "APPROVED";
+        } else if (rejectedWeight * 100 >= snapshot.totalWeight() * snapshot.thresholdPercent()) {
+            decision = "REJECTED";
+        }
+        upsertVoteSnapshot(snapshot.id(), approvedWeight, rejectedWeight, decision);
+        if (decision == null) {
+            return Map.of();
+        }
+        return Map.of(countersignDecisionVariable(metadata.nodeId()), decision);
+    }
+
+    /**
      * 查询流程实例下的会签任务组快照。
      */
     public List<CountersignTaskGroupResponse> queryTaskGroups(String processInstanceId) {
         return listGroups(processInstanceId).stream()
                 .map(group -> {
                     List<TaskGroupMemberRecord> members = listMembers(group.id());
+                    VoteSnapshotRecord voteSnapshot = "VOTE".equals(group.approvalMode())
+                            ? findVoteSnapshot(processInstanceId, group.nodeId()).orElse(null)
+                            : null;
                     int totalCount = members.size();
                     int completedCount = (int) members.stream()
                             .filter(member -> "COMPLETED".equals(member.memberStatus()))
@@ -75,12 +133,17 @@ public class FlowableCountersignService {
                             completedCount,
                             activeCount,
                             waitingCount,
+                            voteSnapshot == null ? null : voteSnapshot.thresholdPercent(),
+                            voteSnapshot == null ? null : voteSnapshot.approvedWeight(),
+                            voteSnapshot == null ? null : voteSnapshot.rejectedWeight(),
+                            voteSnapshot == null ? null : voteSnapshot.decisionStatus(),
                             members.stream()
                                     .map(member -> new CountersignTaskGroupMemberResponse(
                                             member.id(),
                                             member.taskId(),
                                             member.assigneeUserId(),
                                             member.sequenceNo(),
+                                            member.voteWeight(),
                                             member.memberStatus()
                                     ))
                                     .toList()
@@ -125,6 +188,11 @@ public class FlowableCountersignService {
         listRunningGroups(processInstanceId).forEach(group -> {
             if (activeTasksByNode.containsKey(group.nodeId())) {
                 updateGroupStatus(group.id(), "RUNNING");
+                return;
+            }
+            if (shouldAutoFinishRemainingMembers(processInstanceId, group)) {
+                markAutoFinishedMembers(processInstanceId, group);
+                updateGroupStatus(group.id(), "COMPLETED");
                 return;
             }
             if (hasPendingMembers(group.id())) {
@@ -196,10 +264,13 @@ public class FlowableCountersignService {
                     activeTask == null ? null : activeTask.getId(),
                     userId,
                     index + 1,
-                    null,
+                    metadata.voteWeights().get(userId),
                     activeTask == null ? "WAITING" : "ACTIVE",
                     null
             );
+        }
+        if ("VOTE".equals(metadata.approvalMode())) {
+            createVoteSnapshot(processInstanceId, metadata);
         }
         return new TaskGroupRecord(groupId, processInstanceId, metadata.nodeId(), metadata.nodeName(), metadata.approvalMode(), "RUNNING");
     }
@@ -272,6 +343,50 @@ public class FlowableCountersignService {
         return count != null && count > 0;
     }
 
+    private boolean shouldAutoFinishRemainingMembers(String processInstanceId, TaskGroupRecord group) {
+        if (!"OR_SIGN".equals(group.approvalMode()) && !"VOTE".equals(group.approvalMode())) {
+            return false;
+        }
+        String decision = countersignDecision(processInstanceId, group.nodeId());
+        return decision != null && !decision.isBlank();
+    }
+
+    private void markAutoFinishedMembers(String processInstanceId, TaskGroupRecord group) {
+        List<TaskGroupMemberRecord> members = listMembers(group.id());
+        Map<String, String> deleteReasonByTaskId = flowableEngineFacade.historyService()
+                .createHistoricTaskInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .taskDefinitionKey(group.nodeId())
+                .list()
+                .stream()
+                .filter(task -> task.getDeleteReason() != null && !task.getDeleteReason().isBlank())
+                .collect(java.util.stream.Collectors.toMap(
+                        HistoricTaskInstance::getId,
+                        HistoricTaskInstance::getDeleteReason,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+        for (TaskGroupMemberRecord member : members) {
+            if ("COMPLETED".equals(member.memberStatus())) {
+                continue;
+            }
+            if (member.taskId() == null || !deleteReasonByTaskId.containsKey(member.taskId())) {
+                continue;
+            }
+            jdbcTemplate.update(
+                    """
+                    UPDATE wf_task_group_member
+                    SET member_status = 'AUTO_FINISHED',
+                        completed_at = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    Timestamp.from(Instant.now()),
+                    member.id()
+            );
+        }
+    }
+
     private Optional<TaskGroupRecord> findRunningGroup(String processInstanceId, String nodeId) {
         List<TaskGroupRecord> records = jdbcTemplate.query(
                 """
@@ -319,7 +434,7 @@ public class FlowableCountersignService {
     private List<TaskGroupMemberRecord> listMembers(String groupId) {
         return jdbcTemplate.query(
                 """
-                SELECT id, task_group_id, process_instance_id, node_id, task_id, assignee_user_id, sequence_no, member_status
+                SELECT id, task_group_id, process_instance_id, node_id, task_id, assignee_user_id, sequence_no, vote_weight, member_status
                 FROM wf_task_group_member
                 WHERE task_group_id = ?
                 ORDER BY sequence_no ASC
@@ -348,7 +463,10 @@ public class FlowableCountersignService {
             return null;
         }
         String approvalMode = extensionValue(element, "approvalMode");
-        if (!"SEQUENTIAL".equals(approvalMode) && !"PARALLEL".equals(approvalMode)) {
+        if (!"SEQUENTIAL".equals(approvalMode)
+                && !"PARALLEL".equals(approvalMode)
+                && !"OR_SIGN".equals(approvalMode)
+                && !"VOTE".equals(approvalMode)) {
             return null;
         }
         List<String> userIds = commaSeparatedValue(extensionValue(element, "userIds"));
@@ -364,8 +482,126 @@ public class FlowableCountersignService {
                         }),
                 approvalMode,
                 extensionValue(element, "reapprovePolicy"),
-                userIds
+                userIds,
+                "true".equalsIgnoreCase(extensionValue(element, "autoFinishRemaining")),
+                integerValue(extensionValue(element, "voteThresholdPercent")),
+                parseVoteWeights(extensionValue(element, "voteWeights"))
         );
+    }
+
+    private Optional<TaskGroupMemberRecord> findMemberByTaskId(String taskId) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, task_group_id, process_instance_id, node_id, task_id, assignee_user_id, sequence_no, vote_weight, member_status
+                FROM wf_task_group_member
+                WHERE task_id = ?
+                """,
+                this::mapTaskGroupMember,
+                taskId
+        ).stream().findFirst();
+    }
+
+    private Optional<VoteSnapshotRecord> findVoteSnapshot(String processInstanceId, String nodeId) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, process_instance_id, node_id, threshold_percent, total_weight, approved_weight, rejected_weight, decision_status
+                FROM wf_task_vote_snapshot
+                WHERE process_instance_id = ?
+                  AND node_id = ?
+                """,
+                this::mapVoteSnapshot,
+                processInstanceId,
+                nodeId
+        ).stream().findFirst();
+    }
+
+    private VoteSnapshotRecord createVoteSnapshot(String processInstanceId, CountersignNodeMetadata metadata) {
+        VoteSnapshotRecord existing = findVoteSnapshot(processInstanceId, metadata.nodeId()).orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+        int totalWeight = metadata.voteWeights().values().stream().mapToInt(Integer::intValue).sum();
+        VoteSnapshotRecord snapshot = new VoteSnapshotRecord(
+                "tvs_" + UUID.randomUUID().toString().replace("-", ""),
+                processInstanceId,
+                metadata.nodeId(),
+                metadata.voteThresholdPercent() == null ? 0 : metadata.voteThresholdPercent(),
+                totalWeight,
+                0,
+                0,
+                null
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO wf_task_vote_snapshot (
+                  id,
+                  process_instance_id,
+                  node_id,
+                  threshold_percent,
+                  total_weight,
+                  approved_weight,
+                  rejected_weight,
+                  decision_status,
+                  decided_at,
+                  created_at,
+                  updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                snapshot.id(),
+                snapshot.processInstanceId(),
+                snapshot.nodeId(),
+                snapshot.thresholdPercent(),
+                snapshot.totalWeight(),
+                snapshot.approvedWeight(),
+                snapshot.rejectedWeight(),
+                snapshot.decisionStatus(),
+                null
+        );
+        return snapshot;
+    }
+
+    private void upsertVoteSnapshot(String snapshotId, int approvedWeight, int rejectedWeight, String decision) {
+        jdbcTemplate.update(
+                """
+                UPDATE wf_task_vote_snapshot
+                SET approved_weight = ?,
+                    rejected_weight = ?,
+                    decision_status = ?,
+                    decided_at = CASE WHEN ? IS NULL THEN decided_at ELSE CURRENT_TIMESTAMP END,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                approvedWeight,
+                rejectedWeight,
+                decision,
+                decision,
+                snapshotId
+        );
+    }
+
+    private String countersignDecision(String processInstanceId, String nodeId) {
+        try {
+            Object runtimeValue = flowableEngineFacade.runtimeService()
+                    .getVariable(processInstanceId, countersignDecisionVariable(nodeId));
+            if (runtimeValue != null) {
+                return String.valueOf(runtimeValue);
+            }
+        } catch (FlowableObjectNotFoundException ignored) {
+            // 实例已结束时回退到历史变量查询。
+        }
+        org.flowable.variable.api.history.HistoricVariableInstance historicValue = flowableEngineFacade.historyService()
+                .createHistoricVariableInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .variableName(countersignDecisionVariable(nodeId))
+                .singleResult();
+        if (historicValue != null && historicValue.getValue() != null) {
+            return String.valueOf(historicValue.getValue());
+        }
+        return null;
+    }
+
+    private String countersignDecisionVariable(String nodeId) {
+        return "wfCountersignDecision_" + nodeId;
     }
 
     private String extensionValue(BaseElement element, String name) {
@@ -390,6 +626,36 @@ public class FlowableCountersignService {
                 .toList();
     }
 
+    private Map<String, Integer> parseVoteWeights(String value) {
+        if (value == null || value.isBlank()) {
+            return Map.of();
+        }
+        Map<String, Integer> weights = new LinkedHashMap<>();
+        for (String item : value.split(",")) {
+            String trimmed = item.trim();
+            if (trimmed.isBlank()) {
+                continue;
+            }
+            String[] pair = trimmed.split(":");
+            if (pair.length != 2) {
+                continue;
+            }
+            Integer weight = integerValue(pair[1]);
+            if (weight == null) {
+                continue;
+            }
+            weights.put(pair[0].trim(), weight);
+        }
+        return weights;
+    }
+
+    private Integer integerValue(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return Integer.parseInt(value.trim());
+    }
+
     private TaskGroupRecord mapTaskGroup(ResultSet resultSet, int rowNum) throws SQLException {
         return new TaskGroupRecord(
                 resultSet.getString("id"),
@@ -410,7 +676,21 @@ public class FlowableCountersignService {
                 resultSet.getString("task_id"),
                 resultSet.getString("assignee_user_id"),
                 resultSet.getInt("sequence_no"),
+                (Integer) resultSet.getObject("vote_weight"),
                 resultSet.getString("member_status")
+        );
+    }
+
+    private VoteSnapshotRecord mapVoteSnapshot(ResultSet resultSet, int rowNum) throws SQLException {
+        return new VoteSnapshotRecord(
+                resultSet.getString("id"),
+                resultSet.getString("process_instance_id"),
+                resultSet.getString("node_id"),
+                resultSet.getInt("threshold_percent"),
+                resultSet.getInt("total_weight"),
+                resultSet.getInt("approved_weight"),
+                resultSet.getInt("rejected_weight"),
+                resultSet.getString("decision_status")
         );
     }
 
@@ -422,7 +702,10 @@ public class FlowableCountersignService {
             String nodeName,
             String approvalMode,
             String reapprovePolicy,
-            List<String> userIds
+            List<String> userIds,
+            boolean autoFinishRemaining,
+            Integer voteThresholdPercent,
+            Map<String, Integer> voteWeights
     ) {
     }
 
@@ -450,7 +733,23 @@ public class FlowableCountersignService {
             String taskId,
             String assigneeUserId,
             int sequenceNo,
+            Integer voteWeight,
             String memberStatus
+    ) {
+    }
+
+    /**
+     * 票签累计快照。
+     */
+    private record VoteSnapshotRecord(
+            String id,
+            String processInstanceId,
+            String nodeId,
+            int thresholdPercent,
+            int totalWeight,
+            int approvedWeight,
+            int rejectedWeight,
+            String decisionStatus
     ) {
     }
 }

@@ -233,6 +233,100 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeOrSignAutoFinishedMembersOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishExplicitOrSignCountersignProcess();
+        seedLeaveBill("leave_023");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_023");
+        String taskId = startBody.path("activeTasks").findValuesAsText("taskId").get(0);
+
+        JsonNode completeBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "任意一人同意即可"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(completeBody.path("status").asText()).isEqualTo("COMPLETED");
+
+        JsonNode detailBody = approvalDetailByBusiness(managerToken, "leave_023");
+        assertThat(detailBody.path("instanceStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(detailBody.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("OR_SIGN");
+        assertThat(detailBody.path("countersignGroups").get(0).path("groupStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(detailBody.path("countersignGroups").get(0).path("members").toString())
+                .contains("COMPLETED", "AUTO_FINISHED");
+        assertThat(detailBody.path("taskTrace").toString()).contains("AUTO_FINISHED");
+    }
+
+    @Test
+    void shouldExposeVoteDecisionProgressOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        String secondManagerToken = login("wangwu");
+        publishExplicitVoteCountersignProcess();
+        seedLeaveBill("leave_024");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_024");
+        String firstTaskId = findTaskId(startBody, "usr_002");
+        String secondTaskId = findTaskId(startBody, "usr_003");
+
+        JsonNode firstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "第一票通过"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(firstCompleteBody.path("status").asText()).isEqualTo("RUNNING");
+
+        JsonNode interimDetail = approvalDetailByBusiness(managerToken, "leave_024");
+        assertThat(interimDetail.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("VOTE");
+        assertThat(interimDetail.path("countersignGroups").get(0).path("voteThresholdPercent").asInt()).isEqualTo(60);
+        assertThat(interimDetail.path("countersignGroups").get(0).path("approvedWeight").asInt()).isEqualTo(40);
+        assertThat(interimDetail.path("countersignGroups").get(0).path("decisionStatus").isNull()).isTrue();
+        assertThat(interimDetail.path("countersignGroups").get(0).path("members").get(0).path("voteWeight").asInt()).isEqualTo(40);
+
+        JsonNode secondCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", secondTaskId)
+                        .header("Authorization", "Bearer " + secondManagerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_003",
+                                  "comment": "第二票通过"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(secondCompleteBody.path("status").asText()).isEqualTo("COMPLETED");
+
+        JsonNode finalDetail = approvalDetailByBusiness(managerToken, "leave_024");
+        assertThat(finalDetail.path("instanceStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(finalDetail.path("countersignGroups").get(0).path("approvedWeight").asInt()).isEqualTo(75);
+        assertThat(finalDetail.path("countersignGroups").get(0).path("rejectedWeight").asInt()).isEqualTo(0);
+        assertThat(finalDetail.path("countersignGroups").get(0).path("decisionStatus").asText()).isEqualTo("APPROVED");
+        assertThat(finalDetail.path("countersignGroups").get(0).path("members").toString()).contains("AUTO_FINISHED");
+    }
+
+    @Test
     void shouldExposeAutomationAndNotificationTraceOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         publishAutomationLeaveProcess();
@@ -918,6 +1012,15 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString()).path("data");
     }
 
+    private String findTaskId(JsonNode startBody, String assigneeUserId) {
+        for (JsonNode taskNode : startBody.path("activeTasks")) {
+            if (assigneeUserId.equals(taskNode.path("assigneeUserId").asText())) {
+                return taskNode.path("taskId").asText();
+            }
+        }
+        return "";
+    }
+
     private void seedLeaveBill(String billId) {
         jdbcTemplate.update(
                 """
@@ -1135,6 +1238,168 @@ class FlowableProcessRuntimeControllerTest {
                         },
                         "approvalPolicy": {
                           "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishExplicitOrSignCountersignProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假或签",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "负责人或签",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "approvalMode": "OR_SIGN",
+                        "autoFinishRemaining": true,
+                        "reapprovePolicy": "RESTART_ALL",
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002", "usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "OR_SIGN"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishExplicitVoteCountersignProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假票签",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "负责人票签",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "approvalMode": "VOTE",
+                        "autoFinishRemaining": true,
+                        "reapprovePolicy": "RESTART_ALL",
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002", "usr_003", "usr_004"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "VOTE"
+                        },
+                        "voteRule": {
+                          "thresholdPercent": 60,
+                          "passCondition": "GREATER_THAN_OR_EQUAL",
+                          "rejectCondition": "GREATER_THAN_OR_EQUAL",
+                          "weights": [
+                            {"userId": "usr_002", "weight": 40},
+                            {"userId": "usr_003", "weight": 35},
+                            {"userId": "usr_004", "weight": 25}
+                          ]
                         },
                         "operations": ["APPROVE", "REJECT", "RETURN"],
                         "commentRequired": false

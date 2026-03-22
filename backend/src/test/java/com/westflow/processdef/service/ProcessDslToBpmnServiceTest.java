@@ -210,6 +210,40 @@ class ProcessDslToBpmnServiceTest {
         );
     }
 
+    @Test
+    void shouldConvertOrSignCountersignIntoConditionalMultiInstanceUserTask() {
+        ProcessDslPayload payload = countersignPayload("OR_SIGN");
+
+        String xml = service.convert(payload, "oa_countersign:1", 1);
+
+        assertThat(xml).contains(
+                "id=\"approve_countersign\"",
+                "<multiInstanceLoopCharacteristics",
+                "isSequential=\"false\"",
+                "flowable:collection=\"${wfCountersignAssignees_approve_countersign}\"",
+                "flowable:elementVariable=\"wfCountersignAssignee_approve_countersign\"",
+                "${wfCountersignDecision_approve_countersign == 'APPROVED'}",
+                "<completionCondition>"
+        );
+    }
+
+    @Test
+    void shouldConvertVoteCountersignIntoConditionalMultiInstanceUserTask() {
+        ProcessDslPayload payload = countersignPayload("VOTE");
+
+        String xml = service.convert(payload, "oa_countersign:1", 1);
+
+        assertThat(xml).contains(
+                "id=\"approve_countersign\"",
+                "<multiInstanceLoopCharacteristics",
+                "isSequential=\"false\"",
+                "flowable:collection=\"${wfCountersignAssignees_approve_countersign}\"",
+                "flowable:elementVariable=\"wfCountersignAssignee_approve_countersign\"",
+                "${wfCountersignDecision_approve_countersign == 'APPROVED' || wfCountersignDecision_approve_countersign == 'REJECTED'}",
+                "voteThresholdPercent=\"60\""
+        );
+    }
+
     private ProcessDslPayload.Node node(
             String id,
             String type,
@@ -263,6 +297,7 @@ class ProcessDslToBpmnServiceTest {
                         node("approve_countersign", "approver", "会签审批", Map.of(
                                 "approvalMode", approvalMode,
                                 "reapprovePolicy", "RESTART_ALL",
+                                "autoFinishRemaining", !"SEQUENTIAL".equals(approvalMode) && !"PARALLEL".equals(approvalMode),
                                 "assignment", Map.of(
                                         "mode", "USER",
                                         "userIds", List.of("usr_002", "usr_003"),
@@ -270,7 +305,18 @@ class ProcessDslToBpmnServiceTest {
                                         "departmentRef", "",
                                         "formFieldKey", ""
                                 ),
-                                "operations", List.of("APPROVE", "REJECT", "RETURN")
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "voteRule", "VOTE".equals(approvalMode)
+                                        ? Map.of(
+                                                "thresholdPercent", 60,
+                                                "passCondition", "GREATER_THAN_OR_EQUAL",
+                                                "rejectCondition", "GREATER_THAN_OR_EQUAL",
+                                                "weights", List.of(
+                                                        Map.of("userId", "usr_002", "weight", 40),
+                                                        Map.of("userId", "usr_003", "weight", 60)
+                                                )
+                                        )
+                                        : Map.of()
                         )),
                         node("end_1", "end", "结束", Map.of())
                 ),

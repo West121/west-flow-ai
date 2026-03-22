@@ -117,6 +117,9 @@ public class FlowableRuntimeStartService {
             return;
         }
         variables.put("wfCountersignAssignees_" + node.id(), userIds);
+        if ("OR_SIGN".equals(approvalMode) || "VOTE".equals(approvalMode)) {
+            variables.put("wfCountersignDecision_" + node.id(), "PENDING");
+        }
     }
 
     /**

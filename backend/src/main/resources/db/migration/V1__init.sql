@@ -234,6 +234,21 @@ CREATE TABLE IF NOT EXISTS wf_task_group_member (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS wf_task_vote_snapshot (
+    id VARCHAR(64) PRIMARY KEY,
+    process_instance_id VARCHAR(64) NOT NULL,
+    node_id VARCHAR(128) NOT NULL,
+    threshold_percent INTEGER NOT NULL,
+    total_weight INTEGER NOT NULL,
+    approved_weight INTEGER NOT NULL DEFAULT 0,
+    rejected_weight INTEGER NOT NULL DEFAULT 0,
+    decision_status VARCHAR(32),
+    decided_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (process_instance_id, node_id)
+);
+
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS publisher_user_id VARCHAR(64);
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(64);
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS flowable_definition_id VARCHAR(128);

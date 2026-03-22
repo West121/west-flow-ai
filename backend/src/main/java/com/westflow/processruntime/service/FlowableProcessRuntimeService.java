@@ -415,6 +415,11 @@ public class FlowableProcessRuntimeService {
                 request.comment(),
                 request.taskFormData()
         );
+        variables.putAll(flowableCountersignService.prepareCompletionVariables(
+                task.getProcessDefinitionId(),
+                task,
+                request.action()
+        ));
         if (request.taskFormData() != null && !request.taskFormData().isEmpty()) {
             variables.putAll(request.taskFormData());
         }
@@ -2082,6 +2087,9 @@ public class FlowableProcessRuntimeService {
             if ("CC".equals(taskKind)) {
                 return readTimeValue(localVariables) == null ? "CC_PENDING" : "CC_READ";
             }
+            if (isHistoricTaskAutoFinished(task)) {
+                return "AUTO_FINISHED";
+            }
             return isHistoricTaskRevoked(task) ? "REVOKED" : "COMPLETED";
         }
         if (processInstance != null && "WESTFLOW_REVOKED".equals(processInstance.getDeleteReason())) {
@@ -2092,6 +2100,33 @@ public class FlowableProcessRuntimeService {
 
     private boolean isHistoricTaskRevoked(HistoricTaskInstance task) {
         return task.getDeleteReason() != null && !task.getDeleteReason().isBlank();
+    }
+
+    private boolean isHistoricTaskAutoFinished(HistoricTaskInstance task) {
+        if (task == null || task.getDeleteReason() == null || task.getDeleteReason().isBlank()) {
+            return false;
+        }
+        if (!"MI_END".equals(task.getDeleteReason())) {
+            return false;
+        }
+        String approvalMode = countersignApprovalMode(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+        return "OR_SIGN".equals(approvalMode) || "VOTE".equals(approvalMode);
+    }
+
+    private String countersignApprovalMode(String processDefinitionId, String nodeId) {
+        if (processDefinitionId == null || nodeId == null) {
+            return null;
+        }
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
+        if (model == null || model.getFlowElement(nodeId) == null || model.getFlowElement(nodeId).getAttributes() == null) {
+            return null;
+        }
+        List<org.flowable.bpmn.model.ExtensionAttribute> attrs = model.getFlowElement(nodeId).getAttributes().get("approvalMode");
+        if (attrs == null || attrs.isEmpty()) {
+            return null;
+        }
+        String value = attrs.get(0).getValue();
+        return value == null || value.isBlank() ? null : value;
     }
 
     private String resolveActingMode(Task activeTask, HistoricTaskInstance historicTask) {
