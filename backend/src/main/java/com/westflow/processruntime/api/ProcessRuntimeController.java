@@ -157,9 +157,12 @@ public class ProcessRuntimeController {
     // 按规则驳回任务。
     public ApiResponse<CompleteTaskResponse> reject(
             @PathVariable String taskId,
-            @Valid @RequestBody RejectTaskRequest request
+            @Valid @RequestBody RejectTaskRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.reject(taskId, request));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.reject(taskId, request)
+                : flowableProcessRuntimeService.reject(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/jump")
@@ -167,9 +170,12 @@ public class ProcessRuntimeController {
     // 跳转任务到指定节点。
     public ApiResponse<CompleteTaskResponse> jump(
             @PathVariable String taskId,
-            @Valid @RequestBody JumpTaskRequest request
+            @Valid @RequestBody JumpTaskRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.jump(taskId, request));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.jump(taskId, request)
+                : flowableProcessRuntimeService.jump(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/take-back")
@@ -263,9 +269,12 @@ public class ProcessRuntimeController {
     // 转交任务。
     public ApiResponse<CompleteTaskResponse> transfer(
             @PathVariable String taskId,
-            @Valid @RequestBody TransferTaskRequest request
+            @Valid @RequestBody TransferTaskRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.transfer(taskId, request));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.transfer(taskId, request)
+                : flowableProcessRuntimeService.transfer(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/return")
@@ -273,9 +282,13 @@ public class ProcessRuntimeController {
     // 退回到上一节点。
     public ApiResponse<CompleteTaskResponse> returnTask(
             @PathVariable String taskId,
-            @RequestBody(required = false) ReturnTaskRequest request
+            @RequestBody(required = false) ReturnTaskRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.returnToPrevious(taskId, request == null ? new ReturnTaskRequest(null, null) : request));
+        ReturnTaskRequest payload = request == null ? new ReturnTaskRequest(null, null) : request;
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.returnToPrevious(taskId, payload)
+                : flowableProcessRuntimeService.returnToPrevious(taskId, payload));
     }
 
     // 通过路径区分旧 demo 运行态与新真实 Flowable 运行态。

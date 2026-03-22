@@ -12,20 +12,27 @@ import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
 import com.westflow.processruntime.api.ApprovalSheetListView;
 import com.westflow.processruntime.api.ApprovalSheetPageRequest;
+import com.westflow.processruntime.api.AddSignTaskRequest;
 import com.westflow.processruntime.api.ClaimTaskRequest;
 import com.westflow.processruntime.api.ClaimTaskResponse;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
+import com.westflow.processruntime.api.DelegateTaskRequest;
 import com.westflow.processruntime.api.DemoTaskView;
+import com.westflow.processruntime.api.JumpTaskRequest;
 import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
 import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
+import com.westflow.processruntime.api.RejectTaskRequest;
+import com.westflow.processruntime.api.RemoveSignTaskRequest;
+import com.westflow.processruntime.api.ReturnTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
+import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -42,6 +49,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
@@ -185,15 +193,15 @@ public class FlowableProcessRuntimeService {
                 task.getAssignee() == null && isCandidate,
                 canHandle,
                 canHandle,
-                false,
-                false,
+                canHandle,
+                canHandle,
                 false,
                 false,
                 false,
                 false,
                 "CC".equals(taskKind) && canHandle,
-                false,
-                false,
+                canHandle,
+                canHandle,
                 false,
                 false,
                 false,
@@ -221,21 +229,17 @@ public class FlowableProcessRuntimeService {
     public CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
         Task task = requireActiveTask(taskId);
         String operatorUserId = normalizeUserId(request.operatorUserId());
-        if (task.getAssignee() == null) {
-            flowableTaskActionService.claim(taskId, operatorUserId);
-            task = requireActiveTask(taskId);
-        }
-        Map<String, Object> variables = new LinkedHashMap<>();
-        variables.put("westflowLastAction", request.action());
-        variables.put("westflowLastOperatorUserId", operatorUserId);
-        variables.put("westflowLastComment", request.comment());
-        variables.put("westflowTaskFormData", request.taskFormData() == null ? Map.of() : request.taskFormData());
+        task = claimTaskIfNeeded(task, operatorUserId);
+        Map<String, Object> variables = actionVariables(
+                request.action(),
+                operatorUserId,
+                request.comment(),
+                request.taskFormData()
+        );
         if (request.taskFormData() != null && !request.taskFormData().isEmpty()) {
             variables.putAll(request.taskFormData());
         }
-        if (request.comment() != null && !request.comment().isBlank()) {
-            flowableEngineFacade.taskService().addComment(taskId, task.getProcessInstanceId(), request.comment().trim());
-        }
+        appendComment(task, request.comment());
         flowableTaskActionService.complete(taskId, variables);
         List<DemoTaskView> nextTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
@@ -253,6 +257,177 @@ public class FlowableProcessRuntimeService {
                 nextTasks.isEmpty() ? "COMPLETED" : "RUNNING",
                 nextTasks
         );
+    }
+
+    /**
+     * 把当前任务转办给其他用户。
+     */
+    public CompleteTaskResponse transfer(String taskId, TransferTaskRequest request) {
+        Task task = requireTaskForAction(taskId, "转办");
+        appendComment(task, request.comment());
+        flowableEngineFacade.runtimeService().setVariables(
+                task.getProcessInstanceId(),
+                actionVariables("TRANSFER", currentUserId(), request.comment(), Map.of("targetUserId", request.targetUserId()))
+        );
+        flowableTaskActionService.transfer(taskId, request.targetUserId());
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_TRANSFERRED",
+                "任务已转办",
+                "TASK",
+                task.getId(),
+                task.getId(),
+                request.targetUserId(),
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId(),
+                        "targetUserId", request.targetUserId()
+                ),
+                null,
+                null,
+                null
+        );
+        Task updatedTask = requireActiveTask(taskId);
+        return new CompleteTaskResponse(
+                updatedTask.getProcessInstanceId(),
+                taskId,
+                "RUNNING",
+                List.of(toTaskView(updatedTask))
+        );
+    }
+
+    /**
+     * 跳转当前任务到指定节点。
+     */
+    public CompleteTaskResponse jump(String taskId, JumpTaskRequest request) {
+        Task task = requireTaskForAction(taskId, "跳转");
+        String targetNodeId = requireTargetNode(task.getProcessDefinitionId(), request.targetNodeId());
+        String targetNodeName = resolveNodeName(task.getProcessDefinitionId(), targetNodeId);
+        appendComment(task, request.comment());
+        flowableTaskActionService.moveToActivity(
+                taskId,
+                targetNodeId,
+                actionVariables("JUMP", currentUserId(), request.comment(), Map.of("targetNodeId", targetNodeId))
+        );
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_JUMPED",
+                "任务已跳转",
+                "TASK",
+                task.getId(),
+                task.getId(),
+                null,
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId(),
+                        "targetNodeId", targetNodeId,
+                        "targetNodeName", targetNodeName
+                ),
+                "JUMP",
+                targetNodeId,
+                null
+        );
+        return nextTaskResponse(task.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 退回到上一人工节点。
+     */
+    public CompleteTaskResponse returnToPrevious(String taskId, ReturnTaskRequest request) {
+        Task task = requireTaskForAction(taskId, "退回");
+        String targetStrategy = request.targetStrategy() == null || request.targetStrategy().isBlank()
+                ? "PREVIOUS_USER_TASK"
+                : request.targetStrategy().trim();
+        if (!"PREVIOUS_USER_TASK".equals(targetStrategy)) {
+            throw actionNotAllowed("当前仅支持退回上一步人工节点", Map.of("targetStrategy", targetStrategy));
+        }
+        HistoricTaskInstance previousTask = requirePreviousUserTask(task);
+        appendComment(task, request.comment());
+        flowableTaskActionService.moveToActivity(
+                taskId,
+                previousTask.getTaskDefinitionKey(),
+                actionVariables("RETURN", currentUserId(), request.comment(), Map.of("targetStrategy", targetStrategy))
+        );
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_RETURNED",
+                "任务已退回",
+                "TASK",
+                task.getId(),
+                task.getId(),
+                previousTask.getAssignee(),
+                eventDetails(
+                        "comment", request.comment(),
+                        "targetStrategy", targetStrategy,
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId(),
+                        "targetUserId", previousTask.getAssignee()
+                ),
+                targetStrategy,
+                previousTask.getTaskDefinitionKey(),
+                null
+        );
+        return nextTaskResponse(task.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 按轻量策略驳回当前任务。
+     */
+    public CompleteTaskResponse reject(String taskId, RejectTaskRequest request) {
+        Task task = requireTaskForAction(taskId, "驳回");
+        String targetStrategy = request.targetStrategy() == null || request.targetStrategy().isBlank()
+                ? "PREVIOUS_USER_TASK"
+                : request.targetStrategy().trim();
+        RejectTarget target = resolveRejectTarget(task, request, targetStrategy);
+        appendComment(task, request.comment());
+        flowableTaskActionService.moveToActivity(
+                taskId,
+                target.nodeId(),
+                actionVariables(
+                        "REJECT_ROUTE",
+                        currentUserId(),
+                        request.comment(),
+                        Map.of(
+                                "targetStrategy", targetStrategy,
+                                "targetNodeId", target.nodeId(),
+                                "targetNodeName", target.nodeName(),
+                                "reapproveStrategy", normalizeReapproveStrategy(request.reapproveStrategy())
+                        )
+                )
+        );
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_REJECTED",
+                "任务已驳回",
+                "TASK",
+                task.getId(),
+                task.getId(),
+                target.targetUserId(),
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId(),
+                        "targetUserId", target.targetUserId(),
+                        "targetStrategy", targetStrategy,
+                        "targetNodeId", target.nodeId(),
+                        "targetNodeName", target.nodeName(),
+                        "reapproveStrategy", normalizeReapproveStrategy(request.reapproveStrategy())
+                ),
+                targetStrategy,
+                target.nodeId(),
+                normalizeReapproveStrategy(request.reapproveStrategy())
+        );
+        return nextTaskResponse(task.getProcessInstanceId(), taskId);
     }
 
     private ProcessTaskDetailResponse buildDetail(
@@ -646,6 +821,196 @@ public class FlowableProcessRuntimeService {
         );
     }
 
+    private Task requireTaskForAction(String taskId, String actionLabel) {
+        Task task = requireActiveTask(taskId);
+        List<String> candidateUserIds = candidateUsers(taskId);
+        boolean canHandle = currentUserId().equals(task.getAssignee())
+                || (task.getAssignee() == null && candidateUserIds.contains(currentUserId()));
+        if (!canHandle) {
+            throw actionNotAllowed(
+                    "当前任务不允许执行" + actionLabel,
+                    eventDetails("taskId", taskId, "userId", currentUserId(), "assigneeUserId", task.getAssignee())
+            );
+        }
+        return claimTaskIfNeeded(task, currentUserId());
+    }
+
+    private Task claimTaskIfNeeded(Task task, String assigneeUserId) {
+        if (task.getAssignee() == null) {
+            flowableTaskActionService.claim(task.getId(), assigneeUserId);
+            return requireActiveTask(task.getId());
+        }
+        return task;
+    }
+
+    private Map<String, Object> actionVariables(
+            String action,
+            String operatorUserId,
+            String comment,
+            Map<String, Object> taskFormData
+    ) {
+        Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("westflowLastAction", action);
+        variables.put("westflowLastOperatorUserId", operatorUserId);
+        variables.put("westflowLastComment", comment);
+        variables.put("westflowTaskFormData", taskFormData == null || taskFormData.isEmpty() ? Map.of() : taskFormData);
+        return variables;
+    }
+
+    private void appendComment(Task task, String comment) {
+        if (comment != null && !comment.isBlank()) {
+            flowableEngineFacade.taskService().addComment(task.getId(), task.getProcessInstanceId(), comment.trim());
+        }
+    }
+
+    private String requireTargetNode(String processDefinitionId, String targetNodeId) {
+        if (targetNodeId == null || targetNodeId.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "目标节点不能为空",
+                    eventDetails("targetNodeId", targetNodeId)
+            );
+        }
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
+        if (model == null || model.getFlowElement(targetNodeId) == null) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "目标节点不存在",
+                    eventDetails("targetNodeId", targetNodeId)
+            );
+        }
+        return targetNodeId;
+    }
+
+    private String resolveNodeName(String processDefinitionId, String targetNodeId) {
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
+        if (model == null || model.getFlowElement(targetNodeId) == null) {
+            return targetNodeId;
+        }
+        String name = model.getFlowElement(targetNodeId).getName();
+        return name == null || name.isBlank() ? targetNodeId : name;
+    }
+
+    private HistoricTaskInstance requirePreviousUserTask(Task task) {
+        return flowableEngineFacade.historyService()
+                .createHistoricTaskInstanceQuery()
+                .processInstanceId(task.getProcessInstanceId())
+                .finished()
+                .orderByHistoricTaskInstanceEndTime()
+                .desc()
+                .list()
+                .stream()
+                .filter(candidate -> !candidate.getId().equals(task.getId()))
+                .findFirst()
+                .orElseThrow(() -> actionNotAllowed(
+                        "当前任务不存在可退回的上一步人工节点",
+                        Map.of("taskId", task.getId(), "processInstanceId", task.getProcessInstanceId())
+                ));
+    }
+
+    private RejectTarget resolveRejectTarget(Task task, RejectTaskRequest request, String targetStrategy) {
+        return switch (targetStrategy) {
+            case "PREVIOUS_USER_TASK" -> {
+                HistoricTaskInstance previousTask = requirePreviousUserTask(task);
+                yield new RejectTarget(
+                        previousTask.getTaskDefinitionKey(),
+                        previousTask.getName(),
+                        previousTask.getAssignee()
+                );
+            }
+            case "ANY_USER_TASK" -> {
+                String targetNodeId = requireTargetNode(task.getProcessDefinitionId(), request.targetNodeId());
+                yield new RejectTarget(
+                        targetNodeId,
+                        resolveNodeName(task.getProcessDefinitionId(), targetNodeId),
+                        null
+                );
+            }
+            default -> throw actionNotAllowed(
+                    "当前真实运行态仅支持驳回到上一步或指定节点",
+                    Map.of("targetStrategy", targetStrategy)
+            );
+        };
+    }
+
+    private String normalizeReapproveStrategy(String reapproveStrategy) {
+        return reapproveStrategy == null || reapproveStrategy.isBlank()
+                ? "CONTINUE"
+                : reapproveStrategy.trim();
+    }
+
+    private CompleteTaskResponse nextTaskResponse(String processInstanceId, String completedTaskId) {
+        List<DemoTaskView> nextTasks = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .active()
+                .orderByTaskCreateTime()
+                .asc()
+                .list()
+                .stream()
+                .map(this::toTaskView)
+                .toList();
+        return new CompleteTaskResponse(
+                processInstanceId,
+                completedTaskId,
+                nextTasks.isEmpty() ? "COMPLETED" : "RUNNING",
+                nextTasks
+        );
+    }
+
+    private void appendInstanceEvent(
+            String instanceId,
+            String taskId,
+            String nodeId,
+            String eventType,
+            String eventName,
+            String actionCategory,
+            String sourceTaskId,
+            String targetTaskId,
+            String targetUserId,
+            Map<String, Object> details,
+            String targetStrategy,
+            String targetNodeId,
+            String reapproveStrategy
+    ) {
+        traceStore.appendInstanceEvent(new ProcessInstanceEventResponse(
+                instanceId + "::" + eventType + "::" + UUID.randomUUID(),
+                instanceId,
+                taskId,
+                nodeId,
+                eventType,
+                eventName,
+                actionCategory,
+                sourceTaskId,
+                targetTaskId,
+                targetUserId,
+                currentUserId(),
+                OffsetDateTime.now(TIME_ZONE),
+                details == null ? Map.of() : details,
+                targetStrategy,
+                targetNodeId,
+                reapproveStrategy,
+                null,
+                null,
+                null,
+                null
+        ));
+    }
+
+    private Map<String, Object> eventDetails(Object... keyValues) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        for (int index = 0; index + 1 < keyValues.length; index += 2) {
+            String key = String.valueOf(keyValues[index]);
+            Object value = keyValues[index + 1];
+            if (value != null) {
+                details.put(key, value);
+            }
+        }
+        return Map.copyOf(details);
+    }
+
     private ProcessTaskListItemResponse toTaskListItem(Task task) {
         Map<String, Object> variables = runtimeVariables(task.getProcessInstanceId());
         String processKey = stringValue(variables.get("westflowProcessKey"));
@@ -988,6 +1353,15 @@ public class FlowableProcessRuntimeService {
         );
     }
 
+    private ContractException actionNotAllowed(String message, Map<String, Object> details) {
+        return new ContractException(
+                "PROCESS.ACTION_NOT_ALLOWED",
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                message,
+                details
+        );
+    }
+
     private <T> PageResponse<T> page(List<T> records, int page, int pageSize) {
         long total = records.size();
         long pages = total == 0 ? 0 : (total + pageSize - 1L) / pageSize;
@@ -1008,6 +1382,16 @@ public class FlowableProcessRuntimeService {
             String processDefinitionId,
             String startUserId,
             String status
+    ) {
+    }
+
+    /**
+     * 真实驳回动作解析后的目标节点。
+     */
+    private record RejectTarget(
+            String nodeId,
+            String nodeName,
+            String targetUserId
     ) {
     }
 }

@@ -174,6 +174,183 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(byBusinessBody.path("taskFormData").path("approvedDays").asInt()).isEqualTo(2);
     }
 
+    @Test
+    void shouldTransferTaskOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        String targetToken = login("wangwu");
+        publishLeaveProcess();
+        seedLeaveBill("leave_003");
+
+        String taskId = startProcess(applicantToken, "leave_003").path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode transferBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/transfer", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "改由王五处理"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(transferBody.path("status").asText()).isEqualTo("RUNNING");
+        assertThat(transferBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+
+        JsonNode targetPage = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/page")
+                        .header("Authorization", "Bearer " + targetToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "请假",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(targetPage.path("records").get(0).path("taskId").asText()).isEqualTo(taskId);
+        assertThat(targetPage.path("records").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+    }
+
+    @Test
+    void shouldJumpTaskToTargetNodeOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishTwoStepLeaveProcess();
+        seedLeaveBill("leave_004");
+
+        String taskId = startProcess(applicantToken, "leave_004").path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode jumpBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/jump", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetNodeId": "approve_hr",
+                                  "comment": "直接跳到人事审批"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(jumpBody.path("nextTasks").get(0).path("nodeId").asText()).isEqualTo("approve_hr");
+        assertThat(jumpBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+
+        JsonNode byBusinessBody = approvalDetailByBusiness(managerToken, "leave_004");
+        assertThat(byBusinessBody.path("nodeId").asText()).isEqualTo("approve_hr");
+        assertThat(byBusinessBody.path("assigneeUserId").asText()).isEqualTo("usr_003");
+    }
+
+    @Test
+    void shouldReturnTaskToPreviousOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        String hrToken = login("wangwu");
+        publishTwoStepLeaveProcess();
+        seedLeaveBill("leave_005");
+
+        String firstTaskId = startProcess(applicantToken, "leave_005").path("activeTasks").get(0).path("taskId").asText();
+        JsonNode completeBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "转人事复核",
+                                  "taskFormData": {
+                                    "approvedDays": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String hrTaskId = completeBody.path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode returnBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/return", hrTaskId)
+                        .header("Authorization", "Bearer " + hrToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "PREVIOUS_USER_TASK",
+                                  "comment": "资料不完整，退回补充"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(returnBody.path("nextTasks").get(0).path("nodeId").asText()).isEqualTo("approve_manager");
+        assertThat(returnBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_002");
+
+        JsonNode byBusinessBody = approvalDetailByBusiness(managerToken, "leave_005");
+        assertThat(byBusinessBody.path("nodeId").asText()).isEqualTo("approve_manager");
+        assertThat(byBusinessBody.path("assigneeUserId").asText()).isEqualTo("usr_002");
+        assertThat(byBusinessBody.path("instanceStatus").asText()).isEqualTo("RUNNING");
+    }
+
+    @Test
+    void shouldRejectTaskToTargetNodeOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        String hrToken = login("wangwu");
+        publishTwoStepLeaveProcess();
+        seedLeaveBill("leave_006");
+
+        String firstTaskId = startProcess(applicantToken, "leave_006").path("activeTasks").get(0).path("taskId").asText();
+        JsonNode completeBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "提交给人事",
+                                  "taskFormData": {
+                                    "approvedDays": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String hrTaskId = completeBody.path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode rejectBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/reject", hrTaskId)
+                        .header("Authorization", "Bearer " + hrToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "ANY_USER_TASK",
+                                  "targetNodeId": "approve_manager",
+                                  "reapproveStrategy": "CONTINUE",
+                                  "comment": "请负责人重新确认"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(rejectBody.path("nextTasks").get(0).path("nodeId").asText()).isEqualTo("approve_manager");
+
+        JsonNode byBusinessBody = approvalDetailByBusiness(managerToken, "leave_006");
+        assertThat(byBusinessBody.path("nodeId").asText()).isEqualTo("approve_manager");
+        assertThat(byBusinessBody.path("instanceEvents").toString()).contains("TASK_REJECTED");
+    }
+
     private String login(String username) throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -189,6 +366,38 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString();
 
         return objectMapper.readTree(response).path("data").path("accessToken").asText();
+    }
+
+    private JsonNode startProcess(String token, String businessId) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "%s",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "外出办事"
+                                  }
+                                }
+                                """.formatted(businessId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+    }
+
+    private JsonNode approvalDetailByBusiness(String token, String businessId) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + token)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", businessId))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
     }
 
     private void seedLeaveBill(String billId) {
@@ -276,6 +485,107 @@ class FlowableProcessRuntimeControllerTest {
                       "target": "end_1",
                       "priority": 10,
                       "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishTwoStepLeaveProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假审批",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_hr",
+                      "type": "approver",
+                      "name": "人事复核",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "approve_hr",
+                      "priority": 10,
+                      "label": "负责人通过"
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "approve_hr",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "人事通过"
                     }
                   ]
                 }
