@@ -15,6 +15,7 @@ import {
   SquareMenu,
   Search,
   Users,
+  Zap,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -110,6 +111,40 @@ export const sidebarData: SidebarData = {
             {
               title: '执行离职转办',
               url: '/system/handover/execute',
+            },
+          ],
+        },
+        {
+          title: '通知渠道管理',
+          icon: Mail,
+          requiredRoles: ['PROCESS_ADMIN'],
+          items: [
+            {
+              title: '通知渠道列表',
+              url: '/system/notification-channels/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建通知渠道',
+              url: '/system/notification-channels/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+          ],
+        },
+        {
+          title: '触发器管理',
+          icon: Zap,
+          requiredRoles: ['PROCESS_ADMIN'],
+          items: [
+            {
+              title: '触发器列表',
+              url: '/system/triggers/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建触发器',
+              url: '/system/triggers/create',
+              requiredRoles: ['PROCESS_ADMIN'],
             },
           ],
         },

@@ -43,6 +43,18 @@ const snapshot: WorkflowSnapshot = {
             type: 'SEQUENTIAL',
             voteThreshold: null,
           },
+          timeoutPolicy: {
+            enabled: false,
+            durationMinutes: null,
+            action: 'APPROVE',
+          },
+          reminderPolicy: {
+            enabled: false,
+            firstReminderAfterMinutes: null,
+            repeatIntervalMinutes: null,
+            maxTimes: null,
+            channels: ['IN_APP'],
+          },
           operations: ['APPROVE', 'REJECT', 'RETURN'],
           commentRequired: false,
         },
@@ -236,6 +248,18 @@ describe('workflow designer dsl mapping', () => {
                 type: 'SEQUENTIAL',
                 voteThreshold: null,
               },
+              timeoutPolicy: {
+                enabled: false,
+                durationMinutes: null,
+                action: 'APPROVE',
+              },
+              reminderPolicy: {
+                enabled: false,
+                firstReminderAfterMinutes: null,
+                repeatIntervalMinutes: null,
+                maxTimes: null,
+                channels: ['IN_APP'],
+              },
               operations: ['APPROVE', 'REJECT', 'RETURN'],
               commentRequired: true,
             },
@@ -308,6 +332,18 @@ describe('workflow designer dsl mapping', () => {
                 type: 'SEQUENTIAL',
                 voteThreshold: null,
               },
+              timeoutPolicy: {
+                enabled: false,
+                durationMinutes: null,
+                action: 'APPROVE',
+              },
+              reminderPolicy: {
+                enabled: false,
+                firstReminderAfterMinutes: null,
+                repeatIntervalMinutes: null,
+                maxTimes: null,
+                channels: ['IN_APP'],
+              },
               operations: ['APPROVE', 'REJECT', 'RETURN'],
               commentRequired: false,
             },
@@ -333,6 +369,18 @@ describe('workflow designer dsl mapping', () => {
               approvalPolicy: {
                 type: 'SEQUENTIAL',
                 voteThreshold: null,
+              },
+              timeoutPolicy: {
+                enabled: false,
+                durationMinutes: null,
+                action: 'APPROVE',
+              },
+              reminderPolicy: {
+                enabled: false,
+                firstReminderAfterMinutes: null,
+                repeatIntervalMinutes: null,
+                maxTimes: null,
+                channels: ['IN_APP'],
               },
               operations: ['APPROVE', 'REJECT', 'RETURN'],
               commentRequired: false,
@@ -516,6 +564,188 @@ describe('workflow designer dsl mapping', () => {
           targetFieldKey: 'approvedAmount',
         },
       ],
+    })
+  })
+
+  it('keeps timer and trigger node configs when mapping between canvas and DSL', () => {
+    const automationSnapshot: WorkflowSnapshot = {
+      nodes: [
+        {
+          id: 'timer_1',
+          type: 'workflow',
+          position: { x: 100, y: 100 },
+          data: {
+            kind: 'timer',
+            label: '定时等待',
+            description: '到点后推进',
+            tone: 'warning',
+            config: {
+              scheduleType: 'RELATIVE_TO_ARRIVAL',
+              delayMinutes: 30,
+              runAt: '',
+              comment: '午休后执行',
+            },
+          },
+        },
+        {
+          id: 'trigger_1',
+          type: 'workflow',
+          position: { x: 340, y: 100 },
+          data: {
+            kind: 'trigger',
+            label: '业务触发',
+            description: '调用外部触发器',
+            tone: 'brand',
+            config: {
+              triggerMode: 'SCHEDULED',
+              scheduleType: 'ABSOLUTE_TIME',
+              runAt: '2026-03-23T09:30:00+08:00',
+              delayMinutes: null,
+              triggerKey: 'sync_invoice',
+              retryTimes: 3,
+              retryIntervalMinutes: 10,
+              payloadTemplate: '{"source":"workflow"}',
+            },
+          },
+        },
+      ],
+      edges: [],
+      selectedNodeId: 'timer_1',
+    }
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(automationSnapshot, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[0]?.type).toBe('timer')
+    expect(dsl.nodes[0]?.config).toMatchObject({
+      scheduleType: 'RELATIVE_TO_ARRIVAL',
+      delayMinutes: 30,
+      comment: '午休后执行',
+    })
+    expect(dsl.nodes[1]?.type).toBe('trigger')
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      triggerMode: 'SCHEDULED',
+      scheduleType: 'ABSOLUTE_TIME',
+      triggerKey: 'sync_invoice',
+      retryTimes: 3,
+      retryIntervalMinutes: 10,
+      payloadTemplate: '{"source":"workflow"}',
+    })
+
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:5',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 5,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl,
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.nodes[0]?.data.kind).toBe('timer')
+    expect(hydrated.nodes[0]?.data.config).toMatchObject({
+      scheduleType: 'RELATIVE_TO_ARRIVAL',
+      delayMinutes: 30,
+      comment: '午休后执行',
+    })
+    expect(hydrated.nodes[1]?.data.kind).toBe('trigger')
+    expect(hydrated.nodes[1]?.data.config).toMatchObject({
+      triggerMode: 'SCHEDULED',
+      triggerKey: 'sync_invoice',
+      retryTimes: 3,
+      retryIntervalMinutes: 10,
+    })
+  })
+
+  it('persists approver timeout and reminder policies in the DSL', () => {
+    const snapshotWithAutomation = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1'
+          ? ({
+              ...node,
+              data: {
+                ...node.data,
+                config: {
+                  ...(node.data.config as object),
+                  timeoutPolicy: {
+                    enabled: true,
+                    durationMinutes: 45,
+                    action: 'REJECT',
+                  },
+                  reminderPolicy: {
+                    enabled: true,
+                    firstReminderAfterMinutes: 10,
+                    repeatIntervalMinutes: 15,
+                    maxTimes: 3,
+                    channels: ['IN_APP', 'EMAIL'],
+                  },
+                },
+              },
+            } as WorkflowNode)
+          : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithAutomation, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      timeoutPolicy: {
+        enabled: true,
+        durationMinutes: 45,
+        action: 'REJECT',
+      },
+      reminderPolicy: {
+        enabled: true,
+        firstReminderAfterMinutes: 10,
+        repeatIntervalMinutes: 15,
+        maxTimes: 3,
+        channels: ['IN_APP', 'EMAIL'],
+      },
+    })
+
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:6',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 6,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl,
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.nodes[1]?.data.config).toMatchObject({
+      timeoutPolicy: {
+        enabled: true,
+        durationMinutes: 45,
+        action: 'REJECT',
+      },
+      reminderPolicy: {
+        enabled: true,
+        firstReminderAfterMinutes: 10,
+        repeatIntervalMinutes: 15,
+        maxTimes: 3,
+        channels: ['IN_APP', 'EMAIL'],
+      },
     })
   })
 })

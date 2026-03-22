@@ -8,6 +8,9 @@ import {
   type WorkflowNodeKind,
   type WorkflowNodeTone,
   type WorkflowStartNodeConfig,
+  type WorkflowReminderChannel,
+  type WorkflowTimerNodeConfig,
+  type WorkflowTriggerNodeConfig,
 } from './types'
 
 export type WorkflowEdgeCondition = {
@@ -20,6 +23,8 @@ export type WorkflowNodeConfigRecord = {
   approver: WorkflowApproverNodeConfig
   condition: WorkflowConditionNodeConfig
   cc: WorkflowCcNodeConfig
+  timer: WorkflowTimerNodeConfig
+  trigger: WorkflowTriggerNodeConfig
   parallel: Record<string, never>
   end: Record<string, never>
 }
@@ -39,6 +44,18 @@ const defaultApproverConfig: WorkflowApproverNodeConfig = {
     type: 'SEQUENTIAL',
     voteThreshold: null,
   },
+  timeoutPolicy: {
+    enabled: false,
+    durationMinutes: null,
+    action: 'APPROVE',
+  },
+  reminderPolicy: {
+    enabled: false,
+    firstReminderAfterMinutes: null,
+    repeatIntervalMinutes: null,
+    maxTimes: null,
+    channels: ['IN_APP'],
+  },
   operations: ['APPROVE', 'REJECT', 'RETURN'],
   commentRequired: false,
 }
@@ -57,6 +74,24 @@ const defaultConditionConfig: WorkflowConditionNodeConfig = {
   defaultEdgeId: '',
   expressionMode: 'EXPRESSION',
   expressionFieldKey: '',
+}
+
+const defaultTimerConfig: WorkflowTimerNodeConfig = {
+  scheduleType: 'RELATIVE_TO_ARRIVAL',
+  runAt: '',
+  delayMinutes: 30,
+  comment: '',
+}
+
+const defaultTriggerConfig: WorkflowTriggerNodeConfig = {
+  triggerMode: 'IMMEDIATE',
+  scheduleType: 'RELATIVE_TO_ARRIVAL',
+  runAt: '',
+  delayMinutes: 0,
+  triggerKey: '',
+  retryTimes: 0,
+  retryIntervalMinutes: 5,
+  payloadTemplate: '',
 }
 
 const defaultStartConfig: WorkflowStartNodeConfig = {
@@ -81,6 +116,34 @@ function normalizeFieldBindings(value: unknown): WorkflowFieldBinding[] {
     .filter((item) => item.sourceFieldKey && item.targetFieldKey)
 }
 
+function normalizeNumber(value: unknown, fallback: number | null) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  return fallback
+}
+
+function normalizeReminderChannels(value: unknown): WorkflowReminderChannel[] {
+  if (!Array.isArray(value)) {
+    return [...defaultApproverConfig.reminderPolicy.channels]
+  }
+
+  const channels = value
+    .map((item) => String(item))
+    .filter(
+      (item): item is WorkflowReminderChannel =>
+        item === 'IN_APP' ||
+        item === 'EMAIL' ||
+        item === 'WEBHOOK' ||
+        item === 'SMS' ||
+        item === 'WECHAT' ||
+        item === 'DINGTALK'
+    )
+
+  return channels.length > 0 ? channels : [...defaultApproverConfig.reminderPolicy.channels]
+}
+
 export function defaultNodeConfig<K extends WorkflowNodeKind>(
   kind: K
 ): WorkflowNodeConfigMap[K] {
@@ -93,6 +156,10 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
       return defaultConditionConfig as WorkflowNodeConfigMap[K]
     case 'cc':
       return defaultCcConfig as WorkflowNodeConfigMap[K]
+    case 'timer':
+      return defaultTimerConfig as WorkflowNodeConfigMap[K]
+    case 'trigger':
+      return defaultTriggerConfig as WorkflowNodeConfigMap[K]
     case 'parallel':
     case 'end':
       return emptyConfig as WorkflowNodeConfigMap[K]
@@ -107,6 +174,10 @@ export function toneForKind(kind: WorkflowNodeKind): WorkflowNodeTone {
       return 'brand'
     case 'condition':
       return 'warning'
+    case 'timer':
+      return 'warning'
+    case 'trigger':
+      return 'brand'
     default:
       return 'neutral'
   }
@@ -122,6 +193,10 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
       return '条件分支节点'
     case 'cc':
       return '抄送节点'
+    case 'timer':
+      return '定时节点'
+    case 'trigger':
+      return '触发节点'
     case 'parallel':
       return '并行编排节点'
     case 'end':
@@ -139,6 +214,10 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
       return '条件'
     case 'cc':
       return '抄送'
+    case 'timer':
+      return '定时'
+    case 'trigger':
+      return '触发'
     case 'parallel':
       return '并行'
     case 'end':
@@ -192,6 +271,33 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
               ? null
               : defaultApproverConfig.approvalPolicy.voteThreshold,
       },
+      timeoutPolicy: {
+        enabled: Boolean(value?.timeoutPolicy?.enabled ?? defaultApproverConfig.timeoutPolicy.enabled),
+        durationMinutes: normalizeNumber(
+          value?.timeoutPolicy?.durationMinutes,
+          defaultApproverConfig.timeoutPolicy.durationMinutes
+        ),
+        action:
+          value?.timeoutPolicy?.action === 'REJECT'
+            ? 'REJECT'
+            : defaultApproverConfig.timeoutPolicy.action,
+      },
+      reminderPolicy: {
+        enabled: Boolean(value?.reminderPolicy?.enabled ?? defaultApproverConfig.reminderPolicy.enabled),
+        firstReminderAfterMinutes: normalizeNumber(
+          value?.reminderPolicy?.firstReminderAfterMinutes,
+          defaultApproverConfig.reminderPolicy.firstReminderAfterMinutes
+        ),
+        repeatIntervalMinutes: normalizeNumber(
+          value?.reminderPolicy?.repeatIntervalMinutes,
+          defaultApproverConfig.reminderPolicy.repeatIntervalMinutes
+        ),
+        maxTimes: normalizeNumber(
+          value?.reminderPolicy?.maxTimes,
+          defaultApproverConfig.reminderPolicy.maxTimes
+        ),
+        channels: normalizeReminderChannels(value?.reminderPolicy?.channels),
+      },
       operations: Array.isArray(value?.operations) && value.operations.length > 0
         ? value.operations.map(String)
         : [...defaultApproverConfig.operations],
@@ -227,6 +333,44 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
           : defaultCcConfig.targets.departmentRef,
       },
       readRequired: Boolean(value?.readRequired ?? defaultCcConfig.readRequired),
+    } as WorkflowNodeConfigMap[K]
+  }
+
+  if (kind === 'timer') {
+    const value = config as Partial<WorkflowTimerNodeConfig> | null | undefined
+    return {
+      scheduleType:
+        value?.scheduleType === 'ABSOLUTE_TIME'
+          ? 'ABSOLUTE_TIME'
+          : defaultTimerConfig.scheduleType,
+      runAt: value?.runAt ? String(value.runAt) : defaultTimerConfig.runAt,
+      delayMinutes: normalizeNumber(value?.delayMinutes, defaultTimerConfig.delayMinutes),
+      comment: value?.comment ? String(value.comment) : defaultTimerConfig.comment,
+    } as WorkflowNodeConfigMap[K]
+  }
+
+  if (kind === 'trigger') {
+    const value = config as Partial<WorkflowTriggerNodeConfig> | null | undefined
+    return {
+      triggerMode:
+        value?.triggerMode === 'SCHEDULED'
+          ? 'SCHEDULED'
+          : defaultTriggerConfig.triggerMode,
+      scheduleType:
+        value?.scheduleType === 'ABSOLUTE_TIME'
+          ? 'ABSOLUTE_TIME'
+          : defaultTriggerConfig.scheduleType,
+      runAt: value?.runAt ? String(value.runAt) : defaultTriggerConfig.runAt,
+      delayMinutes: normalizeNumber(value?.delayMinutes, defaultTriggerConfig.delayMinutes),
+      triggerKey: value?.triggerKey ? String(value.triggerKey) : defaultTriggerConfig.triggerKey,
+      retryTimes: normalizeNumber(value?.retryTimes, defaultTriggerConfig.retryTimes),
+      retryIntervalMinutes: normalizeNumber(
+        value?.retryIntervalMinutes,
+        defaultTriggerConfig.retryIntervalMinutes
+      ),
+      payloadTemplate: value?.payloadTemplate
+        ? String(value.payloadTemplate)
+        : defaultTriggerConfig.payloadTemplate,
     } as WorkflowNodeConfigMap[K]
   }
 

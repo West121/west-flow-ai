@@ -97,6 +97,97 @@ class ProcessDslToBpmnServiceTest {
         );
     }
 
+    @Test
+    void shouldConvertAutomationNodeConfigIntoBpmnXml() {
+        ProcessDslPayload payload = new ProcessDslPayload(
+                "1.0.0",
+                "oa_auto",
+                "自动化审批",
+                "OA",
+                "oa-auto-form",
+                "1.0.0",
+                List.of(),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of(
+                                "initiatorEditable", true
+                        )),
+                        node("approve_1", "approver", "审批", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SEQUENTIAL", null),
+                                "operations", List.of("APPROVE", "REJECT"),
+                                "commentRequired", false,
+                                "timeoutPolicy", Map.of(
+                                        "enabled", true,
+                                        "durationMinutes", 30,
+                                        "action", "APPROVE"
+                                ),
+                                "reminderPolicy", Map.of(
+                                        "enabled", true,
+                                        "firstReminderAfterMinutes", 10,
+                                        "repeatIntervalMinutes", 5,
+                                        "maxTimes", 3,
+                                        "channels", List.of("IN_APP", "EMAIL")
+                                )
+                        )),
+                        node("timer_1", "timer", "定时等待", Map.of(
+                                "scheduleType", "RELATIVE_TO_ARRIVAL",
+                                "delayMinutes", 15,
+                                "comment", "等待 15 分钟"
+                        )),
+                        node("trigger_1", "trigger", "调用业务触发器", Map.of(
+                                "triggerMode", "SCHEDULED",
+                                "scheduleType", "ABSOLUTE_TIME",
+                                "runAt", "2026-03-22T10:00:00+08:00",
+                                "triggerKey", "leave_sync",
+                                "retryTimes", 2,
+                                "retryIntervalMinutes", 5,
+                                "payloadTemplate", "{\"billNo\":\"${billNo}\"}"
+                        )),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1", 1, null),
+                        edge("edge_2", "approve_1", "timer_1", 2, null),
+                        edge("edge_3", "timer_1", "trigger_1", 3, null),
+                        edge("edge_4", "trigger_1", "end_1", 4, null)
+                )
+        );
+
+        String xml = service.convert(payload, "oa_auto:1", 1);
+
+        assertThat(xml).contains(
+                "timeoutEnabled=\"true\"",
+                "timeoutDurationMinutes=\"30\"",
+                "timeoutAction=\"APPROVE\"",
+                "reminderEnabled=\"true\"",
+                "reminderFirstReminderAfterMinutes=\"10\"",
+                "reminderRepeatIntervalMinutes=\"5\"",
+                "reminderMaxTimes=\"3\"",
+                "reminderChannels=\"IN_APP,EMAIL\"",
+                "<intermediateCatchEvent",
+                "id=\"timer_1\"",
+                "scheduleType=\"RELATIVE_TO_ARRIVAL\"",
+                "delayMinutes=\"15\"",
+                "<serviceTask",
+                "id=\"trigger_1\"",
+                "triggerMode=\"SCHEDULED\"",
+                "triggerKey=\"leave_sync\"",
+                "retryTimes=\"2\"",
+                "retryIntervalMinutes=\"5\""
+        );
+    }
+
     private ProcessDslPayload.Node node(
             String id,
             String type,

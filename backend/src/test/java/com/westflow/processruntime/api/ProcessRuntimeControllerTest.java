@@ -271,6 +271,81 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeAutomationStatusTraceAndNotificationRecords() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validAutomationProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_auto_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_auto",
+                                  "businessKey": "leave_auto_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "自动化演示"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String taskId = objectMapper.readTree(startResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        String detailResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode detailBody = objectMapper.readTree(detailResponse).path("data");
+        assertThat(detailBody.path("automationStatus").asText()).isEqualTo("PENDING");
+        assertThat(detailBody.path("automationActionTrace").size()).isGreaterThanOrEqualTo(4);
+        assertThat(detailBody.path("notificationSendRecords").size()).isEqualTo(2);
+        assertThat(detailBody.path("notificationSendRecords").get(0).path("status").asText()).isEqualTo("PENDING");
+
+        String pageResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/approval-sheets/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "view": "INITIATED",
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode pageBody = objectMapper.readTree(pageResponse).path("data");
+        assertThat(pageBody.path("records").size()).isEqualTo(1);
+        assertThat(pageBody.path("records").get(0).path("automationStatus").asText()).isEqualTo("PENDING");
+    }
+
+    @Test
     void shouldResolveApprovalSheetDetailByBusinessWhenTaskIsActive() throws Exception {
         String token = login();
 
@@ -2137,6 +2212,110 @@ class ProcessRuntimeControllerTest {
                       "priority": 10,
                       "label": "通过"
                     }
+                  ]
+                }
+                """;
+    }
+
+    private String validAutomationProcessDsl() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_auto",
+                  "processName": "自动化审批",
+                  "category": "OA",
+                  "processFormKey": "oa_auto_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false,
+                        "timeoutPolicy": {
+                          "enabled": true,
+                          "durationMinutes": 30,
+                          "action": "APPROVE"
+                        },
+                        "reminderPolicy": {
+                          "enabled": true,
+                          "firstReminderAfterMinutes": 10,
+                          "repeatIntervalMinutes": 5,
+                          "maxTimes": 2,
+                          "channels": ["IN_APP", "EMAIL"]
+                        }
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "timer_1",
+                      "type": "timer",
+                      "name": "等待调度",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "scheduleType": "RELATIVE_TO_ARRIVAL",
+                        "delayMinutes": 15,
+                        "comment": "等待 15 分钟后继续"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "trigger_1",
+                      "type": "trigger",
+                      "name": "调用业务触发器",
+                      "position": {"x": 760, "y": 100},
+                      "config": {
+                        "triggerMode": "SCHEDULED",
+                        "scheduleType": "ABSOLUTE_TIME",
+                        "runAt": "2026-03-22T18:00:00+08:00",
+                        "triggerKey": "oa_leave_sync",
+                        "retryTimes": 2,
+                        "retryIntervalMinutes": 5,
+                        "payloadTemplate": "{\\"billNo\\":\\"${billNo}\\"}"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 980, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "approve_manager", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "approve_manager", "target": "timer_1", "priority": 20, "label": "通过"},
+                    {"id": "edge_3", "source": "timer_1", "target": "trigger_1", "priority": 30, "label": "到时"},
+                    {"id": "edge_4", "source": "trigger_1", "target": "end_1", "priority": 40, "label": "触发完成"}
                   ]
                 }
                 """;

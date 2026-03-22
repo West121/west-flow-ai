@@ -5,6 +5,8 @@ export type WorkflowNodeKind =
   | 'approver'
   | 'condition'
   | 'cc'
+  | 'timer'
+  | 'trigger'
   | 'parallel'
   | 'end'
 
@@ -21,6 +23,17 @@ export type WorkflowApproverApprovalPolicyType =
   | 'SEQUENTIAL'
   | 'PARALLEL'
   | 'VOTE'
+
+export type WorkflowTimeoutApprovalAction = 'APPROVE' | 'REJECT'
+export type WorkflowReminderChannel =
+  | 'IN_APP'
+  | 'EMAIL'
+  | 'WEBHOOK'
+  | 'SMS'
+  | 'WECHAT'
+  | 'DINGTALK'
+export type WorkflowTimerScheduleType = 'ABSOLUTE_TIME' | 'RELATIVE_TO_ARRIVAL'
+export type WorkflowTriggerMode = 'IMMEDIATE' | 'SCHEDULED'
 
 export type WorkflowCcTargetMode = 'USER' | 'ROLE' | 'DEPARTMENT'
 export type WorkflowConditionExpressionMode = 'EXPRESSION' | 'FIELD_COMPARE'
@@ -66,8 +79,38 @@ export type WorkflowApproverNodeConfig = {
     type: WorkflowApproverApprovalPolicyType
     voteThreshold: number | null
   }
+  timeoutPolicy: {
+    enabled: boolean
+    durationMinutes: number | null
+    action: WorkflowTimeoutApprovalAction
+  }
+  reminderPolicy: {
+    enabled: boolean
+    firstReminderAfterMinutes: number | null
+    repeatIntervalMinutes: number | null
+    maxTimes: number | null
+    channels: WorkflowReminderChannel[]
+  }
   operations: string[]
   commentRequired: boolean
+}
+
+export type WorkflowTimerNodeConfig = {
+  scheduleType: WorkflowTimerScheduleType
+  runAt: string
+  delayMinutes: number | null
+  comment: string
+}
+
+export type WorkflowTriggerNodeConfig = {
+  triggerMode: WorkflowTriggerMode
+  scheduleType: WorkflowTimerScheduleType
+  runAt: string
+  delayMinutes: number | null
+  triggerKey: string
+  retryTimes: number | null
+  retryIntervalMinutes: number | null
+  payloadTemplate: string
 }
 
 export type WorkflowConditionNodeConfig = {
@@ -91,6 +134,8 @@ export type WorkflowNodeConfigMap = {
   approver: WorkflowApproverNodeConfig
   condition: WorkflowConditionNodeConfig
   cc: WorkflowCcNodeConfig
+  timer: WorkflowTimerNodeConfig
+  trigger: WorkflowTriggerNodeConfig
   parallel: Record<string, never>
   end: Record<string, never>
 }

@@ -717,6 +717,69 @@ describe('workbench pages', () => {
     expect(screen.queryByRole('button', { name: '唤醒' })).not.toBeInTheDocument()
   })
 
+  it('shows automation trace, notification records and automation status in the workflow center', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_auto_001',
+        automationStatus: 'SUCCESS',
+        automationActionTrace: [
+          {
+            traceId: 'auto_trace_001',
+            traceType: 'CONDITION_MATCHED',
+            traceName: '命中请假完成规则',
+            status: 'SUCCESS',
+            operatorUserId: 'system',
+            occurredAt: '2026-03-22T09:14:00+08:00',
+            detail: '状态为 COMPLETED，继续发送通知',
+          },
+        ],
+        notificationSendRecords: [
+          {
+            recordId: 'notify_001',
+            channelName: '企业微信通知',
+            channelType: 'WECHAT_WORK',
+            target: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send',
+            status: 'SUCCESS',
+            attemptCount: 1,
+            sentAt: '2026-03-22T09:15:00+08:00',
+            errorMessage: null,
+          },
+        ],
+        activeTaskIds: ['task_auto_001'],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: false,
+      canReject: false,
+      canRejectRoute: false,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+    workbenchApiMocks.listApprovalSheets.mockResolvedValue(
+      createApprovalSheetPage({
+        instanceStatus: 'COMPLETED',
+        automationStatus: 'SUCCESS',
+      })
+    )
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_auto_001' />)
+    renderWithQuery(<WorkbenchDoneListPage />)
+
+    expect(await screen.findAllByText('自动动作轨迹')).not.toHaveLength(0)
+    expect(screen.getAllByText('通知发送记录').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('自动化状态').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('执行成功').length).toBeGreaterThan(0)
+  })
+
   it('shows delegate action and proxy metadata in the task detail page', async () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
       createWorkbenchTaskDetail({

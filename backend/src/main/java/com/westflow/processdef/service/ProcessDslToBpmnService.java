@@ -44,6 +44,8 @@ public class ProcessDslToBpmnService {
             case "condition" -> emptyTag("exclusiveGateway", nodeAttrs(node, "defaultEdgeId", stringValue(config.get("defaultEdgeId"))));
             case "parallel_split" -> emptyTag("parallelGateway", nodeAttrs(node, "gatewayType", "split"));
             case "parallel_join" -> emptyTag("parallelGateway", nodeAttrs(node, "gatewayType", "join"));
+            case "timer" -> emptyTag("intermediateCatchEvent", timerAttrs(node, config));
+            case "trigger" -> emptyTag("serviceTask", triggerAttrs(node, config));
             case "end" -> emptyTag("endEvent", nodeAttrs(node));
             default -> emptyTag("node", nodeAttrs(node, "type", node.type()));
         };
@@ -66,6 +68,16 @@ public class ProcessDslToBpmnService {
         attrs.put("voteThreshold", stringValue(approvalPolicy.get("voteThreshold")));
         attrs.put("operations", joinValues(config.get("operations")));
         attrs.put("commentRequired", booleanValue(config.get("commentRequired")));
+        Map<String, Object> timeoutPolicy = mapValue(config.get("timeoutPolicy"));
+        attrs.put("timeoutEnabled", booleanValue(timeoutPolicy.get("enabled")));
+        attrs.put("timeoutDurationMinutes", stringValue(timeoutPolicy.get("durationMinutes")));
+        attrs.put("timeoutAction", stringValue(timeoutPolicy.get("action")));
+        Map<String, Object> reminderPolicy = mapValue(config.get("reminderPolicy"));
+        attrs.put("reminderEnabled", booleanValue(reminderPolicy.get("enabled")));
+        attrs.put("reminderFirstReminderAfterMinutes", stringValue(reminderPolicy.get("firstReminderAfterMinutes")));
+        attrs.put("reminderRepeatIntervalMinutes", stringValue(reminderPolicy.get("repeatIntervalMinutes")));
+        attrs.put("reminderMaxTimes", stringValue(reminderPolicy.get("maxTimes")));
+        attrs.put("reminderChannels", joinValues(reminderPolicy.get("channels")));
         return attrs;
     }
 
@@ -81,6 +93,36 @@ public class ProcessDslToBpmnService {
         attrs.put("roleCodes", joinValues(targets.get("roleCodes")));
         attrs.put("departmentRef", stringValue(targets.get("departmentRef")));
         attrs.put("readRequired", booleanValue(config.get("readRequired")));
+        return attrs;
+    }
+
+    private Map<String, Object> timerAttrs(ProcessDslPayload.Node node, Map<String, Object> config) {
+        // 定时节点只保留调度方式和执行时间信息。
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        attrs.put("id", node.id());
+        attrs.put("name", node.name());
+        attrs.put("description", node.description());
+        attrs.put("scheduleType", stringValue(config.get("scheduleType")));
+        attrs.put("runAt", stringValue(config.get("runAt")));
+        attrs.put("delayMinutes", stringValue(config.get("delayMinutes")));
+        attrs.put("comment", stringValue(config.get("comment")));
+        return attrs;
+    }
+
+    private Map<String, Object> triggerAttrs(ProcessDslPayload.Node node, Map<String, Object> config) {
+        // 触发节点在 BPMN 中先落成 serviceTask，并带上触发器执行参数。
+        Map<String, Object> attrs = new LinkedHashMap<>();
+        attrs.put("id", node.id());
+        attrs.put("name", node.name());
+        attrs.put("description", node.description());
+        attrs.put("triggerMode", stringValue(config.get("triggerMode")));
+        attrs.put("scheduleType", stringValue(config.get("scheduleType")));
+        attrs.put("runAt", stringValue(config.get("runAt")));
+        attrs.put("delayMinutes", stringValue(config.get("delayMinutes")));
+        attrs.put("triggerKey", stringValue(config.get("triggerKey")));
+        attrs.put("retryTimes", stringValue(config.get("retryTimes")));
+        attrs.put("retryIntervalMinutes", stringValue(config.get("retryIntervalMinutes")));
+        attrs.put("payloadTemplate", stringValue(config.get("payloadTemplate")));
         return attrs;
     }
 

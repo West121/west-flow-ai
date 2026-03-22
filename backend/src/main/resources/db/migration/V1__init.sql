@@ -1013,3 +1013,139 @@ SELECT
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_common_default');
+
+CREATE TABLE IF NOT EXISTS wf_notification_channel (
+    id VARCHAR(64) PRIMARY KEY,
+    channel_code VARCHAR(128) NOT NULL UNIQUE,
+    channel_type VARCHAR(64) NOT NULL,
+    channel_name VARCHAR(128) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    mock_mode BOOLEAN NOT NULL DEFAULT FALSE,
+    config_json TEXT NOT NULL,
+    remark VARCHAR(500),
+    last_sent_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_notification_log (
+    id VARCHAR(64) PRIMARY KEY,
+    channel_id VARCHAR(64) NOT NULL,
+    channel_code VARCHAR(128) NOT NULL,
+    channel_type VARCHAR(64) NOT NULL,
+    recipient VARCHAR(255) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    provider_name VARCHAR(64) NOT NULL,
+    success BOOLEAN NOT NULL DEFAULT FALSE,
+    status VARCHAR(32) NOT NULL,
+    response_message VARCHAR(1000),
+    payload_json TEXT,
+    sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_trigger_definition (
+    id VARCHAR(64) PRIMARY KEY,
+    trigger_name VARCHAR(128) NOT NULL,
+    trigger_key VARCHAR(128) NOT NULL UNIQUE,
+    trigger_event VARCHAR(64) NOT NULL,
+    business_type VARCHAR(64),
+    channel_ids_json TEXT NOT NULL,
+    condition_expression VARCHAR(1000),
+    description VARCHAR(1000),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_orchestrator_job (
+    id VARCHAR(64) PRIMARY KEY,
+    automation_type VARCHAR(64) NOT NULL,
+    target_id VARCHAR(64) NOT NULL,
+    target_name VARCHAR(255) NOT NULL,
+    scheduled_at TIMESTAMP,
+    status VARCHAR(32) NOT NULL,
+    payload_json TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_orchestrator_execution (
+    id VARCHAR(64) PRIMARY KEY,
+    run_id VARCHAR(64) NOT NULL,
+    target_id VARCHAR(64) NOT NULL,
+    automation_type VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    message VARCHAR(1000),
+    executed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_notification_channel',
+    'menu_system',
+    '通知渠道配置',
+    'MENU',
+    '/system/notification-channels/list',
+    'system/notification-channels/list',
+    'system:notification-channel:view',
+    'BellRing',
+    90,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_notification_channel');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_trigger',
+    'menu_system',
+    '触发器管理',
+    'MENU',
+    '/system/triggers/list',
+    'system/triggers/list',
+    'system:trigger:view',
+    'Zap',
+    100,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_trigger');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_009', 'role_process_admin', 'menu_system_notification_channel', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_009');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_010', 'role_process_admin', 'menu_system_trigger', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_010');

@@ -1,0 +1,146 @@
+package com.westflow.notification.service;
+
+import com.westflow.common.error.ContractException;
+import com.westflow.notification.mapper.NotificationChannelMapper;
+import com.westflow.notification.mapper.NotificationLogMapper;
+import com.westflow.notification.model.NotificationChannelRecord;
+import com.westflow.notification.model.NotificationChannelType;
+import com.westflow.notification.model.NotificationDispatchRequest;
+import com.westflow.notification.model.NotificationDispatchResult;
+import com.westflow.notification.model.NotificationLogRecord;
+import com.westflow.notification.model.NotificationSendResult;
+import com.westflow.notification.provider.NotificationProvider;
+import jakarta.annotation.PostConstruct;
+import java.time.Instant;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class NotificationDispatchService {
+
+    private final NotificationChannelMapper notificationChannelMapper;
+    private final NotificationLogMapper notificationLogMapper;
+    private final List<NotificationProvider> providers;
+    private Map<NotificationChannelType, NotificationProvider> providerMap;
+
+    @PostConstruct
+    void init() {
+        // provider 按渠道类型注册，后续接入新渠道只需要增加实现类。
+        providerMap = new EnumMap<>(NotificationChannelType.class);
+        for (NotificationProvider provider : providers) {
+            providerMap.put(provider.type(), provider);
+        }
+    }
+
+    public NotificationDispatchResult dispatchByChannelCode(String channelCode, NotificationDispatchRequest request) {
+        NotificationChannelRecord channel = requireChannel(channelCode);
+        NotificationProvider provider = requireProvider(channel.channelType());
+        Instant sentAt = Instant.now();
+        String logId = buildId("nlg");
+        try {
+            NotificationSendResult sendResult = provider.send(channel, request);
+            NotificationLogRecord logRecord = buildLog(logId, channel, request, sendResult.providerName(), sendResult.success(), sendResult.responseMessage(), sentAt);
+            notificationLogMapper.insert(logRecord);
+            if (sendResult.success()) {
+                notificationChannelMapper.markLastSentAt(channel.channelId(), sentAt);
+            }
+            return new NotificationDispatchResult(
+                    logId,
+                    channel.channelId(),
+                    channel.channelCode(),
+                    channel.channelType(),
+                    sendResult.success(),
+                    sendResult.providerName(),
+                    sendResult.responseMessage(),
+                    sentAt
+            );
+        } catch (Exception exception) {
+            // 发送失败也要落日志，方便后续追查渠道问题。
+            NotificationLogRecord logRecord = buildLog(logId, channel, request, provider.type().name(), false, exception.getMessage(), sentAt);
+            notificationLogMapper.insert(logRecord);
+            return new NotificationDispatchResult(
+                    logId,
+                    channel.channelId(),
+                    channel.channelCode(),
+                    channel.channelType(),
+                    false,
+                    provider.type().name(),
+                    exception.getMessage(),
+                    sentAt
+            );
+        }
+    }
+
+    private NotificationChannelRecord requireChannel(String channelCode) {
+        NotificationChannelRecord channel = notificationChannelMapper.selectByCode(channelCode);
+        if (channel == null) {
+            throw new ContractException(
+                    "BIZ.RESOURCE_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "通知渠道不存在",
+                    Map.of("channelCode", channelCode)
+            );
+        }
+        return channel;
+    }
+
+    private NotificationProvider requireProvider(String channelType) {
+        NotificationChannelType type;
+        try {
+            type = NotificationChannelType.fromCode(channelType);
+        } catch (IllegalArgumentException exception) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "通知渠道类型不合法",
+                    Map.of("channelType", channelType)
+            );
+        }
+        NotificationProvider provider = providerMap.get(type);
+        if (provider == null) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "当前渠道类型未绑定 provider",
+                    Map.of("channelType", channelType)
+            );
+        }
+        return provider;
+    }
+
+    private NotificationLogRecord buildLog(
+            String logId,
+            NotificationChannelRecord channel,
+            NotificationDispatchRequest request,
+            String providerName,
+            boolean success,
+            String responseMessage,
+            Instant sentAt
+    ) {
+        return new NotificationLogRecord(
+                logId,
+                channel.channelId(),
+                channel.channelCode(),
+                channel.channelType(),
+                request.recipient(),
+                request.title(),
+                request.content(),
+                providerName,
+                success,
+                success ? "SUCCESS" : "FAILED",
+                responseMessage,
+                request.payload(),
+                sentAt
+        );
+    }
+
+    private String buildId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+}

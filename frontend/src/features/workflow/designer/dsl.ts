@@ -19,6 +19,8 @@ export type ProcessDefinitionDslNodeType =
   | 'start'
   | 'approver'
   | 'cc'
+  | 'timer'
+  | 'trigger'
   | 'condition'
   | 'parallel_split'
   | 'parallel_join'
@@ -87,6 +89,8 @@ function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
     case 'start':
     case 'approver':
     case 'cc':
+    case 'timer':
+    case 'trigger':
     case 'condition':
     case 'end':
       return kind
@@ -103,6 +107,9 @@ function nodeKindFor(type: ProcessDefinitionDslNodeType) {
     case 'parallel_split':
     case 'parallel_join':
       return 'parallel'
+    case 'timer':
+    case 'trigger':
+      return type
     default:
       return type
   }
@@ -116,6 +123,10 @@ function toneFor(type: ProcessDefinitionDslNodeType) {
       return 'brand'
     case 'condition':
       return 'warning'
+    case 'timer':
+      return 'warning'
+    case 'trigger':
+      return 'brand'
     default:
       return 'neutral'
   }

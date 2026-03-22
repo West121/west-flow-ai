@@ -33,6 +33,8 @@ import {
   type WorkflowCcTargetMode,
   type WorkflowEdge,
   type WorkflowNode,
+  type WorkflowReminderChannel,
+  type WorkflowTimeoutApprovalAction,
 } from './types'
 
 const assignmentModes = [
@@ -55,6 +57,30 @@ const ccTargetModes = [
   { value: 'DEPARTMENT', label: '部门' },
 ] satisfies Array<{ value: WorkflowCcTargetMode; label: string }>
 
+const timerScheduleTypes = [
+  { value: 'RELATIVE_TO_ARRIVAL', label: '相对到达时间' },
+  { value: 'ABSOLUTE_TIME', label: '绝对时间' },
+] satisfies Array<{ value: 'RELATIVE_TO_ARRIVAL' | 'ABSOLUTE_TIME'; label: string }>
+
+const triggerModes = [
+  { value: 'IMMEDIATE', label: '立即执行' },
+  { value: 'SCHEDULED', label: '定时执行' },
+] satisfies Array<{ value: 'IMMEDIATE' | 'SCHEDULED'; label: string }>
+
+const reminderChannels = [
+  { value: 'IN_APP', label: '站内信' },
+  { value: 'EMAIL', label: '邮件' },
+  { value: 'WEBHOOK', label: 'Webhook' },
+  { value: 'SMS', label: '短信' },
+  { value: 'WECHAT', label: '企业微信' },
+  { value: 'DINGTALK', label: '钉钉' },
+] satisfies Array<{ value: WorkflowReminderChannel; label: string }>
+
+const timeoutActions = [
+  { value: 'APPROVE', label: '自动通过' },
+  { value: 'REJECT', label: '自动拒绝' },
+] satisfies Array<{ value: WorkflowTimeoutApprovalAction; label: string }>
+
 const operationOptions = [
   { key: 'APPROVE', label: '通过' },
   { key: 'REJECT', label: '拒绝' },
@@ -70,7 +96,16 @@ const branchSchema = z.object({
 
 const nodeConfigFormSchema = z
   .object({
-    kind: z.enum(['start', 'approver', 'condition', 'cc', 'parallel', 'end']),
+    kind: z.enum([
+      'start',
+      'approver',
+      'condition',
+      'cc',
+      'timer',
+      'trigger',
+      'parallel',
+      'end',
+    ]),
     label: z.string().trim().min(1, '节点名称不能为空'),
     description: z.string().trim().min(1, '节点描述不能为空'),
     start: z.object({
@@ -93,6 +128,20 @@ const nodeConfigFormSchema = z
       fieldBindingsJson: z.string(),
       approvalPolicyType: z.enum(['SEQUENTIAL', 'PARALLEL', 'VOTE']),
       voteThreshold: z.string(),
+      timeoutPolicy: z.object({
+        enabled: z.boolean(),
+        durationMinutes: z.string(),
+        action: z.enum(['APPROVE', 'REJECT']),
+      }),
+      reminderPolicy: z.object({
+        enabled: z.boolean(),
+        firstReminderAfterMinutes: z.string(),
+        repeatIntervalMinutes: z.string(),
+        maxTimes: z.string(),
+        channels: z.array(
+          z.enum(['IN_APP', 'EMAIL', 'WEBHOOK', 'SMS', 'WECHAT', 'DINGTALK'])
+        ),
+      }),
       operations: z.object({
         APPROVE: z.boolean(),
         REJECT: z.boolean(),
@@ -107,6 +156,22 @@ const nodeConfigFormSchema = z
       roleCodes: z.string(),
       departmentRef: z.string(),
       readRequired: z.boolean(),
+    }),
+    timer: z.object({
+      scheduleType: z.enum(['RELATIVE_TO_ARRIVAL', 'ABSOLUTE_TIME']),
+      runAt: z.string(),
+      delayMinutes: z.string(),
+      comment: z.string(),
+    }),
+    trigger: z.object({
+      triggerMode: z.enum(['IMMEDIATE', 'SCHEDULED']),
+      scheduleType: z.enum(['RELATIVE_TO_ARRIVAL', 'ABSOLUTE_TIME']),
+      runAt: z.string(),
+      delayMinutes: z.string(),
+      triggerKey: z.string(),
+      retryTimes: z.string(),
+      retryIntervalMinutes: z.string(),
+      payloadTemplate: z.string(),
     }),
     condition: z.object({
       defaultEdgeId: z.string(),
@@ -223,6 +288,77 @@ const nodeConfigFormSchema = z
           })
         }
       }
+
+      if (values.approver.timeoutPolicy.enabled) {
+        if (!values.approver.timeoutPolicy.durationMinutes.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '请输入超时分钟数',
+            path: ['approver', 'timeoutPolicy', 'durationMinutes'],
+          })
+        } else {
+          const duration = Number(values.approver.timeoutPolicy.durationMinutes)
+          if (!Number.isFinite(duration) || duration <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '超时分钟数必须是大于 0 的数字',
+              path: ['approver', 'timeoutPolicy', 'durationMinutes'],
+            })
+          }
+        }
+      }
+
+      if (values.approver.reminderPolicy.enabled) {
+        const reminderFields: Array<{
+          path: ['approver', 'reminderPolicy', 'firstReminderAfterMinutes' | 'repeatIntervalMinutes' | 'maxTimes']
+          value: string
+          label: string
+        }> = [
+          {
+            path: ['approver', 'reminderPolicy', 'firstReminderAfterMinutes'],
+            value: values.approver.reminderPolicy.firstReminderAfterMinutes,
+            label: '首次提醒分钟数',
+          },
+          {
+            path: ['approver', 'reminderPolicy', 'repeatIntervalMinutes'],
+            value: values.approver.reminderPolicy.repeatIntervalMinutes,
+            label: '重复提醒间隔分钟数',
+          },
+          {
+            path: ['approver', 'reminderPolicy', 'maxTimes'],
+            value: values.approver.reminderPolicy.maxTimes,
+            label: '提醒次数',
+          },
+        ]
+
+        reminderFields.forEach((item) => {
+          if (!item.value.trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `请输入${item.label}`,
+              path: item.path,
+            })
+            return
+          }
+
+          const amount = Number(item.value)
+          if (!Number.isFinite(amount) || amount <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `${item.label}必须是大于 0 的数字`,
+              path: item.path,
+            })
+          }
+        })
+
+        if (values.approver.reminderPolicy.channels.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '请至少选择一个提醒渠道',
+            path: ['approver', 'reminderPolicy', 'channels'],
+          })
+        }
+      }
     }
 
     if (values.kind === 'cc') {
@@ -246,6 +382,90 @@ const nodeConfigFormSchema = z
           message: '请输入抄送部门编码',
           path: ['cc', 'departmentRef'],
         })
+      }
+    }
+
+    if (values.kind === 'timer') {
+      if (values.timer.scheduleType === 'ABSOLUTE_TIME' && !values.timer.runAt.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '绝对时间模式需要填写执行时间',
+          path: ['timer', 'runAt'],
+        })
+      }
+      if (
+        values.timer.scheduleType === 'RELATIVE_TO_ARRIVAL' &&
+        !values.timer.delayMinutes.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '相对时间模式需要填写延迟分钟数',
+          path: ['timer', 'delayMinutes'],
+        })
+      }
+    }
+
+    if (values.kind === 'trigger') {
+      if (!values.trigger.triggerKey.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '请输入触发器编码',
+          path: ['trigger', 'triggerKey'],
+        })
+      }
+
+      if (values.trigger.triggerMode === 'SCHEDULED') {
+        if (values.trigger.scheduleType === 'ABSOLUTE_TIME' && !values.trigger.runAt.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '定时触发需要填写执行时间',
+            path: ['trigger', 'runAt'],
+          })
+        }
+        if (
+          values.trigger.scheduleType === 'RELATIVE_TO_ARRIVAL' &&
+          !values.trigger.delayMinutes.trim()
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '定时触发需要填写延迟分钟数',
+            path: ['trigger', 'delayMinutes'],
+          })
+        }
+      }
+
+      if (!values.trigger.retryTimes.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '请输入重试次数',
+          path: ['trigger', 'retryTimes'],
+        })
+      } else {
+        const retryTimes = Number(values.trigger.retryTimes)
+        if (!Number.isFinite(retryTimes) || retryTimes < 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '重试次数必须是非负数字',
+            path: ['trigger', 'retryTimes'],
+          })
+        }
+      }
+
+      if (!values.trigger.retryIntervalMinutes.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '请输入重试间隔分钟数',
+          path: ['trigger', 'retryIntervalMinutes'],
+        })
+      } else {
+        const retryInterval = Number(values.trigger.retryIntervalMinutes)
+        if (!Number.isFinite(retryInterval) || retryInterval < 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '重试间隔分钟数必须是非负数字',
+            path: ['trigger', 'retryIntervalMinutes'],
+          })
+        }
       }
     }
 
@@ -292,8 +512,12 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
   const outgoingEdges = edges.filter((edge) => edge.source === node.id)
   const config = node.data.config as Record<string, unknown>
   const approvalPolicy = (config.approvalPolicy ?? {}) as Record<string, unknown>
+  const timeoutPolicy = (config.timeoutPolicy ?? {}) as Record<string, unknown>
+  const reminderPolicy = (config.reminderPolicy ?? {}) as Record<string, unknown>
   const assignment = (config.assignment ?? {}) as Record<string, unknown>
   const targets = (config.targets ?? {}) as Record<string, unknown>
+  const timerConfig = config as Record<string, unknown>
+  const triggerConfig = config as Record<string, unknown>
   const branchDefaults = outgoingEdges.map((edge) => ({
     ...buildConditionFormDefaults(
       edge.id,
@@ -346,6 +570,42 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
           : false,
       },
       commentRequired: Boolean(config.commentRequired ?? false),
+      timeoutPolicy: {
+        enabled: Boolean(timeoutPolicy.enabled ?? false),
+        durationMinutes:
+          timeoutPolicy.durationMinutes === null || timeoutPolicy.durationMinutes === undefined
+            ? ''
+            : String(timeoutPolicy.durationMinutes),
+        action: timeoutPolicy.action === 'REJECT' ? 'REJECT' : 'APPROVE',
+      },
+      reminderPolicy: {
+        enabled: Boolean(reminderPolicy.enabled ?? false),
+        firstReminderAfterMinutes:
+          reminderPolicy.firstReminderAfterMinutes === null ||
+          reminderPolicy.firstReminderAfterMinutes === undefined
+            ? ''
+            : String(reminderPolicy.firstReminderAfterMinutes),
+        repeatIntervalMinutes:
+          reminderPolicy.repeatIntervalMinutes === null ||
+          reminderPolicy.repeatIntervalMinutes === undefined
+            ? ''
+            : String(reminderPolicy.repeatIntervalMinutes),
+        maxTimes:
+          reminderPolicy.maxTimes === null || reminderPolicy.maxTimes === undefined
+            ? ''
+            : String(reminderPolicy.maxTimes),
+        channels: Array.isArray(reminderPolicy.channels)
+          ? reminderPolicy.channels.filter(
+              (channel): channel is WorkflowReminderChannel =>
+                channel === 'IN_APP' ||
+                channel === 'EMAIL' ||
+                channel === 'WEBHOOK' ||
+                channel === 'SMS' ||
+                channel === 'WECHAT' ||
+                channel === 'DINGTALK'
+            )
+          : ['IN_APP'],
+      },
     },
     cc: {
       targetMode: (targets.mode as WorkflowCcTargetMode) ?? 'USER',
@@ -369,6 +629,41 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
           : 'EXPRESSION',
       expressionFieldKey: String(config.expressionFieldKey ?? ''),
       branches: branchDefaults,
+    },
+    timer: {
+      scheduleType:
+        timerConfig.scheduleType === 'ABSOLUTE_TIME'
+          ? 'ABSOLUTE_TIME'
+          : 'RELATIVE_TO_ARRIVAL',
+      runAt: String(timerConfig.runAt ?? ''),
+      delayMinutes:
+        timerConfig.delayMinutes === null || timerConfig.delayMinutes === undefined
+          ? ''
+          : String(timerConfig.delayMinutes),
+      comment: String(timerConfig.comment ?? ''),
+    },
+    trigger: {
+      triggerMode: triggerConfig.triggerMode === 'SCHEDULED' ? 'SCHEDULED' : 'IMMEDIATE',
+      scheduleType:
+        triggerConfig.scheduleType === 'ABSOLUTE_TIME'
+          ? 'ABSOLUTE_TIME'
+          : 'RELATIVE_TO_ARRIVAL',
+      runAt: String(triggerConfig.runAt ?? ''),
+      delayMinutes:
+        triggerConfig.delayMinutes === null || triggerConfig.delayMinutes === undefined
+          ? ''
+          : String(triggerConfig.delayMinutes),
+      triggerKey: String(triggerConfig.triggerKey ?? ''),
+      retryTimes:
+        triggerConfig.retryTimes === null || triggerConfig.retryTimes === undefined
+          ? ''
+          : String(triggerConfig.retryTimes),
+      retryIntervalMinutes:
+        triggerConfig.retryIntervalMinutes === null ||
+        triggerConfig.retryIntervalMinutes === undefined
+          ? ''
+          : String(triggerConfig.retryIntervalMinutes),
+      payloadTemplate: String(triggerConfig.payloadTemplate ?? ''),
     },
     parallel: {},
     end: {},
@@ -427,6 +722,26 @@ function buildNodePatch(values: NodeConfigFormValues) {
                 ? parseNumber(values.approver.voteThreshold)
                 : null,
           },
+          timeoutPolicy: {
+            enabled: values.approver.timeoutPolicy.enabled,
+            durationMinutes: values.approver.timeoutPolicy.enabled
+              ? parseNumber(values.approver.timeoutPolicy.durationMinutes)
+              : null,
+            action: values.approver.timeoutPolicy.action,
+          },
+          reminderPolicy: {
+            enabled: values.approver.reminderPolicy.enabled,
+            firstReminderAfterMinutes: values.approver.reminderPolicy.enabled
+              ? parseNumber(values.approver.reminderPolicy.firstReminderAfterMinutes)
+              : null,
+            repeatIntervalMinutes: values.approver.reminderPolicy.enabled
+              ? parseNumber(values.approver.reminderPolicy.repeatIntervalMinutes)
+              : null,
+            maxTimes: values.approver.reminderPolicy.enabled
+              ? parseNumber(values.approver.reminderPolicy.maxTimes)
+              : null,
+            channels: values.approver.reminderPolicy.channels,
+          },
           operations: Object.entries(values.approver.operations)
             .filter(([, checked]) => checked)
             .map(([operation]) => operation),
@@ -451,6 +766,38 @@ function buildNodePatch(values: NodeConfigFormValues) {
           defaultEdgeId: values.condition.defaultEdgeId,
           expressionMode: values.condition.expressionMode,
           expressionFieldKey: values.condition.expressionFieldKey.trim(),
+        },
+      }
+    case 'timer':
+      return {
+        config: {
+          scheduleType: values.timer.scheduleType,
+          runAt: values.timer.runAt.trim(),
+          delayMinutes:
+            values.timer.scheduleType === 'RELATIVE_TO_ARRIVAL'
+              ? parseNumber(values.timer.delayMinutes)
+              : null,
+          comment: values.timer.comment.trim(),
+        },
+      }
+    case 'trigger':
+      return {
+        config: {
+          triggerMode: values.trigger.triggerMode,
+          scheduleType: values.trigger.scheduleType,
+          runAt:
+            values.trigger.triggerMode === 'SCHEDULED'
+              ? values.trigger.runAt.trim()
+              : '',
+          delayMinutes:
+            values.trigger.triggerMode === 'SCHEDULED' &&
+            values.trigger.scheduleType === 'RELATIVE_TO_ARRIVAL'
+              ? parseNumber(values.trigger.delayMinutes)
+              : null,
+          triggerKey: values.trigger.triggerKey.trim(),
+          retryTimes: parseNumber(values.trigger.retryTimes),
+          retryIntervalMinutes: parseNumber(values.trigger.retryIntervalMinutes),
+          payloadTemplate: values.trigger.payloadTemplate.trim(),
         },
       }
     default:
@@ -508,6 +855,18 @@ export function NodeConfigPanel({
             fieldBindingsJson: '[]',
             approvalPolicyType: 'SEQUENTIAL',
             voteThreshold: '',
+            timeoutPolicy: {
+              enabled: false,
+              durationMinutes: '',
+              action: 'APPROVE',
+            },
+            reminderPolicy: {
+              enabled: false,
+              firstReminderAfterMinutes: '',
+              repeatIntervalMinutes: '',
+              maxTimes: '',
+              channels: ['IN_APP'],
+            },
             operations: {
               APPROVE: true,
               REJECT: true,
@@ -522,6 +881,22 @@ export function NodeConfigPanel({
             roleCodes: '',
             departmentRef: '',
             readRequired: false,
+          },
+          timer: {
+            scheduleType: 'RELATIVE_TO_ARRIVAL',
+            runAt: '',
+            delayMinutes: '',
+            comment: '',
+          },
+          trigger: {
+            triggerMode: 'IMMEDIATE',
+            scheduleType: 'RELATIVE_TO_ARRIVAL',
+            runAt: '',
+            delayMinutes: '',
+            triggerKey: '',
+            retryTimes: '',
+            retryIntervalMinutes: '',
+            payloadTemplate: '',
           },
           condition: {
             defaultEdgeId: '',
@@ -543,6 +918,14 @@ export function NodeConfigPanel({
     control: form.control,
     name: 'approver.approvalPolicyType',
   })
+  const selectedTimeoutEnabled = useWatch({
+    control: form.control,
+    name: 'approver.timeoutPolicy.enabled',
+  })
+  const selectedReminderEnabled = useWatch({
+    control: form.control,
+    name: 'approver.reminderPolicy.enabled',
+  })
   const selectedNodeFormKey = useWatch({
     control: form.control,
     name: 'approver.nodeFormKey',
@@ -559,6 +942,10 @@ export function NodeConfigPanel({
   const selectedConditionMode = useWatch({
     control: form.control,
     name: 'condition.expressionMode',
+  })
+  const selectedTriggerMode = useWatch({
+    control: form.control,
+    name: 'trigger.triggerMode',
   })
   const operationsError =
     (form.formState.errors.approver?.operations as { message?: string } | undefined)
@@ -892,6 +1279,162 @@ export function NodeConfigPanel({
               />
             ) : null}
 
+            <FormField
+              control={form.control}
+              name='approver.timeoutPolicy.enabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
+                  <div className='space-y-1'>
+                    <FormLabel>超时审批</FormLabel>
+                    <p className='text-xs text-muted-foreground'>
+                      人工审批节点超时后可自动通过或自动拒绝。
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {selectedTimeoutEnabled ? (
+              <div className='grid gap-4 rounded-xl border bg-muted/20 p-4'>
+                <FormField
+                  control={form.control}
+                  name='approver.timeoutPolicy.durationMinutes'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>超时分钟数</FormLabel>
+                      <FormControl>
+                        <Input {...field} inputMode='numeric' placeholder='45' />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name='approver.timeoutPolicy.action'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>超时后动作</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className='w-full' aria-label='超时后动作'>
+                            <SelectValue placeholder='请选择超时动作' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timeoutActions.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            ) : null}
+
+            <FormField
+              control={form.control}
+              name='approver.reminderPolicy.enabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
+                  <div className='space-y-1'>
+                    <FormLabel>自动提醒</FormLabel>
+                    <p className='text-xs text-muted-foreground'>
+                      按设定节奏向待办审批人发送提醒。
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {selectedReminderEnabled ? (
+              <div className='grid gap-4 rounded-xl border bg-muted/20 p-4'>
+                <div className='grid gap-4 md:grid-cols-3'>
+                  <FormField
+                    control={form.control}
+                    name='approver.reminderPolicy.firstReminderAfterMinutes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>首次提醒分钟数</FormLabel>
+                        <FormControl>
+                          <Input {...field} inputMode='numeric' placeholder='10' />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='approver.reminderPolicy.repeatIntervalMinutes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>重复提醒间隔分钟数</FormLabel>
+                        <FormControl>
+                          <Input {...field} inputMode='numeric' placeholder='15' />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='approver.reminderPolicy.maxTimes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>提醒次数</FormLabel>
+                        <FormControl>
+                          <Input {...field} inputMode='numeric' placeholder='3' />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className='grid gap-2'>
+                  <Label>提醒渠道</Label>
+                  <div className='grid gap-2 md:grid-cols-2'>
+                    {reminderChannels.map((item) => (
+                      <FormField
+                        key={item.value}
+                        control={form.control}
+                        name='approver.reminderPolicy.channels'
+                        render={({ field }) => {
+                          const checked = field.value.includes(item.value)
+                          return (
+                            <FormItem className='flex flex-row items-center gap-3 rounded-xl border px-3 py-2'>
+                              <FormControl>
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(nextChecked) => {
+                                    const nextValues = nextChecked
+                                      ? [...field.value, item.value]
+                                      : field.value.filter((value) => value !== item.value)
+                                    field.onChange(nextValues)
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className='font-normal'>{item.label}</FormLabel>
+                            </FormItem>
+                          )
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </div>
+              </div>
+            ) : null}
+
             <div className='flex flex-col gap-2'>
               <Label>可执行操作</Label>
               <div className='grid gap-2 md:grid-cols-2'>
@@ -1178,6 +1721,246 @@ export function NodeConfigPanel({
                 </div>
               ) : null}
             </div>
+          </div>
+        ) : null}
+
+        {selectedKind === 'timer' ? (
+          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
+            <div className='flex items-center gap-2 text-sm font-medium'>
+              <Check className='size-4 text-primary' />
+              定时节点
+            </div>
+
+            <FormField
+              control={form.control}
+              name='timer.scheduleType'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>调度类型</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className='w-full' aria-label='调度类型'>
+                        <SelectValue placeholder='请选择调度类型' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timerScheduleTypes.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='timer.runAt'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>执行时间</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='2026-03-23T09:30:00+08:00' />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      绝对时间模式下使用此值。
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='timer.delayMinutes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>延迟分钟数</FormLabel>
+                    <FormControl>
+                      <Input {...field} inputMode='numeric' placeholder='30' />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      相对到达时间模式下使用此值。
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name='timer.comment'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>说明</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} rows={3} placeholder='定时节点用途说明' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        ) : null}
+
+        {selectedKind === 'trigger' ? (
+          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
+            <div className='flex items-center gap-2 text-sm font-medium'>
+              <Check className='size-4 text-primary' />
+              触发节点
+            </div>
+
+            <FormField
+              control={form.control}
+              name='trigger.triggerMode'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>触发方式</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className='w-full' aria-label='触发方式'>
+                        <SelectValue placeholder='请选择触发方式' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {triggerModes.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {selectedTriggerMode === 'SCHEDULED' ? (
+              <div className='grid gap-4 rounded-xl border bg-muted/20 p-4'>
+                <FormField
+                  control={form.control}
+                  name='trigger.scheduleType'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>调度类型</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className='w-full' aria-label='调度类型'>
+                            <SelectValue placeholder='请选择调度类型' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {timerScheduleTypes.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='trigger.runAt'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>执行时间</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder='2026-03-23T09:30:00+08:00' />
+                        </FormControl>
+                        <p className='text-xs text-muted-foreground'>
+                          绝对时间模式下使用此值。
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='trigger.delayMinutes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>延迟分钟数</FormLabel>
+                        <FormControl>
+                          <Input {...field} inputMode='numeric' placeholder='30' />
+                        </FormControl>
+                        <p className='text-xs text-muted-foreground'>
+                          相对到达时间模式下使用此值。
+                        </p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            <FormField
+              control={form.control}
+              name='trigger.triggerKey'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>触发器编码</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder='sync_invoice' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='trigger.retryTimes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>重试次数</FormLabel>
+                    <FormControl>
+                      <Input {...field} inputMode='numeric' placeholder='3' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name='trigger.retryIntervalMinutes'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>重试间隔分钟数</FormLabel>
+                    <FormControl>
+                      <Input {...field} inputMode='numeric' placeholder='10' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name='trigger.payloadTemplate'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>负载模板</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} rows={3} placeholder='{"source":"workflow"}' />
+                  </FormControl>
+                  <p className='text-xs text-muted-foreground'>
+                    触发时将把这里的模板内容作为执行上下文。
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
         ) : null}
 

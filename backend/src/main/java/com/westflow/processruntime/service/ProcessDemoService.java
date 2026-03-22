@@ -33,6 +33,8 @@ import com.westflow.processruntime.api.ClaimTaskRequest;
 import com.westflow.processruntime.api.ClaimTaskResponse;
 import com.westflow.processruntime.api.DemoTaskView;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
+import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
+import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
 import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
@@ -2066,6 +2068,7 @@ public class ProcessDemoService {
         DemoTask currentTask = projection.currentTask;
         DemoTask latestHandledTask = projection.latestHandledTask;
         DemoTask latestRelevantTask = latestHandledTask != null ? latestHandledTask : projection.latestTask;
+        ProcessDslPayload payload = processDefinitionService.getById(projection.instance.processDefinitionId).dsl();
         return new ApprovalSheetListItemResponse(
                 projection.instance.instanceId,
                 projection.instance.processDefinitionId,
@@ -2083,10 +2086,65 @@ public class ProcessDemoService {
                 projection.instance.status,
                 latestRelevantTask.action,
                 latestRelevantTask.operatorUserId,
+                resolveAutomationStatus(projection.instance, payload),
                 projection.instance.createdAt,
                 projection.instance.updatedAt,
                 projection.completedAt()
         );
+    }
+
+    private String resolveAutomationStatus(DemoProcessInstance instance, ProcessDslPayload payload) {
+        if (!hasAutomationConfig(payload)) {
+            return null;
+        }
+        return switch (instance.status) {
+            case "COMPLETED" -> "SUCCESS";
+            case "REJECTED" -> "FAILED";
+            case "REVOKED" -> "SKIPPED";
+            default -> "PENDING";
+        };
+    }
+
+    private boolean hasAutomationConfig(ProcessDslPayload payload) {
+        return payload.nodes().stream().anyMatch(node -> {
+            if ("timer".equals(node.type()) || "trigger".equals(node.type())) {
+                return true;
+            }
+            if (!"approver".equals(node.type())) {
+                return false;
+            }
+            Map<String, Object> config = safeConfig(node);
+            return Boolean.TRUE.equals(mapValue(config.get("timeoutPolicy")).get("enabled"))
+                    || Boolean.TRUE.equals(mapValue(config.get("reminderPolicy")).get("enabled"));
+        });
+    }
+
+    private String statusOrPending(String status) {
+        return status == null ? "PENDING" : status;
+    }
+
+    private String resolveNotificationChannelName(String channel) {
+        return switch (channel) {
+            case "IN_APP" -> "站内通知";
+            case "EMAIL" -> "邮件通知";
+            case "WEBHOOK" -> "Webhook 通知";
+            case "SMS" -> "短信通知";
+            case "WECHAT" -> "企业微信通知";
+            case "DINGTALK" -> "钉钉通知";
+            default -> channel;
+        };
+    }
+
+    private String resolveNotificationTarget(String channel, DemoProcessInstance instance) {
+        return switch (channel) {
+            case "IN_APP" -> instance.initiatorUserId;
+            case "EMAIL" -> instance.initiatorUserId + "@westflow.local";
+            case "WEBHOOK" -> "https://webhook.westflow.local/process/" + instance.instanceId;
+            case "SMS" -> "mobile:" + instance.initiatorUserId;
+            case "WECHAT" -> "wechat:" + instance.initiatorUserId;
+            case "DINGTALK" -> "dingtalk:" + instance.initiatorUserId;
+            default -> instance.initiatorUserId;
+        };
     }
 
     private String resolveBusinessTitle(String businessType, String businessKey, Map<String, Object> businessData) {
@@ -2206,6 +2264,7 @@ public class ProcessDemoService {
         String effectiveFormKey = nodeFormKey != null ? nodeFormKey : processFormKey;
         String effectiveFormVersion = nodeFormVersion != null ? nodeFormVersion : processFormVersion;
         Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(instance.businessType, instance.businessKey);
+        String automationStatus = resolveAutomationStatus(instance, payload);
 
         return new ProcessTaskDetailResponse(
                 task.taskId,
@@ -2217,10 +2276,13 @@ public class ProcessDemoService {
                 instance.businessType,
                 instance.initiatorUserId,
                 businessData,
+                automationStatus,
                 payload.nodes(),
                 payload.edges(),
                 instanceEventsFor(instance.instanceId),
                 taskTraceFor(instance.instanceId),
+                automationTraceFor(instance, payload),
+                notificationSendRecordsFor(instance, payload),
                 task.nodeId,
                 task.nodeName,
                 task.taskKind.name(),
@@ -2273,6 +2335,107 @@ public class ProcessDemoService {
                 .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
                 .map(this::toTraceItem)
                 .toList();
+    }
+
+    private List<ProcessAutomationTraceItemResponse> automationTraceFor(
+            DemoProcessInstance instance,
+            ProcessDslPayload payload
+    ) {
+        // demo 运行态还没有真实作业表，这里先按 DSL 配置投影自动化轨迹。
+        List<ProcessAutomationTraceItemResponse> traces = new ArrayList<>();
+        OffsetDateTime occurredAt = instance.updatedAt == null ? instance.createdAt : instance.updatedAt;
+        String status = resolveAutomationStatus(instance, payload);
+        for (ProcessDslPayload.Node node : payload.nodes()) {
+            Map<String, Object> config = safeConfig(node);
+            if ("approver".equals(node.type())) {
+                Map<String, Object> timeoutPolicy = mapValue(config.get("timeoutPolicy"));
+                if (Boolean.TRUE.equals(timeoutPolicy.get("enabled"))) {
+                    traces.add(new ProcessAutomationTraceItemResponse(
+                            newId("auto_trace"),
+                            "TIMEOUT_APPROVAL",
+                            node.name() + " 超时审批",
+                            statusOrPending(status),
+                            "system",
+                            occurredAt,
+                            "超时动作：" + stringValue(timeoutPolicy.get("action")),
+                            node.id()
+                    ));
+                }
+                Map<String, Object> reminderPolicy = mapValue(config.get("reminderPolicy"));
+                if (Boolean.TRUE.equals(reminderPolicy.get("enabled"))) {
+                    traces.add(new ProcessAutomationTraceItemResponse(
+                            newId("auto_trace"),
+                            "AUTO_REMINDER",
+                            node.name() + " 自动提醒",
+                            statusOrPending(status),
+                            "system",
+                            occurredAt,
+                            "提醒渠道：" + String.join("、", stringListValue(reminderPolicy.get("channels"))),
+                            node.id()
+                    ));
+                }
+                continue;
+            }
+            if ("timer".equals(node.type())) {
+                traces.add(new ProcessAutomationTraceItemResponse(
+                        newId("auto_trace"),
+                        "TIMER_NODE",
+                        node.name(),
+                        statusOrPending(status),
+                        "system",
+                        occurredAt,
+                        "定时节点等待到点后自动推进",
+                        node.id()
+                ));
+                continue;
+            }
+            if ("trigger".equals(node.type())) {
+                traces.add(new ProcessAutomationTraceItemResponse(
+                        newId("auto_trace"),
+                        "TRIGGER_NODE",
+                        node.name(),
+                        statusOrPending(status),
+                        "system",
+                        occurredAt,
+                        "触发器：" + stringValue(config.get("triggerKey")),
+                        node.id()
+                ));
+            }
+        }
+        return traces;
+    }
+
+    private List<ProcessNotificationSendRecordResponse> notificationSendRecordsFor(
+            DemoProcessInstance instance,
+            ProcessDslPayload payload
+    ) {
+        // 通知中心未完全接入前，详情页先展示自动提醒的计划发送记录。
+        List<ProcessNotificationSendRecordResponse> records = new ArrayList<>();
+        String status = "COMPLETED".equals(instance.status) ? "SUCCESS" : "PENDING";
+        int attemptCount = "SUCCESS".equals(status) ? 1 : 0;
+        OffsetDateTime sentAt = "SUCCESS".equals(status) ? instance.updatedAt : null;
+        for (ProcessDslPayload.Node node : payload.nodes()) {
+            if (!"approver".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> reminderPolicy = mapValue(safeConfig(node).get("reminderPolicy"));
+            if (!Boolean.TRUE.equals(reminderPolicy.get("enabled"))) {
+                continue;
+            }
+            for (String channel : stringListValue(reminderPolicy.get("channels"))) {
+                records.add(new ProcessNotificationSendRecordResponse(
+                        newId("notify"),
+                        resolveNotificationChannelName(channel),
+                        channel,
+                        resolveNotificationTarget(channel, instance),
+                        status,
+                        attemptCount,
+                        sentAt,
+                        null
+                ));
+            }
+        }
+        return records;
     }
 
     private ProcessTaskTraceItemResponse toTraceItem(DemoTask task) {

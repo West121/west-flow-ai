@@ -19,6 +19,7 @@ public record ApprovalSheetListItemResponse(
         String instanceStatus,
         String latestAction,
         String latestOperatorUserId,
+        String automationStatus,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         OffsetDateTime completedAt

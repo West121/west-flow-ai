@@ -1,9 +1,11 @@
 import {
   BellRing,
+  Clock3,
   Flag,
   GitBranch,
   GitMerge,
   Play,
+  Zap,
   UserRoundCheck,
 } from 'lucide-react'
 import { Position } from '@xyflow/react'
@@ -63,6 +65,22 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
     tone: 'neutral',
     accent: 'from-violet-500/20 to-violet-500/5',
     icon: BellRing,
+  },
+  {
+    kind: 'timer',
+    label: '定时',
+    description: '到点自动推进流程',
+    tone: 'warning',
+    accent: 'from-amber-500/20 to-amber-500/5',
+    icon: Clock3,
+  },
+  {
+    kind: 'trigger',
+    label: '触发',
+    description: '立即或定时执行外部触发器',
+    tone: 'brand',
+    accent: 'from-sky-500/20 to-sky-500/5',
+    icon: Zap,
   },
   {
     kind: 'end',

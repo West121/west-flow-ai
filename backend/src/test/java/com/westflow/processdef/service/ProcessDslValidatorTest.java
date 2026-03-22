@@ -226,6 +226,82 @@ class ProcessDslValidatorTest {
         assertValidationFailure(dsl, "cc 节点 USER 目标不能为空");
     }
 
+    @Test
+    void shouldRejectApproverTimeoutPolicyWithoutDurationMinutes() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("approve_1", "approver", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy(),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false,
+                                "timeoutPolicy", Map.of(
+                                        "enabled", true,
+                                        "action", "APPROVE"
+                                )
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "approver 节点 timeoutPolicy.durationMinutes 不能为空");
+    }
+
+    @Test
+    void shouldRejectTimerNodeWithoutScheduleConfig() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("timer_1", "timer", Map.of(
+                                "scheduleType", "RELATIVE_TO_ARRIVAL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "timer_1"),
+                        edge("edge_2", "timer_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "timer 节点 delayMinutes 不能为空");
+    }
+
+    @Test
+    void shouldRejectTriggerNodeWithoutTriggerKey() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("trigger_1", "trigger", Map.of(
+                                "triggerMode", "IMMEDIATE",
+                                "retryTimes", 2,
+                                "retryIntervalMinutes", 5,
+                                "payloadTemplate", "{\"biz\":\"value\"}"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "trigger_1"),
+                        edge("edge_2", "trigger_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "trigger 节点 triggerKey 不能为空");
+    }
+
     private void assertValidationFailure(ProcessDslPayload dsl, String messagePart) {
         assertThatThrownBy(() -> validator.validate(dsl))
                 .isInstanceOf(ContractException.class)

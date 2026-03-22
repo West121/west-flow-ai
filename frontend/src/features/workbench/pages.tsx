@@ -57,6 +57,11 @@ import { PageShell } from '@/features/shared/page-shell'
 import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
 import {
+  ApprovalSheetAutomationActionTimeline,
+  ApprovalSheetAutomationStatusCard,
+  NotificationSendRecordSection,
+} from '@/features/workbench/automation-sections'
+import {
   formatApprovalSheetText,
   resolveApprovalSheetActingModeLabel,
   resolveApprovalSheetResultLabel,
@@ -1972,6 +1977,11 @@ export function WorkbenchTodoDetailPage({
               <div className='md:col-span-2 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
                 <ApprovalSheetBusinessSection detail={detail} />
                 <div className='space-y-4'>
+                  <ApprovalSheetAutomationStatusCard
+                    automationStatus={detail.automationStatus}
+                    actionTraceCount={detail.automationActionTrace?.length ?? 0}
+                    notificationCount={detail.notificationSendRecords?.length ?? 0}
+                  />
                   <ApprovalSheetGraph
                     flowNodes={detail.flowNodes ?? []}
                     flowEdges={detail.flowEdges ?? []}
@@ -1979,6 +1989,12 @@ export function WorkbenchTodoDetailPage({
                     instanceEvents={detail.instanceEvents ?? []}
                   />
                   <ApprovalSheetActionTimeline taskTrace={detail.taskTrace ?? []} />
+                  <ApprovalSheetAutomationActionTimeline
+                    automationActionTrace={detail.automationActionTrace ?? []}
+                  />
+                  <NotificationSendRecordSection
+                    notificationSendRecords={detail.notificationSendRecords ?? []}
+                  />
                 </div>
               </div>
 

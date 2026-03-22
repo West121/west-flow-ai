@@ -19,6 +19,18 @@ import org.springframework.stereotype.Service;
 @Service
 public class ProcessDslValidator {
 
+    private static final List<String> SUPPORTED_TIMEOUT_ACTIONS = List.of("APPROVE", "REJECT");
+    private static final List<String> SUPPORTED_REMINDER_CHANNELS = List.of(
+            "IN_APP",
+            "EMAIL",
+            "WEBHOOK",
+            "SMS",
+            "WECHAT",
+            "DINGTALK"
+    );
+    private static final List<String> SUPPORTED_SCHEDULE_TYPES = List.of("ABSOLUTE_TIME", "RELATIVE_TO_ARRIVAL");
+    private static final List<String> SUPPORTED_TRIGGER_MODES = List.of("IMMEDIATE", "SCHEDULED");
+
     public void validate(ProcessDslPayload payload) {
         Map<String, ProcessDslPayload.Node> nodeById = indexNodes(payload.nodes());
         Map<String, List<ProcessDslPayload.Edge>> outgoingEdges = indexEdges(payload.edges(), ProcessDslPayload.Edge::source);
@@ -30,6 +42,8 @@ public class ProcessDslValidator {
         validateStartConfig(nodeById.values());
         validateApproverAssignments(nodeById.values());
         validateCcTargets(nodeById.values());
+        validateTimerNodes(nodeById.values());
+        validateTriggerNodes(nodeById.values());
         validateIsolatedNodes(nodeById.values(), outgoingEdges, incomingEdges);
         validateReachability(nodeById.values(), outgoingEdges);
         validateConditionFanout(nodeById.values(), outgoingEdges);
@@ -146,6 +160,9 @@ public class ProcessDslValidator {
             if (stringList(config.get("operations")).isEmpty()) {
                 throw invalid("approver 节点 operations 不能为空", Map.of("nodeId", node.id()));
             }
+
+            validateTimeoutPolicy(node);
+            validateReminderPolicy(node);
         }
     }
 
@@ -191,6 +208,52 @@ public class ProcessDslValidator {
                     }
                 }
                 default -> throw invalid("cc 节点 targets.mode 不合法", Map.of("nodeId", node.id(), "mode", mode));
+            }
+        }
+    }
+
+    private void validateTimerNodes(Collection<ProcessDslPayload.Node> nodes) {
+        for (ProcessDslPayload.Node node : nodes) {
+            if (!"timer".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> config = safeConfig(node);
+            String scheduleType = asString(config.get("scheduleType"));
+            if (scheduleType == null || !SUPPORTED_SCHEDULE_TYPES.contains(scheduleType)) {
+                throw invalid("timer 节点 scheduleType 不合法", Map.of("nodeId", node.id(), "scheduleType", scheduleType));
+            }
+            validateScheduleConfig(node, config, "timer");
+        }
+    }
+
+    private void validateTriggerNodes(Collection<ProcessDslPayload.Node> nodes) {
+        for (ProcessDslPayload.Node node : nodes) {
+            if (!"trigger".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> config = safeConfig(node);
+            String triggerMode = asString(config.get("triggerMode"));
+            if (triggerMode == null || !SUPPORTED_TRIGGER_MODES.contains(triggerMode)) {
+                throw invalid("trigger 节点 triggerMode 不合法", Map.of("nodeId", node.id(), "triggerMode", triggerMode));
+            }
+            String triggerKey = asString(config.get("triggerKey"));
+            if (triggerKey == null) {
+                throw invalid("trigger 节点 triggerKey 不能为空", Map.of("nodeId", node.id()));
+            }
+            if ("SCHEDULED".equals(triggerMode)) {
+                String scheduleType = asString(config.get("scheduleType"));
+                if (scheduleType == null || !SUPPORTED_SCHEDULE_TYPES.contains(scheduleType)) {
+                    throw invalid("trigger 节点 scheduleType 不合法", Map.of("nodeId", node.id(), "scheduleType", scheduleType));
+                }
+                validateScheduleConfig(node, config, "trigger");
+            }
+            Integer retryTimes = integerValue(config.get("retryTimes"));
+            if (retryTimes == null || retryTimes < 0) {
+                throw invalid("trigger 节点 retryTimes 必须大于等于 0", Map.of("nodeId", node.id()));
+            }
+            Integer retryIntervalMinutes = integerValue(config.get("retryIntervalMinutes"));
+            if (retryTimes > 0 && (retryIntervalMinutes == null || retryIntervalMinutes <= 0)) {
+                throw invalid("trigger 节点 retryIntervalMinutes 不能为空", Map.of("nodeId", node.id()));
             }
         }
     }
@@ -315,6 +378,61 @@ public class ProcessDslValidator {
             if (!canReachNodeType(join.id(), "parallel_split", incomingEdges, nodeById, new HashSet<>(), true)) {
                 throw invalid("parallel_split 与 parallel_join 必须成对出现", Map.of("nodeId", join.id()));
             }
+        }
+    }
+
+    private void validateTimeoutPolicy(ProcessDslPayload.Node node) {
+        Map<String, Object> timeoutPolicy = mapValue(safeConfig(node).get("timeoutPolicy"));
+        if (timeoutPolicy.isEmpty() || !Boolean.TRUE.equals(timeoutPolicy.get("enabled"))) {
+            return;
+        }
+        Integer durationMinutes = integerValue(timeoutPolicy.get("durationMinutes"));
+        if (durationMinutes == null || durationMinutes <= 0) {
+            throw invalid("approver 节点 timeoutPolicy.durationMinutes 不能为空", Map.of("nodeId", node.id()));
+        }
+        String action = asString(timeoutPolicy.get("action"));
+        if (action == null || !SUPPORTED_TIMEOUT_ACTIONS.contains(action)) {
+            throw invalid("approver 节点 timeoutPolicy.action 不合法", Map.of("nodeId", node.id(), "action", action));
+        }
+    }
+
+    private void validateReminderPolicy(ProcessDslPayload.Node node) {
+        Map<String, Object> reminderPolicy = mapValue(safeConfig(node).get("reminderPolicy"));
+        if (reminderPolicy.isEmpty() || !Boolean.TRUE.equals(reminderPolicy.get("enabled"))) {
+            return;
+        }
+        Integer firstReminderAfterMinutes = integerValue(reminderPolicy.get("firstReminderAfterMinutes"));
+        Integer repeatIntervalMinutes = integerValue(reminderPolicy.get("repeatIntervalMinutes"));
+        Integer maxTimes = integerValue(reminderPolicy.get("maxTimes"));
+        if (firstReminderAfterMinutes == null || firstReminderAfterMinutes <= 0) {
+            throw invalid("approver 节点 reminderPolicy.firstReminderAfterMinutes 不能为空", Map.of("nodeId", node.id()));
+        }
+        if (repeatIntervalMinutes == null || repeatIntervalMinutes <= 0) {
+            throw invalid("approver 节点 reminderPolicy.repeatIntervalMinutes 不能为空", Map.of("nodeId", node.id()));
+        }
+        if (maxTimes == null || maxTimes <= 0) {
+            throw invalid("approver 节点 reminderPolicy.maxTimes 不能为空", Map.of("nodeId", node.id()));
+        }
+        List<String> channels = stringList(reminderPolicy.get("channels"));
+        if (channels.isEmpty()) {
+            throw invalid("approver 节点 reminderPolicy.channels 不能为空", Map.of("nodeId", node.id()));
+        }
+        if (channels.stream().anyMatch(channel -> !SUPPORTED_REMINDER_CHANNELS.contains(channel))) {
+            throw invalid("approver 节点 reminderPolicy.channels 不合法", Map.of("nodeId", node.id(), "channels", channels));
+        }
+    }
+
+    private void validateScheduleConfig(ProcessDslPayload.Node node, Map<String, Object> config, String nodeType) {
+        String scheduleType = asString(config.get("scheduleType"));
+        if ("ABSOLUTE_TIME".equals(scheduleType)) {
+            if (asString(config.get("runAt")) == null) {
+                throw invalid(nodeType + " 节点 runAt 不能为空", Map.of("nodeId", node.id()));
+            }
+            return;
+        }
+        Integer delayMinutes = integerValue(config.get("delayMinutes"));
+        if (delayMinutes == null || delayMinutes <= 0) {
+            throw invalid(nodeType + " 节点 delayMinutes 不能为空", Map.of("nodeId", node.id()));
         }
     }
 

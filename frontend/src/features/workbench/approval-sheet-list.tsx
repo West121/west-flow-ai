@@ -40,6 +40,42 @@ function resolveApprovalSheetInstanceStatusVariant(status: string) {
   return status === 'COMPLETED' ? 'secondary' : 'destructive'
 }
 
+// 流程中心把自动化状态直接暴露成标签，便于一眼看出规则是否已经生效。
+export function resolveApprovalSheetAutomationStatusLabel(
+  status: string | null | undefined
+) {
+  switch (status) {
+    case 'SUCCESS':
+      return '执行成功'
+    case 'FAILED':
+      return '执行失败'
+    case 'RUNNING':
+      return '执行中'
+    case 'SKIPPED':
+      return '已跳过'
+    case 'DISABLED':
+      return '已停用'
+    case 'PENDING':
+      return '待执行'
+    default:
+      return '未配置'
+  }
+}
+
+function resolveApprovalSheetAutomationStatusVariant(status: string | null | undefined) {
+  switch (status) {
+    case 'SUCCESS':
+      return 'secondary'
+    case 'FAILED':
+      return 'destructive'
+    case 'RUNNING':
+    case 'PENDING':
+      return 'default'
+    default:
+      return 'outline'
+  }
+}
+
 function renderApprovalSheetDetailAction({
   item,
   mode,
@@ -143,6 +179,19 @@ export function createApprovalSheetColumns(
       cell: ({ row }) => (
         <Badge variant={resolveApprovalSheetInstanceStatusVariant(row.original.instanceStatus)}>
           {resolveApprovalSheetInstanceStatusLabel(row.original.instanceStatus)}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'automationStatus',
+      header: '自动化状态',
+      cell: ({ row }) => (
+        <Badge
+          variant={resolveApprovalSheetAutomationStatusVariant(
+            row.original.automationStatus
+          )}
+        >
+          {resolveApprovalSheetAutomationStatusLabel(row.original.automationStatus)}
         </Badge>
       ),
     },

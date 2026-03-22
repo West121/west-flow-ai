@@ -40,10 +40,14 @@ import { Route as AuthenticatedWorkbenchDoneListRouteImport } from './routes/_au
 import { Route as AuthenticatedWorkbenchCopiedListRouteImport } from './routes/_authenticated/workbench/copied/list'
 import { Route as AuthenticatedSystemUsersListRouteImport } from './routes/_authenticated/system/users/list'
 import { Route as AuthenticatedSystemUsersCreateRouteImport } from './routes/_authenticated/system/users/create'
+import { Route as AuthenticatedSystemTriggersListRouteImport } from './routes/_authenticated/system/triggers/list'
+import { Route as AuthenticatedSystemTriggersCreateRouteImport } from './routes/_authenticated/system/triggers/create'
 import { Route as AuthenticatedSystemRolesListRouteImport } from './routes/_authenticated/system/roles/list'
 import { Route as AuthenticatedSystemRolesCreateRouteImport } from './routes/_authenticated/system/roles/create'
 import { Route as AuthenticatedSystemPostsListRouteImport } from './routes/_authenticated/system/posts/list'
 import { Route as AuthenticatedSystemPostsCreateRouteImport } from './routes/_authenticated/system/posts/create'
+import { Route as AuthenticatedSystemNotificationChannelsListRouteImport } from './routes/_authenticated/system/notification-channels/list'
+import { Route as AuthenticatedSystemNotificationChannelsCreateRouteImport } from './routes/_authenticated/system/notification-channels/create'
 import { Route as AuthenticatedSystemMenusListRouteImport } from './routes/_authenticated/system/menus/list'
 import { Route as AuthenticatedSystemMenusCreateRouteImport } from './routes/_authenticated/system/menus/create'
 import { Route as AuthenticatedSystemHandoverExecuteRouteImport } from './routes/_authenticated/system/handover/execute'
@@ -60,15 +64,19 @@ import { Route as AuthenticatedOaExpenseBillIdRouteImport } from './routes/_auth
 import { Route as AuthenticatedOaCommonCreateRouteImport } from './routes/_authenticated/oa/common/create'
 import { Route as AuthenticatedOaCommonBillIdRouteImport } from './routes/_authenticated/oa/common/$billId'
 import { Route as AuthenticatedSystemUsersUserIdIndexRouteImport } from './routes/_authenticated/system/users/$userId/index'
+import { Route as AuthenticatedSystemTriggersTriggerIdIndexRouteImport } from './routes/_authenticated/system/triggers/$triggerId/index'
 import { Route as AuthenticatedSystemRolesRoleIdIndexRouteImport } from './routes/_authenticated/system/roles/$roleId/index'
 import { Route as AuthenticatedSystemPostsPostIdIndexRouteImport } from './routes/_authenticated/system/posts/$postId/index'
+import { Route as AuthenticatedSystemNotificationChannelsChannelIdIndexRouteImport } from './routes/_authenticated/system/notification-channels/$channelId/index'
 import { Route as AuthenticatedSystemMenusMenuIdIndexRouteImport } from './routes/_authenticated/system/menus/$menuId/index'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdIndexRouteImport } from './routes/_authenticated/system/departments/$departmentId/index'
 import { Route as AuthenticatedSystemCompaniesCompanyIdIndexRouteImport } from './routes/_authenticated/system/companies/$companyId/index'
 import { Route as AuthenticatedSystemAgentsAgentIdIndexRouteImport } from './routes/_authenticated/system/agents/$agentId/index'
 import { Route as AuthenticatedSystemUsersUserIdEditRouteImport } from './routes/_authenticated/system/users/$userId/edit'
+import { Route as AuthenticatedSystemTriggersTriggerIdEditRouteImport } from './routes/_authenticated/system/triggers/$triggerId/edit'
 import { Route as AuthenticatedSystemRolesRoleIdEditRouteImport } from './routes/_authenticated/system/roles/$roleId/edit'
 import { Route as AuthenticatedSystemPostsPostIdEditRouteImport } from './routes/_authenticated/system/posts/$postId/edit'
+import { Route as AuthenticatedSystemNotificationChannelsChannelIdEditRouteImport } from './routes/_authenticated/system/notification-channels/$channelId/edit'
 import { Route as AuthenticatedSystemMenusMenuIdEditRouteImport } from './routes/_authenticated/system/menus/$menuId/edit'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdEditRouteImport } from './routes/_authenticated/system/departments/$departmentId/edit'
 import { Route as AuthenticatedSystemCompaniesCompanyIdEditRouteImport } from './routes/_authenticated/system/companies/$companyId/edit'
@@ -246,6 +254,18 @@ const AuthenticatedSystemUsersCreateRoute =
     path: '/system/users/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemTriggersListRoute =
+  AuthenticatedSystemTriggersListRouteImport.update({
+    id: '/system/triggers/list',
+    path: '/system/triggers/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemTriggersCreateRoute =
+  AuthenticatedSystemTriggersCreateRouteImport.update({
+    id: '/system/triggers/create',
+    path: '/system/triggers/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemRolesListRoute =
   AuthenticatedSystemRolesListRouteImport.update({
     id: '/system/roles/list',
@@ -268,6 +288,18 @@ const AuthenticatedSystemPostsCreateRoute =
   AuthenticatedSystemPostsCreateRouteImport.update({
     id: '/system/posts/create',
     path: '/system/posts/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemNotificationChannelsListRoute =
+  AuthenticatedSystemNotificationChannelsListRouteImport.update({
+    id: '/system/notification-channels/list',
+    path: '/system/notification-channels/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemNotificationChannelsCreateRoute =
+  AuthenticatedSystemNotificationChannelsCreateRouteImport.update({
+    id: '/system/notification-channels/create',
+    path: '/system/notification-channels/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemMenusListRoute =
@@ -366,6 +398,12 @@ const AuthenticatedSystemUsersUserIdIndexRoute =
     path: '/system/users/$userId/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemTriggersTriggerIdIndexRoute =
+  AuthenticatedSystemTriggersTriggerIdIndexRouteImport.update({
+    id: '/system/triggers/$triggerId/',
+    path: '/system/triggers/$triggerId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemRolesRoleIdIndexRoute =
   AuthenticatedSystemRolesRoleIdIndexRouteImport.update({
     id: '/system/roles/$roleId/',
@@ -376,6 +414,12 @@ const AuthenticatedSystemPostsPostIdIndexRoute =
   AuthenticatedSystemPostsPostIdIndexRouteImport.update({
     id: '/system/posts/$postId/',
     path: '/system/posts/$postId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemNotificationChannelsChannelIdIndexRoute =
+  AuthenticatedSystemNotificationChannelsChannelIdIndexRouteImport.update({
+    id: '/system/notification-channels/$channelId/',
+    path: '/system/notification-channels/$channelId/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemMenusMenuIdIndexRoute =
@@ -408,6 +452,12 @@ const AuthenticatedSystemUsersUserIdEditRoute =
     path: '/system/users/$userId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemTriggersTriggerIdEditRoute =
+  AuthenticatedSystemTriggersTriggerIdEditRouteImport.update({
+    id: '/system/triggers/$triggerId/edit',
+    path: '/system/triggers/$triggerId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemRolesRoleIdEditRoute =
   AuthenticatedSystemRolesRoleIdEditRouteImport.update({
     id: '/system/roles/$roleId/edit',
@@ -418,6 +468,12 @@ const AuthenticatedSystemPostsPostIdEditRoute =
   AuthenticatedSystemPostsPostIdEditRouteImport.update({
     id: '/system/posts/$postId/edit',
     path: '/system/posts/$postId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemNotificationChannelsChannelIdEditRoute =
+  AuthenticatedSystemNotificationChannelsChannelIdEditRouteImport.update({
+    id: '/system/notification-channels/$channelId/edit',
+    path: '/system/notification-channels/$channelId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemMenusMenuIdEditRoute =
@@ -483,10 +539,14 @@ export interface FileRoutesByFullPath {
   '/system/handover/execute': typeof AuthenticatedSystemHandoverExecuteRoute
   '/system/menus/create': typeof AuthenticatedSystemMenusCreateRoute
   '/system/menus/list': typeof AuthenticatedSystemMenusListRoute
+  '/system/notification-channels/create': typeof AuthenticatedSystemNotificationChannelsCreateRoute
+  '/system/notification-channels/list': typeof AuthenticatedSystemNotificationChannelsListRoute
   '/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
   '/system/posts/list': typeof AuthenticatedSystemPostsListRoute
   '/system/roles/create': typeof AuthenticatedSystemRolesCreateRoute
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
+  '/system/triggers/create': typeof AuthenticatedSystemTriggersCreateRoute
+  '/system/triggers/list': typeof AuthenticatedSystemTriggersListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
   '/workbench/copied/list': typeof AuthenticatedWorkbenchCopiedListRoute
@@ -499,15 +559,19 @@ export interface FileRoutesByFullPath {
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
+  '/system/notification-channels/$channelId/edit': typeof AuthenticatedSystemNotificationChannelsChannelIdEditRoute
   '/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
   '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
+  '/system/triggers/$triggerId/edit': typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
+  '/system/notification-channels/$channelId': typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRoute
   '/system/posts/$postId': typeof AuthenticatedSystemPostsPostIdIndexRoute
   '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
+  '/system/triggers/$triggerId': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -547,10 +611,14 @@ export interface FileRoutesByTo {
   '/system/handover/execute': typeof AuthenticatedSystemHandoverExecuteRoute
   '/system/menus/create': typeof AuthenticatedSystemMenusCreateRoute
   '/system/menus/list': typeof AuthenticatedSystemMenusListRoute
+  '/system/notification-channels/create': typeof AuthenticatedSystemNotificationChannelsCreateRoute
+  '/system/notification-channels/list': typeof AuthenticatedSystemNotificationChannelsListRoute
   '/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
   '/system/posts/list': typeof AuthenticatedSystemPostsListRoute
   '/system/roles/create': typeof AuthenticatedSystemRolesCreateRoute
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
+  '/system/triggers/create': typeof AuthenticatedSystemTriggersCreateRoute
+  '/system/triggers/list': typeof AuthenticatedSystemTriggersListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
   '/workbench/copied/list': typeof AuthenticatedWorkbenchCopiedListRoute
@@ -563,15 +631,19 @@ export interface FileRoutesByTo {
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
+  '/system/notification-channels/$channelId/edit': typeof AuthenticatedSystemNotificationChannelsChannelIdEditRoute
   '/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
   '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
+  '/system/triggers/$triggerId/edit': typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
+  '/system/notification-channels/$channelId': typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRoute
   '/system/posts/$postId': typeof AuthenticatedSystemPostsPostIdIndexRoute
   '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
+  '/system/triggers/$triggerId': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 export interface FileRoutesById {
@@ -614,10 +686,14 @@ export interface FileRoutesById {
   '/_authenticated/system/handover/execute': typeof AuthenticatedSystemHandoverExecuteRoute
   '/_authenticated/system/menus/create': typeof AuthenticatedSystemMenusCreateRoute
   '/_authenticated/system/menus/list': typeof AuthenticatedSystemMenusListRoute
+  '/_authenticated/system/notification-channels/create': typeof AuthenticatedSystemNotificationChannelsCreateRoute
+  '/_authenticated/system/notification-channels/list': typeof AuthenticatedSystemNotificationChannelsListRoute
   '/_authenticated/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
   '/_authenticated/system/posts/list': typeof AuthenticatedSystemPostsListRoute
   '/_authenticated/system/roles/create': typeof AuthenticatedSystemRolesCreateRoute
   '/_authenticated/system/roles/list': typeof AuthenticatedSystemRolesListRoute
+  '/_authenticated/system/triggers/create': typeof AuthenticatedSystemTriggersCreateRoute
+  '/_authenticated/system/triggers/list': typeof AuthenticatedSystemTriggersListRoute
   '/_authenticated/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/_authenticated/system/users/list': typeof AuthenticatedSystemUsersListRoute
   '/_authenticated/workbench/copied/list': typeof AuthenticatedWorkbenchCopiedListRoute
@@ -630,15 +706,19 @@ export interface FileRoutesById {
   '/_authenticated/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/_authenticated/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/_authenticated/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
+  '/_authenticated/system/notification-channels/$channelId/edit': typeof AuthenticatedSystemNotificationChannelsChannelIdEditRoute
   '/_authenticated/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
   '/_authenticated/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
+  '/_authenticated/system/triggers/$triggerId/edit': typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   '/_authenticated/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/_authenticated/system/agents/$agentId/': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/_authenticated/system/companies/$companyId/': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/_authenticated/system/departments/$departmentId/': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/_authenticated/system/menus/$menuId/': typeof AuthenticatedSystemMenusMenuIdIndexRoute
+  '/_authenticated/system/notification-channels/$channelId/': typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRoute
   '/_authenticated/system/posts/$postId/': typeof AuthenticatedSystemPostsPostIdIndexRoute
   '/_authenticated/system/roles/$roleId/': typeof AuthenticatedSystemRolesRoleIdIndexRoute
+  '/_authenticated/system/triggers/$triggerId/': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   '/_authenticated/system/users/$userId/': typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -681,10 +761,14 @@ export interface FileRouteTypes {
     | '/system/handover/execute'
     | '/system/menus/create'
     | '/system/menus/list'
+    | '/system/notification-channels/create'
+    | '/system/notification-channels/list'
     | '/system/posts/create'
     | '/system/posts/list'
     | '/system/roles/create'
     | '/system/roles/list'
+    | '/system/triggers/create'
+    | '/system/triggers/list'
     | '/system/users/create'
     | '/system/users/list'
     | '/workbench/copied/list'
@@ -697,15 +781,19 @@ export interface FileRouteTypes {
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
     | '/system/menus/$menuId/edit'
+    | '/system/notification-channels/$channelId/edit'
     | '/system/posts/$postId/edit'
     | '/system/roles/$roleId/edit'
+    | '/system/triggers/$triggerId/edit'
     | '/system/users/$userId/edit'
     | '/system/agents/$agentId'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
     | '/system/menus/$menuId'
+    | '/system/notification-channels/$channelId'
     | '/system/posts/$postId'
     | '/system/roles/$roleId'
+    | '/system/triggers/$triggerId'
     | '/system/users/$userId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -745,10 +833,14 @@ export interface FileRouteTypes {
     | '/system/handover/execute'
     | '/system/menus/create'
     | '/system/menus/list'
+    | '/system/notification-channels/create'
+    | '/system/notification-channels/list'
     | '/system/posts/create'
     | '/system/posts/list'
     | '/system/roles/create'
     | '/system/roles/list'
+    | '/system/triggers/create'
+    | '/system/triggers/list'
     | '/system/users/create'
     | '/system/users/list'
     | '/workbench/copied/list'
@@ -761,15 +853,19 @@ export interface FileRouteTypes {
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
     | '/system/menus/$menuId/edit'
+    | '/system/notification-channels/$channelId/edit'
     | '/system/posts/$postId/edit'
     | '/system/roles/$roleId/edit'
+    | '/system/triggers/$triggerId/edit'
     | '/system/users/$userId/edit'
     | '/system/agents/$agentId'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
     | '/system/menus/$menuId'
+    | '/system/notification-channels/$channelId'
     | '/system/posts/$postId'
     | '/system/roles/$roleId'
+    | '/system/triggers/$triggerId'
     | '/system/users/$userId'
   id:
     | '__root__'
@@ -811,10 +907,14 @@ export interface FileRouteTypes {
     | '/_authenticated/system/handover/execute'
     | '/_authenticated/system/menus/create'
     | '/_authenticated/system/menus/list'
+    | '/_authenticated/system/notification-channels/create'
+    | '/_authenticated/system/notification-channels/list'
     | '/_authenticated/system/posts/create'
     | '/_authenticated/system/posts/list'
     | '/_authenticated/system/roles/create'
     | '/_authenticated/system/roles/list'
+    | '/_authenticated/system/triggers/create'
+    | '/_authenticated/system/triggers/list'
     | '/_authenticated/system/users/create'
     | '/_authenticated/system/users/list'
     | '/_authenticated/workbench/copied/list'
@@ -827,15 +927,19 @@ export interface FileRouteTypes {
     | '/_authenticated/system/companies/$companyId/edit'
     | '/_authenticated/system/departments/$departmentId/edit'
     | '/_authenticated/system/menus/$menuId/edit'
+    | '/_authenticated/system/notification-channels/$channelId/edit'
     | '/_authenticated/system/posts/$postId/edit'
     | '/_authenticated/system/roles/$roleId/edit'
+    | '/_authenticated/system/triggers/$triggerId/edit'
     | '/_authenticated/system/users/$userId/edit'
     | '/_authenticated/system/agents/$agentId/'
     | '/_authenticated/system/companies/$companyId/'
     | '/_authenticated/system/departments/$departmentId/'
     | '/_authenticated/system/menus/$menuId/'
+    | '/_authenticated/system/notification-channels/$channelId/'
     | '/_authenticated/system/posts/$postId/'
     | '/_authenticated/system/roles/$roleId/'
+    | '/_authenticated/system/triggers/$triggerId/'
     | '/_authenticated/system/users/$userId/'
   fileRoutesById: FileRoutesById
 }
@@ -1068,6 +1172,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemUsersCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/triggers/list': {
+      id: '/_authenticated/system/triggers/list'
+      path: '/system/triggers/list'
+      fullPath: '/system/triggers/list'
+      preLoaderRoute: typeof AuthenticatedSystemTriggersListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/triggers/create': {
+      id: '/_authenticated/system/triggers/create'
+      path: '/system/triggers/create'
+      fullPath: '/system/triggers/create'
+      preLoaderRoute: typeof AuthenticatedSystemTriggersCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/roles/list': {
       id: '/_authenticated/system/roles/list'
       path: '/system/roles/list'
@@ -1094,6 +1212,20 @@ declare module '@tanstack/react-router' {
       path: '/system/posts/create'
       fullPath: '/system/posts/create'
       preLoaderRoute: typeof AuthenticatedSystemPostsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/notification-channels/list': {
+      id: '/_authenticated/system/notification-channels/list'
+      path: '/system/notification-channels/list'
+      fullPath: '/system/notification-channels/list'
+      preLoaderRoute: typeof AuthenticatedSystemNotificationChannelsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/notification-channels/create': {
+      id: '/_authenticated/system/notification-channels/create'
+      path: '/system/notification-channels/create'
+      fullPath: '/system/notification-channels/create'
+      preLoaderRoute: typeof AuthenticatedSystemNotificationChannelsCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/menus/list': {
@@ -1208,6 +1340,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemUsersUserIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/triggers/$triggerId/': {
+      id: '/_authenticated/system/triggers/$triggerId/'
+      path: '/system/triggers/$triggerId'
+      fullPath: '/system/triggers/$triggerId'
+      preLoaderRoute: typeof AuthenticatedSystemTriggersTriggerIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/roles/$roleId/': {
       id: '/_authenticated/system/roles/$roleId/'
       path: '/system/roles/$roleId'
@@ -1220,6 +1359,13 @@ declare module '@tanstack/react-router' {
       path: '/system/posts/$postId'
       fullPath: '/system/posts/$postId'
       preLoaderRoute: typeof AuthenticatedSystemPostsPostIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/notification-channels/$channelId/': {
+      id: '/_authenticated/system/notification-channels/$channelId/'
+      path: '/system/notification-channels/$channelId'
+      fullPath: '/system/notification-channels/$channelId'
+      preLoaderRoute: typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/menus/$menuId/': {
@@ -1257,6 +1403,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemUsersUserIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/triggers/$triggerId/edit': {
+      id: '/_authenticated/system/triggers/$triggerId/edit'
+      path: '/system/triggers/$triggerId/edit'
+      fullPath: '/system/triggers/$triggerId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemTriggersTriggerIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/roles/$roleId/edit': {
       id: '/_authenticated/system/roles/$roleId/edit'
       path: '/system/roles/$roleId/edit'
@@ -1269,6 +1422,13 @@ declare module '@tanstack/react-router' {
       path: '/system/posts/$postId/edit'
       fullPath: '/system/posts/$postId/edit'
       preLoaderRoute: typeof AuthenticatedSystemPostsPostIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/notification-channels/$channelId/edit': {
+      id: '/_authenticated/system/notification-channels/$channelId/edit'
+      path: '/system/notification-channels/$channelId/edit'
+      fullPath: '/system/notification-channels/$channelId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemNotificationChannelsChannelIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/menus/$menuId/edit': {
@@ -1352,10 +1512,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemHandoverExecuteRoute: typeof AuthenticatedSystemHandoverExecuteRoute
   AuthenticatedSystemMenusCreateRoute: typeof AuthenticatedSystemMenusCreateRoute
   AuthenticatedSystemMenusListRoute: typeof AuthenticatedSystemMenusListRoute
+  AuthenticatedSystemNotificationChannelsCreateRoute: typeof AuthenticatedSystemNotificationChannelsCreateRoute
+  AuthenticatedSystemNotificationChannelsListRoute: typeof AuthenticatedSystemNotificationChannelsListRoute
   AuthenticatedSystemPostsCreateRoute: typeof AuthenticatedSystemPostsCreateRoute
   AuthenticatedSystemPostsListRoute: typeof AuthenticatedSystemPostsListRoute
   AuthenticatedSystemRolesCreateRoute: typeof AuthenticatedSystemRolesCreateRoute
   AuthenticatedSystemRolesListRoute: typeof AuthenticatedSystemRolesListRoute
+  AuthenticatedSystemTriggersCreateRoute: typeof AuthenticatedSystemTriggersCreateRoute
+  AuthenticatedSystemTriggersListRoute: typeof AuthenticatedSystemTriggersListRoute
   AuthenticatedSystemUsersCreateRoute: typeof AuthenticatedSystemUsersCreateRoute
   AuthenticatedSystemUsersListRoute: typeof AuthenticatedSystemUsersListRoute
   AuthenticatedWorkbenchCopiedListRoute: typeof AuthenticatedWorkbenchCopiedListRoute
@@ -1368,15 +1532,19 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemCompaniesCompanyIdEditRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   AuthenticatedSystemMenusMenuIdEditRoute: typeof AuthenticatedSystemMenusMenuIdEditRoute
+  AuthenticatedSystemNotificationChannelsChannelIdEditRoute: typeof AuthenticatedSystemNotificationChannelsChannelIdEditRoute
   AuthenticatedSystemPostsPostIdEditRoute: typeof AuthenticatedSystemPostsPostIdEditRoute
   AuthenticatedSystemRolesRoleIdEditRoute: typeof AuthenticatedSystemRolesRoleIdEditRoute
+  AuthenticatedSystemTriggersTriggerIdEditRoute: typeof AuthenticatedSystemTriggersTriggerIdEditRoute
   AuthenticatedSystemUsersUserIdEditRoute: typeof AuthenticatedSystemUsersUserIdEditRoute
   AuthenticatedSystemAgentsAgentIdIndexRoute: typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   AuthenticatedSystemCompaniesCompanyIdIndexRoute: typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   AuthenticatedSystemDepartmentsDepartmentIdIndexRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   AuthenticatedSystemMenusMenuIdIndexRoute: typeof AuthenticatedSystemMenusMenuIdIndexRoute
+  AuthenticatedSystemNotificationChannelsChannelIdIndexRoute: typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRoute
   AuthenticatedSystemPostsPostIdIndexRoute: typeof AuthenticatedSystemPostsPostIdIndexRoute
   AuthenticatedSystemRolesRoleIdIndexRoute: typeof AuthenticatedSystemRolesRoleIdIndexRoute
+  AuthenticatedSystemTriggersTriggerIdIndexRoute: typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
   AuthenticatedSystemUsersUserIdIndexRoute: typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 
@@ -1411,10 +1579,17 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemHandoverExecuteRoute,
   AuthenticatedSystemMenusCreateRoute: AuthenticatedSystemMenusCreateRoute,
   AuthenticatedSystemMenusListRoute: AuthenticatedSystemMenusListRoute,
+  AuthenticatedSystemNotificationChannelsCreateRoute:
+    AuthenticatedSystemNotificationChannelsCreateRoute,
+  AuthenticatedSystemNotificationChannelsListRoute:
+    AuthenticatedSystemNotificationChannelsListRoute,
   AuthenticatedSystemPostsCreateRoute: AuthenticatedSystemPostsCreateRoute,
   AuthenticatedSystemPostsListRoute: AuthenticatedSystemPostsListRoute,
   AuthenticatedSystemRolesCreateRoute: AuthenticatedSystemRolesCreateRoute,
   AuthenticatedSystemRolesListRoute: AuthenticatedSystemRolesListRoute,
+  AuthenticatedSystemTriggersCreateRoute:
+    AuthenticatedSystemTriggersCreateRoute,
+  AuthenticatedSystemTriggersListRoute: AuthenticatedSystemTriggersListRoute,
   AuthenticatedSystemUsersCreateRoute: AuthenticatedSystemUsersCreateRoute,
   AuthenticatedSystemUsersListRoute: AuthenticatedSystemUsersListRoute,
   AuthenticatedWorkbenchCopiedListRoute: AuthenticatedWorkbenchCopiedListRoute,
@@ -1434,10 +1609,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemDepartmentsDepartmentIdEditRoute,
   AuthenticatedSystemMenusMenuIdEditRoute:
     AuthenticatedSystemMenusMenuIdEditRoute,
+  AuthenticatedSystemNotificationChannelsChannelIdEditRoute:
+    AuthenticatedSystemNotificationChannelsChannelIdEditRoute,
   AuthenticatedSystemPostsPostIdEditRoute:
     AuthenticatedSystemPostsPostIdEditRoute,
   AuthenticatedSystemRolesRoleIdEditRoute:
     AuthenticatedSystemRolesRoleIdEditRoute,
+  AuthenticatedSystemTriggersTriggerIdEditRoute:
+    AuthenticatedSystemTriggersTriggerIdEditRoute,
   AuthenticatedSystemUsersUserIdEditRoute:
     AuthenticatedSystemUsersUserIdEditRoute,
   AuthenticatedSystemAgentsAgentIdIndexRoute:
@@ -1448,10 +1627,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemDepartmentsDepartmentIdIndexRoute,
   AuthenticatedSystemMenusMenuIdIndexRoute:
     AuthenticatedSystemMenusMenuIdIndexRoute,
+  AuthenticatedSystemNotificationChannelsChannelIdIndexRoute:
+    AuthenticatedSystemNotificationChannelsChannelIdIndexRoute,
   AuthenticatedSystemPostsPostIdIndexRoute:
     AuthenticatedSystemPostsPostIdIndexRoute,
   AuthenticatedSystemRolesRoleIdIndexRoute:
     AuthenticatedSystemRolesRoleIdIndexRoute,
+  AuthenticatedSystemTriggersTriggerIdIndexRoute:
+    AuthenticatedSystemTriggersTriggerIdIndexRoute,
   AuthenticatedSystemUsersUserIdIndexRoute:
     AuthenticatedSystemUsersUserIdIndexRoute,
 }

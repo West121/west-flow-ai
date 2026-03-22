@@ -1,9 +1,11 @@
 import {
   BellRing,
+  Clock3,
   Flag,
   GitBranch,
   GitMerge,
   Play,
+  Zap,
   UserRoundCheck,
 } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
@@ -45,6 +47,10 @@ function renderIcon(kind: WorkflowNodeData['kind']) {
       return <GitMerge className='size-5' />
     case 'cc':
       return <BellRing className='size-5' />
+    case 'timer':
+      return <Clock3 className='size-5' />
+    case 'trigger':
+      return <Zap className='size-5' />
     case 'end':
       return <Flag className='size-5' />
   }

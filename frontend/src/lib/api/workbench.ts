@@ -108,12 +108,15 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   operatorUserId: string | null
   comment: string | null
   instanceStatus: string
+  automationStatus?: string | null
   formData: Record<string, unknown>
   businessData?: Record<string, unknown> | null
   flowNodes?: WorkbenchFlowNode[] | null
   flowEdges?: WorkbenchFlowEdge[] | null
   instanceEvents?: WorkbenchProcessInstanceEvent[] | null
   taskTrace?: WorkbenchTaskTraceItem[] | null
+  automationActionTrace?: WorkbenchAutomationActionTraceItem[] | null
+  notificationSendRecords?: WorkbenchNotificationSendRecord[] | null
   taskKind?: string | null
   actingMode?: string | null
   actingForUserId?: string | null
@@ -133,6 +136,28 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   fieldBindings: WorkflowFieldBinding[]
   taskFormData: Record<string, unknown> | null
   activeTaskIds: string[]
+}
+
+export type WorkbenchAutomationActionTraceItem = {
+  traceId: string
+  traceType: string
+  traceName: string
+  status: string
+  operatorUserId?: string | null
+  occurredAt: string
+  detail?: string | null
+  nodeId?: string | null
+}
+
+export type WorkbenchNotificationSendRecord = {
+  recordId: string
+  channelName: string
+  channelType: string
+  target: string
+  status: string
+  attemptCount: number
+  sentAt?: string | null
+  errorMessage?: string | null
 }
 
 export type ApprovalSheetBusinessLocator = {
@@ -159,6 +184,7 @@ export type ApprovalSheetListItem = {
   instanceStatus: string
   latestAction: string | null
   latestOperatorUserId: string | null
+  automationStatus?: string | null
   createdAt: string
   updatedAt: string
   completedAt: string | null
