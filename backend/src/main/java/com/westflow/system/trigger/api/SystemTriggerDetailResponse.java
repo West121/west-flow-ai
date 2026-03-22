@@ -1,0 +1,22 @@
+package com.westflow.system.trigger.api;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * 触发器详情响应。
+ */
+public record SystemTriggerDetailResponse(
+        String triggerId,
+        String triggerName,
+        String triggerKey,
+        String triggerEvent,
+        String businessType,
+        List<String> channelIds,
+        String conditionExpression,
+        String description,
+        Boolean enabled,
+        Instant createdAt,
+        Instant updatedAt
+) {
+}
