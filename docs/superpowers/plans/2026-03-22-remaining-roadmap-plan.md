@@ -82,6 +82,7 @@ Expected: PASS
 
 **Files:**
 - Create: `docs/superpowers/plans/2026-03-22-system-management-completion-plan.md`
+- Create: `docs/superpowers/specs/2026-03-22-system-management-completion-design.md`
 - Reference: `frontend/src/routes/_authenticated/system`
 - Reference: `frontend/src/components/layout/data/sidebar-data.ts`
 - Reference: `backend/src/main/java/com/westflow/system`

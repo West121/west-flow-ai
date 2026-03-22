@@ -174,6 +174,10 @@
 
 - `Phase 2：系统管理补齐与清理`
 
+Phase 2 的详细设计见：
+
+- `docs/superpowers/specs/2026-03-22-system-management-completion-design.md`
+
 这两步结束后，才正式开启：
 
 - `Phase 3：真运行态`
