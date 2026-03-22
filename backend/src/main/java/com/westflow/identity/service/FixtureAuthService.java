@@ -5,6 +5,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.identity.dto.CurrentUserResponse;
 import com.westflow.identity.dto.LoginRequest;
 import com.westflow.identity.dto.LoginResponse;
+import com.westflow.identity.mapper.IdentityAccessMapper;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -17,8 +18,10 @@ public class FixtureAuthService {
 
     private final Map<String, FixtureUser> usersByUsername;
     private final Map<String, FixtureUser> usersById;
+    private final IdentityAccessMapper identityAccessMapper;
 
-    public FixtureAuthService() {
+    public FixtureAuthService(IdentityAccessMapper identityAccessMapper) {
+        this.identityAccessMapper = identityAccessMapper;
         FixtureUser zhangsan = new FixtureUser(
                 "usr_001",
                 "zhangsan",
@@ -33,13 +36,9 @@ public class FixtureAuthService {
                         "post_001", new PostFixture("post_001", "dept_001", "部门经理"),
                         "post_002", new PostFixture("post_002", "dept_002", "项目助理")
                 ),
-                List.of("OA_USER", "DEPT_MANAGER"),
-                List.of("oa:leave:create", "workflow:task:approve", "system:permission-probe"),
-                List.of(new CurrentUserResponse.DataScope("DEPARTMENT_AND_CHILDREN", "dept_001")),
                 List.of(new CurrentUserResponse.PartTimePost("post_002", "dept_002", "项目助理")),
                 List.of(new CurrentUserResponse.Delegation("usr_002", "usr_001", "ACTIVE")),
-                List.of("ai:copilot:open", "ai:process:start", "ai:task:handle"),
-                List.of(new CurrentUserResponse.MenuItem("menu_oa_leave", "请假申请", "/oa/leave/list"))
+                List.of("ai:copilot:open", "ai:process:start", "ai:task:handle")
         );
 
         FixtureUser lisi = new FixtureUser(
@@ -53,13 +52,9 @@ public class FixtureAuthService {
                 "cmp_001",
                 "post_003",
                 Map.of("post_003", new PostFixture("post_003", "dept_003", "普通员工")),
-                List.of("OA_USER"),
-                List.of("oa:leave:create"),
-                List.of(new CurrentUserResponse.DataScope("SELF", "usr_002")),
                 List.of(),
                 List.of(),
-                List.of("ai:copilot:open"),
-                List.of(new CurrentUserResponse.MenuItem("menu_oa_leave", "请假申请", "/oa/leave/list"))
+                List.of("ai:copilot:open")
         );
 
         this.usersByUsername = Map.of(zhangsan.username(), zhangsan, lisi.username(), lisi);
@@ -100,13 +95,13 @@ public class FixtureAuthService {
                 user.companyId(),
                 activePost.postId(),
                 activePost.departmentId(),
-                user.roles(),
-                user.permissions(),
-                user.dataScopes(),
+                identityAccessMapper.selectRoleCodesByUserId(user.userId()),
+                identityAccessMapper.selectPermissionsByUserId(user.userId()),
+                identityAccessMapper.selectDataScopesByUserId(user.userId()),
                 user.partTimePosts(),
                 user.delegations(),
                 user.aiCapabilities(),
-                user.menus()
+                identityAccessMapper.selectMenusByUserId(user.userId())
         );
     }
 
@@ -124,11 +119,13 @@ public class FixtureAuthService {
     }
 
     public List<String> permissionsByUserId(String userId) {
-        return getUserById(userId).permissions();
+        getUserById(userId);
+        return identityAccessMapper.selectPermissionsByUserId(userId);
     }
 
     public List<String> rolesByUserId(String userId) {
-        return getUserById(userId).roles();
+        getUserById(userId);
+        return identityAccessMapper.selectRoleCodesByUserId(userId);
     }
 
     private FixtureUser getUserById(String userId) {
@@ -150,13 +147,9 @@ public class FixtureAuthService {
             String companyId,
             String primaryPostId,
             Map<String, PostFixture> posts,
-            List<String> roles,
-            List<String> permissions,
-            List<CurrentUserResponse.DataScope> dataScopes,
             List<CurrentUserResponse.PartTimePost> partTimePosts,
             List<CurrentUserResponse.Delegation> delegations,
-            List<String> aiCapabilities,
-            List<CurrentUserResponse.MenuItem> menus
+            List<String> aiCapabilities
     ) {
     }
 

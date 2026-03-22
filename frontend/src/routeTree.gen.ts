@@ -35,6 +35,7 @@ import { Route as AuthenticatedWorkbenchTodosListRouteImport } from './routes/_a
 import { Route as AuthenticatedSystemUsersListRouteImport } from './routes/_authenticated/system/users/list'
 import { Route as AuthenticatedSystemUsersCreateRouteImport } from './routes/_authenticated/system/users/create'
 import { Route as AuthenticatedSystemRolesListRouteImport } from './routes/_authenticated/system/roles/list'
+import { Route as AuthenticatedSystemRolesCreateRouteImport } from './routes/_authenticated/system/roles/create'
 import { Route as AuthenticatedSystemPostsListRouteImport } from './routes/_authenticated/system/posts/list'
 import { Route as AuthenticatedSystemPostsCreateRouteImport } from './routes/_authenticated/system/posts/create'
 import { Route as AuthenticatedSystemMenusListRouteImport } from './routes/_authenticated/system/menus/list'
@@ -44,11 +45,13 @@ import { Route as AuthenticatedSystemDepartmentsCreateRouteImport } from './rout
 import { Route as AuthenticatedSystemCompaniesListRouteImport } from './routes/_authenticated/system/companies/list'
 import { Route as AuthenticatedSystemCompaniesCreateRouteImport } from './routes/_authenticated/system/companies/create'
 import { Route as AuthenticatedSystemUsersUserIdIndexRouteImport } from './routes/_authenticated/system/users/$userId/index'
+import { Route as AuthenticatedSystemRolesRoleIdIndexRouteImport } from './routes/_authenticated/system/roles/$roleId/index'
 import { Route as AuthenticatedSystemPostsPostIdIndexRouteImport } from './routes/_authenticated/system/posts/$postId/index'
 import { Route as AuthenticatedSystemMenusMenuIdIndexRouteImport } from './routes/_authenticated/system/menus/$menuId/index'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdIndexRouteImport } from './routes/_authenticated/system/departments/$departmentId/index'
 import { Route as AuthenticatedSystemCompaniesCompanyIdIndexRouteImport } from './routes/_authenticated/system/companies/$companyId/index'
 import { Route as AuthenticatedSystemUsersUserIdEditRouteImport } from './routes/_authenticated/system/users/$userId/edit'
+import { Route as AuthenticatedSystemRolesRoleIdEditRouteImport } from './routes/_authenticated/system/roles/$roleId/edit'
 import { Route as AuthenticatedSystemPostsPostIdEditRouteImport } from './routes/_authenticated/system/posts/$postId/edit'
 import { Route as AuthenticatedSystemMenusMenuIdEditRouteImport } from './routes/_authenticated/system/menus/$menuId/edit'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdEditRouteImport } from './routes/_authenticated/system/departments/$departmentId/edit'
@@ -197,6 +200,12 @@ const AuthenticatedSystemRolesListRoute =
     path: '/system/roles/list',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemRolesCreateRoute =
+  AuthenticatedSystemRolesCreateRouteImport.update({
+    id: '/system/roles/create',
+    path: '/system/roles/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemPostsListRoute =
   AuthenticatedSystemPostsListRouteImport.update({
     id: '/system/posts/list',
@@ -251,6 +260,12 @@ const AuthenticatedSystemUsersUserIdIndexRoute =
     path: '/system/users/$userId/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemRolesRoleIdIndexRoute =
+  AuthenticatedSystemRolesRoleIdIndexRouteImport.update({
+    id: '/system/roles/$roleId/',
+    path: '/system/roles/$roleId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemPostsPostIdIndexRoute =
   AuthenticatedSystemPostsPostIdIndexRouteImport.update({
     id: '/system/posts/$postId/',
@@ -279,6 +294,12 @@ const AuthenticatedSystemUsersUserIdEditRoute =
   AuthenticatedSystemUsersUserIdEditRouteImport.update({
     id: '/system/users/$userId/edit',
     path: '/system/users/$userId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemRolesRoleIdEditRoute =
+  AuthenticatedSystemRolesRoleIdEditRouteImport.update({
+    id: '/system/roles/$roleId/edit',
+    path: '/system/roles/$roleId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemPostsPostIdEditRoute =
@@ -335,6 +356,7 @@ export interface FileRoutesByFullPath {
   '/system/menus/list': typeof AuthenticatedSystemMenusListRoute
   '/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
   '/system/posts/list': typeof AuthenticatedSystemPostsListRoute
+  '/system/roles/create': typeof AuthenticatedSystemRolesCreateRoute
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
@@ -344,11 +366,13 @@ export interface FileRoutesByFullPath {
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
   '/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
+  '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
   '/system/posts/$postId': typeof AuthenticatedSystemPostsPostIdIndexRoute
+  '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
   '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -379,6 +403,7 @@ export interface FileRoutesByTo {
   '/system/menus/list': typeof AuthenticatedSystemMenusListRoute
   '/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
   '/system/posts/list': typeof AuthenticatedSystemPostsListRoute
+  '/system/roles/create': typeof AuthenticatedSystemRolesCreateRoute
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
@@ -388,11 +413,13 @@ export interface FileRoutesByTo {
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
   '/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
+  '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
   '/system/posts/$postId': typeof AuthenticatedSystemPostsPostIdIndexRoute
+  '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
   '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 export interface FileRoutesById {
@@ -426,6 +453,7 @@ export interface FileRoutesById {
   '/_authenticated/system/menus/list': typeof AuthenticatedSystemMenusListRoute
   '/_authenticated/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
   '/_authenticated/system/posts/list': typeof AuthenticatedSystemPostsListRoute
+  '/_authenticated/system/roles/create': typeof AuthenticatedSystemRolesCreateRoute
   '/_authenticated/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/_authenticated/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/_authenticated/system/users/list': typeof AuthenticatedSystemUsersListRoute
@@ -435,11 +463,13 @@ export interface FileRoutesById {
   '/_authenticated/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/_authenticated/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
   '/_authenticated/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
+  '/_authenticated/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/_authenticated/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/_authenticated/system/companies/$companyId/': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/_authenticated/system/departments/$departmentId/': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/_authenticated/system/menus/$menuId/': typeof AuthenticatedSystemMenusMenuIdIndexRoute
   '/_authenticated/system/posts/$postId/': typeof AuthenticatedSystemPostsPostIdIndexRoute
+  '/_authenticated/system/roles/$roleId/': typeof AuthenticatedSystemRolesRoleIdIndexRoute
   '/_authenticated/system/users/$userId/': typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -473,6 +503,7 @@ export interface FileRouteTypes {
     | '/system/menus/list'
     | '/system/posts/create'
     | '/system/posts/list'
+    | '/system/roles/create'
     | '/system/roles/list'
     | '/system/users/create'
     | '/system/users/list'
@@ -482,11 +513,13 @@ export interface FileRouteTypes {
     | '/system/departments/$departmentId/edit'
     | '/system/menus/$menuId/edit'
     | '/system/posts/$postId/edit'
+    | '/system/roles/$roleId/edit'
     | '/system/users/$userId/edit'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
     | '/system/menus/$menuId'
     | '/system/posts/$postId'
+    | '/system/roles/$roleId'
     | '/system/users/$userId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -517,6 +550,7 @@ export interface FileRouteTypes {
     | '/system/menus/list'
     | '/system/posts/create'
     | '/system/posts/list'
+    | '/system/roles/create'
     | '/system/roles/list'
     | '/system/users/create'
     | '/system/users/list'
@@ -526,11 +560,13 @@ export interface FileRouteTypes {
     | '/system/departments/$departmentId/edit'
     | '/system/menus/$menuId/edit'
     | '/system/posts/$postId/edit'
+    | '/system/roles/$roleId/edit'
     | '/system/users/$userId/edit'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
     | '/system/menus/$menuId'
     | '/system/posts/$postId'
+    | '/system/roles/$roleId'
     | '/system/users/$userId'
   id:
     | '__root__'
@@ -563,6 +599,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system/menus/list'
     | '/_authenticated/system/posts/create'
     | '/_authenticated/system/posts/list'
+    | '/_authenticated/system/roles/create'
     | '/_authenticated/system/roles/list'
     | '/_authenticated/system/users/create'
     | '/_authenticated/system/users/list'
@@ -572,11 +609,13 @@ export interface FileRouteTypes {
     | '/_authenticated/system/departments/$departmentId/edit'
     | '/_authenticated/system/menus/$menuId/edit'
     | '/_authenticated/system/posts/$postId/edit'
+    | '/_authenticated/system/roles/$roleId/edit'
     | '/_authenticated/system/users/$userId/edit'
     | '/_authenticated/system/companies/$companyId/'
     | '/_authenticated/system/departments/$departmentId/'
     | '/_authenticated/system/menus/$menuId/'
     | '/_authenticated/system/posts/$postId/'
+    | '/_authenticated/system/roles/$roleId/'
     | '/_authenticated/system/users/$userId/'
   fileRoutesById: FileRoutesById
 }
@@ -774,6 +813,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemRolesListRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/roles/create': {
+      id: '/_authenticated/system/roles/create'
+      path: '/system/roles/create'
+      fullPath: '/system/roles/create'
+      preLoaderRoute: typeof AuthenticatedSystemRolesCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/posts/list': {
       id: '/_authenticated/system/posts/list'
       path: '/system/posts/list'
@@ -837,6 +883,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemUsersUserIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/roles/$roleId/': {
+      id: '/_authenticated/system/roles/$roleId/'
+      path: '/system/roles/$roleId'
+      fullPath: '/system/roles/$roleId'
+      preLoaderRoute: typeof AuthenticatedSystemRolesRoleIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/posts/$postId/': {
       id: '/_authenticated/system/posts/$postId/'
       path: '/system/posts/$postId'
@@ -870,6 +923,13 @@ declare module '@tanstack/react-router' {
       path: '/system/users/$userId/edit'
       fullPath: '/system/users/$userId/edit'
       preLoaderRoute: typeof AuthenticatedSystemUsersUserIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/roles/$roleId/edit': {
+      id: '/_authenticated/system/roles/$roleId/edit'
+      path: '/system/roles/$roleId/edit'
+      fullPath: '/system/roles/$roleId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemRolesRoleIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/posts/$postId/edit': {
@@ -944,6 +1004,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemMenusListRoute: typeof AuthenticatedSystemMenusListRoute
   AuthenticatedSystemPostsCreateRoute: typeof AuthenticatedSystemPostsCreateRoute
   AuthenticatedSystemPostsListRoute: typeof AuthenticatedSystemPostsListRoute
+  AuthenticatedSystemRolesCreateRoute: typeof AuthenticatedSystemRolesCreateRoute
   AuthenticatedSystemRolesListRoute: typeof AuthenticatedSystemRolesListRoute
   AuthenticatedSystemUsersCreateRoute: typeof AuthenticatedSystemUsersCreateRoute
   AuthenticatedSystemUsersListRoute: typeof AuthenticatedSystemUsersListRoute
@@ -953,11 +1014,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   AuthenticatedSystemMenusMenuIdEditRoute: typeof AuthenticatedSystemMenusMenuIdEditRoute
   AuthenticatedSystemPostsPostIdEditRoute: typeof AuthenticatedSystemPostsPostIdEditRoute
+  AuthenticatedSystemRolesRoleIdEditRoute: typeof AuthenticatedSystemRolesRoleIdEditRoute
   AuthenticatedSystemUsersUserIdEditRoute: typeof AuthenticatedSystemUsersUserIdEditRoute
   AuthenticatedSystemCompaniesCompanyIdIndexRoute: typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   AuthenticatedSystemDepartmentsDepartmentIdIndexRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   AuthenticatedSystemMenusMenuIdIndexRoute: typeof AuthenticatedSystemMenusMenuIdIndexRoute
   AuthenticatedSystemPostsPostIdIndexRoute: typeof AuthenticatedSystemPostsPostIdIndexRoute
+  AuthenticatedSystemRolesRoleIdIndexRoute: typeof AuthenticatedSystemRolesRoleIdIndexRoute
   AuthenticatedSystemUsersUserIdIndexRoute: typeof AuthenticatedSystemUsersUserIdIndexRoute
 }
 
@@ -982,6 +1045,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemMenusListRoute: AuthenticatedSystemMenusListRoute,
   AuthenticatedSystemPostsCreateRoute: AuthenticatedSystemPostsCreateRoute,
   AuthenticatedSystemPostsListRoute: AuthenticatedSystemPostsListRoute,
+  AuthenticatedSystemRolesCreateRoute: AuthenticatedSystemRolesCreateRoute,
   AuthenticatedSystemRolesListRoute: AuthenticatedSystemRolesListRoute,
   AuthenticatedSystemUsersCreateRoute: AuthenticatedSystemUsersCreateRoute,
   AuthenticatedSystemUsersListRoute: AuthenticatedSystemUsersListRoute,
@@ -996,6 +1060,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemMenusMenuIdEditRoute,
   AuthenticatedSystemPostsPostIdEditRoute:
     AuthenticatedSystemPostsPostIdEditRoute,
+  AuthenticatedSystemRolesRoleIdEditRoute:
+    AuthenticatedSystemRolesRoleIdEditRoute,
   AuthenticatedSystemUsersUserIdEditRoute:
     AuthenticatedSystemUsersUserIdEditRoute,
   AuthenticatedSystemCompaniesCompanyIdIndexRoute:
@@ -1006,6 +1072,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemMenusMenuIdIndexRoute,
   AuthenticatedSystemPostsPostIdIndexRoute:
     AuthenticatedSystemPostsPostIdIndexRoute,
+  AuthenticatedSystemRolesRoleIdIndexRoute:
+    AuthenticatedSystemRolesRoleIdIndexRoute,
   AuthenticatedSystemUsersUserIdIndexRoute:
     AuthenticatedSystemUsersUserIdIndexRoute,
 }

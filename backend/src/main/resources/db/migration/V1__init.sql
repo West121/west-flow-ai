@@ -56,11 +56,44 @@ CREATE TABLE IF NOT EXISTS wf_menu (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS wf_role (
+    id VARCHAR(64) PRIMARY KEY,
+    role_code VARCHAR(64) NOT NULL UNIQUE,
+    role_name VARCHAR(128) NOT NULL,
+    role_category VARCHAR(32) NOT NULL,
+    description VARCHAR(500),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS wf_user_post (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
     post_id VARCHAR(64) NOT NULL,
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_user_role (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    role_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_role_menu (
+    id VARCHAR(64) PRIMARY KEY,
+    role_id VARCHAR(64) NOT NULL,
+    menu_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_role_data_scope (
+    id VARCHAR(64) PRIMARY KEY,
+    role_id VARCHAR(64) NOT NULL,
+    scope_type VARCHAR(64) NOT NULL,
+    scope_value VARCHAR(64) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -450,6 +483,37 @@ INSERT INTO wf_menu (
     updated_at
 )
 SELECT
+    'menu_system_permission_probe',
+    'menu_system_menu',
+    '权限探针',
+    'BUTTON',
+    NULL,
+    NULL,
+    'system:permission-probe',
+    'ShieldCheck',
+    999,
+    FALSE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_permission_probe');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
     'menu_workflow',
     NULL,
     '流程平台',
@@ -526,6 +590,105 @@ SELECT
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_designer');
+
+INSERT INTO wf_role (
+    id,
+    role_code,
+    role_name,
+    role_category,
+    description,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'role_oa_user',
+    'OA_USER',
+    'OA 普通用户',
+    'SYSTEM',
+    '默认业务发起与待办处理角色',
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role WHERE id = 'role_oa_user');
+
+INSERT INTO wf_role (
+    id,
+    role_code,
+    role_name,
+    role_category,
+    description,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'role_dept_manager',
+    'DEPT_MANAGER',
+    '部门经理',
+    'SYSTEM',
+    '具备部门与子部门数据权限的管理角色',
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role WHERE id = 'role_dept_manager');
+
+INSERT INTO wf_role (
+    id,
+    role_code,
+    role_name,
+    role_category,
+    description,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'role_process_admin',
+    'PROCESS_ADMIN',
+    '流程管理员',
+    'SYSTEM',
+    '负责流程定义与发布管理',
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role WHERE id = 'role_process_admin');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_001', 'role_oa_user', 'menu_workbench_dashboard', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_001');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_002', 'role_oa_user', 'menu_workbench_todo', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_002');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_003', 'role_dept_manager', 'menu_system_user', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_003');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_004', 'role_dept_manager', 'menu_system_permission_probe', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_004');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_005', 'role_process_admin', 'menu_workflow_definition', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_005');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_006', 'role_process_admin', 'menu_workflow_designer', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_006');
+
+INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
+SELECT 'rds_001', 'role_oa_user', 'SELF', '*', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_001');
+
+INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
+SELECT 'rds_002', 'role_dept_manager', 'DEPARTMENT_AND_CHILDREN', 'dept_001', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_002');
+
+INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
+SELECT 'rds_003', 'role_process_admin', 'COMPANY', 'cmp_001', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_003');
 
 INSERT INTO wf_user (
     id,
@@ -625,6 +788,22 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_002');
 INSERT INTO wf_user_post (id, user_id, post_id, is_primary, created_at)
 SELECT 'up_003', 'usr_003', 'post_003', TRUE, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_003');
+
+INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+SELECT 'ur_001', 'usr_001', 'role_oa_user', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_001');
+
+INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+SELECT 'ur_002', 'usr_001', 'role_dept_manager', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_002');
+
+INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+SELECT 'ur_003', 'usr_002', 'role_oa_user', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_003');
+
+INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+SELECT 'ur_004', 'usr_003', 'role_process_admin', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_004');
 
 INSERT INTO wf_delegation (id, principal_user_id, delegate_user_id, status, created_at)
 SELECT 'dlg_001', 'usr_002', 'usr_001', 'ACTIVE', CURRENT_TIMESTAMP

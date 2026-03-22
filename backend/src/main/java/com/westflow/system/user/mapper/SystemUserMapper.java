@@ -51,6 +51,28 @@ public interface SystemUserMapper {
             "  <if test='postId != null and postId != \"\"'>",
             "    AND u.active_post_id = #{postId}",
             "  </if>",
+            "  <if test='!allAccess'>",
+            "    <trim prefix='AND (' suffix=')' prefixOverrides='OR'>",
+            "      <if test='allowedUserIds != null and allowedUserIds.size() > 0'>",
+            "        OR u.id IN",
+            "        <foreach collection='allowedUserIds' item='userId' open='(' separator=',' close=')'>",
+            "          #{userId}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedDepartmentIds != null and allowedDepartmentIds.size() > 0'>",
+            "        OR u.active_department_id IN",
+            "        <foreach collection='allowedDepartmentIds' item='departmentIdItem' open='(' separator=',' close=')'>",
+            "          #{departmentIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedCompanyIds != null and allowedCompanyIds.size() > 0'>",
+            "        OR u.company_id IN",
+            "        <foreach collection='allowedCompanyIds' item='companyIdItem' open='(' separator=',' close=')'>",
+            "          #{companyIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "    </trim>",
+            "  </if>",
             "</where>",
             "ORDER BY ${orderBy} ${orderDirection}",
             "LIMIT #{limit} OFFSET #{offset}",
@@ -61,6 +83,10 @@ public interface SystemUserMapper {
             @Param("enabled") Boolean enabled,
             @Param("departmentId") String departmentId,
             @Param("postId") String postId,
+            @Param("allAccess") boolean allAccess,
+            @Param("allowedUserIds") List<String> allowedUserIds,
+            @Param("allowedDepartmentIds") List<String> allowedDepartmentIds,
+            @Param("allowedCompanyIds") List<String> allowedCompanyIds,
             @Param("orderBy") String orderBy,
             @Param("orderDirection") String orderDirection,
             @Param("limit") long limit,
@@ -93,6 +119,28 @@ public interface SystemUserMapper {
             "  <if test='postId != null and postId != \"\"'>",
             "    AND u.active_post_id = #{postId}",
             "  </if>",
+            "  <if test='!allAccess'>",
+            "    <trim prefix='AND (' suffix=')' prefixOverrides='OR'>",
+            "      <if test='allowedUserIds != null and allowedUserIds.size() > 0'>",
+            "        OR u.id IN",
+            "        <foreach collection='allowedUserIds' item='userId' open='(' separator=',' close=')'>",
+            "          #{userId}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedDepartmentIds != null and allowedDepartmentIds.size() > 0'>",
+            "        OR u.active_department_id IN",
+            "        <foreach collection='allowedDepartmentIds' item='departmentIdItem' open='(' separator=',' close=')'>",
+            "          #{departmentIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedCompanyIds != null and allowedCompanyIds.size() > 0'>",
+            "        OR u.company_id IN",
+            "        <foreach collection='allowedCompanyIds' item='companyIdItem' open='(' separator=',' close=')'>",
+            "          #{companyIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "    </trim>",
+            "  </if>",
             "</where>",
             "</script>"
     })
@@ -100,7 +148,11 @@ public interface SystemUserMapper {
             @Param("keyword") String keyword,
             @Param("enabled") Boolean enabled,
             @Param("departmentId") String departmentId,
-            @Param("postId") String postId
+            @Param("postId") String postId,
+            @Param("allAccess") boolean allAccess,
+            @Param("allowedUserIds") List<String> allowedUserIds,
+            @Param("allowedDepartmentIds") List<String> allowedDepartmentIds,
+            @Param("allowedCompanyIds") List<String> allowedCompanyIds
     );
 
     @Select("""
@@ -144,8 +196,23 @@ public interface SystemUserMapper {
             """)
     List<SystemUserFormOptionsResponse.PostOption> selectPostOptions();
 
-    @Select("SELECT department_id FROM wf_post WHERE id = #{postId}")
-    String selectDepartmentIdByPostId(@Param("postId") String postId);
+    @Select("""
+            SELECT
+              p.department_id,
+              d.company_id
+            FROM wf_post p
+            INNER JOIN wf_department d ON d.id = p.department_id
+            WHERE p.id = #{postId}
+            """)
+    PostContext selectPostContextByPostId(@Param("postId") String postId);
+
+    @Select("""
+            SELECT id
+            FROM wf_department
+            WHERE parent_department_id = #{departmentId}
+            ORDER BY department_name ASC
+            """)
+    List<String> selectDepartmentIdsByParentId(@Param("departmentId") String departmentId);
 
     @Select({
             "<script>",
@@ -224,4 +291,10 @@ public interface SystemUserMapper {
             )
             """)
     int insertUserPost(SystemUserPostBinding binding);
+
+    record PostContext(
+            String departmentId,
+            String companyId
+    ) {
+    }
 }

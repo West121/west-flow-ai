@@ -73,8 +73,17 @@ export const sidebarData: SidebarData = {
         },
         {
           title: '角色管理',
-          url: '/system/roles/list',
           icon: ShieldCheck,
+          items: [
+            {
+              title: '角色列表',
+              url: '/system/roles/list',
+            },
+            {
+              title: '新建角色',
+              url: '/system/roles/create',
+            },
+          ],
         },
         {
           title: '菜单管理',

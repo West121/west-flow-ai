@@ -1,18 +1,26 @@
 package com.westflow.system.user.service;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.identity.dto.CurrentUserResponse;
+import com.westflow.identity.mapper.IdentityAccessMapper;
 import com.westflow.system.user.api.SaveSystemUserRequest;
 import com.westflow.system.user.api.SystemUserDetailResponse;
 import com.westflow.system.user.api.SystemUserFormOptionsResponse;
 import com.westflow.system.user.api.SystemUserListItemResponse;
 import com.westflow.system.user.api.SystemUserMutationResponse;
 import com.westflow.system.user.mapper.SystemUserMapper;
+import com.westflow.system.user.mapper.SystemUserMapper.PostContext;
+import java.util.ArrayDeque;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,20 +39,30 @@ public class SystemUserService {
     );
 
     private final SystemUserMapper systemUserMapper;
+    private final IdentityAccessMapper identityAccessMapper;
 
-    public SystemUserService(SystemUserMapper systemUserMapper) {
+    public SystemUserService(SystemUserMapper systemUserMapper, IdentityAccessMapper identityAccessMapper) {
         this.systemUserMapper = systemUserMapper;
+        this.identityAccessMapper = identityAccessMapper;
     }
 
     public PageResponse<SystemUserListItemResponse> page(PageRequest request) {
+        AccessPolicy accessPolicy = resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
         String orderDirection = resolveOrderDirection(request.sorts());
+        if (accessPolicy.restricted() && accessPolicy.isEmpty()) {
+            return new PageResponse<>(request.page(), request.pageSize(), 0, 0, List.of(), List.of());
+        }
         long total = systemUserMapper.countPage(
                 request.keyword(),
                 filters.enabled(),
                 filters.departmentId(),
-                filters.postId()
+                filters.postId(),
+                accessPolicy.allAccess(),
+                accessPolicy.userIds(),
+                accessPolicy.departmentIds(),
+                accessPolicy.companyIds()
         );
         long pageSize = request.pageSize();
         long pages = total == 0 ? 0 : (total + pageSize - 1) / pageSize;
@@ -57,6 +75,10 @@ public class SystemUserService {
                         filters.enabled(),
                         filters.departmentId(),
                         filters.postId(),
+                        accessPolicy.allAccess(),
+                        accessPolicy.userIds(),
+                        accessPolicy.departmentIds(),
+                        accessPolicy.companyIds(),
                         orderBy,
                         orderDirection,
                         pageSize,
@@ -76,6 +98,7 @@ public class SystemUserService {
                     Map.of("userId", userId)
             );
         }
+        assertAccessible(detail.companyId(), detail.departmentId(), userId);
         return detail;
     }
 
@@ -88,8 +111,10 @@ public class SystemUserService {
 
     @Transactional
     public SystemUserMutationResponse create(SaveSystemUserRequest request) {
+        PostContext postContext = resolvePostContext(request.primaryPostId());
+        validateCompanyConsistency(request.companyId(), postContext.companyId());
+        assertAccessible(postContext.companyId(), postContext.departmentId(), null);
         validateUsername(request.username(), null);
-        String departmentId = resolveDepartmentId(request.primaryPostId());
         String userId = buildId("usr");
 
         systemUserMapper.insertUser(new SystemUserEntity(
@@ -100,7 +125,7 @@ public class SystemUserService {
                 request.email(),
                 "",
                 request.companyId(),
-                departmentId,
+                postContext.departmentId(),
                 request.primaryPostId(),
                 request.enabled()
         ));
@@ -117,8 +142,10 @@ public class SystemUserService {
     @Transactional
     public SystemUserMutationResponse update(String userId, SaveSystemUserRequest request) {
         detail(userId);
+        PostContext postContext = resolvePostContext(request.primaryPostId());
+        validateCompanyConsistency(request.companyId(), postContext.companyId());
+        assertAccessible(postContext.companyId(), postContext.departmentId(), userId);
         validateUsername(request.username(), userId);
-        String departmentId = resolveDepartmentId(request.primaryPostId());
 
         systemUserMapper.updateUser(new SystemUserEntity(
                 userId,
@@ -128,7 +155,7 @@ public class SystemUserService {
                 request.email(),
                 "",
                 request.companyId(),
-                departmentId,
+                postContext.departmentId(),
                 request.primaryPostId(),
                 request.enabled()
         ));
@@ -155,9 +182,9 @@ public class SystemUserService {
         }
     }
 
-    private String resolveDepartmentId(String postId) {
-        String departmentId = systemUserMapper.selectDepartmentIdByPostId(postId);
-        if (departmentId == null || departmentId.isBlank()) {
+    private PostContext resolvePostContext(String postId) {
+        PostContext postContext = systemUserMapper.selectPostContextByPostId(postId);
+        if (postContext == null || postContext.departmentId() == null || postContext.companyId() == null) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
                     HttpStatus.BAD_REQUEST,
@@ -165,7 +192,96 @@ public class SystemUserService {
                     Map.of("primaryPostId", postId)
             );
         }
-        return departmentId;
+        return postContext;
+    }
+
+    private void validateCompanyConsistency(String companyId, String postCompanyId) {
+        if (!postCompanyId.equals(companyId)) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "公司与主岗位所属组织不一致",
+                    Map.of("companyId", companyId)
+            );
+        }
+    }
+
+    private void assertAccessible(String companyId, String departmentId, String userId) {
+        AccessPolicy accessPolicy = resolveAccessPolicy();
+        if (accessPolicy.allAccess()) {
+            return;
+        }
+        if (userId != null && accessPolicy.userIds().contains(userId)) {
+            return;
+        }
+        if (departmentId != null && accessPolicy.departmentIds().contains(departmentId)) {
+            return;
+        }
+        if (companyId != null && accessPolicy.companyIds().contains(companyId)) {
+            return;
+        }
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (userId != null) {
+            details.put("userId", userId);
+        }
+        if (companyId != null) {
+            details.put("companyId", companyId);
+        }
+        if (departmentId != null) {
+            details.put("departmentId", departmentId);
+        }
+        throw new ContractException(
+                "AUTH.FORBIDDEN",
+                HttpStatus.FORBIDDEN,
+                "无权访问当前数据",
+                details
+        );
+    }
+
+    private AccessPolicy resolveAccessPolicy() {
+        String loginId = StpUtil.getLoginIdAsString();
+        List<CurrentUserResponse.DataScope> dataScopes = identityAccessMapper.selectDataScopesByUserId(loginId);
+        boolean allAccess = false;
+        LinkedHashSet<String> userIds = new LinkedHashSet<>();
+        LinkedHashSet<String> departmentIds = new LinkedHashSet<>();
+        LinkedHashSet<String> companyIds = new LinkedHashSet<>();
+
+        for (CurrentUserResponse.DataScope dataScope : dataScopes) {
+            switch (dataScope.scopeType()) {
+                case "ALL" -> allAccess = true;
+                case "SELF" -> userIds.add(loginId);
+                case "DEPARTMENT" -> departmentIds.add(dataScope.scopeValue());
+                case "DEPARTMENT_AND_CHILDREN" -> departmentIds.addAll(
+                        resolveDepartmentIdsWithDescendants(dataScope.scopeValue())
+                );
+                case "COMPANY" -> companyIds.add(dataScope.scopeValue());
+                default -> {
+                }
+            }
+        }
+
+        return new AccessPolicy(
+                allAccess,
+                List.copyOf(userIds),
+                List.copyOf(departmentIds),
+                List.copyOf(companyIds)
+        );
+    }
+
+    private List<String> resolveDepartmentIdsWithDescendants(String rootDepartmentId) {
+        LinkedHashSet<String> collected = new LinkedHashSet<>();
+        Queue<String> queue = new ArrayDeque<>();
+        queue.add(rootDepartmentId);
+
+        while (!queue.isEmpty()) {
+            String departmentId = queue.poll();
+            if (!collected.add(departmentId)) {
+                continue;
+            }
+            queue.addAll(systemUserMapper.selectDepartmentIdsByParentId(departmentId));
+        }
+
+        return List.copyOf(collected);
     }
 
     private Filters resolveFilters(List<FilterItem> filters) {
@@ -245,6 +361,21 @@ public class SystemUserService {
             String departmentId,
             String postId
     ) {
+    }
+
+    private record AccessPolicy(
+            boolean allAccess,
+            List<String> userIds,
+            List<String> departmentIds,
+            List<String> companyIds
+    ) {
+        boolean restricted() {
+            return !allAccess;
+        }
+
+        boolean isEmpty() {
+            return userIds.isEmpty() && departmentIds.isEmpty() && companyIds.isEmpty();
+        }
     }
 
     public record SystemUserEntity(
