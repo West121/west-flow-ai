@@ -717,6 +717,347 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldSupportRejectRoutingBackToPreviousUserTask() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRejectRouteProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_reject_prev_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_reject_route",
+                                  "businessKey": "leave_reject_prev_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "驳回测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String firstTaskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+        JsonNode firstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "同意"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        String secondTaskId = firstCompleteBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+
+        String rejectResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/reject", secondTaskId)
+                        .header("Authorization", "Bearer " + login("wangwu"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "PREVIOUS_USER_TASK",
+                                  "reapproveStrategy": "CONTINUE",
+                                  "comment": "退回补充材料"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode rejectBody = objectMapper.readTree(rejectResponse);
+        assertThat(rejectBody.path("code").asText()).isEqualTo("OK");
+        assertThat(rejectBody.path("data").path("status").asText()).isEqualTo("RUNNING");
+        assertThat(rejectBody.path("data").path("nextTasks").size()).isEqualTo(1);
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_reject_prev_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(detailBody.path("data").path("instanceStatus").asText()).isEqualTo("RUNNING");
+        assertThat(detailBody.path("data").path("taskTrace").size()).isEqualTo(3);
+        assertThat(detailBody.path("data").path("taskTrace").get(1).path("status").asText()).isEqualTo("REJECTED");
+        assertThat(detailBody.path("data").path("taskTrace").get(1).path("action").asText()).isEqualTo("REJECT_ROUTE");
+        assertThat(detailBody.path("data").path("taskTrace").get(2).path("nodeId").asText()).isEqualTo("approve_manager");
+        assertThat(detailBody.path("data").path("taskTrace").get(2).path("status").asText()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void shouldSupportRejectRoutingBackToInitiator() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRejectToInitiatorProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_reject_init_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_reject_initiator",
+                                  "businessKey": "leave_reject_init_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 3,
+                                    "reason": "驳回到发起人"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String firstTaskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+        JsonNode firstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "发起人已确认"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        String secondTaskId = firstCompleteBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+
+        String rejectResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/reject", secondTaskId)
+                        .header("Authorization", "Bearer " + login("wangwu"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "INITIATOR",
+                                  "reapproveStrategy": "RETURN_TO_REJECTED_NODE",
+                                  "comment": "退回到发起人"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode rejectBody = objectMapper.readTree(rejectResponse);
+        assertThat(rejectBody.path("code").asText()).isEqualTo("OK");
+        assertThat(rejectBody.path("data").path("status").asText()).isEqualTo("RUNNING");
+        assertThat(rejectBody.path("data").path("nextTasks").size()).isEqualTo(1);
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_reject_init_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(detailBody.path("data").path("taskTrace").size()).isEqualTo(3);
+        assertThat(detailBody.path("data").path("taskTrace").get(1).path("action").asText()).isEqualTo("REJECT_ROUTE");
+        assertThat(detailBody.path("data").path("taskTrace").get(2).path("nodeId").asText()).isEqualTo("approve_initiator");
+    }
+
+    @Test
+    void shouldSupportJumpTakeBackAndWakeUp() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRejectRouteProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_runtime_flow_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_reject_route",
+                                  "businessKey": "leave_runtime_flow_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 4,
+                                    "reason": "流程回退测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String firstTaskId = objectMapper.readTree(startResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        JsonNode firstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "通过"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        String secondTaskId = firstCompleteBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode takeBackActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", secondTaskId)
+                        .header("Authorization", "Bearer " + login("lisi")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(takeBackActions.path("canApprove").asBoolean()).isFalse();
+        assertThat(takeBackActions.path("canTakeBack").asBoolean()).isTrue();
+
+        String takeBackResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/take-back", secondTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "拿回修改"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode takeBackBody = objectMapper.readTree(takeBackResponse);
+        assertThat(takeBackBody.path("code").asText()).isEqualTo("OK");
+        assertThat(takeBackBody.path("data").path("status").asText()).isEqualTo("RUNNING");
+        assertThat(takeBackBody.path("data").path("nextTasks").get(0).path("nodeId").asText()).isEqualTo("approve_manager");
+
+        JsonNode takeBackDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_runtime_flow_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(takeBackDetail.path("data").path("taskTrace").get(1).path("status").asText()).isEqualTo("TAKEN_BACK");
+
+        String jumpStartResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_reject_route",
+                                  "businessKey": "leave_runtime_jump_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "跳转测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String jumpFirstTaskId = objectMapper.readTree(jumpStartResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+        JsonNode jumpFirstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", jumpFirstTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "同意"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        String jumpTaskId = jumpFirstCompleteBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+
+        String jumpResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/jump", jumpTaskId)
+                        .header("Authorization", "Bearer " + login("wangwu"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetNodeId": "end_1",
+                                  "comment": "直接结束"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode jumpBody = objectMapper.readTree(jumpResponse);
+        assertThat(jumpBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
+
+        String wakeUpResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/instances/{instanceId}/wake-up",
+                        jumpBody.path("data").path("instanceId").asText())
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sourceTaskId": "%s",
+                                  "comment": "唤醒重办"
+                                }
+                                """.formatted(jumpTaskId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode wakeUpBody = objectMapper.readTree(wakeUpResponse);
+        assertThat(wakeUpBody.path("data").path("status").asText()).isEqualTo("RUNNING");
+        assertThat(wakeUpBody.path("data").path("nextTasks").size()).isEqualTo(1);
+
+        JsonNode wakeUpDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_runtime_jump_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(wakeUpDetail.path("data").path("instanceStatus").asText()).isEqualTo("RUNNING");
+        assertThat(wakeUpDetail.path("data").path("taskTrace"))
+                .anySatisfy(item -> assertThat(item.path("action").asText()).isEqualTo("JUMP"));
+    }
+
+    @Test
     void shouldSupportAddSignRemoveSignAndBlockCompletionUntilAddSignTaskResolves() throws Exception {
         String initiatorToken = login("zhangsan");
 
@@ -1381,6 +1722,212 @@ class ProcessRuntimeControllerTest {
                       "target": "end_1",
                       "priority": 10,
                       "label": "通过"
+                    }
+                  ]
+                }
+                """;
+    }
+
+    private String validRejectRouteProcessDsl() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_reject_route",
+                  "processName": "驳回回退审批",
+                  "category": "OA",
+                  "processFormKey": "oa-reject-route-form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_director",
+                      "type": "approver",
+                      "name": "流程管理员审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "approve_director",
+                      "priority": 10,
+                      "label": "通过"
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "approve_director",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "结束"
+                    }
+                  ]
+                }
+                """;
+    }
+
+    private String validRejectToInitiatorProcessDsl() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_reject_initiator",
+                  "processName": "驳回发起人审批",
+                  "category": "OA",
+                  "processFormKey": "oa-reject-initiator-form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_initiator",
+                      "type": "approver",
+                      "name": "发起人确认",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_001"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_director",
+                      "type": "approver",
+                      "name": "流程管理员审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_initiator",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_initiator",
+                      "target": "approve_director",
+                      "priority": 10,
+                      "label": "通过"
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "approve_director",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "结束"
                     }
                   ]
                 }

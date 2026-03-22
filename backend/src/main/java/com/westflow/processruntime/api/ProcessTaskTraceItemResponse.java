@@ -26,6 +26,12 @@ public record ProcessTaskTraceItemResponse(
         String targetUserId,
         boolean isCcTask,
         boolean isAddSignTask,
-        boolean isRevoked
+        boolean isRevoked,
+        boolean isRejected,
+        boolean isJumped,
+        boolean isTakenBack,
+        String targetStrategy,
+        String targetNodeId,
+        String reapproveStrategy
 ) {
 }

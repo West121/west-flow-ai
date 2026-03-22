@@ -80,9 +80,16 @@ export type WorkbenchTaskTraceItem = {
   sourceTaskId?: string | null
   targetTaskId?: string | null
   targetUserId?: string | null
+  targetStrategy?: string | null
+  targetNodeId?: string | null
+  targetNodeName?: string | null
+  reapproveStrategy?: string | null
   isCcTask?: boolean
   isAddSignTask?: boolean
   isRevoked?: boolean
+  isRejected?: boolean
+  isJumped?: boolean
+  isTakenBack?: boolean
 }
 
 export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
@@ -146,6 +153,7 @@ export type WorkbenchTaskActionAvailability = {
   canClaim: boolean
   canApprove: boolean
   canReject: boolean
+  canRejectRoute: boolean
   canTransfer: boolean
   canReturn: boolean
   canAddSign: boolean
@@ -153,6 +161,9 @@ export type WorkbenchTaskActionAvailability = {
   canRevoke: boolean
   canUrge: boolean
   canRead: boolean
+  canJump: boolean
+  canTakeBack: boolean
+  canWakeUp: boolean
 }
 
 export type ApprovalSheetPageResponse = {
@@ -199,6 +210,28 @@ export type RevokeWorkbenchTaskPayload = {
 }
 
 export type UrgeWorkbenchTaskPayload = {
+  comment?: string | null
+}
+
+export type RejectWorkbenchTaskPayload = {
+  targetStrategy: 'PREVIOUS_USER_TASK' | 'INITIATOR' | 'ANY_USER_TASK'
+  targetTaskId?: string | null
+  targetNodeId?: string | null
+  reapproveStrategy: 'CONTINUE' | 'RETURN_TO_REJECTED_NODE'
+  comment?: string | null
+}
+
+export type JumpWorkbenchTaskPayload = {
+  targetNodeId: string
+  comment?: string | null
+}
+
+export type TakeBackWorkbenchTaskPayload = {
+  comment?: string | null
+}
+
+export type WakeUpWorkbenchInstancePayload = {
+  sourceTaskId: string
   comment?: string | null
 }
 
@@ -435,6 +468,62 @@ export async function readWorkbenchTask(
     data: CompleteWorkbenchTaskResponse
     requestId: string
   }>(`/process-runtime/demo/tasks/${taskId}/read`)
+
+  return unwrapResponse(response)
+}
+
+export async function rejectWorkbenchTask(
+  taskId: string,
+  payload: RejectWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/reject`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function jumpWorkbenchTask(
+  taskId: string,
+  payload: JumpWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/jump`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function takeBackWorkbenchTask(
+  taskId: string,
+  payload: TakeBackWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/take-back`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function wakeUpWorkbenchInstance(
+  instanceId: string,
+  payload: WakeUpWorkbenchInstancePayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/instances/${instanceId}/wake-up`, payload)
 
   return unwrapResponse(response)
 }

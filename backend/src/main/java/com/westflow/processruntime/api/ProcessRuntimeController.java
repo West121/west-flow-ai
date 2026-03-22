@@ -107,6 +107,42 @@ public class ProcessRuntimeController {
         return ApiResponse.success(processDemoService.read(taskId));
     }
 
+    @PostMapping("/tasks/{taskId}/reject")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> reject(
+            @PathVariable String taskId,
+            @Valid @RequestBody RejectTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.reject(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/jump")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> jump(
+            @PathVariable String taskId,
+            @Valid @RequestBody JumpTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.jump(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/take-back")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> takeBack(
+            @PathVariable String taskId,
+            @RequestBody(required = false) TakeBackTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.takeBack(taskId, request == null ? new TakeBackTaskRequest(null) : request));
+    }
+
+    @PostMapping("/instances/{instanceId}/wake-up")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> wakeUp(
+            @PathVariable String instanceId,
+            @Valid @RequestBody WakeUpInstanceRequest request
+    ) {
+        return ApiResponse.success(processDemoService.wakeUp(instanceId, request));
+    }
+
     @PostMapping("/tasks/{taskId}/claim")
     @SaCheckLogin
     public ApiResponse<ClaimTaskResponse> claim(

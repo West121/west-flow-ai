@@ -355,6 +355,7 @@ describe('workbench pages', () => {
       canClaim: false,
       canApprove: true,
       canReject: true,
+      canRejectRoute: true,
       canTransfer: true,
       canReturn: true,
       canAddSign: false,
@@ -677,6 +678,7 @@ describe('workbench pages', () => {
       canClaim: true,
       canApprove: false,
       canReject: false,
+      canRejectRoute: false,
       canTransfer: false,
       canReturn: true,
     })
@@ -696,9 +698,135 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('办理时长').length).toBeGreaterThan(0)
     expect(screen.getAllByText('是否超时').length).toBeGreaterThan(0)
     expect(screen.getAllByText('审批意见摘要').length).toBeGreaterThan(0)
-
     expect(await screen.findByRole('button', { name: '认领任务' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '退回上一步' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '驳回' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '跳转' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拿回' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '唤醒' })).not.toBeInTheDocument()
+  })
+
+  it('renders advanced runtime labels in the action timeline', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_history_001',
+        activeTaskIds: ['task_history_001'],
+        taskTrace: [
+          {
+            taskId: 'task_history_001',
+            nodeId: 'approve_manager',
+            nodeName: '部门负责人审批',
+            status: 'REJECTED',
+            assigneeUserId: 'usr_002',
+            candidateUserIds: ['usr_002'],
+            action: 'REJECT_ROUTE',
+            operatorUserId: 'usr_002',
+            comment: '请补充资料',
+            receiveTime: '2026-03-22T09:10:00+08:00',
+            readTime: '2026-03-22T09:12:00+08:00',
+            handleStartTime: '2026-03-22T09:13:00+08:00',
+            handleEndTime: '2026-03-22T09:18:00+08:00',
+            handleDurationSeconds: 300,
+            sourceTaskId: 'task_source_001',
+            targetTaskId: 'task_target_001',
+            targetUserId: 'usr_003',
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
+          {
+            taskId: 'task_history_002',
+            nodeId: 'jump_node_001',
+            nodeName: '财务复核',
+            status: 'JUMPED',
+            assigneeUserId: 'usr_004',
+            candidateUserIds: ['usr_004'],
+            action: 'JUMP',
+            operatorUserId: 'usr_002',
+            comment: '跳转到财务复核',
+            receiveTime: '2026-03-22T09:20:00+08:00',
+            readTime: '2026-03-22T09:21:00+08:00',
+            handleStartTime: '2026-03-22T09:22:00+08:00',
+            handleEndTime: '2026-03-22T09:23:00+08:00',
+            handleDurationSeconds: 60,
+            sourceTaskId: 'task_source_002',
+            targetTaskId: 'task_target_002',
+            targetUserId: 'usr_004',
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
+          {
+            taskId: 'task_history_003',
+            nodeId: 'take_back_node_001',
+            nodeName: '流程发起',
+            status: 'TAKEN_BACK',
+            assigneeUserId: 'usr_001',
+            candidateUserIds: ['usr_001'],
+            action: 'TAKE_BACK',
+            operatorUserId: 'usr_001',
+            comment: '拿回后重提',
+            receiveTime: '2026-03-22T09:30:00+08:00',
+            readTime: '2026-03-22T09:31:00+08:00',
+            handleStartTime: '2026-03-22T09:32:00+08:00',
+            handleEndTime: '2026-03-22T09:33:00+08:00',
+            handleDurationSeconds: 60,
+            sourceTaskId: 'task_source_003',
+            targetTaskId: 'task_target_003',
+            targetUserId: 'usr_001',
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
+          {
+            taskId: 'task_history_004',
+            nodeId: 'wake_node_001',
+            nodeName: '历史审批',
+            status: 'PENDING',
+            assigneeUserId: 'usr_005',
+            candidateUserIds: ['usr_005'],
+            action: 'WAKE_UP',
+            operatorUserId: 'usr_001',
+            comment: '唤醒后重新处理',
+            receiveTime: '2026-03-22T09:40:00+08:00',
+            readTime: '2026-03-22T09:41:00+08:00',
+            handleStartTime: '2026-03-22T09:42:00+08:00',
+            handleEndTime: null,
+            handleDurationSeconds: null,
+            sourceTaskId: 'task_source_004',
+            targetTaskId: 'task_target_004',
+            targetUserId: 'usr_005',
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_history_001' />)
+
+    expect(await screen.findByText('动作轨迹')).toBeInTheDocument()
+    expect(screen.getAllByText('驳回到上一步人工节点').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('跳转').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('拿回').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('唤醒').length).toBeGreaterThan(0)
   })
 
   it('loads approval-sheet detail through the business locator path', async () => {
@@ -712,6 +840,7 @@ describe('workbench pages', () => {
       canClaim: false,
       canApprove: true,
       canReject: true,
+      canRejectRoute: true,
       canTransfer: true,
       canReturn: false,
     })
@@ -752,6 +881,7 @@ describe('workbench pages', () => {
       canClaim: false,
       canApprove: true,
       canReject: true,
+      canRejectRoute: true,
       canTransfer: true,
       canReturn: true,
       canAddSign: true,
@@ -759,6 +889,9 @@ describe('workbench pages', () => {
       canRevoke: true,
       canUrge: true,
       canRead: true,
+      canJump: true,
+      canTakeBack: true,
+      canWakeUp: true,
     })
     workbenchApiMocks.readWorkbenchTask.mockResolvedValue({
       instanceId: 'pi_001',
@@ -795,6 +928,7 @@ describe('workbench pages', () => {
       canClaim: false,
       canApprove: true,
       canReject: true,
+      canRejectRoute: true,
       canTransfer: true,
       canReturn: false,
     })
@@ -851,6 +985,7 @@ describe('workbench pages', () => {
       canClaim: false,
       canApprove: true,
       canReject: true,
+      canRejectRoute: true,
       canTransfer: false,
       canReturn: false,
     })
@@ -932,6 +1067,7 @@ describe('workbench pages', () => {
       canClaim: false,
       canApprove: true,
       canReject: false,
+      canRejectRoute: false,
       canTransfer: false,
       canReturn: false,
     })

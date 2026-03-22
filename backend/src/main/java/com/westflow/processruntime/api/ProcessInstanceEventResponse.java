@@ -18,6 +18,9 @@ public record ProcessInstanceEventResponse(
         String targetUserId,
         String operatorUserId,
         OffsetDateTime occurredAt,
-        Map<String, Object> details
+        Map<String, Object> details,
+        String targetStrategy,
+        String targetNodeId,
+        String reapproveStrategy
 ) {
 }

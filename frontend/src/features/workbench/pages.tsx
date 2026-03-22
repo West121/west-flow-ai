@@ -21,7 +21,7 @@ import {
   UserCheck2,
   UserRoundPlus,
 } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -77,13 +77,17 @@ import {
   completeWorkbenchTask,
   getWorkbenchTaskActions,
   getWorkbenchTaskDetail,
+  jumpWorkbenchTask,
   listApprovalSheets,
   listWorkbenchTasks,
   readWorkbenchTask,
   removeSignWorkbenchTask,
   revokeWorkbenchTask,
+  rejectWorkbenchTask,
   returnWorkbenchTask,
+  takeBackWorkbenchTask,
   transferWorkbenchTask,
+  wakeUpWorkbenchInstance,
   urgeWorkbenchTask,
   type ApprovalSheetListItem,
   type CompleteWorkbenchTaskPayload,
@@ -715,6 +719,43 @@ const returnTaskSchema = z.object({
 
 type ReturnTaskFormValues = z.input<typeof returnTaskSchema>
 
+const rejectTaskSchema = z.object({
+  targetStrategy: z.enum([
+    'PREVIOUS_USER_TASK',
+    'INITIATOR',
+    'ANY_USER_TASK',
+  ]),
+  targetTaskId: z.string().max(120, '驳回目标任务编号最多 120 个字符').default(''),
+  targetNodeId: z.string().max(120, '驳回目标节点编号最多 120 个字符').default(''),
+  reapproveStrategy: z.enum([
+    'CONTINUE',
+    'RETURN_TO_REJECTED_NODE',
+  ]),
+  comment: z.string().max(500, '驳回说明最多 500 个字符').default(''),
+})
+
+type RejectTaskFormValues = z.input<typeof rejectTaskSchema>
+
+const jumpTaskSchema = z.object({
+  targetNodeId: z.string().trim().min(1, '请输入目标节点编号'),
+  comment: z.string().max(500, '跳转说明最多 500 个字符').default(''),
+})
+
+type JumpTaskFormValues = z.input<typeof jumpTaskSchema>
+
+const takeBackTaskSchema = z.object({
+  comment: z.string().max(500, '拿回说明最多 500 个字符').default(''),
+})
+
+type TakeBackTaskFormValues = z.input<typeof takeBackTaskSchema>
+
+const wakeUpTaskSchema = z.object({
+  sourceTaskId: z.string().trim().min(1, '请输入历史任务编号'),
+  comment: z.string().max(500, '唤醒说明最多 500 个字符').default(''),
+})
+
+type WakeUpTaskFormValues = z.input<typeof wakeUpTaskSchema>
+
 const addSignTaskSchema = z.object({
   targetUserId: z.string().trim().min(1, '请输入加签用户编码'),
   comment: z.string().max(500, '加签说明最多 500 个字符').default(''),
@@ -1040,6 +1081,10 @@ export function WorkbenchTodoDetailPage({
   const [addSignDialogOpen, setAddSignDialogOpen] = useState(false)
   const [removeSignDialogOpen, setRemoveSignDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
+  const [jumpDialogOpen, setJumpDialogOpen] = useState(false)
+  const [takeBackDialogOpen, setTakeBackDialogOpen] = useState(false)
+  const [wakeUpDialogOpen, setWakeUpDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [urgeDialogOpen, setUrgeDialogOpen] = useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
@@ -1097,6 +1142,35 @@ export function WorkbenchTodoDetailPage({
     return resolvedTaskId
   }
 
+  function requireActionInstanceId() {
+    if (!detail?.instanceId) {
+      throw new Error('当前审批单没有实例编号')
+    }
+
+    return detail.instanceId
+  }
+
+  async function navigateAfterTaskMutation(response: {
+    nextTasks: Array<{ taskId: string }>
+  }) {
+    const nextTask = response.nextTasks[0]
+    if (locator?.mode === 'task') {
+      if (nextTask) {
+        startTransition(() => {
+          navigate({
+            to: '/workbench/todos/$taskId',
+            params: { taskId: nextTask.taskId },
+          })
+        })
+        return
+      }
+
+      startTransition(() => {
+        navigate({ to: '/workbench/todos/list' })
+      })
+    }
+  }
+
   const claimForm = useForm<ClaimTaskFormValues>({
     resolver: zodResolver(claimTaskSchema),
     defaultValues: {
@@ -1136,6 +1210,36 @@ export function WorkbenchTodoDetailPage({
       comment: '',
     },
   })
+  const rejectForm = useForm<RejectTaskFormValues>({
+    resolver: zodResolver(rejectTaskSchema),
+    defaultValues: {
+      targetStrategy: 'PREVIOUS_USER_TASK',
+      targetTaskId: '',
+      targetNodeId: '',
+      reapproveStrategy: 'CONTINUE',
+      comment: '',
+    },
+  })
+  const jumpForm = useForm<JumpTaskFormValues>({
+    resolver: zodResolver(jumpTaskSchema),
+    defaultValues: {
+      targetNodeId: '',
+      comment: '',
+    },
+  })
+  const takeBackForm = useForm<TakeBackTaskFormValues>({
+    resolver: zodResolver(takeBackTaskSchema),
+    defaultValues: {
+      comment: '',
+    },
+  })
+  const wakeUpForm = useForm<WakeUpTaskFormValues>({
+    resolver: zodResolver(wakeUpTaskSchema),
+    defaultValues: {
+      sourceTaskId: '',
+      comment: '',
+    },
+  })
   const urgeForm = useForm<SimpleActionCommentFormValues>({
     resolver: zodResolver(simpleActionCommentSchema),
     defaultValues: {
@@ -1169,10 +1273,41 @@ export function WorkbenchTodoDetailPage({
     revokeForm.reset({
       comment: '',
     })
+    rejectForm.reset({
+      targetStrategy: 'PREVIOUS_USER_TASK',
+      targetTaskId: '',
+      targetNodeId: '',
+      reapproveStrategy: 'CONTINUE',
+      comment: '',
+    })
+    jumpForm.reset({
+      targetNodeId: '',
+      comment: '',
+    })
+    takeBackForm.reset({
+      comment: '',
+    })
+    wakeUpForm.reset({
+      sourceTaskId: '',
+      comment: '',
+    })
     urgeForm.reset({
       comment: '',
     })
-  }, [addSignForm, claimForm, detail, removeSignForm, returnForm, revokeForm, transferForm, urgeForm])
+  }, [
+    addSignForm,
+    claimForm,
+    detail,
+    jumpForm,
+    removeSignForm,
+    rejectForm,
+    returnForm,
+    revokeForm,
+    takeBackForm,
+    transferForm,
+    urgeForm,
+    wakeUpForm,
+  ])
 
   async function refreshWorkbenchQueries() {
     await Promise.all([
@@ -1312,6 +1447,82 @@ export function WorkbenchTodoDetailPage({
     },
     onError: handleServerError,
   })
+  const rejectMutation = useMutation({
+    mutationFn: (payload: RejectTaskFormValues) => {
+      const targetTaskId = payload.targetTaskId?.trim()
+      const targetNodeId = payload.targetNodeId?.trim()
+
+      return rejectWorkbenchTask(requireActionTaskId(), {
+        targetStrategy: payload.targetStrategy,
+        targetTaskId: targetTaskId || undefined,
+        targetNodeId: targetNodeId || undefined,
+        reapproveStrategy: payload.reapproveStrategy,
+        comment: payload.comment?.trim() || undefined,
+      })
+    },
+    onSuccess: async (response) => {
+      await refreshWorkbenchQueries()
+      setRejectDialogOpen(false)
+      rejectForm.reset({
+        targetStrategy: 'PREVIOUS_USER_TASK',
+        targetTaskId: '',
+        targetNodeId: '',
+        reapproveStrategy: 'CONTINUE',
+        comment: '',
+      })
+      await navigateAfterTaskMutation(response)
+    },
+    onError: handleServerError,
+  })
+  const jumpMutation = useMutation({
+    mutationFn: (payload: JumpTaskFormValues) =>
+      jumpWorkbenchTask(requireActionTaskId(), {
+        targetNodeId: payload.targetNodeId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async (response) => {
+      await refreshWorkbenchQueries()
+      setJumpDialogOpen(false)
+      jumpForm.reset({
+        targetNodeId: '',
+        comment: '',
+      })
+      await navigateAfterTaskMutation(response)
+    },
+    onError: handleServerError,
+  })
+  const takeBackMutation = useMutation({
+    mutationFn: (payload: TakeBackTaskFormValues) =>
+      takeBackWorkbenchTask(requireActionTaskId(), {
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async (response) => {
+      await refreshWorkbenchQueries()
+      setTakeBackDialogOpen(false)
+      takeBackForm.reset({
+        comment: '',
+      })
+      await navigateAfterTaskMutation(response)
+    },
+    onError: handleServerError,
+  })
+  const wakeUpMutation = useMutation({
+    mutationFn: (payload: WakeUpTaskFormValues) =>
+      wakeUpWorkbenchInstance(requireActionInstanceId(), {
+        sourceTaskId: payload.sourceTaskId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async (response) => {
+      await refreshWorkbenchQueries()
+      setWakeUpDialogOpen(false)
+      wakeUpForm.reset({
+        sourceTaskId: '',
+        comment: '',
+      })
+      await navigateAfterTaskMutation(response)
+    },
+    onError: handleServerError,
+  })
   const urgeMutation = useMutation({
     mutationFn: (payload: SimpleActionCommentFormValues) =>
       urgeWorkbenchTask(requireActionTaskId(), {
@@ -1372,8 +1583,17 @@ export function WorkbenchTodoDetailPage({
       actionsQuery.data?.canRemoveSign ||
       actionsQuery.data?.canRevoke ||
       actionsQuery.data?.canUrge ||
-      actionsQuery.data?.canRead
+      actionsQuery.data?.canRead ||
+      actionsQuery.data?.canRejectRoute ||
+      actionsQuery.data?.canJump ||
+      actionsQuery.data?.canTakeBack ||
+      actionsQuery.data?.canWakeUp
   )
+  const rejectTargetStrategy =
+    useWatch({
+      control: rejectForm.control,
+      name: 'targetStrategy',
+    }) ?? 'PREVIOUS_USER_TASK'
 
   return (
     <PageShell
@@ -1554,8 +1774,21 @@ export function WorkbenchTodoDetailPage({
                 detail={detail}
                 hasNodeForm={hasNodeForm}
                 showCompletionForm={showCompletionForm}
-                onSubmit={(payload) => completeMutation.mutate(payload)}
-                isPending={completeMutation.isPending}
+                onSubmit={(payload) => {
+                  if (payload.action === 'REJECT') {
+                    rejectMutation.mutate({
+                      targetStrategy: 'PREVIOUS_USER_TASK',
+                      targetTaskId: '',
+                      targetNodeId: '',
+                      reapproveStrategy: 'CONTINUE',
+                      comment: payload.comment ?? undefined,
+                    })
+                    return
+                  }
+
+                  completeMutation.mutate(payload)
+                }}
+                isPending={completeMutation.isPending || rejectMutation.isPending}
               />
             </CardContent>
           </Card>
@@ -1802,6 +2035,310 @@ export function WorkbenchTodoDetailPage({
                       >
                         {readMutation.isPending ? '处理中' : '已阅'}
                       </Button>
+                    ) : null}
+
+                    {actionsQuery.data?.canRejectRoute ? (
+                      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>
+                            驳回
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>驳回处理</DialogTitle>
+                            <DialogDescription>
+                              选择驳回目标和重审策略，系统会通过专用驳回接口处理。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...rejectForm}>
+                            <form
+                              className='space-y-4'
+                              onSubmit={rejectForm.handleSubmit((values) => {
+                                rejectMutation.mutate(values)
+                              })}
+                            >
+                              <FormField
+                                control={rejectForm.control}
+                                name='targetStrategy'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>驳回目标</FormLabel>
+                                    <FormControl>
+                                      <select
+                                        className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                                        {...field}
+                                      >
+                                        <option value='PREVIOUS_USER_TASK'>上一步人工节点</option>
+                                        <option value='INITIATOR'>发起人</option>
+                                        <option value='ANY_USER_TASK'>任意节点</option>
+                                      </select>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              {rejectTargetStrategy === 'ANY_USER_TASK' ? (
+                                <FormField
+                                  control={rejectForm.control}
+                                  name='targetNodeId'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>目标节点编号</FormLabel>
+                                      <FormControl>
+                                        <Input placeholder='例如：approve_finance' {...field} />
+                                      </FormControl>
+                                      <FormDescription>当前版本通过节点编号指定任意驳回目标。</FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              ) : (
+                                <FormField
+                                  control={rejectForm.control}
+                                  name='targetTaskId'
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel>目标任务编号</FormLabel>
+                                      <FormControl>
+                                        <Input placeholder='可选，系统会自动解析默认目标' {...field} />
+                                      </FormControl>
+                                      <FormDescription>上一步或发起人场景可留空，让系统自动回退。</FormDescription>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+                              )}
+                              <FormField
+                                control={rejectForm.control}
+                                name='reapproveStrategy'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>重审策略</FormLabel>
+                                    <FormControl>
+                                      <select
+                                        className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                                        {...field}
+                                      >
+                                        <option value='CONTINUE'>继续执行</option>
+                                        <option value='RETURN_TO_REJECTED_NODE'>退回驳回节点</option>
+                                      </select>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={rejectForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>驳回说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入驳回说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setRejectDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={rejectMutation.isPending}>
+                                  {rejectMutation.isPending ? '驳回中' : '确认驳回'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canJump ? (
+                      <Dialog open={jumpDialogOpen} onOpenChange={setJumpDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>
+                            跳转
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>跳转</DialogTitle>
+                            <DialogDescription>
+                              将当前任务强制路由到指定节点或结束节点。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...jumpForm}>
+                            <form
+                              className='space-y-4'
+                              onSubmit={jumpForm.handleSubmit((values) => {
+                                jumpMutation.mutate(values)
+                              })}
+                            >
+                              <FormField
+                                control={jumpForm.control}
+                                name='targetNodeId'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>目标节点编号</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder='例如：approve_finance' {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={jumpForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>跳转说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入跳转说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setJumpDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={jumpMutation.isPending}>
+                                  {jumpMutation.isPending ? '跳转中' : '确认跳转'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canTakeBack ? (
+                      <Dialog open={takeBackDialogOpen} onOpenChange={setTakeBackDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>
+                            拿回
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>拿回任务</DialogTitle>
+                            <DialogDescription>
+                              在当前办理人未处理前，上一节点提交人可把任务拿回。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...takeBackForm}>
+                            <form
+                              className='space-y-4'
+                              onSubmit={takeBackForm.handleSubmit((values) => {
+                                takeBackMutation.mutate(values)
+                              })}
+                            >
+                              <FormField
+                                control={takeBackForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>拿回说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入拿回说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setTakeBackDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={takeBackMutation.isPending}>
+                                  {takeBackMutation.isPending ? '拿回中' : '确认拿回'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canWakeUp ? (
+                      <Dialog open={wakeUpDialogOpen} onOpenChange={setWakeUpDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>
+                            唤醒
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>唤醒流程</DialogTitle>
+                            <DialogDescription>
+                              从历史任务重新拉起终态实例，继续后续审批流程。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...wakeUpForm}>
+                            <form
+                              className='space-y-4'
+                              onSubmit={wakeUpForm.handleSubmit((values) => {
+                                wakeUpMutation.mutate(values)
+                              })}
+                            >
+                              <FormField
+                                control={wakeUpForm.control}
+                                name='sourceTaskId'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>历史任务编号</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder='例如：task_001' {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={wakeUpForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>唤醒说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入唤醒说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setWakeUpDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={wakeUpMutation.isPending}>
+                                  {wakeUpMutation.isPending ? '唤醒中' : '确认唤醒'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
                     ) : null}
                   </div>
                 </div>

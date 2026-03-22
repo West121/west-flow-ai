@@ -120,6 +120,18 @@ export function resolveApprovalSheetBusinessRows(
 }
 
 export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
+  if (item.action === 'REJECT_ROUTE') {
+    return '驳回到上一步人工节点'
+  }
+  if (item.action === 'JUMP') {
+    return '跳转'
+  }
+  if (item.action === 'TAKE_BACK') {
+    return '拿回'
+  }
+  if (item.action === 'WAKE_UP') {
+    return '唤醒'
+  }
   if (item.action === 'APPROVE') {
     return '通过'
   }

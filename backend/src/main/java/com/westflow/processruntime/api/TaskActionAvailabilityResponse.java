@@ -10,6 +10,10 @@ public record TaskActionAvailabilityResponse(
         boolean canRemoveSign,
         boolean canRevoke,
         boolean canUrge,
-        boolean canRead
+        boolean canRead,
+        boolean canRejectRoute,
+        boolean canJump,
+        boolean canTakeBack,
+        boolean canWakeUp
 ) {
 }
