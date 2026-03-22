@@ -1,32 +1,43 @@
 package com.westflow.ai.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.ai.agent.AiAgentDescriptor;
+import com.westflow.ai.agent.AiAgentRegistry;
+import com.westflow.ai.gateway.AiGatewayService;
 import com.westflow.ai.mapper.AiAuditMapper;
 import com.westflow.ai.mapper.AiConfirmationMapper;
 import com.westflow.ai.mapper.AiConversationMapper;
 import com.westflow.ai.mapper.AiMessageMapper;
 import com.westflow.ai.mapper.AiToolCallMapper;
 import com.westflow.ai.model.AiConfirmToolCallRequest;
+import com.westflow.ai.model.AiConversationDetailResponse;
 import com.westflow.ai.model.AiConversationRecord;
+import com.westflow.ai.model.AiMessageAppendRequest;
+import com.westflow.ai.model.AiMessageRecord;
 import com.westflow.ai.model.AiToolCallRequest;
 import com.westflow.ai.model.AiToolCallRecord;
 import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.model.AiToolSource;
 import com.westflow.ai.model.AiToolType;
+import com.westflow.ai.orchestration.AiOrchestrationPlanner;
+import com.westflow.ai.skill.AiSkillDescriptor;
+import com.westflow.ai.skill.AiSkillRegistry;
+import com.westflow.ai.tool.AiToolDefinition;
+import com.westflow.ai.tool.AiToolRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -54,13 +65,55 @@ class AiCopilotServiceTest {
 
     @BeforeEach
     void setUp() {
+        AiAgentRegistry aiAgentRegistry = new AiAgentRegistry(List.of(
+                new AiAgentDescriptor("supervisor", "Supervisor", "SUPERVISOR", List.of("OA", "PLM", "GENERAL"), true, 100),
+                new AiAgentDescriptor("routing", "Routing", "ROUTING", List.of("OA", "PLM", "GENERAL"), false, 80)
+        ));
+        AiSkillRegistry aiSkillRegistry = new AiSkillRegistry(List.of(
+                new AiSkillDescriptor("approval-trace", "审批轨迹解释", List.of("OA", "PLM"), List.of("轨迹", "路径"), false, 90),
+                new AiSkillDescriptor("plm-change-summary", "PLM 变更摘要", List.of("PLM"), List.of("PLM", "ECR", "ECO"), false, 80)
+        ));
+        AiToolRegistry aiToolRegistry = new AiToolRegistry(List.of(
+                AiToolDefinition.read(
+                        "workflow.todo.list",
+                        AiToolSource.PLATFORM,
+                        "已返回待办列表",
+                        context -> Map.of("count", 1, "items", List.of("task_001"))
+                ),
+                AiToolDefinition.read(
+                        "workflow.trace.summary",
+                        AiToolSource.SKILL,
+                        "已返回审批轨迹摘要",
+                        context -> Map.of("summary", "当前审批轨迹正常")
+                ),
+                AiToolDefinition.read(
+                        "plm.change.summary",
+                        AiToolSource.SKILL,
+                        "已返回 PLM 变更摘要",
+                        context -> Map.of("summary", "PLM 变更摘要已生成")
+                ),
+                AiToolDefinition.write(
+                        "process.start",
+                        AiToolSource.AGENT,
+                        "请确认是否发起流程",
+                        context -> Map.of("accepted", true)
+                ),
+                AiToolDefinition.write(
+                        "workflow.task.complete",
+                        AiToolSource.AGENT,
+                        "请确认是否完成当前待办",
+                        context -> Map.of("accepted", true)
+                )
+        ));
         aiCopilotService = new DbAiCopilotService(
                 aiConversationMapper,
                 aiMessageMapper,
                 aiToolCallMapper,
                 aiConfirmationMapper,
                 aiAuditMapper,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new AiGatewayService(new AiOrchestrationPlanner(aiAgentRegistry, aiSkillRegistry)),
+                new AiToolExecutionService(aiToolRegistry)
         );
     }
 
@@ -115,6 +168,54 @@ class AiCopilotServiceTest {
         assertThat(confirmed.status()).isEqualTo("CONFIRMED");
         verify(aiConfirmationMapper).insertConfirmation(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
+    }
+
+    @Test
+    void shouldAppendWriteIntentMessageAndStageConfirmationCard() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(2L);
+        when(aiMessageMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("请直接发起这个流程")
+        );
+
+        assertThat(detail.conversationId()).isEqualTo("conv_001");
+        verify(aiToolCallMapper).insertToolCall(any());
+        verify(aiAuditMapper, times(2)).insertAudit(any());
+    }
+
+    @Test
+    void shouldAppendReadIntentMessageThroughSkillRouting() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(2L);
+        when(aiMessageMapper.selectByConversationId("conv_001")).thenReturn(List.of(
+                new AiMessageRecord(
+                        "msg_001",
+                        "conv_001",
+                        "assistant",
+                        "AI Copilot",
+                        "我已经汇总当前审批轨迹，可继续追问节点处理路径。",
+                        "[]",
+                        "usr_001",
+                        LocalDateTime.of(2026, 3, 23, 10, 12),
+                        LocalDateTime.of(2026, 3, 23, 10, 12)
+                )
+        ));
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我总结一下审批轨迹")
+        );
+
+        assertThat(detail.conversationId()).isEqualTo("conv_001");
+        verify(aiToolCallMapper).insertToolCall(any());
+        verify(aiConfirmationMapper, never()).insertConfirmation(any());
     }
 
     private AiConversationRecord conversation() {

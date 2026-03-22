@@ -4,6 +4,9 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.ai.gateway.AiGatewayRequest;
+import com.westflow.ai.gateway.AiGatewayResponse;
+import com.westflow.ai.gateway.AiGatewayService;
 import com.westflow.ai.mapper.AiAuditMapper;
 import com.westflow.ai.mapper.AiConfirmationMapper;
 import com.westflow.ai.mapper.AiConversationMapper;
@@ -58,6 +61,8 @@ public class DbAiCopilotService implements AiCopilotService {
     private final AiConfirmationMapper aiConfirmationMapper;
     private final AiAuditMapper aiAuditMapper;
     private final ObjectMapper objectMapper;
+    private final AiGatewayService aiGatewayService;
+    private final AiToolExecutionService aiToolExecutionService;
 
     public DbAiCopilotService(
             AiConversationMapper aiConversationMapper,
@@ -65,7 +70,9 @@ public class DbAiCopilotService implements AiCopilotService {
             AiToolCallMapper aiToolCallMapper,
             AiConfirmationMapper aiConfirmationMapper,
             AiAuditMapper aiAuditMapper,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            AiGatewayService aiGatewayService,
+            AiToolExecutionService aiToolExecutionService
     ) {
         this.aiConversationMapper = aiConversationMapper;
         this.aiMessageMapper = aiMessageMapper;
@@ -73,6 +80,8 @@ public class DbAiCopilotService implements AiCopilotService {
         this.aiConfirmationMapper = aiConfirmationMapper;
         this.aiAuditMapper = aiAuditMapper;
         this.objectMapper = objectMapper;
+        this.aiGatewayService = aiGatewayService;
+        this.aiToolExecutionService = aiToolExecutionService;
     }
 
     /**
@@ -119,11 +128,14 @@ public class DbAiCopilotService implements AiCopilotService {
     @Override
     public AiConversationDetailResponse getConversation(String conversationId) {
         AiConversationRecord conversation = requireConversation(conversationId);
+        List<AiMessageRecord> messageRecords = aiMessageMapper.selectByConversationId(conversationId);
+        List<AiToolCallRecord> toolCallRecords = aiToolCallMapper.selectByConversationId(conversationId);
+        List<AiAuditRecord> auditRecords = aiAuditMapper.selectByConversationId(conversationId);
         return toDetail(
                 conversation,
-                aiMessageMapper.selectByConversationId(conversationId).stream().map(this::toMessage).toList(),
-                aiToolCallMapper.selectByConversationId(conversationId).stream().map(this::toToolCallResult).toList(),
-                aiAuditMapper.selectByConversationId(conversationId).stream().map(this::toAudit).toList()
+                messageRecords == null ? List.of() : messageRecords.stream().map(this::toMessage).toList(),
+                toolCallRecords == null ? List.of() : toolCallRecords.stream().map(this::toToolCallResult).toList(),
+                auditRecords == null ? List.of() : auditRecords.stream().map(this::toAudit).toList()
         );
     }
 
@@ -135,23 +147,41 @@ public class DbAiCopilotService implements AiCopilotService {
     public AiConversationDetailResponse appendMessage(String conversationId, AiMessageAppendRequest request) {
         AiConversationRecord conversation = requireConversation(conversationId);
         LocalDateTime now = now();
+        String normalizedContent = request.content() == null ? "" : request.content().trim();
         AiMessageRecord message = new AiMessageRecord(
                 newId("msg"),
                 conversationId,
                 "user",
                 "你",
-                request.content(),
-                toJson(List.of(defaultTextBlock(request.content()))),
+                normalizedContent,
+                toJson(List.of(defaultTextBlock(normalizedContent))),
                 currentUserId(),
                 now,
                 now
         );
         aiMessageMapper.insertMessage(message);
-        String preview = request.content() == null || request.content().isBlank() ? conversation.preview() : request.content();
-        insertAudit(conversationId, null, "MESSAGE_APPEND", preview);
-        createAssistantReply(conversationId, request.content(), now);
+        String preview = normalizedContent.isBlank() ? conversation.preview() : normalizedContent;
+        insertAudit(conversationId, null, "MESSAGE_APPEND", preview == null ? "" : preview);
+        AssistantReply assistantReply = buildAssistantReply(conversation, normalizedContent, now);
+        aiMessageMapper.insertMessage(new AiMessageRecord(
+                newId("msg"),
+                conversationId,
+                "assistant",
+                "AI Copilot",
+                assistantReply.content(),
+                toJson(assistantReply.blocks()),
+                currentUserId(),
+                now,
+                now
+        ));
         long messageCount = aiMessageMapper.countByConversationId(conversationId);
-        aiConversationMapper.updateConversationSnapshot(conversationId, preview, STATUS_ACTIVE, Math.toIntExact(messageCount), now);
+        aiConversationMapper.updateConversationSnapshot(
+                conversationId,
+                assistantReply.content(),
+                STATUS_ACTIVE,
+                Math.toIntExact(messageCount),
+                now
+        );
         return getConversation(conversationId);
     }
 
@@ -162,38 +192,10 @@ public class DbAiCopilotService implements AiCopilotService {
     @Transactional
     public AiToolCallResultResponse executeToolCall(String conversationId, AiToolCallRequest request) {
         requireConversation(conversationId);
-        LocalDateTime now = now();
-        String toolCallId = newId("tool");
-        boolean requiresConfirmation = request.toolType() == AiToolType.WRITE;
-        String status = requiresConfirmation ? TOOL_STATUS_PENDING_CONFIRMATION : TOOL_STATUS_EXECUTED;
-        String summary = requiresConfirmation ? confirmationSummary(request.toolKey()) : executionSummary(request.toolKey());
-        String confirmationId = requiresConfirmation ? newId("confirm") : null;
-        Map<String, Object> result = requiresConfirmation
-                ? Map.of()
-                : Map.of("executed", true, "toolKey", request.toolKey());
-        AiToolCallRecord record = new AiToolCallRecord(
-                toolCallId,
-                conversationId,
-                request.toolKey(),
-                request.toolType(),
-                request.toolSource(),
-                status,
-                requiresConfirmation,
-                toJson(request.arguments()),
-                toJson(result),
-                summary,
-                confirmationId,
-                currentUserId(),
-                now,
-                requiresConfirmation ? null : now
-        );
-        aiToolCallMapper.insertToolCall(record);
-        if (requiresConfirmation) {
-            insertAudit(conversationId, toolCallId, "WRITE", summary);
-        } else {
-            insertAudit(conversationId, toolCallId, "READ", summary);
-        }
-        return toToolCallResult(record);
+        AiToolCallResultResponse result = aiToolExecutionService.executeToolCall(conversationId, request);
+        persistToolCall(result);
+        insertAudit(conversationId, result.toolCallId(), request.toolType() == AiToolType.WRITE ? "WRITE" : "READ", result.summary());
+        return result;
     }
 
     /**
@@ -257,84 +259,50 @@ public class DbAiCopilotService implements AiCopilotService {
         );
     }
 
-    private void createAssistantReply(String conversationId, String content, LocalDateTime now) {
-        String normalizedContent = content == null ? "" : content.trim();
-        if (normalizedContent.isBlank()) {
-            return;
+    private AssistantReply buildAssistantReply(AiConversationRecord conversation, String content, LocalDateTime now) {
+        if (content.isBlank()) {
+            return new AssistantReply("请输入更明确的问题或操作意图。", List.of(defaultTextBlock("当前消息为空，未触发 AI 编排。")));
         }
 
-        List<AiMessageBlockResponse> blocks;
-        String assistantContent;
-        if (requiresWriteConfirmation(normalizedContent)) {
-            PendingToolCall pendingToolCall = stagePendingToolCall(conversationId, normalizedContent, now);
-            assistantContent = "我已经整理出建议动作，确认后才会真正执行写操作。";
-            blocks = List.of(
-                    defaultTextBlock("检测到写操作意图，系统已切换为确认执行模式。"),
-                    new AiMessageBlockResponse(
-                            "confirm",
-                            "请确认是否继续执行",
-                            null,
-                            pendingToolCall.confirmationId(),
-                            pendingToolCall.summary(),
-                            "当前默认策略是读操作直执、写操作必须确认。",
-                            "确认处理",
-                            "暂不执行",
-                            "pending",
-                            null
+        String domain = resolveDomain(conversation);
+        AiGatewayResponse gatewayResponse = aiGatewayService.route(new AiGatewayRequest(
+                conversation.conversationId(),
+                currentUserId(),
+                content,
+                domain,
+                false,
+                List.of(),
+                parseJsonStringList(conversation.contextTagsJson())
+        ));
+
+        if (gatewayResponse.requiresConfirmation()) {
+            AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(
+                    conversation.conversationId(),
+                    buildWriteToolCall(content, domain)
+            );
+            persistToolCall(toolResult);
+            insertAudit(conversation.conversationId(), toolResult.toolCallId(), "WRITE", toolResult.summary());
+            return new AssistantReply(
+                    "我已经整理出建议动作，确认后才会真正执行写操作。",
+                    List.of(
+                            defaultTextBlock("当前请求已进入 Supervisor 审核流程。"),
+                            confirmationBlock(toolResult)
                     )
             );
-        } else {
-            assistantContent = "我已经根据当前问题整理出下一步建议，你可以继续追问或改写指令。";
-            blocks = List.of(defaultTextBlock("这是一次只读分析，不会触发任何写操作。"));
         }
 
-        aiMessageMapper.insertMessage(new AiMessageRecord(
-                newId("msg"),
-                conversationId,
-                "assistant",
-                "AI Copilot",
-                assistantContent,
-                toJson(blocks),
-                currentUserId(),
-                now,
-                now
-        ));
-    }
+        AiToolCallRequest readToolCall = buildReadToolCall(content, domain, gatewayResponse.skillIds());
+        if (readToolCall != null) {
+            AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(conversation.conversationId(), readToolCall);
+            persistToolCall(toolResult);
+            insertAudit(conversation.conversationId(), toolResult.toolCallId(), "READ", toolResult.summary());
+            return new AssistantReply(buildReadSummary(toolResult), buildReadBlocks(toolResult, gatewayResponse));
+        }
 
-    private PendingToolCall stagePendingToolCall(String conversationId, String content, LocalDateTime now) {
-        String toolCallId = newId("tool");
-        String confirmationId = newId("confirm");
-        String toolKey = detectToolKey(content);
-        String summary = confirmationSummary(toolKey);
-        aiToolCallMapper.insertToolCall(new AiToolCallRecord(
-                toolCallId,
-                conversationId,
-                toolKey,
-                AiToolType.WRITE,
-                AiToolSource.AGENT,
-                TOOL_STATUS_PENDING_CONFIRMATION,
-                true,
-                toJson(Map.of("content", content)),
-                toJson(Map.of()),
-                summary,
-                confirmationId,
-                currentUserId(),
-                now,
-                null
-        ));
-        aiConfirmationMapper.insertConfirmation(new AiConfirmationRecord(
-                confirmationId,
-                toolCallId,
-                "pending",
-                false,
-                null,
-                null,
-                now,
-                null,
-                now
-        ));
-        insertAudit(conversationId, toolCallId, "WRITE", "生成待确认操作卡");
-        return new PendingToolCall(toolCallId, confirmationId, summary);
+        return new AssistantReply(
+                buildAssistantSummary(gatewayResponse, domain),
+                List.of(defaultTextBlock(buildAssistantSummary(gatewayResponse, domain)))
+        );
     }
 
     private void appendConfirmationResultMessage(
@@ -375,22 +343,6 @@ public class DbAiCopilotService implements AiCopilotService {
                 Math.toIntExact(messageCount),
                 now
         );
-    }
-
-    private boolean requiresWriteConfirmation(String content) {
-        return List.of("完成", "审批", "处理", "发起", "提交", "驳回", "退回", "转办", "加签", "减签")
-                .stream()
-                .anyMatch(content::contains);
-    }
-
-    private String detectToolKey(String content) {
-        if (content.contains("发起")) {
-            return "process.start";
-        }
-        if (content.contains("驳回") || content.contains("退回")) {
-            return "workflow.task.reject";
-        }
-        return "workflow.task.complete";
     }
 
     private AiConversationRecord requireConversation(String conversationId) {
@@ -561,6 +513,32 @@ public class DbAiCopilotService implements AiCopilotService {
         return offsetDateTime;
     }
 
+    private void persistToolCall(AiToolCallResultResponse result) {
+        aiToolCallMapper.insertToolCall(new AiToolCallRecord(
+                result.toolCallId(),
+                result.conversationId(),
+                result.toolKey(),
+                result.toolType(),
+                result.toolSource(),
+                result.status(),
+                result.requiresConfirmation(),
+                toJson(result.arguments()),
+                toJson(result.result()),
+                result.summary(),
+                result.confirmationId(),
+                currentUserId(),
+                toLocalDateTime(result.createdAt()),
+                toLocalDateTime(result.completedAt())
+        ));
+    }
+
+    private LocalDateTime toLocalDateTime(OffsetDateTime offsetDateTime) {
+        if (offsetDateTime == null) {
+            return null;
+        }
+        return offsetDateTime.atZoneSameInstant(TIME_ZONE).toLocalDateTime();
+    }
+
     private String defaultTitle(String title) {
         if (title == null || title.isBlank()) {
             return "新建 Copilot 会话";
@@ -568,28 +546,131 @@ public class DbAiCopilotService implements AiCopilotService {
         return title.trim();
     }
 
-    private String executionSummary(String toolKey) {
-        if ("workflow.todo.list".equals(toolKey)) {
-            return "已返回待办列表";
+    private String resolveDomain(AiConversationRecord conversation) {
+        List<String> contextTags = parseJsonStringList(conversation.contextTagsJson());
+        if (contextTags.stream().anyMatch(tag -> "PLM".equalsIgnoreCase(tag))) {
+            return "PLM";
         }
-        return "已执行工具调用";
+        if (contextTags.stream().anyMatch(tag -> "OA".equalsIgnoreCase(tag) || "审批".equalsIgnoreCase(tag))) {
+            return "OA";
+        }
+        return "GENERAL";
     }
 
-    private String confirmationSummary(String toolKey) {
-        if (toolKey != null && toolKey.contains("complete")) {
-            return "请确认是否完成当前待办";
+    private AiToolCallRequest buildWriteToolCall(String content, String domain) {
+        if (content.contains("发起") || content.contains("提交")) {
+            return new AiToolCallRequest(
+                    "process.start",
+                    AiToolType.WRITE,
+                    AiToolSource.AGENT,
+                    Map.of("content", content, "domain", domain)
+            );
         }
-        return "请确认是否执行该操作";
+        if (content.contains("驳回") || content.contains("退回")) {
+            return new AiToolCallRequest(
+                    "workflow.task.reject",
+                    AiToolType.WRITE,
+                    AiToolSource.AGENT,
+                    Map.of("content", content, "domain", domain)
+            );
+        }
+        return new AiToolCallRequest(
+                "workflow.task.complete",
+                AiToolType.WRITE,
+                AiToolSource.AGENT,
+                Map.of("content", content, "domain", domain)
+        );
+    }
+
+    private AiToolCallRequest buildReadToolCall(String content, String domain, List<String> skillIds) {
+        if (skillIds.contains("approval-trace") || content.contains("轨迹") || content.contains("路径")) {
+            return new AiToolCallRequest(
+                    "workflow.trace.summary",
+                    AiToolType.READ,
+                    AiToolSource.SKILL,
+                    Map.of("content", content, "domain", domain)
+            );
+        }
+        if (skillIds.contains("plm-change-summary") || "PLM".equalsIgnoreCase(domain)
+                || content.contains("PLM") || content.contains("ECR") || content.contains("ECO") || content.contains("物料")) {
+            return new AiToolCallRequest(
+                    "plm.change.summary",
+                    AiToolType.READ,
+                    AiToolSource.SKILL,
+                    Map.of("content", content, "domain", domain, "businessType", "PLM")
+            );
+        }
+        if (content.contains("待办")) {
+            return new AiToolCallRequest(
+                    "workflow.todo.list",
+                    AiToolType.READ,
+                    AiToolSource.PLATFORM,
+                    Map.of("keyword", content, "domain", domain)
+            );
+        }
+        return null;
+    }
+
+    private AiMessageBlockResponse confirmationBlock(AiToolCallResultResponse result) {
+        return new AiMessageBlockResponse(
+                "confirm",
+                "请确认是否继续执行",
+                null,
+                result.confirmationId(),
+                result.summary(),
+                "当前默认策略是读操作直执、写操作必须确认。",
+                "确认处理",
+                "暂不执行",
+                "pending",
+                null
+        );
+    }
+
+    private List<AiMessageBlockResponse> buildReadBlocks(AiToolCallResultResponse result, AiGatewayResponse gatewayResponse) {
+        if ("workflow.todo.list".equals(result.toolKey())) {
+            Object count = result.result().getOrDefault("count", 0);
+            return List.of(
+                    defaultTextBlock("已通过平台内置工具读取待办数据。"),
+                    defaultTextBlock("当前路由模式：" + gatewayResponse.routeMode()),
+                    defaultTextBlock("当前待办数量：" + count)
+            );
+        }
+        return List.of(
+                defaultTextBlock("已通过 " + gatewayResponse.routeMode() + " 路由完成只读分析。"),
+                defaultTextBlock(buildReadSummary(result))
+        );
+    }
+
+    private String buildReadSummary(AiToolCallResultResponse result) {
+        if ("workflow.trace.summary".equals(result.toolKey())) {
+            return "我已经汇总当前审批轨迹，可继续追问节点处理路径。";
+        }
+        if ("plm.change.summary".equals(result.toolKey())) {
+            return "我已经生成当前 PLM 变更摘要，可继续追问 ECR/ECO 影响范围。";
+        }
+        if ("workflow.todo.list".equals(result.toolKey())) {
+            return "我已经读取当前待办列表，可继续缩小筛选范围。";
+        }
+        return "我已经完成本次只读分析。";
+    }
+
+    private String buildAssistantSummary(AiGatewayResponse gatewayResponse, String domain) {
+        if ("SKILL".equals(gatewayResponse.routeMode())) {
+            return "已切换到可复用 Skill 分析链路，当前业务域为 " + domain + "。";
+        }
+        if ("ROUTING".equals(gatewayResponse.routeMode())) {
+            return "已通过 Routing 智能体整理当前问题，可继续补充上下文。";
+        }
+        return "已进入 Supervisor 编排链路。";
     }
 
     private String newId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }
 
-    private record PendingToolCall(
-            String toolCallId,
-            String confirmationId,
-            String summary
+    private record AssistantReply(
+            String content,
+            List<AiMessageBlockResponse> blocks
     ) {
     }
 }
