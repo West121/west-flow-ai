@@ -10,6 +10,7 @@ import com.westflow.processdef.api.ProcessDefinitionDetailResponse;
 import com.westflow.processdef.api.ProcessDefinitionListItemResponse;
 import com.westflow.processdef.model.ProcessDslPayload;
 import java.util.List;
+import org.flowable.engine.RepositoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,11 +30,16 @@ class ProcessDefinitionServiceTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private RepositoryService repositoryService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
         jdbcTemplate.update("DELETE FROM wf_process_definition");
+        repositoryService.createDeploymentQuery().list()
+                .forEach(deployment -> repositoryService.deleteDeployment(deployment.getId(), true));
     }
 
     @Test
@@ -65,6 +71,20 @@ class ProcessDefinitionServiceTest {
         assertThat(published.bpmnXml()).contains("initiatorEditable=\"true\"");
         assertThat(published.bpmnXml()).contains("assignmentMode=\"USER\"");
         assertThat(published.bpmnXml()).contains("operations=\"APPROVE,REJECT,RETURN\"");
+    }
+
+    @Test
+    void shouldDeployPublishedDefinitionToFlowable() throws Exception {
+        ProcessDefinitionDetailResponse published = processDefinitionService.publish(
+                payload("oa_leave", "请假审批", "OA")
+        );
+
+        assertThat(repositoryService.createProcessDefinitionQuery()
+                .processDefinitionKey("oa_leave")
+                .count()).isEqualTo(1);
+        assertThat(repositoryService.createDeploymentQuery()
+                .deploymentName(published.processDefinitionId())
+                .count()).isEqualTo(1);
     }
 
     @Test

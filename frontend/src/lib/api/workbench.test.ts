@@ -35,6 +35,19 @@ describe('workbench api', () => {
     vi.clearAllMocks()
   })
 
+  it('builds runtime paths from the new default namespace', async () => {
+    const { resolveWorkbenchRuntimePath, WORKBENCH_RUNTIME_ENDPOINTS } =
+      await import('./workbench')
+
+    expect(resolveWorkbenchRuntimePath('tasks', 'page')).toBe(
+      '/process-runtime/tasks/page'
+    )
+    expect(resolveWorkbenchRuntimePath('demo', 'tasks', 'page')).toBe(
+      '/process-runtime/demo/tasks/page'
+    )
+    expect(WORKBENCH_RUNTIME_ENDPOINTS.tasksPage).toBe('/process-runtime/tasks/page')
+  })
+
   it('loads workbench tasks with pagination payload', async () => {
     const pageResponse = {
       page: 1,
@@ -78,7 +91,7 @@ describe('workbench api', () => {
       })
     ).resolves.toEqual(pageResponse)
 
-    expect(postMock).toHaveBeenCalledWith('/process-runtime/demo/tasks/page', {
+    expect(postMock).toHaveBeenCalledWith('/process-runtime/tasks/page', {
       page: 1,
       pageSize: 20,
       keyword: '请假',

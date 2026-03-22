@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.service.ProcessDemoService;
+import org.flowable.engine.RuntimeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +47,9 @@ class OAControllerTest {
 
     @Autowired
     private ProcessDemoService processDemoService;
+
+    @Autowired
+    private RuntimeService runtimeService;
 
     @BeforeEach
     void resetRuntime() {
@@ -98,6 +102,9 @@ class OAControllerTest {
         assertThat(linkRow.path("business_type").asText()).isEqualTo("OA_LEAVE");
         assertThat(linkRow.path("process_instance_id").asText()).isEqualTo(data.path("processInstanceId").asText());
         assertThat(linkRow.path("status").asText()).isEqualTo("RUNNING");
+        assertThat(runtimeService.createProcessInstanceQuery()
+                .processInstanceBusinessKey(billId)
+                .count()).isEqualTo(1);
     }
 
     private String login() throws Exception {

@@ -20,6 +20,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import org.flowable.engine.RepositoryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ public class ProcessDefinitionService {
     private final ProcessDslValidator processDslValidator;
     private final ProcessDslToBpmnService processDslToBpmnService;
     private final ObjectMapper objectMapper;
+    private final RepositoryService repositoryService;
 
     @Transactional
     public synchronized ProcessDefinitionDetailResponse saveDraft(ProcessDslPayload payload) {
@@ -99,6 +101,7 @@ public class ProcessDefinitionService {
         );
 
         processDefinitionMapper.insertDefinition(publishedRecord);
+        deployToFlowable(publishedRecord);
         return toDetailResponse(publishedRecord, payload);
     }
 
@@ -193,6 +196,16 @@ public class ProcessDefinitionService {
                 deserializeDsl(record.dslJson()),
                 record.bpmnXml()
         );
+    }
+
+    // 将已发布的 BPMN 同步部署到真实 Flowable 引擎。
+    private void deployToFlowable(ProcessDefinitionRecord record) {
+        repositoryService.createDeployment()
+                .name(record.processDefinitionId())
+                .key(record.processKey())
+                .category(record.category())
+                .addString(record.processKey() + ".bpmn20.xml", record.bpmnXml())
+                .deploy();
     }
 
     // 组装列表页的单行摘要数据。

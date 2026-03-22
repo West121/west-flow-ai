@@ -20,7 +20,7 @@ import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
-import com.westflow.processruntime.service.ProcessDemoService;
+import com.westflow.processruntime.service.FlowableRuntimeStartService;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
@@ -44,7 +44,7 @@ public class OALaunchService {
     private final OALeaveBillMapper oaLeaveBillMapper;
     private final OAExpenseBillMapper oaExpenseBillMapper;
     private final OACommonRequestBillMapper oaCommonRequestBillMapper;
-    private final ProcessDemoService processDemoService;
+    private final FlowableRuntimeStartService flowableRuntimeStartService;
 
     /**
      * 发起请假单。
@@ -178,7 +178,7 @@ public class OALaunchService {
     ) {
         // 通过业务类型和场景码解析流程定义，保持业务发起和流程绑定解耦。
         String processKey = businessProcessBindingService.resolveProcessKey(businessType, sceneCode);
-        return processDemoService.start(new StartProcessRequest(
+        return flowableRuntimeStartService.start(new StartProcessRequest(
                 processKey,
                 billId,
                 businessType,

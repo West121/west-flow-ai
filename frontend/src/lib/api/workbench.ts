@@ -2,6 +2,46 @@ import { apiClient, unwrapResponse } from '@/lib/api/client'
 import { type ListQuerySearch, toPaginationRequest } from '@/features/shared/table/query-contract'
 import { type WorkflowFieldBinding } from '@/features/workflow/designer/types'
 
+// 命名空间默认不带前缀，直接命中后端新 runtime 路径；如需切旧环境可通过环境变量覆盖。
+const DEFAULT_RUNTIME_NAMESPACE = (import.meta.env.VITE_PROCESS_RUNTIME_NAMESPACE ?? '').trim()
+
+type ProcessRuntimeNamespace = string
+
+export const WORKBENCH_RUNTIME_NAMESPACE: ProcessRuntimeNamespace = DEFAULT_RUNTIME_NAMESPACE
+
+export type WorkbenchRuntimeResource = 'tasks' | 'approval-sheets' | 'instances'
+
+export type WorkbenchListPayload<T> = {
+  page: T extends { page: number } ? number : never
+}
+
+export type WorkbenchProcessInstance = {
+  instanceId: string
+  processDefinitionId: string
+  processKey: string
+  processName: string
+  instanceStatus: string
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+  businessType?: string | null
+  businessId?: string | null
+}
+
+export type WorkbenchTaskRuntimeSummary = {
+  taskId: string
+  instanceId: string
+  instanceStatus: string
+  nodeId: string
+  nodeName: string
+  status: WorkbenchTaskListItem['status']
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+}
+
+export type WorkbenchHistoryItem = WorkbenchTaskTraceItem
+
 export type WorkbenchTaskListItem = {
   taskId: string
   instanceId: string
@@ -348,31 +388,65 @@ export type WorkbenchTaskPageResponse = {
   groups: Array<{ field: string; value: string }>
 }
 
+type RuntimePathPart = string | number | undefined
+
+export type WorkbenchRuntimeQueryRequest = {
+  namespace?: ProcessRuntimeNamespace
+}
+
+export function buildWorkRuntimePath(
+  namespace: ProcessRuntimeNamespace = WORKBENCH_RUNTIME_NAMESPACE,
+  ...segments: RuntimePathPart[]
+) {
+  const scope = namespace.trim()
+  const normalized = segments
+    .filter((value) => value !== undefined && `${value}` !== '')
+    .map((value) => `${value}`.replace(/^\/+|\/+$/g, ''))
+    .filter(Boolean)
+  const merged = scope ? [scope, ...normalized] : normalized
+
+  return `/process-runtime/${merged.join('/')}`
+}
+
+export function resolveWorkbenchRuntimePath(...segments: RuntimePathPart[]) {
+  return buildWorkRuntimePath(WORKBENCH_RUNTIME_NAMESPACE, ...segments)
+}
+
+export const WORKBENCH_RUNTIME_ENDPOINTS = {
+  tasksPage: resolveWorkbenchRuntimePath('tasks', 'page'),
+  approvalSheetsPage: resolveWorkbenchRuntimePath('approval-sheets', 'page'),
+  tasksCreate: resolveWorkbenchRuntimePath('start'),
+} as const
+
+type WorkbenchApiSuccess<T> = {
+  code: 'OK'
+  message: string
+  data: T
+  requestId: string
+}
+
+// 任务分页接口，适配实例/任务列表查询协议。
 export async function listWorkbenchTasks(
   search: ListQuerySearch
 ): Promise<WorkbenchTaskPageResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: WorkbenchTaskPageResponse
-    requestId: string
-  }>('/process-runtime/demo/tasks/page', toPaginationRequest(search))
+  const response = await apiClient.post<WorkbenchApiSuccess<WorkbenchTaskPageResponse>>(
+    resolveWorkbenchRuntimePath('tasks', 'page'),
+    toPaginationRequest(search)
+  )
 
   return unwrapResponse(response)
 }
 
+// 审批单分页接口，按视图过滤。
 export async function listApprovalSheets(
   search: ListQuerySearch & {
     view: ApprovalSheetListView
     businessTypes?: string[]
   }
 ): Promise<ApprovalSheetPageResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: ApprovalSheetPageResponse
-    requestId: string
-  }>('/process-runtime/demo/approval-sheets/page', {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<ApprovalSheetPageResponse>
+  >(resolveWorkbenchRuntimePath('approval-sheets', 'page'), {
     ...toPaginationRequest(search),
     view: search.view,
     businessTypes: search.businessTypes ?? [],
@@ -381,15 +455,13 @@ export async function listApprovalSheets(
   return unwrapResponse(response)
 }
 
+// 任务详情接口：实例+任务聚合模型读取。
 export async function getWorkbenchTaskDetail(
   taskId: string
 ): Promise<WorkbenchTaskDetail> {
-  const response = await apiClient.get<{
-    code: 'OK'
-    message: string
-    data: WorkbenchTaskDetail
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}`)
+  const response = await apiClient.get<WorkbenchApiSuccess<WorkbenchTaskDetail>>(
+    resolveWorkbenchRuntimePath('tasks', taskId)
+  )
 
   return unwrapResponse(response)
 }
@@ -397,14 +469,23 @@ export async function getWorkbenchTaskDetail(
 export async function getApprovalSheetDetailByBusiness(
   locator: ApprovalSheetBusinessLocator
 ): Promise<WorkbenchTaskDetail> {
-  const response = await apiClient.get<{
-    code: 'OK'
-    message: string
-    data: WorkbenchTaskDetail
-    requestId: string
-  }>('/process-runtime/demo/approval-sheets/by-business', {
-    params: locator,
-  })
+  const response = await apiClient.get<WorkbenchApiSuccess<WorkbenchTaskDetail>>(
+    resolveWorkbenchRuntimePath('approval-sheets', 'by-business'),
+    {
+      params: locator,
+    }
+  )
+
+  return unwrapResponse(response)
+}
+
+// 选项/能力检查接口，供页面按钮渲染与交互鉴权。
+export async function getWorkbenchTaskActionOptions(
+  taskId: string
+): Promise<WorkbenchTaskActionAvailability> {
+  const response = await apiClient.get<
+    WorkbenchApiSuccess<WorkbenchTaskActionAvailability>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'actions'))
 
   return unwrapResponse(response)
 }
@@ -412,26 +493,33 @@ export async function getApprovalSheetDetailByBusiness(
 export async function getWorkbenchTaskActions(
   taskId: string
 ): Promise<WorkbenchTaskActionAvailability> {
-  const response = await apiClient.get<{
-    code: 'OK'
-    message: string
-    data: WorkbenchTaskActionAvailability
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/actions`)
+  return getWorkbenchTaskActionOptions(taskId)
+}
+
+// 任务实例创建接口，前端先做最小可用封装。
+export async function createWorkbenchProcess(
+  payload: StartWorkbenchProcessPayload
+): Promise<StartWorkbenchProcessResponse> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<StartWorkbenchProcessResponse>
+  >(resolveWorkbenchRuntimePath('start'), payload)
 
   return unwrapResponse(response)
+}
+
+export async function startWorkbenchProcess(
+  payload: StartWorkbenchProcessPayload
+): Promise<StartWorkbenchProcessResponse> {
+  return createWorkbenchProcess(payload)
 }
 
 export async function claimWorkbenchTask(
   taskId: string,
   payload: ClaimWorkbenchTaskPayload
 ): Promise<ClaimWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: ClaimWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/claim`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<ClaimWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'claim'), payload)
 
   return unwrapResponse(response)
 }
@@ -440,12 +528,9 @@ export async function transferWorkbenchTask(
   taskId: string,
   payload: TransferWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/transfer`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'transfer'), payload)
 
   return unwrapResponse(response)
 }
@@ -454,12 +539,9 @@ export async function delegateWorkbenchTask(
   taskId: string,
   payload: DelegateWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/delegate`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'delegate'), payload)
 
   return unwrapResponse(response)
 }
@@ -467,12 +549,9 @@ export async function delegateWorkbenchTask(
 export async function handoverWorkbenchTasks(
   payload: HandoverWorkbenchTasksPayload
 ): Promise<HandoverWorkbenchTasksResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: HandoverWorkbenchTasksResponse
-    requestId: string
-  }>(`/process-runtime/demo/users/${payload.sourceUserId}/handover`, {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<HandoverWorkbenchTasksResponse>
+  >(resolveWorkbenchRuntimePath('users', payload.sourceUserId, 'handover'), {
     targetUserId: payload.targetUserId,
     comment: payload.comment,
   })
@@ -484,12 +563,9 @@ export async function returnWorkbenchTask(
   taskId: string,
   payload: ReturnWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/return`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'return'), payload)
 
   return unwrapResponse(response)
 }
@@ -498,12 +574,9 @@ export async function addSignWorkbenchTask(
   taskId: string,
   payload: AddSignWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/add-sign`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'add-sign'), payload)
 
   return unwrapResponse(response)
 }
@@ -512,12 +585,9 @@ export async function removeSignWorkbenchTask(
   taskId: string,
   payload: RemoveSignWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/remove-sign`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'remove-sign'), payload)
 
   return unwrapResponse(response)
 }
@@ -526,12 +596,9 @@ export async function revokeWorkbenchTask(
   taskId: string,
   payload: RevokeWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/revoke`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'revoke'), payload)
 
   return unwrapResponse(response)
 }
@@ -540,12 +607,9 @@ export async function urgeWorkbenchTask(
   taskId: string,
   payload: UrgeWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/urge`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'urge'), payload)
 
   return unwrapResponse(response)
 }
@@ -553,12 +617,9 @@ export async function urgeWorkbenchTask(
 export async function readWorkbenchTask(
   taskId: string
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/read`)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'read'))
 
   return unwrapResponse(response)
 }
@@ -567,12 +628,9 @@ export async function rejectWorkbenchTask(
   taskId: string,
   payload: RejectWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/reject`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'reject'), payload)
 
   return unwrapResponse(response)
 }
@@ -581,12 +639,9 @@ export async function jumpWorkbenchTask(
   taskId: string,
   payload: JumpWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/jump`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'jump'), payload)
 
   return unwrapResponse(response)
 }
@@ -595,12 +650,9 @@ export async function takeBackWorkbenchTask(
   taskId: string,
   payload: TakeBackWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/take-back`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'take-back'), payload)
 
   return unwrapResponse(response)
 }
@@ -609,25 +661,9 @@ export async function wakeUpWorkbenchInstance(
   instanceId: string,
   payload: WakeUpWorkbenchInstancePayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/instances/${instanceId}/wake-up`, payload)
-
-  return unwrapResponse(response)
-}
-
-export async function startWorkbenchProcess(
-  payload: StartWorkbenchProcessPayload
-): Promise<StartWorkbenchProcessResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: StartWorkbenchProcessResponse
-    requestId: string
-  }>('/process-runtime/demo/start', payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('instances', instanceId, 'wake-up'), payload)
 
   return unwrapResponse(response)
 }
@@ -636,12 +672,9 @@ export async function completeWorkbenchTask(
   taskId: string,
   payload: CompleteWorkbenchTaskPayload
 ): Promise<CompleteWorkbenchTaskResponse> {
-  const response = await apiClient.post<{
-    code: 'OK'
-    message: string
-    data: CompleteWorkbenchTaskResponse
-    requestId: string
-  }>(`/process-runtime/demo/tasks/${taskId}/complete`, payload)
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'complete'), payload)
 
   return unwrapResponse(response)
 }

@@ -117,7 +117,13 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   ),
 }))
 
-vi.mock('@/lib/api/workbench', () => workbenchApiMocks)
+vi.mock('@/lib/api/workbench', () => ({
+  ...workbenchApiMocks,
+  WORKBENCH_RUNTIME_ENDPOINTS: {
+    approvalSheetsPage: '/process-runtime/approval-sheets/page',
+    tasksPage: '/process-runtime/tasks/page',
+  },
+}))
 
 function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({

@@ -4,8 +4,10 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
+import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.processruntime.service.ProcessDemoService;
 import jakarta.validation.Valid;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,44 +17,67 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/process-runtime/demo")
-// 演示态流程运行的任务、审批单和动作入口。
+@RequestMapping({"/api/v1/process-runtime", "/api/v1/process-runtime/demo"})
+// 流程运行入口；当前逐步从 demo 语义迁移到真实 Flowable 路径。
 public class ProcessRuntimeController {
 
     private final ProcessDemoService processDemoService;
+    private final FlowableProcessRuntimeService flowableProcessRuntimeService;
 
-    public ProcessRuntimeController(ProcessDemoService processDemoService) {
+    public ProcessRuntimeController(
+            ProcessDemoService processDemoService,
+            FlowableProcessRuntimeService flowableProcessRuntimeService
+    ) {
         this.processDemoService = processDemoService;
+        this.flowableProcessRuntimeService = flowableProcessRuntimeService;
     }
 
     @PostMapping("/start")
     @SaCheckLogin
     // 发起一个新的流程实例。
-    public ApiResponse<StartProcessResponse> start(@Valid @RequestBody StartProcessRequest request) {
-        return ApiResponse.success(processDemoService.start(request));
+    public ApiResponse<StartProcessResponse> start(
+            @Valid @RequestBody StartProcessRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.start(request)
+                : flowableProcessRuntimeService.start(request));
     }
 
     @PostMapping("/tasks/page")
     @SaCheckLogin
     // 分页查询流程任务列表。
-    public ApiResponse<PageResponse<ProcessTaskListItemResponse>> page(@Valid @RequestBody PageRequest request) {
-        return ApiResponse.success(processDemoService.page(request));
+    public ApiResponse<PageResponse<ProcessTaskListItemResponse>> page(
+            @Valid @RequestBody PageRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.page(request)
+                : flowableProcessRuntimeService.page(request));
     }
 
     @PostMapping("/approval-sheets/page")
     @SaCheckLogin
     // 分页查询审批单列表。
     public ApiResponse<PageResponse<ApprovalSheetListItemResponse>> approvalSheetPage(
-            @Valid @RequestBody ApprovalSheetPageRequest request
+            @Valid @RequestBody ApprovalSheetPageRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.pageApprovalSheets(request));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.pageApprovalSheets(request)
+                : flowableProcessRuntimeService.pageApprovalSheets(request));
     }
 
     @GetMapping("/tasks/{taskId}")
     @SaCheckLogin
     // 查询任务详情。
-    public ApiResponse<ProcessTaskDetailResponse> detail(@PathVariable String taskId) {
-        return ApiResponse.success(processDemoService.detail(taskId));
+    public ApiResponse<ProcessTaskDetailResponse> detail(
+            @PathVariable String taskId,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.detail(taskId)
+                : flowableProcessRuntimeService.detail(taskId));
     }
 
     @GetMapping("/approval-sheets/by-business")
@@ -60,16 +85,24 @@ public class ProcessRuntimeController {
     // 按业务类型和业务主键查询审批单详情。
     public ApiResponse<ProcessTaskDetailResponse> detailByBusiness(
             @RequestParam String businessType,
-            @RequestParam String businessId
+            @RequestParam String businessId,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.detailByBusiness(businessType, businessId));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.detailByBusiness(businessType, businessId)
+                : flowableProcessRuntimeService.detailByBusiness(businessType, businessId));
     }
 
     @GetMapping("/tasks/{taskId}/actions")
     @SaCheckLogin
     // 查询任务可执行动作。
-    public ApiResponse<TaskActionAvailabilityResponse> actions(@PathVariable String taskId) {
-        return ApiResponse.success(processDemoService.actions(taskId));
+    public ApiResponse<TaskActionAvailabilityResponse> actions(
+            @PathVariable String taskId,
+            HttpServletRequest servletRequest
+    ) {
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.actions(taskId)
+                : flowableProcessRuntimeService.actions(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/add-sign")
@@ -204,9 +237,12 @@ public class ProcessRuntimeController {
     // 认领待办任务。
     public ApiResponse<ClaimTaskResponse> claim(
             @PathVariable String taskId,
-            @RequestBody(required = false) ClaimTaskRequest request
+            @RequestBody(required = false) ClaimTaskRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.claim(taskId, request == null ? new ClaimTaskRequest(null) : request));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.claim(taskId, request == null ? new ClaimTaskRequest(null) : request)
+                : flowableProcessRuntimeService.claim(taskId, request == null ? new ClaimTaskRequest(null) : request));
     }
 
     @PostMapping("/tasks/{taskId}/complete")
@@ -214,9 +250,12 @@ public class ProcessRuntimeController {
     // 完成任务。
     public ApiResponse<CompleteTaskResponse> complete(
             @PathVariable String taskId,
-            @Valid @RequestBody CompleteTaskRequest request
+            @Valid @RequestBody CompleteTaskRequest request,
+            HttpServletRequest servletRequest
     ) {
-        return ApiResponse.success(processDemoService.complete(taskId, request));
+        return ApiResponse.success(isDemoPath(servletRequest)
+                ? processDemoService.complete(taskId, request)
+                : flowableProcessRuntimeService.complete(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/transfer")
@@ -237,5 +276,10 @@ public class ProcessRuntimeController {
             @RequestBody(required = false) ReturnTaskRequest request
     ) {
         return ApiResponse.success(processDemoService.returnToPrevious(taskId, request == null ? new ReturnTaskRequest(null, null) : request));
+    }
+
+    // 通过路径区分旧 demo 运行态与新真实 Flowable 运行态。
+    private boolean isDemoPath(HttpServletRequest servletRequest) {
+        return servletRequest.getRequestURI().contains("/process-runtime/demo");
     }
 }
