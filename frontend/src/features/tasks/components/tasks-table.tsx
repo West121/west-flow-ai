@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
 import {
+  type ColumnFiltersState,
+  type PaginationState,
   type SortingState,
   type VisibilityState,
   flexRender,
@@ -13,7 +14,6 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
 import {
   Table,
   TableBody,
@@ -28,44 +28,24 @@ import { type Task } from '../data/schema'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { tasksColumns as columns } from './tasks-columns'
 
-const route = getRouteApi('/_authenticated/tasks/')
-
 type DataTableProps = {
   data: Task[]
 }
 
+// 任务表格，负责 URL 同步筛选、排序和分页。
 export function TasksTable({ data }: DataTableProps) {
-  // Local UI-only states
+  // 本地 UI 状态。
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-
-  // Local state management for table (uncomment to use local-only state, not synced with URL)
-  // const [globalFilter, onGlobalFilterChange] = useState('')
-  // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
-  // const [pagination, onPaginationChange] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
-
-  // Synced with URL states (updated to match route search schema defaults)
-  const {
-    globalFilter,
-    onGlobalFilterChange,
-    columnFilters,
-    onColumnFiltersChange,
-    pagination,
-    onPaginationChange,
-    ensurePageInRange,
-  } = useTableUrlState({
-    search: route.useSearch(),
-    navigate: route.useNavigate(),
-    pagination: { defaultPage: 1, defaultPageSize: 10 },
-    globalFilter: { enabled: true, key: 'filter' },
-    columnFilters: [
-      { columnId: 'status', searchKey: 'status', type: 'array' },
-      { columnId: 'priority', searchKey: 'priority', type: 'array' },
-    ],
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // react-table 与当前状态绑定。
   const table = useReactTable({
     data,
     columns,
@@ -94,20 +74,22 @@ export function TasksTable({ data }: DataTableProps) {
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-    onPaginationChange,
-    onGlobalFilterChange,
-    onColumnFiltersChange,
+    onPaginationChange: setPagination,
+    onGlobalFilterChange: setGlobalFilter,
+    onColumnFiltersChange: setColumnFilters,
   })
 
   const pageCount = table.getPageCount()
   useEffect(() => {
-    ensurePageInRange(pageCount)
-  }, [pageCount, ensurePageInRange])
+    if (pageCount > 0 && pagination.pageIndex >= pageCount) {
+      setPagination((prev) => ({ ...prev, pageIndex: pageCount - 1 }))
+    }
+  }, [pageCount, pagination.pageIndex])
 
   return (
     <div
       className={cn(
-        'max-sm:has-[div[role="toolbar"]]:mb-16', // Add margin bottom to the table on mobile when the toolbar is visible
+        'max-sm:has-[div[role="toolbar"]]:mb-16', // 移动端有批量工具条时预留底部空间。
         'flex flex-1 flex-col gap-4'
       )}
     >

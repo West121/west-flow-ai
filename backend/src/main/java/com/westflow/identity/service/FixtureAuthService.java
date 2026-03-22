@@ -18,6 +18,16 @@ import org.springframework.stereotype.Service;
 public class FixtureAuthService {
 
     private static final String ACTIVE_POST_ID = "activePostId";
+    private static final String ROLE_SYSTEM_ADMIN = "SYSTEM_ADMIN";
+    private static final String ROLE_PROCESS_ADMIN = "PROCESS_ADMIN";
+    private static final List<String> PHASE_2_SYSTEM_PERMISSION_PREFIXES = List.of(
+            "system:dict:",
+            "system:log:",
+            "system:monitor:",
+            "system:file:",
+            "system:notification:",
+            "system:message:"
+    );
 
     private final Map<String, FixtureUser> usersByUsername;
     private final Map<String, FixtureUser> usersById;
@@ -28,6 +38,7 @@ public class FixtureAuthService {
      */
     public FixtureAuthService(IdentityAccessMapper identityAccessMapper) {
         this.identityAccessMapper = identityAccessMapper;
+        // Phase 2 会继续扩展系统管理权限点，这里先把管理员种子和权限判断能力集中起来。
         // 这里是本地联调用的登录桩数据，便于快速验证权限和流程场景。
         FixtureUser zhangsan = new FixtureUser(
                 "usr_001",
@@ -201,7 +212,65 @@ public class FixtureAuthService {
      * 判断用户是否为流程管理员。
      */
     public boolean isProcessAdmin(String userId) {
-        return rolesByUserId(userId).stream().anyMatch("PROCESS_ADMIN"::equalsIgnoreCase);
+        return hasRole(userId, ROLE_PROCESS_ADMIN);
+    }
+
+    /**
+     * 判断用户是否为平台管理员。
+     */
+    public boolean isSystemAdmin(String userId) {
+        return hasRole(userId, ROLE_SYSTEM_ADMIN);
+    }
+
+    /**
+     * 判断用户是否可以进入 Phase 2 的系统管理模块。
+     */
+    public boolean canAccessPhase2SystemManagement(String userId) {
+        return hasAnyRole(userId, ROLE_SYSTEM_ADMIN, ROLE_PROCESS_ADMIN);
+    }
+
+    /**
+     * 判断权限码是否属于 Phase 2 预留的系统管理权限池。
+     */
+    public boolean isPhase2SystemPermission(String permissionCode) {
+        if (permissionCode == null || permissionCode.isBlank()) {
+            return false;
+        }
+        return PHASE_2_SYSTEM_PERMISSION_PREFIXES.stream()
+                .anyMatch(permissionCode::startsWith);
+    }
+
+    /**
+     * 判断用户是否拥有任一角色。
+     */
+    public boolean hasAnyRole(String userId, String... roleCodes) {
+        List<String> roles = rolesByUserId(userId);
+        for (String roleCode : roleCodes) {
+            if (roles.stream().anyMatch(role -> role.equalsIgnoreCase(roleCode))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断用户是否拥有任一权限。
+     */
+    public boolean hasAnyPermission(String userId, String... permissionCodes) {
+        List<String> permissions = permissionsByUserId(userId);
+        for (String permissionCode : permissionCodes) {
+            if (permissions.stream().anyMatch(permission -> permission.equalsIgnoreCase(permissionCode))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 判断用户是否拥有指定角色。
+     */
+    public boolean hasRole(String userId, String roleCode) {
+        return hasAnyRole(userId, roleCode);
     }
 
     /**

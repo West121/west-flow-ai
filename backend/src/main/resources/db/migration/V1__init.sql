@@ -118,6 +118,78 @@ CREATE TABLE IF NOT EXISTS wf_request_audit_log (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS wf_dict_type (
+    id VARCHAR(64) PRIMARY KEY,
+    type_code VARCHAR(128) NOT NULL UNIQUE,
+    type_name VARCHAR(255) NOT NULL,
+    description VARCHAR(500),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_dict_item (
+    id VARCHAR(64) PRIMARY KEY,
+    dict_type_id VARCHAR(64) NOT NULL,
+    item_code VARCHAR(128) NOT NULL,
+    item_label VARCHAR(255) NOT NULL,
+    item_value VARCHAR(255) NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 10,
+    remark VARCHAR(500),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_system_message (
+    id VARCHAR(64) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    target_type VARCHAR(32) NOT NULL,
+    target_user_ids_json TEXT,
+    target_department_ids_json TEXT,
+    sender_user_id VARCHAR(64) NOT NULL,
+    sent_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_system_message_read (
+    id VARCHAR(64) PRIMARY KEY,
+    message_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NOT NULL,
+    read_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_file (
+    id VARCHAR(64) PRIMARY KEY,
+    display_name VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    bucket_name VARCHAR(128) NOT NULL,
+    object_name VARCHAR(255) NOT NULL,
+    content_type VARCHAR(128) NOT NULL,
+    file_size BIGINT NOT NULL,
+    remark VARCHAR(500),
+    deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_notification_template (
+    id VARCHAR(64) PRIMARY KEY,
+    template_code VARCHAR(128) NOT NULL UNIQUE,
+    template_name VARCHAR(255) NOT NULL,
+    channel_type VARCHAR(32) NOT NULL,
+    title_template VARCHAR(255) NOT NULL,
+    content_template TEXT NOT NULL,
+    remark VARCHAR(500),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS wf_process_definition (
     id VARCHAR(64) PRIMARY KEY,
     process_key VARCHAR(128) NOT NULL,
@@ -552,8 +624,8 @@ SELECT
     'menu_system',
     '离职转办执行',
     'MENU',
-    '/system/handover/list',
-    'system/handover/list',
+    '/system/handover/execute',
+    'system/handover/execute',
     'system:handover:view',
     'ArrowRightLeft',
     80,
@@ -562,6 +634,254 @@ SELECT
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_handover');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_dict_type',
+    'menu_system',
+    '字典类型',
+    'MENU',
+    '/system/dict-types/list',
+    'system/dict-types/list',
+    'system:dict-type:view',
+    'BookText',
+    90,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_dict_type');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_dict_item',
+    'menu_system',
+    '字典项',
+    'MENU',
+    '/system/dict-items/list',
+    'system/dict-items/list',
+    'system:dict-item:view',
+    'BookText',
+    100,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_dict_item');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_message',
+    'menu_system',
+    '消息管理',
+    'MENU',
+    '/system/messages/list',
+    'system/messages/list',
+    'system:message:view',
+    'Mail',
+    110,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_message');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_file',
+    'menu_system',
+    '文件管理',
+    'MENU',
+    '/system/files/list',
+    'system/files/list',
+    'system:file:view',
+    'FolderKanban',
+    120,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_file');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_notification_template',
+    'menu_system',
+    '通知模板',
+    'MENU',
+    '/system/notifications/templates/list',
+    'system/notifications/templates/list',
+    'system:notification:template:view',
+    'Mail',
+    130,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_notification_template');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_notification_record',
+    'menu_system',
+    '通知记录',
+    'MENU',
+    '/system/notifications/records/list',
+    'system/notifications/records/list',
+    'system:notification:record:view',
+    'Mail',
+    140,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_notification_record');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_log',
+    'menu_system',
+    '日志管理',
+    'MENU',
+    '/system/logs/audit/list',
+    'system/logs/audit/list',
+    'system:log:view',
+    'ScrollText',
+    150,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_log');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_monitor',
+    'menu_system',
+    '监控管理',
+    'MENU',
+    '/system/monitor/orchestrator-scans/list',
+    'system/monitor/orchestrator-scans/list',
+    'system:monitor:view',
+    'Gauge',
+    160,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_monitor');
 
 INSERT INTO wf_menu (
     id,
@@ -1149,3 +1469,128 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_009');
 INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
 SELECT 'rm_010', 'role_process_admin', 'menu_system_trigger', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_010');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_011', 'role_process_admin', 'menu_system_dict_type', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_011');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_012', 'role_process_admin', 'menu_system_dict_item', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_012');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_013', 'role_process_admin', 'menu_system_message', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_013');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_014', 'role_process_admin', 'menu_system_file', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_014');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_015', 'role_process_admin', 'menu_system_notification_template', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_015');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_016', 'role_process_admin', 'menu_system_notification_record', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_016');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_017', 'role_process_admin', 'menu_system_log', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_017');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_018', 'role_process_admin', 'menu_system_monitor', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_018');
+
+INSERT INTO wf_dict_type (id, type_code, type_name, description, enabled, created_at, updated_at)
+SELECT 'dict_type_message_status', 'message_status', '消息状态', '系统消息状态字典', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_dict_type WHERE id = 'dict_type_message_status');
+
+INSERT INTO wf_dict_item (id, dict_type_id, item_code, item_label, item_value, sort_order, remark, enabled, created_at, updated_at)
+SELECT 'dict_item_message_status_draft', 'dict_type_message_status', 'DRAFT', '草稿', 'DRAFT', 10, '消息草稿状态', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_dict_item WHERE id = 'dict_item_message_status_draft');
+
+INSERT INTO wf_dict_item (id, dict_type_id, item_code, item_label, item_value, sort_order, remark, enabled, created_at, updated_at)
+SELECT 'dict_item_message_status_sent', 'dict_type_message_status', 'SENT', '已发送', 'SENT', 20, '消息发送完成状态', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_dict_item WHERE id = 'dict_item_message_status_sent');
+
+INSERT INTO wf_system_message (
+    id,
+    title,
+    content,
+    status,
+    target_type,
+    target_user_ids_json,
+    target_department_ids_json,
+    sender_user_id,
+    sent_at,
+    created_at,
+    updated_at
+)
+SELECT
+    'msg_seed_001',
+    '系统公告示例',
+    '这是系统管理 Phase 2 的消息管理示例数据。',
+    'SENT',
+    'ALL',
+    '[]',
+    '[]',
+    'usr_003',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_system_message WHERE id = 'msg_seed_001');
+
+INSERT INTO wf_file (
+    id,
+    display_name,
+    original_filename,
+    bucket_name,
+    object_name,
+    content_type,
+    file_size,
+    remark,
+    deleted,
+    deleted_at,
+    created_at,
+    updated_at
+)
+SELECT
+    'fil_seed_001',
+    '系统使用说明',
+    'system-guide.txt',
+    'west-flow-ai',
+    'seed/system-guide.txt',
+    'text/plain',
+    1024,
+    '文件管理示例数据',
+    FALSE,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_file WHERE id = 'fil_seed_001');
+
+INSERT INTO wf_notification_template (
+    id,
+    template_code,
+    template_name,
+    channel_type,
+    title_template,
+    content_template,
+    remark,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'tpl_seed_notify_001',
+    'PROCESS_URGE_IN_APP',
+    '流程催办站内模板',
+    'IN_APP',
+    '流程催办提醒',
+    '流程 {processName} 正等待您处理。',
+    '通知模板示例数据',
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_notification_template WHERE id = 'tpl_seed_notify_001');

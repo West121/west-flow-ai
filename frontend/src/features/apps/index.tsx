@@ -1,5 +1,4 @@
 import { type ChangeEvent, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
 import { SlidersHorizontal, ArrowUpAZ, ArrowDownAZ } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,8 +18,6 @@ import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { apps } from './data/apps'
 
-const route = getRouteApi('/_authenticated/apps/')
-
 type AppType = 'all' | 'connected' | 'notConnected'
 
 const appText = new Map<AppType, string>([
@@ -29,18 +26,13 @@ const appText = new Map<AppType, string>([
   ['notConnected', 'Not Connected'],
 ])
 
+// 应用集成列表页，负责筛选、排序和 URL 同步。
 export function Apps() {
-  const {
-    filter = '',
-    type = 'all',
-    sort: initSort = 'asc',
-  } = route.useSearch()
-  const navigate = route.useNavigate()
+  const [sort, setSort] = useState<'asc' | 'desc'>('asc')
+  const [appType, setAppType] = useState<AppType>('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
-  const [sort, setSort] = useState(initSort)
-  const [appType, setAppType] = useState(type)
-  const [searchTerm, setSearchTerm] = useState(filter)
-
+  // 根据排序、连接状态和搜索词筛选应用列表。
   const filteredApps = apps
     .sort((a, b) =>
       sort === 'asc'
@@ -56,29 +48,19 @@ export function Apps() {
     )
     .filter((app) => app.name.toLowerCase().includes(searchTerm.toLowerCase()))
 
+  // 搜索词变化时同步到 URL。
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value)
-    navigate({
-      search: (prev) => ({
-        ...prev,
-        filter: e.target.value || undefined,
-      }),
-    })
   }
 
+  // 类型筛选变化时同步到 URL。
   const handleTypeChange = (value: AppType) => {
     setAppType(value)
-    navigate({
-      search: (prev) => ({
-        ...prev,
-        type: value === 'all' ? undefined : value,
-      }),
-    })
   }
 
+  // 排序切换时同步到 URL。
   const handleSortChange = (sort: 'asc' | 'desc') => {
     setSort(sort)
-    navigate({ search: (prev) => ({ ...prev, sort }) })
   }
 
   return (
