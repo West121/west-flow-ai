@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,11 +37,20 @@ import {
 export function NavGroup({ title, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
+  const roleCodes = useAuthStore((state) => state.currentUser?.roles ?? [])
+  const visibleItems = items
+    .map((item) => filterNavItemByRole(item, roleCodes))
+    .filter((item) => item !== null)
+
+  if (visibleItems.length === 0) {
+    return null
+  }
+
   return (
     <SidebarGroup>
       <SidebarGroupLabel>{title}</SidebarGroupLabel>
       <SidebarMenu>
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const key = `${item.title}-${item.url}`
 
           if (!item.items)
@@ -174,12 +184,46 @@ function SidebarMenuCollapsedDropdown({
 }
 
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
+  // 侧边栏高亮要同时兼容完整 URL、去掉 query 的路径和子菜单命中。
   return (
-    href === item.url || // /endpint?search=param
-    href.split('?')[0] === item.url || // endpoint
-    !!item?.items?.filter((i) => i.url === href).length || // if child nav is active
+    href === item.url || // 带 query 的完整路径
+    href.split('?')[0] === item.url || // 去掉 query 后的纯路径
+    !!item?.items?.filter((i) => i.url === href).length || // 子菜单命中
     (mainNav &&
       href.split('/')[1] !== '' &&
       href.split('/')[1] === item?.url?.split('/')[1])
   )
+}
+
+function filterNavItemByRole(item: NavItem, roleCodes: string[]) {
+  if (item.requiredRoles?.length) {
+    const matched = item.requiredRoles.some((roleCode) =>
+      roleCodes.includes(roleCode)
+    )
+
+    if (!matched) {
+      return null
+    }
+  }
+
+  if (!item.items) {
+    return item
+  }
+
+  const visibleChildren = item.items.filter((child) => {
+    if (!child.requiredRoles?.length) {
+      return true
+    }
+
+    return child.requiredRoles.some((roleCode) => roleCodes.includes(roleCode))
+  })
+
+  if (visibleChildren.length === 0) {
+    return null
+  }
+
+  return {
+    ...item,
+    items: visibleChildren,
+  }
 }

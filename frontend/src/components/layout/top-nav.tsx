@@ -33,6 +33,7 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
               <DropdownMenuItem key={`${title}-${href}`} asChild>
                 <Link
                   to={href}
+                  search={{}}
                   className={!isActive ? 'text-muted-foreground' : ''}
                   disabled={disabled}
                 >
@@ -55,6 +56,7 @@ export function TopNav({ className, links, ...props }: TopNavProps) {
           <Link
             key={`${title}-${href}`}
             to={href}
+            search={{}}
             disabled={disabled}
             className={`text-sm font-medium transition-colors hover:text-primary ${isActive ? '' : 'text-muted-foreground'}`}
           >

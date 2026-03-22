@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
 import com.westflow.oa.service.OALaunchService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,16 +15,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/oa")
 @SaCheckLogin
+@RequiredArgsConstructor
 public class OAController {
 
     private final OALaunchService oaLaunchService;
 
-    public OAController(OALaunchService oaLaunchService) {
-        this.oaLaunchService = oaLaunchService;
-    }
-
     @PostMapping("/leaves")
     public ApiResponse<OALaunchResponse> createLeave(@Valid @RequestBody CreateOALeaveBillRequest request) {
+        // 请假、报销、通用申请都走同一套发起服务。
         return ApiResponse.success(oaLaunchService.createLeaveBill(request));
     }
 

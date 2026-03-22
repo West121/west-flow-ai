@@ -102,7 +102,10 @@ CREATE TABLE IF NOT EXISTS wf_delegation (
     principal_user_id VARCHAR(64) NOT NULL,
     delegate_user_id VARCHAR(64) NOT NULL,
     status VARCHAR(32) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    remark VARCHAR(255),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (principal_user_id, delegate_user_id)
 );
 
 CREATE TABLE IF NOT EXISTS wf_request_audit_log (
@@ -514,6 +517,68 @@ INSERT INTO wf_menu (
     updated_at
 )
 SELECT
+    'menu_system_agent',
+    'menu_system',
+    '代理关系管理',
+    'MENU',
+    '/system/agents/list',
+    'system/agents/list',
+    'system:agent:view',
+    'Link',
+    70,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_agent');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_handover',
+    'menu_system',
+    '离职转办执行',
+    'MENU',
+    '/system/handover/list',
+    'system/handover/list',
+    'system:handover:view',
+    'ArrowRightLeft',
+    80,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_handover');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
     'menu_workflow',
     NULL,
     '流程平台',
@@ -678,6 +743,14 @@ INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
 SELECT 'rm_006', 'role_process_admin', 'menu_workflow_designer', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_006');
 
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_007', 'role_process_admin', 'menu_system_agent', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_007');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_008', 'role_process_admin', 'menu_system_handover', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_008');
+
 INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
 SELECT 'rds_001', 'role_oa_user', 'SELF', '*', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_001');
@@ -805,8 +878,8 @@ INSERT INTO wf_user_role (id, user_id, role_id, created_at)
 SELECT 'ur_004', 'usr_003', 'role_process_admin', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_004');
 
-INSERT INTO wf_delegation (id, principal_user_id, delegate_user_id, status, created_at)
-SELECT 'dlg_001', 'usr_002', 'usr_001', 'ACTIVE', CURRENT_TIMESTAMP
+INSERT INTO wf_delegation (id, principal_user_id, delegate_user_id, status, remark, created_at, updated_at)
+SELECT 'dlg_001', 'usr_002', 'usr_001', 'ACTIVE', '默认代理关系', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_delegation WHERE id = 'dlg_001');
 
 CREATE TABLE IF NOT EXISTS wf_business_process_binding (

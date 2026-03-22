@@ -65,4 +65,15 @@ public interface IdentityAccessMapper {
             ORDER BY path ASC, title ASC
             """)
     List<CurrentUserResponse.MenuItem> selectMenusByUserId(@Param("userId") String userId);
+
+    @Select("""
+            SELECT
+              principal_user_id AS principalUserId,
+              delegate_user_id AS delegateUserId,
+              status
+            FROM wf_delegation
+            WHERE delegate_user_id = #{userId}
+            ORDER BY created_at ASC
+            """)
+    List<CurrentUserResponse.Delegation> selectDelegationsByDelegateUserId(@Param("userId") String userId);
 }

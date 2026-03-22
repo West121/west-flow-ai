@@ -6,6 +6,7 @@ import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.system.org.company.service.SystemCompanyService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,13 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/system/companies")
 @SaCheckLogin
+@RequiredArgsConstructor
 public class SystemCompanyController {
 
     private final SystemCompanyService systemCompanyService;
-
-    public SystemCompanyController(SystemCompanyService systemCompanyService) {
-        this.systemCompanyService = systemCompanyService;
-    }
 
     @PostMapping("/page")
     public ApiResponse<PageResponse<SystemCompanyListItemResponse>> page(@Valid @RequestBody PageRequest request) {

@@ -12,6 +12,7 @@ import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.approval.service.ApprovalSheetQueryService;
+import com.westflow.system.user.mapper.SystemUserMapper;
 import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
 import com.westflow.processruntime.api.ApprovalSheetListView;
 import com.westflow.processruntime.api.ApprovalSheetPageRequest;
@@ -19,6 +20,10 @@ import com.westflow.processruntime.api.AddSignTaskRequest;
 import com.westflow.processruntime.api.DelegateTaskRequest;
 import com.westflow.processruntime.api.JumpTaskRequest;
 import com.westflow.processruntime.api.HandoverTaskRequest;
+import com.westflow.processruntime.api.HandoverExecutionResponse;
+import com.westflow.processruntime.api.HandoverExecutionTaskItemResponse;
+import com.westflow.processruntime.api.HandoverPreviewResponse;
+import com.westflow.processruntime.api.HandoverPreviewTaskItemResponse;
 import com.westflow.processruntime.api.RemoveSignTaskRequest;
 import com.westflow.processruntime.api.RejectTaskRequest;
 import com.westflow.processruntime.api.RevokeTaskRequest;
@@ -123,6 +128,7 @@ public class ProcessDemoService {
     private final ProcessDefinitionService processDefinitionService;
     private final ApprovalSheetQueryService approvalSheetQueryService;
     private final FixtureAuthService fixtureAuthService;
+    private final SystemUserMapper systemUserMapper;
     private final Map<String, DemoProcessInstance> instancesById = new ConcurrentHashMap<>();
     private final Map<String, DemoTask> tasksById = new ConcurrentHashMap<>();
     private final List<ProcessInstanceEventResponse> instanceEvents = new ArrayList<>();
@@ -136,11 +142,13 @@ public class ProcessDemoService {
     public ProcessDemoService(
             ProcessDefinitionService processDefinitionService,
             ApprovalSheetQueryService approvalSheetQueryService,
-            FixtureAuthService fixtureAuthService
+            FixtureAuthService fixtureAuthService,
+            SystemUserMapper systemUserMapper
     ) {
         this.processDefinitionService = processDefinitionService;
         this.approvalSheetQueryService = approvalSheetQueryService;
         this.fixtureAuthService = fixtureAuthService;
+        this.systemUserMapper = systemUserMapper;
     }
 
     public synchronized void reset() {
@@ -865,119 +873,82 @@ public class ProcessDemoService {
     }
 
     public synchronized CompleteTaskResponse handover(String sourceUserId, HandoverTaskRequest request) {
-        String currentUserId = currentUserId();
-        if (!currentUserIsProcessAdmin()) {
-            throw new ContractException(
-                    "AUTH.FORBIDDEN",
-                    HttpStatus.FORBIDDEN,
-                    "仅流程管理员可以执行离职转办",
-                    Map.of("userId", currentUserId)
-            );
-        }
-        if (sourceUserId == null || sourceUserId.isBlank()) {
-            throw new ContractException(
-                    "VALIDATION.REQUEST_INVALID",
-                    HttpStatus.BAD_REQUEST,
-                    "sourceUserId 不能为空",
-                    Map.of("sourceUserId", sourceUserId)
-            );
-        }
-        if (request.targetUserId() == null || request.targetUserId().isBlank()) {
-            throw new ContractException(
-                    "VALIDATION.REQUEST_INVALID",
-                    HttpStatus.BAD_REQUEST,
-                    "targetUserId 不能为空",
-                    Map.of("sourceUserId", sourceUserId)
-            );
-        }
+        HandoverExecutionResult result = executeHandoverInternal(sourceUserId, request);
+        return new CompleteTaskResponse(result.instanceId(), result.completedTaskId(), result.status(), result.nextTasks());
+    }
 
-        List<DemoTaskView> nextTasks = new ArrayList<>();
-        OffsetDateTime now = now();
-        String firstInstanceId = null;
-        String firstTaskId = null;
-        for (DemoTask task : tasksById.values().stream()
-                .filter(candidate -> sourceUserId.equals(candidate.assigneeUserId))
+    public synchronized HandoverPreviewResponse previewHandover(String sourceUserId, HandoverTaskRequest request) {
+        requireProcessAdminForHandover();
+        String normalizedSourceUserId = normalizeId(sourceUserId, "sourceUserId");
+        String targetUserId = normalizeId(request.targetUserId(), "targetUserId");
+
+        // 预览只负责扫描，不会改动任务和实例状态。
+        List<HandoverPreviewTaskItemResponse> previewTasks = tasksById.values().stream()
+                .filter(candidate -> normalizedSourceUserId.equals(candidate.assigneeUserId))
                 .filter(candidate -> candidate.taskKind == TaskKind.NORMAL)
                 .filter(candidate -> "PENDING".equals(candidate.status))
                 .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
-                .toList()) {
-            DemoProcessInstance instance = requireInstance(task.instanceId);
-            if (firstInstanceId == null) {
-                firstInstanceId = instance.instanceId;
-                firstTaskId = task.taskId;
-            }
-            task.status = "HANDOVERED";
-            task.action = "HANDOVER";
-            task.operatorUserId = currentUserId;
-            task.comment = request.comment();
-            task.completedAt = now;
-            task.handleEndTime = now;
-            task.updatedAt = now;
-            task.actingMode = "HANDOVER";
-            task.actingForUserId = sourceUserId;
-            task.handoverFromUserId = sourceUserId;
-            instance.activeTaskIds.remove(task.taskId);
+                .map(task -> {
+                    DemoProcessInstance instance = requireInstance(task.instanceId);
+                    Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(
+                            instance.businessType,
+                            instance.businessKey
+                    );
+                    return new HandoverPreviewTaskItemResponse(
+                            task.taskId,
+                            task.instanceId,
+                            instance.processDefinitionId,
+                            instance.processKey,
+                            instance.processName,
+                            instance.businessKey,
+                            instance.businessType,
+                            resolveBusinessTitle(instance.businessType, instance.businessKey, businessData),
+                            stringValue(businessData.get("billNo")),
+                            task.nodeId,
+                            task.nodeName,
+                            task.assigneeUserId,
+                            task.createdAt,
+                            task.updatedAt,
+                            true,
+                            null
+                    );
+                })
+                .toList();
 
-            DemoTask nextTask = createTask(
-                    instance,
-                    task.nodeId,
-                    task.nodeName,
-                    delegatedAssignment(task.assignment, request.targetUserId()),
-                    task.taskId,
-                    task.originTaskId,
-                    TaskKind.NORMAL,
-                    request.targetUserId()
-            );
-            nextTask.actingMode = "HANDOVER";
-            nextTask.actingForUserId = sourceUserId;
-            nextTask.handoverFromUserId = sourceUserId;
-            nextTasks.add(nextTask.toView());
-            recordInstanceEvent(
-                    instance.instanceId,
-                    task.taskId,
-                    task.nodeId,
-                    "TASK_HANDOVERED",
-                    "任务已离职转办",
-                    currentUserId,
-                    "TASK",
-                    task.taskId,
-                    nextTask.taskId,
-                    request.targetUserId(),
-                    eventDetails(
-                            "comment", request.comment(),
-                            "sourceTaskId", task.taskId,
-                            "targetTaskId", nextTask.taskId,
-                            "sourceUserId", sourceUserId,
-                            "targetUserId", request.targetUserId(),
-                            "actingMode", "HANDOVER",
-                            "actingForUserId", sourceUserId,
-                            "handoverFromUserId", sourceUserId
-                    ),
-                    null,
-                    null,
-                    null,
-                    "HANDOVER",
-                    sourceUserId,
-                    null,
-                    sourceUserId
-            );
-            refreshStatus(instance);
-        }
-
-        if (nextTasks.isEmpty()) {
+        if (previewTasks.isEmpty()) {
             throw new ContractException(
                     "PROCESS.ACTION_NOT_ALLOWED",
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "没有可离职转办的活跃人工任务",
-                    Map.of("sourceUserId", sourceUserId)
+                    Map.of("sourceUserId", normalizedSourceUserId)
             );
         }
 
-        return new CompleteTaskResponse(
-                firstInstanceId,
-                firstTaskId,
-                "RUNNING",
-                nextTasks
+        DemoUserSnapshot sourceUser = resolveUserSnapshot(normalizedSourceUserId);
+        DemoUserSnapshot targetUser = resolveUserSnapshot(targetUserId);
+        return new HandoverPreviewResponse(
+                normalizedSourceUserId,
+                sourceUser.displayName(),
+                targetUserId,
+                targetUser.displayName(),
+                previewTasks.size(),
+                previewTasks
+        );
+    }
+
+    public synchronized HandoverExecutionResponse executeHandover(String sourceUserId, HandoverTaskRequest request) {
+        HandoverExecutionResult result = executeHandoverInternal(sourceUserId, request);
+        return new HandoverExecutionResponse(
+                result.sourceUserId(),
+                result.sourceDisplayName(),
+                result.targetUserId(),
+                result.targetDisplayName(),
+                result.executionTasks().size(),
+                result.instanceId(),
+                result.completedTaskId(),
+                result.status(),
+                result.nextTasks(),
+                result.executionTasks()
         );
     }
 
@@ -2430,6 +2401,183 @@ public class ProcessDemoService {
         return fixtureAuthService.currentUser();
     }
 
+    private HandoverExecutionResult executeHandoverInternal(String sourceUserId, HandoverTaskRequest request) {
+        requireProcessAdminForHandover();
+        String normalizedSourceUserId = normalizeId(sourceUserId, "sourceUserId");
+        String targetUserId = normalizeId(request.targetUserId(), "targetUserId");
+        DemoUserSnapshot sourceUser = resolveUserSnapshot(normalizedSourceUserId);
+        DemoUserSnapshot targetUser = resolveUserSnapshot(targetUserId);
+
+        List<DemoTaskView> nextTasks = new ArrayList<>();
+        List<HandoverExecutionTaskItemResponse> executionTasks = new ArrayList<>();
+        OffsetDateTime now = now();
+        String firstInstanceId = null;
+        String firstTaskId = null;
+
+        for (DemoTask task : tasksById.values().stream()
+                .filter(candidate -> normalizedSourceUserId.equals(candidate.assigneeUserId))
+                .filter(candidate -> candidate.taskKind == TaskKind.NORMAL)
+                .filter(candidate -> "PENDING".equals(candidate.status))
+                .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
+                .toList()) {
+            DemoProcessInstance instance = requireInstance(task.instanceId);
+            if (firstInstanceId == null) {
+                firstInstanceId = instance.instanceId;
+                firstTaskId = task.taskId;
+            }
+
+            task.status = "HANDOVERED";
+            task.action = "HANDOVER";
+            task.operatorUserId = currentUserId();
+            task.comment = request.comment();
+            task.completedAt = now;
+            task.handleEndTime = now;
+            task.updatedAt = now;
+            task.actingMode = "HANDOVER";
+            task.actingForUserId = normalizedSourceUserId;
+            task.handoverFromUserId = normalizedSourceUserId;
+            instance.activeTaskIds.remove(task.taskId);
+
+            DemoTask nextTask = createTask(
+                    instance,
+                    task.nodeId,
+                    task.nodeName,
+                    delegatedAssignment(task.assignment, targetUserId),
+                    task.taskId,
+                    task.originTaskId,
+                    TaskKind.NORMAL,
+                    targetUserId
+            );
+            nextTask.actingMode = "HANDOVER";
+            nextTask.actingForUserId = normalizedSourceUserId;
+            nextTask.handoverFromUserId = normalizedSourceUserId;
+            nextTasks.add(nextTask.toView());
+            Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(
+                    instance.businessType,
+                    instance.businessKey
+            );
+            // 结果明细里把实例和任务信息都保留下来，方便前端直接展示执行轨迹。
+            executionTasks.add(new HandoverExecutionTaskItemResponse(
+                    task.taskId,
+                    nextTask.taskId,
+                    instance.instanceId,
+                    instance.processDefinitionId,
+                    instance.processKey,
+                    instance.processName,
+                    instance.businessKey,
+                    instance.businessType,
+                    resolveBusinessTitle(instance.businessType, instance.businessKey, businessData),
+                    stringValue(businessData.get("billNo")),
+                    task.nodeId,
+                    task.nodeName,
+                    targetUserId,
+                    "HANDOVERED",
+                    targetUserId,
+                    currentUserId(),
+                    request.comment(),
+                    now,
+                    true,
+                    null
+            ));
+            recordInstanceEvent(
+                    instance.instanceId,
+                    task.taskId,
+                    task.nodeId,
+                    "TASK_HANDOVERED",
+                    "任务已离职转办",
+                    currentUserId(),
+                    "TASK",
+                    task.taskId,
+                    nextTask.taskId,
+                    targetUserId,
+                    eventDetails(
+                            "comment", request.comment(),
+                            "sourceTaskId", task.taskId,
+                            "targetTaskId", nextTask.taskId,
+                            "sourceUserId", normalizedSourceUserId,
+                            "targetUserId", targetUserId,
+                            "actingMode", "HANDOVER",
+                            "actingForUserId", normalizedSourceUserId,
+                            "handoverFromUserId", normalizedSourceUserId
+                    ),
+                    null,
+                    null,
+                    null,
+                    "HANDOVER",
+                    normalizedSourceUserId,
+                    null,
+                    normalizedSourceUserId
+            );
+            refreshStatus(instance);
+        }
+
+        if (nextTasks.isEmpty()) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "没有可离职转办的活跃人工任务",
+                    Map.of("sourceUserId", normalizedSourceUserId)
+            );
+        }
+
+        return new HandoverExecutionResult(
+                normalizedSourceUserId,
+                sourceUser.displayName(),
+                targetUserId,
+                targetUser.displayName(),
+                firstInstanceId,
+                firstTaskId,
+                "RUNNING",
+                nextTasks,
+                executionTasks
+        );
+    }
+
+    private void requireProcessAdminForHandover() {
+        if (!currentUserIsProcessAdmin()) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "仅流程管理员可以执行离职转办",
+                    Map.of("userId", currentUserId())
+            );
+        }
+    }
+
+    private String normalizeId(String value, String fieldName) {
+        if (value == null) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " 不能为空",
+                    Map.of("field", fieldName)
+            );
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " 不能为空",
+                    Map.of("field", fieldName)
+            );
+        }
+        return normalized;
+    }
+
+    private DemoUserSnapshot resolveUserSnapshot(String userId) {
+        var detail = systemUserMapper.selectDetail(userId);
+        if (detail == null) {
+            throw new ContractException(
+                    "BIZ.RESOURCE_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "用户不存在",
+                    Map.of("userId", userId)
+            );
+        }
+        return new DemoUserSnapshot(detail.userId(), detail.displayName());
+    }
+
     private Set<String> activeDelegationPrincipalIds() {
         return currentUser().delegations().stream()
                 .filter(delegation -> "ACTIVE".equalsIgnoreCase(delegation.status()))
@@ -2650,6 +2798,26 @@ public class ProcessDemoService {
 
     private String currentUserId() {
         return StpUtil.getLoginIdAsString();
+    }
+
+    // 离职转办预览和执行共用同一份结果模型，避免预览和执行出现口径不一致。
+    private record DemoUserSnapshot(
+            String userId,
+            String displayName
+    ) {
+    }
+
+    private record HandoverExecutionResult(
+            String sourceUserId,
+            String sourceDisplayName,
+            String targetUserId,
+            String targetDisplayName,
+            String instanceId,
+            String completedTaskId,
+            String status,
+            List<DemoTaskView> nextTasks,
+            List<HandoverExecutionTaskItemResponse> executionTasks
+    ) {
     }
 
     private void recordInstanceEvent(

@@ -16,10 +16,10 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
       setOffset(document.body.scrollTop || document.documentElement.scrollTop)
     }
 
-    // Add scroll listener to the body
+    // 监听滚动是为了在固定头部时切换阴影和磨砂效果。
     document.addEventListener('scroll', onScroll, { passive: true })
 
-    // Clean up the event listener on unmount
+    // 组件卸载时移除监听，避免重复注册。
     return () => document.removeEventListener('scroll', onScroll)
   }, [])
 

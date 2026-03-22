@@ -14,11 +14,13 @@ import com.westflow.system.menu.mapper.SystemMenuMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class SystemMenuService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "visible", "menuType");
@@ -27,11 +29,8 @@ public class SystemMenuService {
 
     private final SystemMenuMapper systemMenuMapper;
 
-    public SystemMenuService(SystemMenuMapper systemMenuMapper) {
-        this.systemMenuMapper = systemMenuMapper;
-    }
-
     public PageResponse<SystemMenuListItemResponse> page(PageRequest request) {
+        // 菜单树支持筛选、排序和关键字搜索，列表层只做基础聚合。
         Boolean enabled = null;
         Boolean visible = null;
         String menuType = null;
@@ -77,6 +76,7 @@ public class SystemMenuService {
     }
 
     public SystemMenuDetailResponse detail(String menuId) {
+        // 菜单详情主要用于编辑页和父级校验。
         SystemMenuDetailResponse detail = systemMenuMapper.selectDetail(menuId);
         if (detail == null) {
             throw new ContractException(
@@ -185,6 +185,7 @@ public class SystemMenuService {
             return;
         }
 
+        // 往上追父级，避免出现循环引用。
         String cursor = parentMenu.parentMenuId();
         while (cursor != null && !cursor.isBlank()) {
             if (currentMenuId.equals(cursor)) {

@@ -6,6 +6,7 @@ import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.system.user.service.SystemUserService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,13 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/system/users")
 @SaCheckLogin
+@RequiredArgsConstructor
 public class SystemUserController {
 
     private final SystemUserService systemUserService;
-
-    public SystemUserController(SystemUserService systemUserService) {
-        this.systemUserService = systemUserService;
-    }
 
     @PostMapping("/page")
     public ApiResponse<PageResponse<SystemUserListItemResponse>> page(@Valid @RequestBody PageRequest request) {

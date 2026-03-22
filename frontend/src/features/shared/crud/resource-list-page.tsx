@@ -174,7 +174,7 @@ export function ResourceListPage<TData>({
       </Button>
       {createAction ? (
         <Button asChild>
-          <Link to={createAction.href}>
+          <Link to={createAction.href} search={{}}>
             <Plus data-icon='inline-start' />
             {createAction.label}
           </Link>

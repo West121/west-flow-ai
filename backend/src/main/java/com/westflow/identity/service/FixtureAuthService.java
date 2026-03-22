@@ -22,6 +22,7 @@ public class FixtureAuthService {
 
     public FixtureAuthService(IdentityAccessMapper identityAccessMapper) {
         this.identityAccessMapper = identityAccessMapper;
+        // 这里是本地联调用的登录桩数据，便于快速验证权限和流程场景。
         FixtureUser zhangsan = new FixtureUser(
                 "usr_001",
                 "zhangsan",
@@ -86,6 +87,7 @@ public class FixtureAuthService {
     }
 
     public LoginResponse login(LoginRequest request) {
+        // 登录只做最小校验，真实权限来源仍然由权限表和当前岗位上下文决定。
         FixtureUser user = usersByUsername.get(request.username());
         if (user == null || !user.password().equals(request.password())) {
             throw new ContractException("AUTH.UNAUTHORIZED", HttpStatus.UNAUTHORIZED, "用户名或密码错误");
@@ -98,6 +100,7 @@ public class FixtureAuthService {
     }
 
     public CurrentUserResponse currentUser() {
+        // 当前用户信息要把岗位、权限、数据范围一次性带齐，前端不用再拆多次请求。
         String loginId = StpUtil.getLoginIdAsString();
         FixtureUser user = getUserById(loginId);
         String activePostId = StpUtil.getTokenSession().getString(ACTIVE_POST_ID);
@@ -108,6 +111,11 @@ public class FixtureAuthService {
         if (activePost == null) {
             throw new ContractException("AUTH.FORBIDDEN", HttpStatus.FORBIDDEN, "当前岗位上下文不存在");
         }
+
+        // 代理关系从数据库读取，系统管理页一旦修改，当前用户上下文就能立即反映出来。
+        List<CurrentUserResponse.Delegation> delegations = identityAccessMapper.selectDelegationsByDelegateUserId(user.userId()).stream()
+                .filter(delegation -> "ACTIVE".equalsIgnoreCase(delegation.status()))
+                .toList();
 
         return new CurrentUserResponse(
                 user.userId(),
@@ -123,13 +131,14 @@ public class FixtureAuthService {
                 identityAccessMapper.selectPermissionsByUserId(user.userId()),
                 identityAccessMapper.selectDataScopesByUserId(user.userId()),
                 user.partTimePosts(),
-                user.delegations(),
+                delegations,
                 user.aiCapabilities(),
                 identityAccessMapper.selectMenusByUserId(user.userId())
         );
     }
 
     public void switchContext(String activePostId) {
+        // 岗位切换只允许在用户已有的岗位集合内发生。
         FixtureUser user = getUserById(StpUtil.getLoginIdAsString());
         if (!user.posts().containsKey(activePostId)) {
             throw new ContractException(
@@ -155,8 +164,8 @@ public class FixtureAuthService {
     public boolean isActiveDelegate(String principalUserId, String delegateUserId) {
         getUserById(principalUserId);
         getUserById(delegateUserId);
-        return usersById.values().stream()
-                .flatMap(user -> user.delegations().stream())
+        // 委派关系在这里统一判断，避免业务服务重复读登录态。
+        return identityAccessMapper.selectDelegationsByDelegateUserId(delegateUserId).stream()
                 .anyMatch(delegation ->
                         "ACTIVE".equalsIgnoreCase(delegation.status())
                                 && principalUserId.equals(delegation.principalUserId())

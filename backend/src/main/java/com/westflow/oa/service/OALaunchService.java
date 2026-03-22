@@ -25,11 +25,13 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class OALaunchService {
 
     private static final DateTimeFormatter BILL_DATE = DateTimeFormatter.BASIC_ISO_DATE;
@@ -41,24 +43,9 @@ public class OALaunchService {
     private final OACommonRequestBillMapper oaCommonRequestBillMapper;
     private final ProcessDemoService processDemoService;
 
-    public OALaunchService(
-            BusinessProcessBindingService businessProcessBindingService,
-            BusinessProcessLinkMapper businessProcessLinkMapper,
-            OALeaveBillMapper oaLeaveBillMapper,
-            OAExpenseBillMapper oaExpenseBillMapper,
-            OACommonRequestBillMapper oaCommonRequestBillMapper,
-            ProcessDemoService processDemoService
-    ) {
-        this.businessProcessBindingService = businessProcessBindingService;
-        this.businessProcessLinkMapper = businessProcessLinkMapper;
-        this.oaLeaveBillMapper = oaLeaveBillMapper;
-        this.oaExpenseBillMapper = oaExpenseBillMapper;
-        this.oaCommonRequestBillMapper = oaCommonRequestBillMapper;
-        this.processDemoService = processDemoService;
-    }
-
     @Transactional
     public OALaunchResponse createLeaveBill(CreateOALeaveBillRequest request) {
+        // 先落业务单，再启动流程实例，避免流程实例和业务单脱节。
         String billId = buildId("leave");
         String billNo = buildBillNo("LEAVE");
         String sceneCode = normalizeSceneCode(request.sceneCode());
@@ -168,6 +155,7 @@ public class OALaunchService {
             String billId,
             Map<String, Object> formData
     ) {
+        // 通过业务类型和场景码解析流程定义，保持业务发起和流程绑定解耦。
         String processKey = businessProcessBindingService.resolveProcessKey(businessType, sceneCode);
         return processDemoService.start(new StartProcessRequest(
                 processKey,
@@ -178,6 +166,7 @@ public class OALaunchService {
     }
 
     private void insertLink(String businessType, String billId, StartProcessResponse startResponse, String userId) {
+        // 业务单和流程实例之间用关联表保存，方便后续查询和追踪。
         businessProcessLinkMapper.insertLink(new BusinessProcessLinkRecord(
                 buildId("bpl"),
                 businessType,

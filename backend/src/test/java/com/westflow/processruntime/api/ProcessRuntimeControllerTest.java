@@ -1403,6 +1403,74 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldPreviewAndExecuteHandoverWithExecutionDetail() throws Exception {
+        String adminToken = login("wangwu");
+        String sourceUserId = "usr_001";
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validHandoverProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_handover_preview_001");
+
+        mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_handover_route",
+                                  "businessKey": "leave_handover_preview_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "离职转办预览测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        // 预览接口只负责告诉管理员会影响哪些任务，不提前改状态。
+        JsonNode previewBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/demo/users/{sourceUserId}/handover/preview", sourceUserId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "预览离职转办"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(previewBody.path("previewTaskCount").asInt()).isEqualTo(1);
+        assertThat(previewBody.path("previewTasks").get(0).path("processKey").asText()).isEqualTo("oa_handover_route");
+        assertThat(previewBody.path("previewTasks").get(0).path("billNo").asText()).isEqualTo("LEAVE-20260322-001");
+        assertThat(previewBody.path("targetDisplayName").asText()).isEqualTo("王五");
+
+        // 执行接口会返回每个被转办任务的执行明细，便于前端展示审计结果。
+        JsonNode executeBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/demo/users/{sourceUserId}/handover/execute", sourceUserId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "执行离职转办"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(executeBody.path("executedTaskCount").asInt()).isEqualTo(1);
+        assertThat(executeBody.path("executionTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+        assertThat(executeBody.path("executionTasks").get(0).path("status").asText()).isEqualTo("HANDOVERED");
+        assertThat(executeBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+    }
+
+    @Test
     void shouldSupportAddSignRemoveSignAndBlockCompletionUntilAddSignTaskResolves() throws Exception {
         String initiatorToken = login("zhangsan");
 

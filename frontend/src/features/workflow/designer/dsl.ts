@@ -81,6 +81,7 @@ export type ProcessDefinitionDetailResponse = {
 const DEFAULT_NODE_WIDTH = 220
 const DEFAULT_NODE_HEIGHT = 96
 
+// 画布节点类型和流程定义节点类型不是完全一一对应，需要先做归一化。
 function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
   switch (kind) {
     case 'start':
@@ -96,6 +97,7 @@ function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
   }
 }
 
+// 反向还原时，把定义里的节点类型映射回画布可编辑的节点种类。
 function nodeKindFor(type: ProcessDefinitionDslNodeType) {
   switch (type) {
     case 'parallel_split':
@@ -119,6 +121,7 @@ function toneFor(type: ProcessDefinitionDslNodeType) {
   }
 }
 
+// DSL 负责在“画布快照”和“流程定义”之间做双向转换。
 export function workflowSnapshotToProcessDefinitionDsl(
   snapshot: WorkflowSnapshot,
   meta: ProcessDefinitionMeta

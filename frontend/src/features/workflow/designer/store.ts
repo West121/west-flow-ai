@@ -33,6 +33,7 @@ import {
 } from './types'
 
 function createInitialSnapshot(): WorkflowSnapshot {
+  // 设计器默认先放一个最小可编辑链路，方便直接进入配置。
   const start = createWorkflowNode(
     workflowNodeTemplates[0],
     'node-start',
@@ -88,9 +89,11 @@ function resolveSelectedNodeId(
     previousSnapshot.selectedNodeId &&
     nextNodes.some((node) => node.id === previousSnapshot.selectedNodeId)
   ) {
+    // 只要当前选中的节点还在，就保持选中状态。
     return previousSnapshot.selectedNodeId
   }
 
+  // 如果节点被删掉了，就退回到最新的可见节点。
   return nextNodes[nextNodes.length - 1]?.id ?? null
 }
 
@@ -167,6 +170,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
       }),
     setSelectedNodeId: (selectedNodeId) =>
       set((state) => ({
+        // 这里只改当前快照，不写入历史栈，避免单纯点选污染撤销记录。
         history: replaceWorkflowSnapshot(state.history, {
           ...state.history.present,
           selectedNodeId,
@@ -174,6 +178,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
       })),
     updateNodeData: (nodeId, updater) =>
       set((state) => ({
+        // 节点内容变更要进入历史，保证撤销/重做可用。
         history: commitWorkflowSnapshot(state.history, {
           ...state.history.present,
           nodes: state.history.present.nodes.map((node) =>
@@ -188,6 +193,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
       })),
     updateNodeDraft: (nodeId, patch, edgePatches = []) =>
       set((state) => ({
+        // 节点表单和边条件会一起落盘，保持设计器预览一致。
         history: commitWorkflowSnapshot(state.history, {
           ...state.history.present,
           nodes: state.history.present.nodes.map((node) => {
@@ -243,6 +249,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             change.type === 'remove' ||
             (change.type === 'position' && !change.dragging)
         )
+        // 拖拽中的位移只刷新当前快照，真正落点才写进历史。
         const nextSnapshot = {
           ...state.history.present,
           nodes: nextNodes,
@@ -261,6 +268,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
         )
 
         return {
+          // 选中不算结构变化，删除或重连才需要进入历史。
           history: withPresentSnapshot(
             state.history,
             {
@@ -273,6 +281,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
       }),
     connectNodes: (connection) =>
       set((state) => ({
+        // 连线属于结构调整，直接写入历史栈。
         history: commitWorkflowSnapshot(state.history, {
           ...state.history.present,
           edges: addEdge(

@@ -24,11 +24,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class SystemUserService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "departmentId", "postId");
@@ -43,12 +45,8 @@ public class SystemUserService {
     private final SystemUserMapper systemUserMapper;
     private final IdentityAccessMapper identityAccessMapper;
 
-    public SystemUserService(SystemUserMapper systemUserMapper, IdentityAccessMapper identityAccessMapper) {
-        this.systemUserMapper = systemUserMapper;
-        this.identityAccessMapper = identityAccessMapper;
-    }
-
     public PageResponse<SystemUserListItemResponse> page(PageRequest request) {
+        // 用户列表先按当前登录人的数据权限收口，再应用筛选和排序。
         AccessPolicy accessPolicy = resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
@@ -91,6 +89,7 @@ public class SystemUserService {
     }
 
     public SystemUserDetailResponse detail(String userId) {
+        // 详情页不能只依赖列表层过滤，必须再做一次权限校验。
         SystemUserBaseDetailRecord detail = systemUserMapper.selectDetail(userId);
         if (detail == null) {
             throw new ContractException(
@@ -119,6 +118,7 @@ public class SystemUserService {
     }
 
     public SystemUserFormOptionsResponse formOptions() {
+        // 用户表单一次性返回公司、岗位、角色选项。
         return new SystemUserFormOptionsResponse(
                 systemUserMapper.selectCompanyOptions(),
                 systemUserMapper.selectPostOptions(),
@@ -128,6 +128,7 @@ public class SystemUserService {
 
     @Transactional
     public SystemUserMutationResponse create(SaveSystemUserRequest request) {
+        // 创建前先校验主岗位、公司和角色关系是否完整。
         PostContext postContext = resolvePostContext(request.primaryPostId());
         validateCompanyConsistency(request.companyId(), postContext.companyId());
         assertAccessible(postContext.companyId(), postContext.departmentId(), null);
@@ -159,6 +160,7 @@ public class SystemUserService {
 
     @Transactional
     public SystemUserMutationResponse update(String userId, SaveSystemUserRequest request) {
+        // 更新时先确认原用户存在，再重建主岗位和角色关系。
         detail(userId);
         PostContext postContext = resolvePostContext(request.primaryPostId());
         validateCompanyConsistency(request.companyId(), postContext.companyId());
@@ -202,6 +204,7 @@ public class SystemUserService {
     }
 
     private void replaceUserRoles(String userId, List<String> roleIds) {
+        // 角色关系采用先删后插，保证最终状态和表单一致。
         List<String> normalizedRoleIds = normalizeRoleIds(roleIds);
         if (normalizedRoleIds.isEmpty()) {
             throw new ContractException(
@@ -236,6 +239,7 @@ public class SystemUserService {
     }
 
     private PostContext resolvePostContext(String postId) {
+        // 主岗位必须能反查到部门和公司，否则用户上下文不完整。
         PostContext postContext = systemUserMapper.selectPostContextByPostId(postId);
         if (postContext == null || postContext.departmentId() == null || postContext.companyId() == null) {
             throw new ContractException(
@@ -260,6 +264,7 @@ public class SystemUserService {
     }
 
     private void assertAccessible(String companyId, String departmentId, String userId) {
+        // 当前人可以访问自己、同部门、同公司或已授权范围内的数据。
         AccessPolicy accessPolicy = resolveAccessPolicy();
         if (accessPolicy.allAccess()) {
             return;

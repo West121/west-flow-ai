@@ -179,6 +179,7 @@ const approvalSheetBusinessTypeOptions = [
   { label: '通用申请', value: 'OA_COMMON' },
 ] as const
 
+// 流程中心列表统一走结构化筛选，避免页面自己拼各种 query。
 function getApprovalSheetFilterValue(
   search: ListQuerySearch,
   field: string
@@ -211,6 +212,7 @@ function updateApprovalSheetFilter(
   })
 }
 
+// CC 列表用“已读/已完成”来区分待办状态，和普通待办口径不同。
 function isCcApprovalSheetRead(record: ApprovalSheetListItem) {
   const latestAction = record.latestAction?.toUpperCase()
   const currentTaskStatus = record.currentTaskStatus?.toUpperCase()
@@ -230,6 +232,7 @@ function isCcApprovalSheetCompleted(record: ApprovalSheetListItem) {
   )
 }
 
+// CC 列表的统计口径单独算，避免和待办/已办混在一起。
 function summarizeCcApprovalSheets(records: ApprovalSheetListItem[]) {
   return {
     total: records.length,
@@ -765,7 +768,7 @@ function TaskRuntimeFormCard({
                 )}
               </Button>
               <Button asChild type='button' variant='outline'>
-                <Link to='/workbench/todos/list'>返回列表</Link>
+                <Link to='/workbench/todos/list' search={{}}>返回列表</Link>
               </Button>
             </div>
           </form>
@@ -821,7 +824,7 @@ const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
     header: '操作',
     cell: ({ row }) => (
       <Button asChild size='sm' variant='outline'>
-        <Link to='/workbench/todos/$taskId' params={{ taskId: row.original.taskId }}>
+        <Link to='/workbench/todos/$taskId' params={{ taskId: row.original.taskId }} search={{}}>
           处理
         </Link>
       </Button>
@@ -935,10 +938,10 @@ export function Dashboard() {
       actions={
         <>
           <Button asChild>
-            <Link to='/workbench/start'>发起流程</Link>
+            <Link to='/workbench/start' search={{}}>发起流程</Link>
           </Button>
           <Button asChild variant='outline'>
-            <Link to='/workbench/todos/list'>进入待办列表</Link>
+            <Link to='/workbench/todos/list' search={{}}>进入待办列表</Link>
           </Button>
         </>
       }
@@ -1001,7 +1004,7 @@ export function Dashboard() {
               ['流程定义列表', '/workflow/definitions/list'],
             ].map(([label, href]) => (
               <Button key={href} asChild variant='outline' className='justify-start'>
-                <Link to={href}>{label}</Link>
+                <Link to={href} search={{}}>{label}</Link>
               </Button>
             ))}
           </CardContent>
@@ -1099,7 +1102,7 @@ export function WorkbenchStartPage() {
       description='先选择业务入口，再进入对应的 OA 发起页。'
       actions={
         <Button asChild variant='outline'>
-          <Link to='/workbench/todos/list'>
+          <Link to='/workbench/todos/list' search={{}}>
             <ArrowLeft />
             返回待办列表
           </Link>
@@ -1122,7 +1125,7 @@ export function WorkbenchStartPage() {
               ['OA 流程查询', '/oa/query'],
             ].map(([label, href]) => (
               <Button key={href} asChild variant='outline' className='justify-start'>
-                <Link to={href as '/oa/leave/create' | '/oa/expense/create' | '/oa/common/create' | '/oa/query'}>
+                <Link to={href as '/oa/leave/create' | '/oa/expense/create' | '/oa/common/create' | '/oa/query'} search={{}}>
                   {label}
                 </Link>
               </Button>
@@ -1789,7 +1792,7 @@ export function WorkbenchTodoDetailPage({
       description='统一审批单详情页，支持业务正文、流程回顾和运行态处理动作。'
       actions={
         <Button asChild variant='outline'>
-          <Link to={backHref}>
+          <Link to={backHref} search={{}}>
             <ArrowLeft />
             {backLabel}
           </Link>

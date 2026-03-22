@@ -46,10 +46,13 @@ import { Route as AuthenticatedSystemPostsListRouteImport } from './routes/_auth
 import { Route as AuthenticatedSystemPostsCreateRouteImport } from './routes/_authenticated/system/posts/create'
 import { Route as AuthenticatedSystemMenusListRouteImport } from './routes/_authenticated/system/menus/list'
 import { Route as AuthenticatedSystemMenusCreateRouteImport } from './routes/_authenticated/system/menus/create'
+import { Route as AuthenticatedSystemHandoverExecuteRouteImport } from './routes/_authenticated/system/handover/execute'
 import { Route as AuthenticatedSystemDepartmentsListRouteImport } from './routes/_authenticated/system/departments/list'
 import { Route as AuthenticatedSystemDepartmentsCreateRouteImport } from './routes/_authenticated/system/departments/create'
 import { Route as AuthenticatedSystemCompaniesListRouteImport } from './routes/_authenticated/system/companies/list'
 import { Route as AuthenticatedSystemCompaniesCreateRouteImport } from './routes/_authenticated/system/companies/create'
+import { Route as AuthenticatedSystemAgentsListRouteImport } from './routes/_authenticated/system/agents/list'
+import { Route as AuthenticatedSystemAgentsCreateRouteImport } from './routes/_authenticated/system/agents/create'
 import { Route as AuthenticatedOaLeaveCreateRouteImport } from './routes/_authenticated/oa/leave/create'
 import { Route as AuthenticatedOaLeaveBillIdRouteImport } from './routes/_authenticated/oa/leave/$billId'
 import { Route as AuthenticatedOaExpenseCreateRouteImport } from './routes/_authenticated/oa/expense/create'
@@ -62,12 +65,14 @@ import { Route as AuthenticatedSystemPostsPostIdIndexRouteImport } from './route
 import { Route as AuthenticatedSystemMenusMenuIdIndexRouteImport } from './routes/_authenticated/system/menus/$menuId/index'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdIndexRouteImport } from './routes/_authenticated/system/departments/$departmentId/index'
 import { Route as AuthenticatedSystemCompaniesCompanyIdIndexRouteImport } from './routes/_authenticated/system/companies/$companyId/index'
+import { Route as AuthenticatedSystemAgentsAgentIdIndexRouteImport } from './routes/_authenticated/system/agents/$agentId/index'
 import { Route as AuthenticatedSystemUsersUserIdEditRouteImport } from './routes/_authenticated/system/users/$userId/edit'
 import { Route as AuthenticatedSystemRolesRoleIdEditRouteImport } from './routes/_authenticated/system/roles/$roleId/edit'
 import { Route as AuthenticatedSystemPostsPostIdEditRouteImport } from './routes/_authenticated/system/posts/$postId/edit'
 import { Route as AuthenticatedSystemMenusMenuIdEditRouteImport } from './routes/_authenticated/system/menus/$menuId/edit'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdEditRouteImport } from './routes/_authenticated/system/departments/$departmentId/edit'
 import { Route as AuthenticatedSystemCompaniesCompanyIdEditRouteImport } from './routes/_authenticated/system/companies/$companyId/edit'
+import { Route as AuthenticatedSystemAgentsAgentIdEditRouteImport } from './routes/_authenticated/system/agents/$agentId/edit'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -277,6 +282,12 @@ const AuthenticatedSystemMenusCreateRoute =
     path: '/system/menus/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemHandoverExecuteRoute =
+  AuthenticatedSystemHandoverExecuteRouteImport.update({
+    id: '/system/handover/execute',
+    path: '/system/handover/execute',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemDepartmentsListRoute =
   AuthenticatedSystemDepartmentsListRouteImport.update({
     id: '/system/departments/list',
@@ -299,6 +310,18 @@ const AuthenticatedSystemCompaniesCreateRoute =
   AuthenticatedSystemCompaniesCreateRouteImport.update({
     id: '/system/companies/create',
     path: '/system/companies/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAgentsListRoute =
+  AuthenticatedSystemAgentsListRouteImport.update({
+    id: '/system/agents/list',
+    path: '/system/agents/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAgentsCreateRoute =
+  AuthenticatedSystemAgentsCreateRouteImport.update({
+    id: '/system/agents/create',
+    path: '/system/agents/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedOaLeaveCreateRoute =
@@ -373,6 +396,12 @@ const AuthenticatedSystemCompaniesCompanyIdIndexRoute =
     path: '/system/companies/$companyId/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemAgentsAgentIdIndexRoute =
+  AuthenticatedSystemAgentsAgentIdIndexRouteImport.update({
+    id: '/system/agents/$agentId/',
+    path: '/system/agents/$agentId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemUsersUserIdEditRoute =
   AuthenticatedSystemUsersUserIdEditRouteImport.update({
     id: '/system/users/$userId/edit',
@@ -409,6 +438,12 @@ const AuthenticatedSystemCompaniesCompanyIdEditRoute =
     path: '/system/companies/$companyId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemAgentsAgentIdEditRoute =
+  AuthenticatedSystemAgentsAgentIdEditRouteImport.update({
+    id: '/system/agents/$agentId/edit',
+    path: '/system/agents/$agentId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
@@ -439,10 +474,13 @@ export interface FileRoutesByFullPath {
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
   '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
+  '/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
   '/system/departments/create': typeof AuthenticatedSystemDepartmentsCreateRoute
   '/system/departments/list': typeof AuthenticatedSystemDepartmentsListRoute
+  '/system/handover/execute': typeof AuthenticatedSystemHandoverExecuteRoute
   '/system/menus/create': typeof AuthenticatedSystemMenusCreateRoute
   '/system/menus/list': typeof AuthenticatedSystemMenusListRoute
   '/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
@@ -457,12 +495,14 @@ export interface FileRoutesByFullPath {
   '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
+  '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
   '/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
   '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
+  '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
@@ -498,10 +538,13 @@ export interface FileRoutesByTo {
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
   '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
+  '/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
   '/system/departments/create': typeof AuthenticatedSystemDepartmentsCreateRoute
   '/system/departments/list': typeof AuthenticatedSystemDepartmentsListRoute
+  '/system/handover/execute': typeof AuthenticatedSystemHandoverExecuteRoute
   '/system/menus/create': typeof AuthenticatedSystemMenusCreateRoute
   '/system/menus/list': typeof AuthenticatedSystemMenusListRoute
   '/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
@@ -516,12 +559,14 @@ export interface FileRoutesByTo {
   '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
+  '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
   '/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
   '/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
+  '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
@@ -560,10 +605,13 @@ export interface FileRoutesById {
   '/_authenticated/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
   '/_authenticated/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/_authenticated/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/_authenticated/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
+  '/_authenticated/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/_authenticated/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/_authenticated/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
   '/_authenticated/system/departments/create': typeof AuthenticatedSystemDepartmentsCreateRoute
   '/_authenticated/system/departments/list': typeof AuthenticatedSystemDepartmentsListRoute
+  '/_authenticated/system/handover/execute': typeof AuthenticatedSystemHandoverExecuteRoute
   '/_authenticated/system/menus/create': typeof AuthenticatedSystemMenusCreateRoute
   '/_authenticated/system/menus/list': typeof AuthenticatedSystemMenusListRoute
   '/_authenticated/system/posts/create': typeof AuthenticatedSystemPostsCreateRoute
@@ -578,12 +626,14 @@ export interface FileRoutesById {
   '/_authenticated/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/_authenticated/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/_authenticated/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
+  '/_authenticated/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/_authenticated/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/_authenticated/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/_authenticated/system/menus/$menuId/edit': typeof AuthenticatedSystemMenusMenuIdEditRoute
   '/_authenticated/system/posts/$postId/edit': typeof AuthenticatedSystemPostsPostIdEditRoute
   '/_authenticated/system/roles/$roleId/edit': typeof AuthenticatedSystemRolesRoleIdEditRoute
   '/_authenticated/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
+  '/_authenticated/system/agents/$agentId/': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   '/_authenticated/system/companies/$companyId/': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   '/_authenticated/system/departments/$departmentId/': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   '/_authenticated/system/menus/$menuId/': typeof AuthenticatedSystemMenusMenuIdIndexRoute
@@ -622,10 +672,13 @@ export interface FileRouteTypes {
     | '/oa/expense/create'
     | '/oa/leave/$billId'
     | '/oa/leave/create'
+    | '/system/agents/create'
+    | '/system/agents/list'
     | '/system/companies/create'
     | '/system/companies/list'
     | '/system/departments/create'
     | '/system/departments/list'
+    | '/system/handover/execute'
     | '/system/menus/create'
     | '/system/menus/list'
     | '/system/posts/create'
@@ -640,12 +693,14 @@ export interface FileRouteTypes {
     | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
     | '/workflow/definitions/list'
+    | '/system/agents/$agentId/edit'
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
     | '/system/menus/$menuId/edit'
     | '/system/posts/$postId/edit'
     | '/system/roles/$roleId/edit'
     | '/system/users/$userId/edit'
+    | '/system/agents/$agentId'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
     | '/system/menus/$menuId'
@@ -681,10 +736,13 @@ export interface FileRouteTypes {
     | '/oa/expense/create'
     | '/oa/leave/$billId'
     | '/oa/leave/create'
+    | '/system/agents/create'
+    | '/system/agents/list'
     | '/system/companies/create'
     | '/system/companies/list'
     | '/system/departments/create'
     | '/system/departments/list'
+    | '/system/handover/execute'
     | '/system/menus/create'
     | '/system/menus/list'
     | '/system/posts/create'
@@ -699,12 +757,14 @@ export interface FileRouteTypes {
     | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
     | '/workflow/definitions/list'
+    | '/system/agents/$agentId/edit'
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
     | '/system/menus/$menuId/edit'
     | '/system/posts/$postId/edit'
     | '/system/roles/$roleId/edit'
     | '/system/users/$userId/edit'
+    | '/system/agents/$agentId'
     | '/system/companies/$companyId'
     | '/system/departments/$departmentId'
     | '/system/menus/$menuId'
@@ -742,10 +802,13 @@ export interface FileRouteTypes {
     | '/_authenticated/oa/expense/create'
     | '/_authenticated/oa/leave/$billId'
     | '/_authenticated/oa/leave/create'
+    | '/_authenticated/system/agents/create'
+    | '/_authenticated/system/agents/list'
     | '/_authenticated/system/companies/create'
     | '/_authenticated/system/companies/list'
     | '/_authenticated/system/departments/create'
     | '/_authenticated/system/departments/list'
+    | '/_authenticated/system/handover/execute'
     | '/_authenticated/system/menus/create'
     | '/_authenticated/system/menus/list'
     | '/_authenticated/system/posts/create'
@@ -760,12 +823,14 @@ export interface FileRouteTypes {
     | '/_authenticated/workbench/todos/$taskId'
     | '/_authenticated/workbench/todos/list'
     | '/_authenticated/workflow/definitions/list'
+    | '/_authenticated/system/agents/$agentId/edit'
     | '/_authenticated/system/companies/$companyId/edit'
     | '/_authenticated/system/departments/$departmentId/edit'
     | '/_authenticated/system/menus/$menuId/edit'
     | '/_authenticated/system/posts/$postId/edit'
     | '/_authenticated/system/roles/$roleId/edit'
     | '/_authenticated/system/users/$userId/edit'
+    | '/_authenticated/system/agents/$agentId/'
     | '/_authenticated/system/companies/$companyId/'
     | '/_authenticated/system/departments/$departmentId/'
     | '/_authenticated/system/menus/$menuId/'
@@ -1045,6 +1110,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemMenusCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/handover/execute': {
+      id: '/_authenticated/system/handover/execute'
+      path: '/system/handover/execute'
+      fullPath: '/system/handover/execute'
+      preLoaderRoute: typeof AuthenticatedSystemHandoverExecuteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/departments/list': {
       id: '/_authenticated/system/departments/list'
       path: '/system/departments/list'
@@ -1071,6 +1143,20 @@ declare module '@tanstack/react-router' {
       path: '/system/companies/create'
       fullPath: '/system/companies/create'
       preLoaderRoute: typeof AuthenticatedSystemCompaniesCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/agents/list': {
+      id: '/_authenticated/system/agents/list'
+      path: '/system/agents/list'
+      fullPath: '/system/agents/list'
+      preLoaderRoute: typeof AuthenticatedSystemAgentsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/agents/create': {
+      id: '/_authenticated/system/agents/create'
+      path: '/system/agents/create'
+      fullPath: '/system/agents/create'
+      preLoaderRoute: typeof AuthenticatedSystemAgentsCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/oa/leave/create': {
@@ -1157,6 +1243,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemCompaniesCompanyIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/agents/$agentId/': {
+      id: '/_authenticated/system/agents/$agentId/'
+      path: '/system/agents/$agentId'
+      fullPath: '/system/agents/$agentId'
+      preLoaderRoute: typeof AuthenticatedSystemAgentsAgentIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/users/$userId/edit': {
       id: '/_authenticated/system/users/$userId/edit'
       path: '/system/users/$userId/edit'
@@ -1197,6 +1290,13 @@ declare module '@tanstack/react-router' {
       path: '/system/companies/$companyId/edit'
       fullPath: '/system/companies/$companyId/edit'
       preLoaderRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/agents/$agentId/edit': {
+      id: '/_authenticated/system/agents/$agentId/edit'
+      path: '/system/agents/$agentId/edit'
+      fullPath: '/system/agents/$agentId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemAgentsAgentIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
@@ -1243,10 +1343,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOaExpenseCreateRoute: typeof AuthenticatedOaExpenseCreateRoute
   AuthenticatedOaLeaveBillIdRoute: typeof AuthenticatedOaLeaveBillIdRoute
   AuthenticatedOaLeaveCreateRoute: typeof AuthenticatedOaLeaveCreateRoute
+  AuthenticatedSystemAgentsCreateRoute: typeof AuthenticatedSystemAgentsCreateRoute
+  AuthenticatedSystemAgentsListRoute: typeof AuthenticatedSystemAgentsListRoute
   AuthenticatedSystemCompaniesCreateRoute: typeof AuthenticatedSystemCompaniesCreateRoute
   AuthenticatedSystemCompaniesListRoute: typeof AuthenticatedSystemCompaniesListRoute
   AuthenticatedSystemDepartmentsCreateRoute: typeof AuthenticatedSystemDepartmentsCreateRoute
   AuthenticatedSystemDepartmentsListRoute: typeof AuthenticatedSystemDepartmentsListRoute
+  AuthenticatedSystemHandoverExecuteRoute: typeof AuthenticatedSystemHandoverExecuteRoute
   AuthenticatedSystemMenusCreateRoute: typeof AuthenticatedSystemMenusCreateRoute
   AuthenticatedSystemMenusListRoute: typeof AuthenticatedSystemMenusListRoute
   AuthenticatedSystemPostsCreateRoute: typeof AuthenticatedSystemPostsCreateRoute
@@ -1261,12 +1364,14 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkbenchTodosTaskIdRoute: typeof AuthenticatedWorkbenchTodosTaskIdRoute
   AuthenticatedWorkbenchTodosListRoute: typeof AuthenticatedWorkbenchTodosListRoute
   AuthenticatedWorkflowDefinitionsListRoute: typeof AuthenticatedWorkflowDefinitionsListRoute
+  AuthenticatedSystemAgentsAgentIdEditRoute: typeof AuthenticatedSystemAgentsAgentIdEditRoute
   AuthenticatedSystemCompaniesCompanyIdEditRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   AuthenticatedSystemMenusMenuIdEditRoute: typeof AuthenticatedSystemMenusMenuIdEditRoute
   AuthenticatedSystemPostsPostIdEditRoute: typeof AuthenticatedSystemPostsPostIdEditRoute
   AuthenticatedSystemRolesRoleIdEditRoute: typeof AuthenticatedSystemRolesRoleIdEditRoute
   AuthenticatedSystemUsersUserIdEditRoute: typeof AuthenticatedSystemUsersUserIdEditRoute
+  AuthenticatedSystemAgentsAgentIdIndexRoute: typeof AuthenticatedSystemAgentsAgentIdIndexRoute
   AuthenticatedSystemCompaniesCompanyIdIndexRoute: typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
   AuthenticatedSystemDepartmentsDepartmentIdIndexRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
   AuthenticatedSystemMenusMenuIdIndexRoute: typeof AuthenticatedSystemMenusMenuIdIndexRoute
@@ -1293,6 +1398,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOaExpenseCreateRoute: AuthenticatedOaExpenseCreateRoute,
   AuthenticatedOaLeaveBillIdRoute: AuthenticatedOaLeaveBillIdRoute,
   AuthenticatedOaLeaveCreateRoute: AuthenticatedOaLeaveCreateRoute,
+  AuthenticatedSystemAgentsCreateRoute: AuthenticatedSystemAgentsCreateRoute,
+  AuthenticatedSystemAgentsListRoute: AuthenticatedSystemAgentsListRoute,
   AuthenticatedSystemCompaniesCreateRoute:
     AuthenticatedSystemCompaniesCreateRoute,
   AuthenticatedSystemCompaniesListRoute: AuthenticatedSystemCompaniesListRoute,
@@ -1300,6 +1407,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemDepartmentsCreateRoute,
   AuthenticatedSystemDepartmentsListRoute:
     AuthenticatedSystemDepartmentsListRoute,
+  AuthenticatedSystemHandoverExecuteRoute:
+    AuthenticatedSystemHandoverExecuteRoute,
   AuthenticatedSystemMenusCreateRoute: AuthenticatedSystemMenusCreateRoute,
   AuthenticatedSystemMenusListRoute: AuthenticatedSystemMenusListRoute,
   AuthenticatedSystemPostsCreateRoute: AuthenticatedSystemPostsCreateRoute,
@@ -1317,6 +1426,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedWorkbenchTodosListRoute: AuthenticatedWorkbenchTodosListRoute,
   AuthenticatedWorkflowDefinitionsListRoute:
     AuthenticatedWorkflowDefinitionsListRoute,
+  AuthenticatedSystemAgentsAgentIdEditRoute:
+    AuthenticatedSystemAgentsAgentIdEditRoute,
   AuthenticatedSystemCompaniesCompanyIdEditRoute:
     AuthenticatedSystemCompaniesCompanyIdEditRoute,
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute:
@@ -1329,6 +1440,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemRolesRoleIdEditRoute,
   AuthenticatedSystemUsersUserIdEditRoute:
     AuthenticatedSystemUsersUserIdEditRoute,
+  AuthenticatedSystemAgentsAgentIdIndexRoute:
+    AuthenticatedSystemAgentsAgentIdIndexRoute,
   AuthenticatedSystemCompaniesCompanyIdIndexRoute:
     AuthenticatedSystemCompaniesCompanyIdIndexRoute,
   AuthenticatedSystemDepartmentsDepartmentIdIndexRoute:

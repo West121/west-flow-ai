@@ -161,6 +161,24 @@ public class ProcessRuntimeController {
         return ApiResponse.success(processDemoService.handover(sourceUserId, request));
     }
 
+    @PostMapping("/users/{sourceUserId}/handover/preview")
+    @SaCheckLogin
+    public ApiResponse<HandoverPreviewResponse> handoverPreview(
+            @PathVariable String sourceUserId,
+            @Valid @RequestBody HandoverTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.previewHandover(sourceUserId, request));
+    }
+
+    @PostMapping("/users/{sourceUserId}/handover/execute")
+    @SaCheckLogin
+    public ApiResponse<HandoverExecutionResponse> handoverExecute(
+            @PathVariable String sourceUserId,
+            @Valid @RequestBody HandoverTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.executeHandover(sourceUserId, request));
+    }
+
     @PostMapping("/tasks/{taskId}/claim")
     @SaCheckLogin
     public ApiResponse<ClaimTaskResponse> claim(

@@ -21,15 +21,13 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
           <AppSidebar />
           <SidebarInset
             className={cn(
-              // Set content container, so we can use container queries
+              // 让内容区成为容器，子组件才能使用 container query。
               '@container/content',
 
-              // If layout is fixed, set the height
-              // to 100svh to prevent overflow
+              // 固定布局时直接占满视口高度，避免内容区溢出。
               'has-data-[layout=fixed]:h-svh',
 
-              // If layout is fixed and sidebar is inset,
-              // set the height to 100svh - spacing (total margins) to prevent overflow
+              // 固定布局且侧边栏内嵌时，扣掉外边距后再算高度。
               'peer-data-[variant=inset]:has-data-[layout=fixed]:h-[calc(100svh-(var(--spacing)*4))]'
             )}
           >

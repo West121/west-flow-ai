@@ -92,6 +92,7 @@ const workflowNodeTypes = {
 }
 
 const helperLineThreshold = 16
+// 默认先挂一套请假流程表单，保证设计器打开后就能直接预览和发布。
 const defaultProcessForm = findProcessRuntimeFormByProcessKey('oa_leave')
 const defaultDefinitionMeta: ProcessDefinitionMeta = {
   processKey: 'oa_leave',

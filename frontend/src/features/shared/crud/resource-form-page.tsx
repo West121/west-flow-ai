@@ -51,7 +51,7 @@ export function ResourceFormPage({
             保存并继续编辑
           </Button>
           <Button asChild variant='ghost'>
-            <Link to={listHref}>取消返回列表</Link>
+            <Link to={listHref} search={{}}>取消返回列表</Link>
           </Button>
         </>
       }

@@ -6,23 +6,18 @@ import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Queue;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class CurrentUserAccessService {
 
     private final FixtureAuthService fixtureAuthService;
     private final SystemDepartmentMapper systemDepartmentMapper;
 
-    public CurrentUserAccessService(
-            FixtureAuthService fixtureAuthService,
-            SystemDepartmentMapper systemDepartmentMapper
-    ) {
-        this.fixtureAuthService = fixtureAuthService;
-        this.systemDepartmentMapper = systemDepartmentMapper;
-    }
-
     public AccessPolicy resolveAccessPolicy() {
+        // 先把当前人的公司、部门、全局权限统一收敛成一个可复用策略对象。
         CurrentUserResponse currentUser = fixtureAuthService.currentUser();
         boolean allAccess = false;
         LinkedHashSet<String> companyIds = new LinkedHashSet<>();
@@ -51,6 +46,7 @@ public class CurrentUserAccessService {
     }
 
     private List<String> resolveDepartmentIdsWithDescendants(String rootDepartmentId) {
+        // 这里用广度优先把子部门全部展开，避免列表查询漏数据。
         LinkedHashSet<String> collected = new LinkedHashSet<>();
         Queue<String> queue = new ArrayDeque<>();
         queue.add(rootDepartmentId);

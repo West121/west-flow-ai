@@ -225,7 +225,7 @@ function PageErrorState({
         {retry ? <Button onClick={retry}>重新加载</Button> : null}
         {listHref ? (
           <Button asChild variant='outline'>
-            <Link to={listHref}>
+            <Link to={listHref} search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -459,7 +459,7 @@ const postColumns: ColumnDef<PostRow>[] = [
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
         <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link to='/system/posts/$postId' params={{ postId: row.original.postId }}>
+          <Link to='/system/posts/$postId' params={{ postId: row.original.postId }} search={{}}>
             详情
           </Link>
         </Button>
@@ -620,7 +620,7 @@ function CompanyFormPage({
             保存并继续编辑
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/companies/list'>
+            <Link to='/system/companies/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -904,7 +904,7 @@ function DepartmentFormPage({
             保存并继续编辑
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/departments/list'>
+            <Link to='/system/departments/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -1246,7 +1246,7 @@ function PostFormPage({
             保存并继续编辑
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/posts/list'>
+            <Link to='/system/posts/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -1674,7 +1674,7 @@ export function CompanyDetailPage({ companyId }: { companyId: string }) {
             </Link>
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/companies/list'>
+            <Link to='/system/companies/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -1772,7 +1772,7 @@ export function DepartmentDetailPage({
             </Link>
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/departments/list'>
+            <Link to='/system/departments/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -1878,7 +1878,7 @@ export function PostDetailPage({ postId }: { postId: string }) {
             </Link>
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/posts/list'>
+            <Link to='/system/posts/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>

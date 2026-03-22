@@ -45,6 +45,7 @@ type PlaybackEvent = {
   operatorUserId: string | null
 }
 
+// 回顾优先使用实例事件；如果后端没有给足事件，再回退到任务轨迹。
 function buildPlaybackEvents(
   instanceEvents: WorkbenchProcessInstanceEvent[],
   taskTrace: WorkbenchTaskTraceItem[]
@@ -109,6 +110,7 @@ function ApprovalSheetGraphInner({
   const [mode, setMode] = useState<'idle' | 'playing' | 'paused'>('idle')
   const [activeIndex, setActiveIndex] = useState(0)
 
+  // 播放态只负责按时间顺序推进高亮，不影响原始流程数据。
   const playbackEvents = useMemo(
     () => buildPlaybackEvents(instanceEvents, taskTrace),
     [instanceEvents, taskTrace]
@@ -139,6 +141,7 @@ function ApprovalSheetGraphInner({
     ?? taskTrace[taskTrace.length - 1]?.nodeId
     ?? null
 
+  // 已完成节点用于标记流程跑过的路径。
   const completedNodeIds = useMemo(
     () =>
       new Set(
@@ -168,6 +171,7 @@ function ApprovalSheetGraphInner({
         const isCompleted = completedNodeIds.has(node.id)
         const isVisited = visitedNodeIds.has(node.id)
 
+        // 节点样式只表达三件事：当前、已完成、已经过。
         return {
           id: node.id,
           position: node.position,
@@ -212,6 +216,7 @@ function ApprovalSheetGraphInner({
         const targetVisited = visitedNodeIds.has(edge.target)
         const isActive = edge.target === activeNodeId
 
+        // 边的颜色跟随目标节点状态变化，便于看出流转路径。
         return {
           id: edge.id,
           source: edge.source,

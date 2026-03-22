@@ -17,11 +17,13 @@ import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class SystemDepartmentService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "companyId", "parentDepartmentId");
@@ -31,17 +33,8 @@ public class SystemDepartmentService {
     private final SystemCompanyMapper systemCompanyMapper;
     private final CurrentUserAccessService currentUserAccessService;
 
-    public SystemDepartmentService(
-            SystemDepartmentMapper systemDepartmentMapper,
-            SystemCompanyMapper systemCompanyMapper,
-            CurrentUserAccessService currentUserAccessService
-    ) {
-        this.systemDepartmentMapper = systemDepartmentMapper;
-        this.systemCompanyMapper = systemCompanyMapper;
-        this.currentUserAccessService = currentUserAccessService;
-    }
-
     public PageResponse<SystemDepartmentListItemResponse> page(PageRequest request) {
+        // 部门列表同时受公司、部门和子部门的数据权限约束。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
@@ -82,6 +75,7 @@ public class SystemDepartmentService {
     }
 
     public SystemDepartmentDetailResponse detail(String departmentId) {
+        // 详情需要补一次权限校验，避免直接访问越权部门。
         SystemDepartmentDetailResponse detail = systemDepartmentMapper.selectDetail(departmentId);
         if (detail == null) {
             throw new ContractException(

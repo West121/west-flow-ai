@@ -21,7 +21,7 @@ type SidebarNavProps = React.HTMLAttributes<HTMLElement> & {
 
 export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
   const { pathname } = useLocation()
-  const navigate = useNavigate()
+  const navigate = useNavigate() as (opts: { to: string }) => void
   const [val, setVal] = useState(pathname ?? '/settings')
 
   const handleSelect = (e: string) => {
@@ -62,9 +62,10 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
           {...props}
         >
           {items.map((item) => (
-            <Link
+    <Link
               key={item.href}
               to={item.href}
+              search={{}}
               className={cn(
                 buttonVariants({ variant: 'ghost' }),
                 pathname === item.href

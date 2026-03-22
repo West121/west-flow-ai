@@ -1,5 +1,6 @@
 import { type WorkbenchTaskDetail, type WorkbenchTaskTraceItem } from '@/lib/api/workbench'
 
+// 统一把审批单详情里的时间、文本和轨迹文案转成页面可直接展示的格式。
 export function formatApprovalSheetDateTime(
   value: string | null | undefined
 ) {
@@ -30,6 +31,7 @@ export function formatApprovalSheetText(value: string | null | undefined) {
   return value?.trim() || '--'
 }
 
+// 数值型时长统一转成中文可读格式，详情页和轨迹卡片复用。
 export function formatApprovalSheetDuration(
   value: number | null | undefined
 ) {
@@ -50,6 +52,7 @@ export function formatApprovalSheetDuration(
   return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`
 }
 
+// 业务详情里经常会混合字符串、数组和对象，这里统一拍平成可读文本。
 export function formatApprovalSheetJsonValue(value: unknown): string {
   if (value === null || value === undefined || value === '') {
     return '--'
@@ -76,6 +79,7 @@ export function formatApprovalSheetJsonValue(value: unknown): string {
   return String(value)
 }
 
+// 业务类型标题和字段标签保持一份映射，避免页面文案散落各处。
 const businessTypeTitleMap: Record<string, string> = {
   OA_LEAVE: '请假申请',
   OA_EXPENSE: '报销申请',
@@ -96,6 +100,7 @@ const businessDataLabelMap: Record<string, string> = {
   content: '申请内容',
 }
 
+// 详情页的业务标题优先取单据自己的标题，取不到再回退到流程名称。
 export function resolveApprovalSheetBusinessTitle(detail: WorkbenchTaskDetail) {
   const businessTitle = detail.businessData?.title
   if (typeof businessTitle === 'string' && businessTitle.trim()) {
@@ -105,6 +110,7 @@ export function resolveApprovalSheetBusinessTitle(detail: WorkbenchTaskDetail) {
   return businessTypeTitleMap[detail.businessType ?? ''] ?? detail.processName
 }
 
+// 业务字段在详情页按统一标签展示，保证流程中心和 OA 详情口径一致。
 export function resolveApprovalSheetBusinessRows(
   detail: WorkbenchTaskDetail
 ): Array<{ key: string; label: string; value: string }> {
@@ -119,6 +125,7 @@ export function resolveApprovalSheetBusinessRows(
     }))
 }
 
+// 轨迹结果文案统一从这里出，详情页、时间线和流程图都可以复用。
 export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   if (item.action === 'REJECT_ROUTE') {
     return '驳回到上一步人工节点'
@@ -187,6 +194,7 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   }
 }
 
+// 办理方式标签用于展示代理、委派、离职转办等运行态语义。
 export function resolveApprovalSheetActingModeLabel(
   value: string | null | undefined
 ) {

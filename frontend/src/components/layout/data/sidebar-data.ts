@@ -1,4 +1,5 @@
 import {
+  ArrowRightLeft,
   Building2,
   CheckCircle2,
   CircleUserRound,
@@ -89,6 +90,30 @@ export const sidebarData: SidebarData = {
           ],
         },
         {
+          title: '代理关系管理',
+          icon: Users,
+          items: [
+            {
+              title: '代理关系列表',
+              url: '/system/agents/list',
+            },
+            {
+              title: '新建代理关系',
+              url: '/system/agents/create',
+            },
+          ],
+        },
+        {
+          title: '离职转办执行',
+          icon: ArrowRightLeft,
+          items: [
+            {
+              title: '执行离职转办',
+              url: '/system/handover/execute',
+            },
+          ],
+        },
+        {
           title: '公司管理',
           icon: Building2,
           items: [
@@ -157,6 +182,29 @@ export const sidebarData: SidebarData = {
               url: '/system/posts/create',
             },
           ],
+        },
+        {
+          title: '代理关系管理',
+          icon: Users,
+          requiredRoles: ['PROCESS_ADMIN'],
+          items: [
+            {
+              title: '代理关系列表',
+              url: '/system/agents/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建代理关系',
+              url: '/system/agents/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+          ],
+        },
+        {
+          title: '离职转办执行',
+          url: '/system/handover/execute',
+          icon: ArrowRightLeft,
+          requiredRoles: ['PROCESS_ADMIN'],
         },
       ],
     },

@@ -16,11 +16,13 @@ import com.westflow.system.org.company.mapper.SystemCompanyMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class SystemCompanyService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status");
@@ -29,15 +31,8 @@ public class SystemCompanyService {
     private final SystemCompanyMapper systemCompanyMapper;
     private final CurrentUserAccessService currentUserAccessService;
 
-    public SystemCompanyService(
-            SystemCompanyMapper systemCompanyMapper,
-            CurrentUserAccessService currentUserAccessService
-    ) {
-        this.systemCompanyMapper = systemCompanyMapper;
-        this.currentUserAccessService = currentUserAccessService;
-    }
-
     public PageResponse<SystemCompanyListItemResponse> page(PageRequest request) {
+        // 公司列表先按当前人的数据权限收口，再叠加搜索和筛选条件。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
         Boolean enabled = resolveEnabledFilter(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
@@ -72,6 +67,7 @@ public class SystemCompanyService {
     }
 
     public SystemCompanyDetailResponse detail(String companyId) {
+        // 详情要做二次校验，不能只依赖列表层过滤。
         SystemCompanyDetailResponse detail = systemCompanyMapper.selectDetail(companyId);
         if (detail == null) {
             throw new ContractException(
@@ -182,6 +178,7 @@ public class SystemCompanyService {
         if (accessPolicy.canAccessCompany(companyId)) {
             return;
         }
+        // 当前人不在这个公司可见范围内，直接拒绝。
         throw new ContractException(
                 "AUTH.FORBIDDEN",
                 HttpStatus.FORBIDDEN,

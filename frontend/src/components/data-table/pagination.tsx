@@ -87,7 +87,7 @@ export function DataTablePagination<TData>({
             <ChevronLeftIcon className='h-4 w-4' />
           </Button>
 
-          {/* Page number buttons */}
+          {/* 页码按钮保持中间省略，避免页数太多时横向过长。 */}
           {pageNumbers.map((pageNumber, index) => (
             <div key={`${pageNumber}-${index}`} className='flex items-center'>
               {pageNumber === '...' ? (

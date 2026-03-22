@@ -18,14 +18,14 @@ type DataTableBulkActionsProps<TData> = {
 }
 
 /**
- * A modular toolbar for displaying bulk actions when table rows are selected.
+ * 表格勾选后显示的批量操作工具条。
  *
- * @template TData The type of data in the table.
- * @param {object} props The component props.
- * @param {Table<TData>} props.table The react-table instance.
- * @param {string} props.entityName The name of the entity being acted upon (e.g., "task", "user").
- * @param {React.ReactNode} props.children The action buttons to be rendered inside the toolbar.
- * @returns {React.ReactNode | null} The rendered component or null if no rows are selected.
+ * @template TData 表格数据类型。
+ * @param {object} props 组件参数。
+ * @param {Table<TData>} props.table react-table 实例。
+ * @param {string} props.entityName 被操作对象名称，例如 task、user。
+ * @param {React.ReactNode} props.children 工具条里的操作按钮。
+ * @returns {React.ReactNode | null} 有勾选时返回工具条，否则返回空。
  */
 export function DataTableBulkActions<TData>({
   table,
@@ -37,17 +37,17 @@ export function DataTableBulkActions<TData>({
   const toolbarRef = useRef<HTMLDivElement>(null)
   const [announcement, setAnnouncement] = useState('')
 
-  // Announce selection changes to screen readers
+  // 选中数量变化时，给屏幕阅读器发出提示。
   useEffect(() => {
     if (selectedCount > 0) {
       const message = `${selectedCount} ${entityName}${selectedCount > 1 ? 's' : ''} selected. Bulk actions toolbar is available.`
 
-      // Use queueMicrotask to defer state update and avoid cascading renders
+      // 延迟一下再更新，避免和当前渲染帧互相打架。
       queueMicrotask(() => {
         setAnnouncement(message)
       })
 
-      // Clear announcement after a delay
+      // 提示只保留一小段时间，避免读屏内容堆积。
       const timer = setTimeout(() => setAnnouncement(''), 3000)
       return () => clearTimeout(timer)
     }
@@ -88,12 +88,11 @@ export function DataTableBulkActions<TData>({
         buttons[buttons.length - 1]?.focus()
         break
       case 'Escape': {
-        // Check if the Escape key came from a dropdown trigger or content
-        // We can't check dropdown state because Radix UI closes it before our handler runs
+        // 先判断 Escape 是否来自下拉菜单，避免误清空选择。
         const target = event.target as HTMLElement
         const activeElement = document.activeElement as HTMLElement
 
-        // Check if the event target or currently focused element is a dropdown trigger
+        // 事件源或当前焦点如果在下拉触发器上，就交给下拉自己处理。
         const isFromDropdownTrigger =
           target?.getAttribute('data-slot') === 'dropdown-menu-trigger' ||
           activeElement?.getAttribute('data-slot') ===
@@ -101,17 +100,16 @@ export function DataTableBulkActions<TData>({
           target?.closest('[data-slot="dropdown-menu-trigger"]') ||
           activeElement?.closest('[data-slot="dropdown-menu-trigger"]')
 
-        // Check if the focused element is inside dropdown content (which is portaled)
+        // 如果焦点在弹出的菜单内容里，也不要顺手清空勾选。
         const isFromDropdownContent =
           activeElement?.closest('[data-slot="dropdown-menu-content"]') ||
           target?.closest('[data-slot="dropdown-menu-content"]')
 
         if (isFromDropdownTrigger || isFromDropdownContent) {
-          // Escape was meant for the dropdown - don't clear selection
           return
         }
 
-        // Escape was meant for the toolbar - clear selection
+        // 这次 Escape 是给工具条的，直接清空勾选。
         event.preventDefault()
         handleClearSelection()
         break
@@ -125,7 +123,7 @@ export function DataTableBulkActions<TData>({
 
   return (
     <>
-      {/* Live region for screen reader announcements */}
+      {/* 给读屏软件的隐藏提示区。 */}
       <div
         aria-live='polite'
         aria-atomic='true'

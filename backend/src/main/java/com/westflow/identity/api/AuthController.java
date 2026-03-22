@@ -8,6 +8,7 @@ import com.westflow.identity.dto.LoginResponse;
 import com.westflow.identity.dto.SwitchContextRequest;
 import com.westflow.identity.service.FixtureAuthService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,13 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
     private final FixtureAuthService fixtureAuthService;
-
-    public AuthController(FixtureAuthService fixtureAuthService) {
-        this.fixtureAuthService = fixtureAuthService;
-    }
 
     @PostMapping("/login")
     public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -32,12 +30,14 @@ public class AuthController {
     @GetMapping("/current-user")
     @SaCheckLogin
     public ApiResponse<CurrentUserResponse> currentUser() {
+        // 当前登录人信息会被前端和权限层反复读取。
         return ApiResponse.success(fixtureAuthService.currentUser());
     }
 
     @PostMapping("/switch-context")
     @SaCheckLogin
     public ApiResponse<Void> switchContext(@Valid @RequestBody SwitchContextRequest request) {
+        // 切换当前岗位上下文，供数据权限和办理权限复用。
         fixtureAuthService.switchContext(request.activePostId());
         return ApiResponse.success(null);
     }

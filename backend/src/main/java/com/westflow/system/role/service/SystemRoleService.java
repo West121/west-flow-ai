@@ -16,11 +16,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class SystemRoleService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "roleCategory");
@@ -36,11 +38,8 @@ public class SystemRoleService {
 
     private final SystemRoleMapper systemRoleMapper;
 
-    public SystemRoleService(SystemRoleMapper systemRoleMapper) {
-        this.systemRoleMapper = systemRoleMapper;
-    }
-
     public PageResponse<SystemRoleListItemResponse> page(PageRequest request) {
+        // 角色列表支持关键词、状态和分类筛选。
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
         String orderDirection = resolveOrderDirection(request.sorts());
@@ -65,6 +64,7 @@ public class SystemRoleService {
     }
 
     public SystemRoleDetailResponse detail(String roleId) {
+        // 角色详情要把菜单和数据权限一起带回去，方便编辑页一次性渲染。
         SystemRoleBaseDetailRecord role = systemRoleMapper.selectRole(roleId);
         if (role == null) {
             throw new ContractException(
@@ -87,6 +87,7 @@ public class SystemRoleService {
     }
 
     public SystemRoleFormOptionsResponse formOptions() {
+        // 表单选项集中返回，前端无需再拆多个接口。
         return new SystemRoleFormOptionsResponse(
                 systemRoleMapper.selectMenuOptions(),
                 List.of(
@@ -324,6 +325,7 @@ public class SystemRoleService {
     }
 
     private void replaceRoleBindings(String roleId, List<String> menuIds, List<RoleDataScopeEntity> dataScopes) {
+        // 先清后插，保持角色菜单和数据权限始终是最终态。
         systemRoleMapper.deleteRoleMenus(roleId);
         systemRoleMapper.deleteRoleDataScopes(roleId);
         menuIds.forEach((menuId) -> systemRoleMapper.insertRoleMenu(new RoleMenuBinding(buildId("rm"), roleId, menuId)));

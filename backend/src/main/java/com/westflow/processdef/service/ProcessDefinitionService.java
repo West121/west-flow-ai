@@ -19,11 +19,13 @@ import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class ProcessDefinitionService {
 
     private static final String STATUS_DRAFT = "DRAFT";
@@ -43,20 +45,9 @@ public class ProcessDefinitionService {
     private final ProcessDslToBpmnService processDslToBpmnService;
     private final ObjectMapper objectMapper;
 
-    public ProcessDefinitionService(
-            ProcessDefinitionMapper processDefinitionMapper,
-            ProcessDslValidator processDslValidator,
-            ProcessDslToBpmnService processDslToBpmnService,
-            ObjectMapper objectMapper
-    ) {
-        this.processDefinitionMapper = processDefinitionMapper;
-        this.processDslValidator = processDslValidator;
-        this.processDslToBpmnService = processDslToBpmnService;
-        this.objectMapper = objectMapper;
-    }
-
     @Transactional
     public synchronized ProcessDefinitionDetailResponse saveDraft(ProcessDslPayload payload) {
+        // 草稿只更新当前流程键对应的最后一个草稿版本。
         String processDefinitionId = draftProcessDefinitionId(payload.processKey());
         LocalDateTime now = now();
         ProcessDefinitionRecord existingDraft = processDefinitionMapper.selectDraftByProcessKey(payload.processKey());
@@ -85,6 +76,7 @@ public class ProcessDefinitionService {
 
     @Transactional
     public synchronized ProcessDefinitionDetailResponse publish(ProcessDslPayload payload) {
+        // 发布前先做 DSL 校验，再生成新的正式版本和 BPMN。
         processDslValidator.validate(payload);
 
         int version = nextPublishedVersion(payload.processKey());
@@ -126,6 +118,7 @@ public class ProcessDefinitionService {
     }
 
     public PageResponse<ProcessDefinitionListItemResponse> page(PageRequest request) {
+        // 流程定义列表同时支持关键词、状态和分类筛选。
         QueryCriteria criteria = resolveCriteria(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
         String orderDirection = resolveOrderDirection(request.sorts());

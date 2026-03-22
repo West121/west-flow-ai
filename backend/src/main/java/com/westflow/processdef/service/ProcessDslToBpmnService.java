@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 public class ProcessDslToBpmnService {
 
     public String convert(ProcessDslPayload payload, String processDefinitionId, int version) {
+        // 这里把设计器 DSL 归一成最小可执行的 BPMN 片段。
         StringBuilder builder = new StringBuilder();
         builder.append("<process id=\"")
                 .append(escape(processDefinitionId))
@@ -49,6 +50,7 @@ public class ProcessDslToBpmnService {
     }
 
     private Map<String, Object> approverAttrs(ProcessDslPayload.Node node, Map<String, Object> config) {
+        // 审批节点要带上选人策略和表单字段绑定。
         Map<String, Object> attrs = new LinkedHashMap<>();
         Map<String, Object> assignment = mapValue(config.get("assignment"));
         Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
@@ -68,6 +70,7 @@ public class ProcessDslToBpmnService {
     }
 
     private Map<String, Object> ccAttrs(ProcessDslPayload.Node node, Map<String, Object> config) {
+        // 抄送节点只保留接收人范围和已阅要求。
         Map<String, Object> attrs = new LinkedHashMap<>();
         Map<String, Object> targets = mapValue(config.get("targets"));
         attrs.put("id", node.id());
@@ -99,6 +102,7 @@ public class ProcessDslToBpmnService {
     }
 
     private String edgeXml(ProcessDslPayload.Edge edge) {
+        // 连线信息承载条件和优先级，便于后续流程引擎执行。
         Map<String, Object> attrs = new LinkedHashMap<>();
         attrs.put("id", edge.id());
         attrs.put("source", edge.source());

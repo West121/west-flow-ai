@@ -18,11 +18,13 @@ import com.westflow.system.org.post.mapper.SystemPostMapper;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class SystemPostService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "companyId", "departmentId");
@@ -32,17 +34,8 @@ public class SystemPostService {
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final CurrentUserAccessService currentUserAccessService;
 
-    public SystemPostService(
-            SystemPostMapper systemPostMapper,
-            SystemDepartmentMapper systemDepartmentMapper,
-            CurrentUserAccessService currentUserAccessService
-    ) {
-        this.systemPostMapper = systemPostMapper;
-        this.systemDepartmentMapper = systemDepartmentMapper;
-        this.currentUserAccessService = currentUserAccessService;
-    }
-
     public PageResponse<SystemPostListItemResponse> page(PageRequest request) {
+        // 岗位列表先按当前人的组织可见范围过滤，再叠加关键词和筛选条件。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
@@ -83,6 +76,7 @@ public class SystemPostService {
     }
 
     public SystemPostDetailResponse detail(String postId) {
+        // 岗位详情不能只看列表结果，要再次校验可见范围。
         SystemPostDetailResponse detail = systemPostMapper.selectDetail(postId);
         if (detail == null) {
             throw new ContractException(

@@ -44,13 +44,13 @@ export function ResourceDetailPage({
       actions={
         <>
           <Button asChild>
-            <Link to={editHref}>
+            <Link to={editHref} search={{}}>
               <FilePenLine data-icon='inline-start' />
               编辑用户
             </Link>
           </Button>
           <Button asChild variant='ghost'>
-            <Link to={listHref}>返回列表</Link>
+            <Link to={listHref} search={{}}>返回列表</Link>
           </Button>
         </>
       }

@@ -7,6 +7,7 @@ import com.westflow.common.query.PageResponse;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,13 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/process-definitions")
+@RequiredArgsConstructor
 public class ProcessDefinitionController {
 
     private final ProcessDefinitionService processDefinitionService;
-
-    public ProcessDefinitionController(ProcessDefinitionService processDefinitionService) {
-        this.processDefinitionService = processDefinitionService;
-    }
 
     @PostMapping("/draft")
     @SaCheckLogin

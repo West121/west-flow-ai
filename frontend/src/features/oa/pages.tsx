@@ -78,6 +78,7 @@ const expenseDetailRoute = getRouteApi('/_authenticated/oa/expense/$billId')
 const commonDetailRoute = getRouteApi('/_authenticated/oa/common/$billId')
 const oaQueryRoute = getRouteApi('/_authenticated/oa/query')
 
+// 发起成功后优先回到首个待办，便于直接继续处理流程。
 function navigateToFirstTask(
   navigate: ReturnType<typeof useNavigate>,
   response: OALaunchResponse
@@ -117,6 +118,7 @@ function navigateToApprovalSheetDetail(
   navigateToFirstTask(navigate, response)
 }
 
+// 发起结果卡片只负责回显单号、实例和首个待办，不掺杂表单逻辑。
 function LaunchSummaryCard({
   response,
 }: {
@@ -244,6 +246,7 @@ function LeaveCreateForm() {
   )
 }
 
+// OA 发起页只做业务表单，提交后由后端决定绑定到哪个流程。
 function ExpenseCreateForm() {
   const navigate = useNavigate()
   const form = useForm<ExpenseFormValues>({

@@ -6,6 +6,7 @@ import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.system.menu.service.SystemMenuService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,13 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/system/menus")
 @SaCheckLogin
+@RequiredArgsConstructor
 public class SystemMenuController {
 
     private final SystemMenuService systemMenuService;
-
-    public SystemMenuController(SystemMenuService systemMenuService) {
-        this.systemMenuService = systemMenuService;
-    }
 
     @PostMapping("/page")
     public ApiResponse<PageResponse<SystemMenuListItemResponse>> page(@Valid @RequestBody PageRequest request) {

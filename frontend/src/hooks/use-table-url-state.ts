@@ -34,7 +34,7 @@ type UseTableUrlStateParams = {
         columnId: string
         searchKey: string
         type?: 'string'
-        // Optional transformers for custom types
+        // 自定义字段可选的序列化和反序列化转换
         serialize?: (value: unknown) => unknown
         deserialize?: (value: unknown) => unknown
       }
@@ -49,16 +49,16 @@ type UseTableUrlStateParams = {
 }
 
 type UseTableUrlStateReturn = {
-  // Global filter
+  // 全局搜索词
   globalFilter?: string
   onGlobalFilterChange?: OnChangeFn<string>
-  // Column filters
+  // 列筛选条件
   columnFilters: ColumnFiltersState
   onColumnFiltersChange: OnChangeFn<ColumnFiltersState>
-  // Pagination
+  // 分页状态
   pagination: PaginationState
   onPaginationChange: OnChangeFn<PaginationState>
-  // Helpers
+  // 翻页保护，避免页码越界
   ensurePageInRange: (
     pageCount: number,
     opts?: { resetTo?: 'first' | 'last' }
@@ -85,7 +85,7 @@ export function useTableUrlState(
   const globalFilterEnabled = globalFilterCfg?.enabled ?? true
   const trimGlobal = globalFilterCfg?.trim ?? true
 
-  // Build initial column filters from the current search params
+  // 先从 URL 还原列筛选，保证刷新后筛选条件不丢
   const initialColumnFilters: ColumnFiltersState = useMemo(() => {
     const collected: ColumnFiltersState = []
     for (const cfg of columnFiltersCfg) {
@@ -97,7 +97,7 @@ export function useTableUrlState(
           collected.push({ id: cfg.columnId, value })
         }
       } else {
-        // default to array type
+        // 未显式声明时，默认按数组筛选处理
         const value = (deserialize(raw) as unknown[]) ?? []
         if (Array.isArray(value) && value.length > 0) {
           collected.push({ id: cfg.columnId, value })
@@ -151,6 +151,7 @@ export function useTableUrlState(
           navigate({
             search: (prev) => ({
               ...(prev as SearchRecord),
+              // 全局搜索变化后回到第一页，避免空页
               [pageKey]: undefined,
               [globalFilterKey]: value ? value : undefined,
             }),
@@ -184,6 +185,7 @@ export function useTableUrlState(
     navigate({
       search: (prev) => ({
         ...(prev as SearchRecord),
+        // 列筛选变更时重置分页，确保结果集重新从第一页开始
         [pageKey]: undefined,
         ...patch,
       }),
@@ -201,6 +203,7 @@ export function useTableUrlState(
         replace: true,
         search: (prev) => ({
           ...(prev as SearchRecord),
+          // 当前页超出总页数时，自动纠正到有效页
           [pageKey]: opts.resetTo === 'last' ? pageCount : undefined,
         }),
       })

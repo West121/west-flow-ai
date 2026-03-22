@@ -239,7 +239,7 @@ const userColumns: ColumnDef<UserRow>[] = [
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
         <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link to='/system/users/$userId' params={{ userId: row.original.userId }}>
+          <Link to='/system/users/$userId' params={{ userId: row.original.userId }} search={{}}>
             详情
           </Link>
         </Button>
@@ -286,7 +286,7 @@ function PageErrorState({
         ) : null}
         {listHref ? (
           <Button asChild variant='outline'>
-            <Link to={listHref}>
+            <Link to={listHref} search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -550,7 +550,7 @@ function SystemUserFormPage({
             保存并继续编辑
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/users/list'>
+            <Link to='/system/users/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
@@ -1004,13 +1004,13 @@ export function UserDetailPage({ userId }: { userId: string }) {
       actions={
         <>
           <Button asChild>
-            <Link to='/system/users/$userId/edit' params={{ userId }}>
+            <Link to='/system/users/$userId/edit' params={{ userId }} search={{}}>
               <Save data-icon='inline-start' />
               编辑用户
             </Link>
           </Button>
           <Button asChild variant='ghost'>
-            <Link to='/system/users/list'>
+            <Link to='/system/users/list' search={{}}>
               <ArrowLeft data-icon='inline-start' />
               返回列表
             </Link>
