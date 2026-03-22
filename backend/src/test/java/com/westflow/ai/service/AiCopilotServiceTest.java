@@ -20,6 +20,8 @@ import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.model.AiToolSource;
 import com.westflow.ai.model.AiToolType;
 import com.westflow.ai.orchestration.AiOrchestrationPlanner;
+import com.westflow.ai.runtime.AiCopilotRuntimeService;
+import com.westflow.ai.runtime.SpringAiAlibabaCopilotRuntimeService;
 import com.westflow.ai.skill.AiSkillDescriptor;
 import com.westflow.ai.skill.AiSkillRegistry;
 import com.westflow.ai.tool.AiToolDefinition;
@@ -30,6 +32,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.ai.chat.client.ChatClient;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -39,6 +42,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 
 /**
  * AI Copilot 服务层测试。
@@ -105,6 +110,12 @@ class AiCopilotServiceTest {
                         context -> Map.of("accepted", true)
                 )
         ));
+        ChatClient chatClient = org.mockito.Mockito.mock(ChatClient.class);
+        AiCopilotRuntimeService runtimeService = new SpringAiAlibabaCopilotRuntimeService(
+                chatClient,
+                mockSupervisorAgent("supervisor-reply"),
+                mockRoutingAgent("routing-reply")
+        );
         aiCopilotService = new DbAiCopilotService(
                 aiConversationMapper,
                 aiMessageMapper,
@@ -113,7 +124,8 @@ class AiCopilotServiceTest {
                 aiAuditMapper,
                 new ObjectMapper(),
                 new AiGatewayService(new AiOrchestrationPlanner(aiAgentRegistry, aiSkillRegistry)),
-                new AiToolExecutionService(aiToolRegistry)
+                new AiToolExecutionService(aiToolRegistry),
+                runtimeService
         );
     }
 
@@ -230,5 +242,29 @@ class AiCopilotServiceTest {
                 LocalDateTime.of(2026, 3, 23, 10, 0),
                 LocalDateTime.of(2026, 3, 23, 10, 0)
         );
+    }
+
+    private com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent mockSupervisorAgent(String reply) {
+        try {
+            com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent agent =
+                    org.mockito.Mockito.mock(com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent.class);
+            lenient().when(agent.invoke(anyString()))
+                    .thenReturn(java.util.Optional.of(new com.alibaba.cloud.ai.graph.OverAllState(Map.of("output", reply))));
+            return agent;
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    private com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent mockRoutingAgent(String reply) {
+        try {
+            com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent agent =
+                    org.mockito.Mockito.mock(com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent.class);
+            lenient().when(agent.invoke(anyString()))
+                    .thenReturn(java.util.Optional.of(new com.alibaba.cloud.ai.graph.OverAllState(Map.of("output", reply))));
+            return agent;
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
     }
 }

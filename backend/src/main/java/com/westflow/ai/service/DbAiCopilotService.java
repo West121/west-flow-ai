@@ -29,6 +29,7 @@ import com.westflow.ai.model.AiToolCallRequest;
 import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.model.AiToolSource;
 import com.westflow.ai.model.AiToolType;
+import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
@@ -63,6 +64,7 @@ public class DbAiCopilotService implements AiCopilotService {
     private final ObjectMapper objectMapper;
     private final AiGatewayService aiGatewayService;
     private final AiToolExecutionService aiToolExecutionService;
+    private final AiCopilotRuntimeService aiCopilotRuntimeService;
 
     public DbAiCopilotService(
             AiConversationMapper aiConversationMapper,
@@ -72,7 +74,8 @@ public class DbAiCopilotService implements AiCopilotService {
             AiAuditMapper aiAuditMapper,
             ObjectMapper objectMapper,
             AiGatewayService aiGatewayService,
-            AiToolExecutionService aiToolExecutionService
+            AiToolExecutionService aiToolExecutionService,
+            AiCopilotRuntimeService aiCopilotRuntimeService
     ) {
         this.aiConversationMapper = aiConversationMapper;
         this.aiMessageMapper = aiMessageMapper;
@@ -82,6 +85,7 @@ public class DbAiCopilotService implements AiCopilotService {
         this.objectMapper = objectMapper;
         this.aiGatewayService = aiGatewayService;
         this.aiToolExecutionService = aiToolExecutionService;
+        this.aiCopilotRuntimeService = aiCopilotRuntimeService;
     }
 
     /**
@@ -296,12 +300,12 @@ public class DbAiCopilotService implements AiCopilotService {
             AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(conversation.conversationId(), readToolCall);
             persistToolCall(toolResult);
             insertAudit(conversation.conversationId(), toolResult.toolCallId(), "READ", toolResult.summary());
-            return new AssistantReply(buildReadSummary(toolResult), buildReadBlocks(toolResult, gatewayResponse));
+            return new AssistantReply(resolveRuntimeReply(content, gatewayResponse, domain, buildReadSummary(toolResult)), buildReadBlocks(toolResult, gatewayResponse));
         }
 
         return new AssistantReply(
-                buildAssistantSummary(gatewayResponse, domain),
-                List.of(defaultTextBlock(buildAssistantSummary(gatewayResponse, domain)))
+                resolveRuntimeReply(content, gatewayResponse, domain, buildAssistantSummary(gatewayResponse, domain)),
+                List.of(defaultTextBlock(resolveRuntimeReply(content, gatewayResponse, domain, buildAssistantSummary(gatewayResponse, domain))))
         );
     }
 
@@ -662,6 +666,34 @@ public class DbAiCopilotService implements AiCopilotService {
             return "已通过 Routing 智能体整理当前问题，可继续补充上下文。";
         }
         return "已进入 Supervisor 编排链路。";
+    }
+
+    private String resolveRuntimeReply(
+            String content,
+            AiGatewayResponse gatewayResponse,
+            String domain,
+            String fallback
+    ) {
+        try {
+            String runtimeReply = aiCopilotRuntimeService.generateReply(
+                    new AiGatewayRequest(
+                            null,
+                            currentUserId(),
+                            content,
+                            domain,
+                            gatewayResponse.requiresConfirmation(),
+                            gatewayResponse.skillIds(),
+                            List.of()
+                    ),
+                    gatewayResponse
+            );
+            if (runtimeReply == null || runtimeReply.isBlank()) {
+                return fallback;
+            }
+            return runtimeReply;
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
     }
 
     private String newId(String prefix) {
