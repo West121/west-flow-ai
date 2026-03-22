@@ -152,6 +152,22 @@ public class FixtureAuthService {
         return identityAccessMapper.selectRoleCodesByUserId(userId);
     }
 
+    public boolean isActiveDelegate(String principalUserId, String delegateUserId) {
+        getUserById(principalUserId);
+        getUserById(delegateUserId);
+        return usersById.values().stream()
+                .flatMap(user -> user.delegations().stream())
+                .anyMatch(delegation ->
+                        "ACTIVE".equalsIgnoreCase(delegation.status())
+                                && principalUserId.equals(delegation.principalUserId())
+                                && delegateUserId.equals(delegation.delegateUserId())
+                );
+    }
+
+    public boolean isProcessAdmin(String userId) {
+        return rolesByUserId(userId).stream().anyMatch("PROCESS_ADMIN"::equalsIgnoreCase);
+    }
+
     private FixtureUser getUserById(String userId) {
         FixtureUser user = usersById.get(userId);
         if (user == null) {

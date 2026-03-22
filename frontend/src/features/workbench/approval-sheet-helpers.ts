@@ -123,6 +123,15 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   if (item.action === 'REJECT_ROUTE') {
     return '驳回到上一步人工节点'
   }
+  if (item.action === 'DELEGATE') {
+    return '委派'
+  }
+  if (item.action === 'PROXY') {
+    return '代理代办'
+  }
+  if (item.action === 'HANDOVER') {
+    return '离职转办'
+  }
   if (item.action === 'JUMP') {
     return '跳转'
   }
@@ -175,5 +184,23 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
     case 'PENDING':
     default:
       return '待处理'
+  }
+}
+
+export function resolveApprovalSheetActingModeLabel(
+  value: string | null | undefined
+) {
+  switch (value) {
+    case 'PROXY':
+      return '代理代办'
+    case 'DELEGATE':
+      return '委派任务'
+    case 'HANDOVER':
+      return '离职转办'
+    case 'DIRECT':
+    case null:
+    case undefined:
+    default:
+      return '直接办理'
   }
 }

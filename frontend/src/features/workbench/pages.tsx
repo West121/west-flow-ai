@@ -58,6 +58,7 @@ import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
 import {
   formatApprovalSheetText,
+  resolveApprovalSheetActingModeLabel,
   resolveApprovalSheetResultLabel,
 } from '@/features/workbench/approval-sheet-helpers'
 import {
@@ -75,11 +76,13 @@ import {
   getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
   completeWorkbenchTask,
+  delegateWorkbenchTask,
   getWorkbenchTaskActions,
   getWorkbenchTaskDetail,
   jumpWorkbenchTask,
   listApprovalSheets,
   listWorkbenchTasks,
+  handoverWorkbenchTasks,
   readWorkbenchTask,
   removeSignWorkbenchTask,
   revokeWorkbenchTask,
@@ -126,6 +129,10 @@ function resolveTaskStatusLabel(status: WorkbenchTaskListItem['status']) {
       return '待认领'
     case 'PENDING':
       return '待处理'
+    case 'DELEGATED':
+      return '委派任务'
+    case 'HANDOVERED':
+      return '离职转办'
     case 'TRANSFERRED':
       return '已转办'
     case 'RETURNED':
@@ -137,7 +144,9 @@ function resolveTaskStatusLabel(status: WorkbenchTaskListItem['status']) {
 }
 
 function resolveTaskStatusVariant(status: WorkbenchTaskListItem['status']) {
-  return status === 'PENDING' || status === 'PENDING_CLAIM'
+  return status === 'PENDING' ||
+    status === 'PENDING_CLAIM' ||
+    status === 'DELEGATED'
     ? 'destructive'
     : 'secondary'
 }
@@ -362,6 +371,14 @@ function ApprovalSheetActionTimeline({
                   <span className='font-medium'>{item.nodeName}</span>
                 </div>
                 <div className='grid gap-1 text-sm text-muted-foreground'>
+                  {(item.actingMode || item.actingForUserId || item.delegatedByUserId || item.handoverFromUserId) ? (
+                    <div className='flex flex-wrap gap-x-3 gap-y-1'>
+                      <span>办理模式：{resolveApprovalSheetActingModeLabel(item.actingMode)}</span>
+                      {item.actingForUserId ? <span>代谁办理：{item.actingForUserId}</span> : null}
+                      {item.delegatedByUserId ? <span>委派来源：{item.delegatedByUserId}</span> : null}
+                      {item.handoverFromUserId ? <span>离职转办来源：{item.handoverFromUserId}</span> : null}
+                    </div>
+                  ) : null}
                   <div className='flex flex-wrap gap-x-3 gap-y-1'>
                     <span>办理人：{formatApprovalSheetText(item.operatorUserId ?? item.assigneeUserId)}</span>
                     <span>接收时间：{formatDateTime(item.receiveTime)}</span>
@@ -480,6 +497,125 @@ function ApprovalSheetListPageSection({
         }}
       />
     </>
+  )
+}
+
+function WorkbenchTodoHandoverToolbar() {
+  const queryClient = useQueryClient()
+  const [handoverDialogOpen, setHandoverDialogOpen] = useState(false)
+  const handoverForm = useForm<HandoverTaskFormValues>({
+    resolver: zodResolver(handoverTaskSchema),
+    defaultValues: {
+      sourceUserId: '',
+      targetUserId: '',
+      comment: '',
+    },
+  })
+
+  const handoverMutation = useMutation({
+    mutationFn: (payload: HandoverTaskFormValues) =>
+      handoverWorkbenchTasks({
+        sourceUserId: payload.sourceUserId.trim(),
+        targetUserId: payload.targetUserId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-page'] })
+      setHandoverDialogOpen(false)
+      handoverForm.reset({
+        sourceUserId: '',
+        targetUserId: '',
+        comment: '',
+      })
+    },
+    onError: handleServerError,
+  })
+
+  const onHandoverSubmit = handoverForm.handleSubmit((values) => {
+    handoverMutation.mutate(values)
+  })
+
+  return (
+    <Card className='border-dashed'>
+      <CardHeader>
+        <CardTitle className='text-base'>离职转办</CardTitle>
+        <CardDescription>
+          流程管理员可以批量将某个来源用户的待办转给目标用户。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
+          <DialogTrigger asChild>
+            <Button type='button' variant='outline'>
+              离职转办
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>离职转办</DialogTitle>
+              <DialogDescription>
+                输入来源用户和目标用户编码，系统会批量转移该来源用户的当前待办。
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...handoverForm}>
+              <form className='space-y-4' onSubmit={onHandoverSubmit}>
+                <FormField
+                  control={handoverForm.control}
+                  name='sourceUserId'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>来源用户编码</FormLabel>
+                      <FormControl>
+                        <Input placeholder='例如：usr_001' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={handoverForm.control}
+                  name='targetUserId'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>目标用户编码</FormLabel>
+                      <FormControl>
+                        <Input placeholder='例如：usr_003' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={handoverForm.control}
+                  name='comment'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>转办说明</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          className='min-h-24'
+                          placeholder='请输入离职转办说明'
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button type='button' variant='outline' onClick={() => setHandoverDialogOpen(false)}>
+                    取消
+                  </Button>
+                  <Button type='submit' disabled={handoverMutation.isPending}>
+                    {handoverMutation.isPending ? '转办中' : '确认转办'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -713,6 +849,13 @@ const transferTaskSchema = z.object({
 
 type TransferTaskFormValues = z.input<typeof transferTaskSchema>
 
+const delegateTaskSchema = z.object({
+  targetUserId: z.string().trim().min(1, '请输入委派用户编码'),
+  comment: z.string().max(500, '委派说明最多 500 个字符').default(''),
+})
+
+type DelegateTaskFormValues = z.input<typeof delegateTaskSchema>
+
 const returnTaskSchema = z.object({
   comment: z.string().max(500, '退回说明最多 500 个字符').default(''),
 })
@@ -775,6 +918,14 @@ const simpleActionCommentSchema = z.object({
 })
 
 type SimpleActionCommentFormValues = z.input<typeof simpleActionCommentSchema>
+
+const handoverTaskSchema = z.object({
+  sourceUserId: z.string().trim().min(1, '请输入来源用户编码'),
+  targetUserId: z.string().trim().min(1, '请输入目标用户编码'),
+  comment: z.string().max(500, '说明最多 500 个字符').default(''),
+})
+
+type HandoverTaskFormValues = z.input<typeof handoverTaskSchema>
 
 export function Dashboard() {
   return (
@@ -892,6 +1043,9 @@ export function WorkbenchTodoListPage() {
 
   return (
     <>
+      <div className='mb-4'>
+        <WorkbenchTodoHandoverToolbar />
+      </div>
       {tasksQuery.isError ? (
         <Alert variant='destructive' className='mb-4'>
           <AlertTitle>待办列表加载失败</AlertTitle>
@@ -1081,6 +1235,7 @@ export function WorkbenchTodoDetailPage({
   const [addSignDialogOpen, setAddSignDialogOpen] = useState(false)
   const [removeSignDialogOpen, setRemoveSignDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
+  const [delegateDialogOpen, setDelegateDialogOpen] = useState(false)
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [jumpDialogOpen, setJumpDialogOpen] = useState(false)
   const [takeBackDialogOpen, setTakeBackDialogOpen] = useState(false)
@@ -1184,6 +1339,13 @@ export function WorkbenchTodoDetailPage({
       comment: '',
     },
   })
+  const delegateForm = useForm<DelegateTaskFormValues>({
+    resolver: zodResolver(delegateTaskSchema),
+    defaultValues: {
+      targetUserId: '',
+      comment: '',
+    },
+  })
   const returnForm = useForm<ReturnTaskFormValues>({
     resolver: zodResolver(returnTaskSchema),
     defaultValues: {
@@ -1259,6 +1421,10 @@ export function WorkbenchTodoDetailPage({
       targetUserId: '',
       comment: '',
     })
+    delegateForm.reset({
+      targetUserId: '',
+      comment: '',
+    })
     returnForm.reset({
       comment: '',
     })
@@ -1296,6 +1462,7 @@ export function WorkbenchTodoDetailPage({
     })
   }, [
     addSignForm,
+    delegateForm,
     claimForm,
     detail,
     jumpForm,
@@ -1373,6 +1540,23 @@ export function WorkbenchTodoDetailPage({
           navigate({ to: '/workbench/todos/list' })
         })
       }
+    },
+    onError: handleServerError,
+  })
+  const delegateMutation = useMutation({
+    mutationFn: (payload: DelegateTaskFormValues) =>
+      delegateWorkbenchTask(requireActionTaskId(), {
+        targetUserId: payload.targetUserId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async (response) => {
+      await refreshWorkbenchQueries()
+      setDelegateDialogOpen(false)
+      delegateForm.reset({
+        targetUserId: '',
+        comment: '',
+      })
+      await navigateAfterTaskMutation(response)
     },
     onError: handleServerError,
   })
@@ -1559,6 +1743,9 @@ export function WorkbenchTodoDetailPage({
   const onTransferSubmit = transferForm.handleSubmit((values) => {
     transferMutation.mutate(values)
   })
+  const onDelegateSubmit = delegateForm.handleSubmit((values) => {
+    delegateMutation.mutate(values)
+  })
   const onReturnSubmit = returnForm.handleSubmit((values) => {
     returnMutation.mutate(values)
   })
@@ -1584,6 +1771,7 @@ export function WorkbenchTodoDetailPage({
       actionsQuery.data?.canRevoke ||
       actionsQuery.data?.canUrge ||
       actionsQuery.data?.canRead ||
+      actionsQuery.data?.canDelegate ||
       actionsQuery.data?.canRejectRoute ||
       actionsQuery.data?.canJump ||
       actionsQuery.data?.canTakeBack ||
@@ -1702,6 +1890,28 @@ export function WorkbenchTodoDetailPage({
                     <dt className='text-muted-foreground'>接收时间</dt>
                     <dd>{formatDateTime(detail.receiveTime)}</dd>
                   </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>办理模式</dt>
+                    <dd>{resolveApprovalSheetActingModeLabel(detail.actingMode)}</dd>
+                  </div>
+                  {detail.actingForUserId ? (
+                    <div className='flex justify-between gap-3'>
+                      <dt className='text-muted-foreground'>代谁办理</dt>
+                      <dd>{detail.actingForUserId}</dd>
+                    </div>
+                  ) : null}
+                  {detail.delegatedByUserId ? (
+                    <div className='flex justify-between gap-3'>
+                      <dt className='text-muted-foreground'>委派来源</dt>
+                      <dd>{detail.delegatedByUserId}</dd>
+                    </div>
+                  ) : null}
+                  {detail.handoverFromUserId ? (
+                    <div className='flex justify-between gap-3'>
+                      <dt className='text-muted-foreground'>离职转办来源</dt>
+                      <dd>{detail.handoverFromUserId}</dd>
+                    </div>
+                  ) : null}
                 </dl>
               </div>
 
@@ -1818,6 +2028,64 @@ export function WorkbenchTodoDetailPage({
                     </p>
                   </div>
                   <div className='grid gap-3'>
+                    {actionsQuery.data?.canDelegate ? (
+                      <Dialog open={delegateDialogOpen} onOpenChange={setDelegateDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>委派</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>委派</DialogTitle>
+                            <DialogDescription>
+                              当前办理人可以把任务委派给其他用户代办，同时保留原责任关系。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...delegateForm}>
+                            <form className='space-y-4' onSubmit={onDelegateSubmit}>
+                              <FormField
+                                control={delegateForm.control}
+                                name='targetUserId'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>委派用户编码</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder='例如：usr_003' {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={delegateForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>委派说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入委派说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setDelegateDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={delegateMutation.isPending}>
+                                  {delegateMutation.isPending ? '委派中' : '确认委派'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
                     {actionsQuery.data?.canAddSign ? (
                       <Dialog open={addSignDialogOpen} onOpenChange={setAddSignDialogOpen}>
                         <DialogTrigger asChild>

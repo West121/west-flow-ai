@@ -32,6 +32,10 @@ public record ProcessTaskTraceItemResponse(
         boolean isTakenBack,
         String targetStrategy,
         String targetNodeId,
-        String reapproveStrategy
+        String reapproveStrategy,
+        String actingMode,
+        String actingForUserId,
+        String delegatedByUserId,
+        String handoverFromUserId
 ) {
 }

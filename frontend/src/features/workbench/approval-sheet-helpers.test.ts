@@ -30,5 +30,26 @@ describe('approval-sheet helpers', () => {
         status: 'COMPLETED',
       } as never)
     ).toBe('唤醒')
+
+    expect(
+      resolveApprovalSheetResultLabel({
+        action: 'DELEGATE',
+        status: 'DELEGATED',
+      } as never)
+    ).toBe('委派')
+
+    expect(
+      resolveApprovalSheetResultLabel({
+        action: 'PROXY',
+        status: 'PENDING',
+      } as never)
+    ).toBe('代理代办')
+
+    expect(
+      resolveApprovalSheetResultLabel({
+        action: 'HANDOVER',
+        status: 'HANDOVERED',
+      } as never)
+    ).toBe('离职转办')
   })
 })

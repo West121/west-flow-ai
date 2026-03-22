@@ -21,6 +21,10 @@ public record ProcessInstanceEventResponse(
         Map<String, Object> details,
         String targetStrategy,
         String targetNodeId,
-        String reapproveStrategy
+        String reapproveStrategy,
+        String actingMode,
+        String actingForUserId,
+        String delegatedByUserId,
+        String handoverFromUserId
 ) {
 }

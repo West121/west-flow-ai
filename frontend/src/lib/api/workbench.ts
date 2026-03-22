@@ -13,7 +13,14 @@ export type WorkbenchTaskListItem = {
   applicantUserId: string
   nodeId: string
   nodeName: string
-  status: 'PENDING_CLAIM' | 'PENDING' | 'COMPLETED' | 'TRANSFERRED' | 'RETURNED'
+  status:
+    | 'PENDING_CLAIM'
+    | 'PENDING'
+    | 'COMPLETED'
+    | 'TRANSFERRED'
+    | 'RETURNED'
+    | 'DELEGATED'
+    | 'HANDOVERED'
   assignmentMode: string | null
   candidateUserIds: string[]
   assigneeUserId: string | null
@@ -84,6 +91,10 @@ export type WorkbenchTaskTraceItem = {
   targetNodeId?: string | null
   targetNodeName?: string | null
   reapproveStrategy?: string | null
+  actingMode?: string | null
+  actingForUserId?: string | null
+  delegatedByUserId?: string | null
+  handoverFromUserId?: string | null
   isCcTask?: boolean
   isAddSignTask?: boolean
   isRevoked?: boolean
@@ -104,6 +115,10 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   instanceEvents?: WorkbenchProcessInstanceEvent[] | null
   taskTrace?: WorkbenchTaskTraceItem[] | null
   taskKind?: string | null
+  actingMode?: string | null
+  actingForUserId?: string | null
+  delegatedByUserId?: string | null
+  handoverFromUserId?: string | null
   receiveTime?: string | null
   readTime?: string | null
   handleStartTime?: string | null
@@ -155,6 +170,7 @@ export type WorkbenchTaskActionAvailability = {
   canReject: boolean
   canRejectRoute: boolean
   canTransfer: boolean
+  canDelegate: boolean
   canReturn: boolean
   canAddSign: boolean
   canRemoveSign: boolean
@@ -233,6 +249,25 @@ export type TakeBackWorkbenchTaskPayload = {
 export type WakeUpWorkbenchInstancePayload = {
   sourceTaskId: string
   comment?: string | null
+}
+
+export type DelegateWorkbenchTaskPayload = {
+  targetUserId: string
+  comment?: string | null
+}
+
+export type HandoverWorkbenchTasksPayload = {
+  sourceUserId: string
+  targetUserId: string
+  comment?: string | null
+}
+
+export type HandoverWorkbenchTasksResponse = {
+  sourceUserId: string
+  targetUserId: string
+  transferredCount: number
+  transferredTaskIds: string[]
+  status: string
 }
 
 export type StartWorkbenchProcessPayload = {
@@ -385,6 +420,36 @@ export async function transferWorkbenchTask(
     data: CompleteWorkbenchTaskResponse
     requestId: string
   }>(`/process-runtime/demo/tasks/${taskId}/transfer`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function delegateWorkbenchTask(
+  taskId: string,
+  payload: DelegateWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/delegate`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function handoverWorkbenchTasks(
+  payload: HandoverWorkbenchTasksPayload
+): Promise<HandoverWorkbenchTasksResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: HandoverWorkbenchTasksResponse
+    requestId: string
+  }>(`/process-runtime/demo/users/${payload.sourceUserId}/handover`, {
+    targetUserId: payload.targetUserId,
+    comment: payload.comment,
+  })
 
   return unwrapResponse(response)
 }

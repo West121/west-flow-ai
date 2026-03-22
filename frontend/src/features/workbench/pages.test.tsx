@@ -23,9 +23,11 @@ const {
     addSignWorkbenchTask: vi.fn(),
     claimWorkbenchTask: vi.fn(),
     completeWorkbenchTask: vi.fn(),
+    delegateWorkbenchTask: vi.fn(),
     getApprovalSheetDetailByBusiness: vi.fn(),
     getWorkbenchTaskActions: vi.fn(),
     getWorkbenchTaskDetail: vi.fn(),
+    handoverWorkbenchTasks: vi.fn(),
     listWorkbenchTasks: vi.fn(),
     listApprovalSheets: vi.fn(),
     readWorkbenchTask: vi.fn(),
@@ -407,6 +409,15 @@ describe('workbench pages', () => {
     expect(screen.getByText('待认领')).toBeInTheDocument()
   })
 
+  it('shows the handover toolbar entry on the todo list', async () => {
+    renderWithQuery(<WorkbenchTodoListPage />)
+
+    expect(
+      await screen.findByRole('button', { name: '离职转办' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('流程管理员可以批量将某个来源用户的待办转给目标用户。')).toBeInTheDocument()
+  })
+
   it('shows business entry cards instead of the legacy processKey form', async () => {
     renderWithQuery(<WorkbenchStartPage />)
 
@@ -706,6 +717,108 @@ describe('workbench pages', () => {
     expect(screen.queryByRole('button', { name: '唤醒' })).not.toBeInTheDocument()
   })
 
+  it('shows delegate action and proxy metadata in the task detail page', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_delegate_001',
+        status: 'PENDING',
+        assignmentMode: 'USER',
+        actingMode: 'PROXY',
+        actingForUserId: 'usr_001',
+        delegatedByUserId: 'usr_009',
+        handoverFromUserId: 'usr_010',
+        taskTrace: [
+          {
+            taskId: 'task_delegate_001',
+            nodeId: 'approve_manager',
+            nodeName: '部门负责人审批',
+            status: 'DELEGATED',
+            assigneeUserId: 'usr_002',
+            candidateUserIds: ['usr_002'],
+            action: 'DELEGATE',
+            operatorUserId: 'usr_002',
+            comment: '委派给王五',
+            receiveTime: '2026-03-22T09:10:00+08:00',
+            readTime: '2026-03-22T09:11:00+08:00',
+            handleStartTime: '2026-03-22T09:12:00+08:00',
+            handleEndTime: '2026-03-22T09:13:00+08:00',
+            handleDurationSeconds: 60,
+            targetUserId: 'usr_003',
+            actingMode: 'DELEGATE',
+            actingForUserId: 'usr_002',
+            delegatedByUserId: 'usr_001',
+            handoverFromUserId: null,
+          },
+          {
+            taskId: 'task_proxy_001',
+            nodeId: 'approve_proxy',
+            nodeName: '代理代办',
+            status: 'PENDING',
+            assigneeUserId: 'usr_003',
+            candidateUserIds: ['usr_003'],
+            action: 'PROXY',
+            operatorUserId: 'usr_003',
+            comment: '代理代办中',
+            receiveTime: '2026-03-22T09:20:00+08:00',
+            readTime: '2026-03-22T09:21:00+08:00',
+            handleStartTime: '2026-03-22T09:22:00+08:00',
+            handleEndTime: null,
+            handleDurationSeconds: null,
+            actingMode: 'PROXY',
+            actingForUserId: 'usr_002',
+            delegatedByUserId: 'usr_001',
+            handoverFromUserId: null,
+          },
+          {
+            taskId: 'task_handover_001',
+            nodeId: 'approve_handover',
+            nodeName: '离职转办',
+            status: 'HANDOVERED',
+            assigneeUserId: 'usr_004',
+            candidateUserIds: ['usr_004'],
+            action: 'HANDOVER',
+            operatorUserId: 'usr_999',
+            comment: '离职转办给新同事',
+            receiveTime: '2026-03-22T09:30:00+08:00',
+            readTime: '2026-03-22T09:31:00+08:00',
+            handleStartTime: '2026-03-22T09:32:00+08:00',
+            handleEndTime: '2026-03-22T09:33:00+08:00',
+            handleDurationSeconds: 60,
+            actingMode: 'HANDOVER',
+            actingForUserId: 'usr_004',
+            delegatedByUserId: null,
+            handoverFromUserId: 'usr_999',
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: false,
+      canRejectRoute: false,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+      canDelegate: true,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_delegate_001' />)
+
+    expect(await screen.findByRole('button', { name: '委派' })).toBeInTheDocument()
+    expect(screen.getAllByText('代理代办').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('代谁办理').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('委派来源').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('离职转办来源').length).toBeGreaterThan(0)
+  })
+
   it('renders advanced runtime labels in the action timeline', async () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
       createWorkbenchTaskDetail({
@@ -800,6 +913,84 @@ describe('workbench pages', () => {
             isAddSignTask: false,
             isRevoked: false,
           },
+          {
+            taskId: 'task_history_005',
+            nodeId: 'delegate_node_001',
+            nodeName: '委派复核',
+            status: 'DELEGATED',
+            assigneeUserId: 'usr_006',
+            candidateUserIds: ['usr_006'],
+            action: 'DELEGATE',
+            operatorUserId: 'usr_002',
+            comment: '委派给同事代办',
+            receiveTime: '2026-03-22T09:50:00+08:00',
+            readTime: '2026-03-22T09:51:00+08:00',
+            handleStartTime: '2026-03-22T09:52:00+08:00',
+            handleEndTime: '2026-03-22T09:53:00+08:00',
+            handleDurationSeconds: 60,
+            sourceTaskId: 'task_source_005',
+            targetTaskId: 'task_target_005',
+            targetUserId: 'usr_006',
+            actingMode: 'DELEGATE',
+            actingForUserId: 'usr_002',
+            delegatedByUserId: 'usr_001',
+            handoverFromUserId: null,
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
+          {
+            taskId: 'task_history_006',
+            nodeId: 'proxy_node_001',
+            nodeName: '代理代办',
+            status: 'PENDING',
+            assigneeUserId: 'usr_007',
+            candidateUserIds: ['usr_007'],
+            action: 'PROXY',
+            operatorUserId: 'usr_007',
+            comment: '代理人处理',
+            receiveTime: '2026-03-22T09:55:00+08:00',
+            readTime: '2026-03-22T09:56:00+08:00',
+            handleStartTime: '2026-03-22T09:57:00+08:00',
+            handleEndTime: '2026-03-22T09:58:00+08:00',
+            handleDurationSeconds: 60,
+            sourceTaskId: 'task_source_006',
+            targetTaskId: 'task_target_006',
+            targetUserId: 'usr_007',
+            actingMode: 'PROXY',
+            actingForUserId: 'usr_002',
+            delegatedByUserId: 'usr_001',
+            handoverFromUserId: null,
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
+          {
+            taskId: 'task_history_007',
+            nodeId: 'handover_node_001',
+            nodeName: '离职转办',
+            status: 'HANDOVERED',
+            assigneeUserId: 'usr_008',
+            candidateUserIds: ['usr_008'],
+            action: 'HANDOVER',
+            operatorUserId: 'usr_998',
+            comment: '离职后批量转办',
+            receiveTime: '2026-03-22T10:00:00+08:00',
+            readTime: '2026-03-22T10:01:00+08:00',
+            handleStartTime: '2026-03-22T10:02:00+08:00',
+            handleEndTime: '2026-03-22T10:03:00+08:00',
+            handleDurationSeconds: 60,
+            sourceTaskId: 'task_source_007',
+            targetTaskId: 'task_target_007',
+            targetUserId: 'usr_008',
+            actingMode: 'HANDOVER',
+            actingForUserId: 'usr_008',
+            delegatedByUserId: null,
+            handoverFromUserId: 'usr_998',
+            isCcTask: false,
+            isAddSignTask: false,
+            isRevoked: false,
+          },
         ],
       })
     )
@@ -827,6 +1018,9 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('跳转').length).toBeGreaterThan(0)
     expect(screen.getAllByText('拿回').length).toBeGreaterThan(0)
     expect(screen.getAllByText('唤醒').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('委派').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('代理代办').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('离职转办').length).toBeGreaterThan(0)
   })
 
   it('loads approval-sheet detail through the business locator path', async () => {

@@ -10,6 +10,10 @@ public record DemoTaskView(
         String status,
         String assignmentMode,
         List<String> candidateUserIds,
-        String assigneeUserId
+        String assigneeUserId,
+        String actingMode,
+        String actingForUserId,
+        String delegatedByUserId,
+        String handoverFromUserId
 ) {
 }

@@ -143,6 +143,24 @@ public class ProcessRuntimeController {
         return ApiResponse.success(processDemoService.wakeUp(instanceId, request));
     }
 
+    @PostMapping("/tasks/{taskId}/delegate")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> delegate(
+            @PathVariable String taskId,
+            @Valid @RequestBody DelegateTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.delegate(taskId, request));
+    }
+
+    @PostMapping("/users/{sourceUserId}/handover")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> handover(
+            @PathVariable String sourceUserId,
+            @Valid @RequestBody HandoverTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.handover(sourceUserId, request));
+    }
+
     @PostMapping("/tasks/{taskId}/claim")
     @SaCheckLogin
     public ApiResponse<ClaimTaskResponse> claim(

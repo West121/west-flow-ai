@@ -14,6 +14,8 @@ public record TaskActionAvailabilityResponse(
         boolean canRejectRoute,
         boolean canJump,
         boolean canTakeBack,
-        boolean canWakeUp
+        boolean canWakeUp,
+        boolean canDelegate,
+        boolean canHandover
 ) {
 }

@@ -285,4 +285,61 @@ describe('workbench api', () => {
       status: 'RETURNED',
     })
   })
+
+  it('supports delegate and handover runtime APIs', async () => {
+    postMock
+      .mockResolvedValueOnce(
+        okResponse({
+          instanceId: 'pi_001',
+          completedTaskId: 'task_001',
+          status: 'RUNNING',
+          nextTasks: [
+            {
+              taskId: 'task_delegate_001',
+              nodeId: 'approve_manager',
+              nodeName: '部门负责人审批',
+              status: 'PENDING',
+              assignmentMode: 'USER',
+              candidateUserIds: ['usr_003'],
+              assigneeUserId: 'usr_003',
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          sourceUserId: 'usr_001',
+          targetUserId: 'usr_003',
+          transferredCount: 2,
+          transferredTaskIds: ['task_handover_001', 'task_handover_002'],
+          status: 'RUNNING',
+        })
+      )
+
+    const { delegateWorkbenchTask, handoverWorkbenchTasks } = await import(
+      './workbench'
+    )
+
+    await expect(
+      delegateWorkbenchTask('task_001', {
+        targetUserId: 'usr_003',
+        comment: '委派给王五代办',
+      })
+    ).resolves.toMatchObject({
+      completedTaskId: 'task_001',
+      status: 'RUNNING',
+    })
+
+    await expect(
+      handoverWorkbenchTasks({
+        sourceUserId: 'usr_001',
+        targetUserId: 'usr_003',
+        comment: '离职转办给王五',
+      })
+    ).resolves.toMatchObject({
+      sourceUserId: 'usr_001',
+      targetUserId: 'usr_003',
+      transferredCount: 2,
+    })
+  })
 })

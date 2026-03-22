@@ -1058,6 +1058,351 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldAllowDelegatedProxyToApprovePendingTaskAndExposeProxyAuditFields() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_proxy_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_proxy_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "代理代办测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String taskId = objectMapper.readTree(startResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        JsonNode actionsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + login("zhangsan")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(actionsBody.path("canApprove").asBoolean()).isTrue();
+        assertThat(actionsBody.path("canTransfer").asBoolean()).isTrue();
+        assertThat(actionsBody.path("canDelegate").asBoolean()).isFalse();
+
+        String completeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", taskId)
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "代理人代办完成"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode completeBody = objectMapper.readTree(completeResponse);
+        assertThat(completeBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_proxy_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("actingMode").asText()).isEqualTo("PROXY");
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("actingForUserId").asText()).isEqualTo("usr_002");
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("delegatedByUserId").asText()).isEqualTo("usr_002");
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("operatorUserId").asText()).isEqualTo("usr_001");
+    }
+
+    @Test
+    void shouldSupportDelegateActionAndPreserveDelegateAuditTrail() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_delegate_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_delegate_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "委派测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String taskId = objectMapper.readTree(startResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        JsonNode delegateActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + login("lisi")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(delegateActions.path("canDelegate").asBoolean()).isTrue();
+        assertThat(delegateActions.path("canApprove").asBoolean()).isTrue();
+
+        String delegateResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/delegate", taskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_001",
+                                  "comment": "委派给张三代办"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode delegateBody = objectMapper.readTree(delegateResponse);
+        assertThat(delegateBody.path("code").asText()).isEqualTo("OK");
+        assertThat(delegateBody.path("data").path("nextTasks").size()).isEqualTo(1);
+        String delegatedTaskId = delegateBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+        assertThat(delegateBody.path("data").path("nextTasks").get(0).path("status").asText()).isEqualTo("PENDING");
+        assertThat(delegateBody.path("data").path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_001");
+
+        String delegatedCompleteResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", delegatedTaskId)
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "代办完成"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode delegatedCompleteBody = objectMapper.readTree(delegatedCompleteResponse);
+        assertThat(delegatedCompleteBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_delegate_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("status").asText()).isEqualTo("DELEGATED");
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("actingMode").asText()).isEqualTo("DELEGATE");
+        assertThat(detailBody.path("data").path("taskTrace").get(0).path("actingForUserId").asText()).isEqualTo("usr_002");
+        assertThat(detailBody.path("data").path("taskTrace").get(1).path("operatorUserId").asText()).isEqualTo("usr_001");
+        assertThat(detailBody.path("data").path("taskTrace").get(1).path("actingMode").asText()).isEqualTo("DELEGATE");
+    }
+
+    @Test
+    void shouldHandOverOnlyPendingHumanTasksAndKeepClaimAndCcTasksUnchanged() throws Exception {
+        String adminToken = login("wangwu");
+        String sourceUserId = "usr_001";
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validHandoverProcessDsl()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validClaimableProcessDsl()))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCcProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_handover_001");
+        seedLeaveBill("leave_claim_001");
+        seedLeaveBill("leave_cc_001");
+
+        String handoverStartResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_handover_route",
+                                  "businessKey": "leave_handover_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "离职转办测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String handoverTaskId = objectMapper.readTree(handoverStartResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        String claimableStartResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_claim_leave",
+                                  "businessKey": "leave_claim_001",
+                                  "formData": {
+                                    "days": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String claimableTaskId = objectMapper.readTree(claimableStartResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        String ccStartResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave_cc",
+                                  "businessKey": "leave_cc_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 3,
+                                    "reason": "抄送转办测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String ccFirstTaskId = objectMapper.readTree(ccStartResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+        mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", ccFirstTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "生成抄送"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        String handoverResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/users/{sourceUserId}/handover", sourceUserId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "离职转办给王五"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode handoverBody = objectMapper.readTree(handoverResponse);
+        assertThat(handoverBody.path("code").asText()).isEqualTo("OK");
+        assertThat(handoverBody.path("data").path("nextTasks").size()).isEqualTo(1);
+        assertThat(handoverBody.path("data").path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+        assertThat(handoverBody.path("data").path("nextTasks").get(0).path("status").asText()).isEqualTo("PENDING");
+
+        JsonNode handoverDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + adminToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_handover_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(handoverDetail.path("data").path("taskTrace").get(0).path("status").asText()).isEqualTo("HANDOVERED");
+        assertThat(handoverDetail.path("data").path("taskTrace").get(0).path("actingMode").asText()).isEqualTo("HANDOVER");
+        assertThat(handoverDetail.path("data").path("taskTrace").get(0).path("handoverFromUserId").asText()).isEqualTo(sourceUserId);
+
+        JsonNode claimableDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + login("wangwu"))
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_claim_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(claimableDetail.path("data").path("taskTrace").get(0).path("status").asText()).isEqualTo("PENDING_CLAIM");
+
+        JsonNode ccDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + login("zhangsan"))
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_cc_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(ccDetail.path("data").path("taskTrace"))
+                .anySatisfy(item -> assertThat(item.path("taskKind").asText()).isEqualTo("CC"));
+    }
+
+    @Test
     void shouldSupportAddSignRemoveSignAndBlockCompletionUntilAddSignTaskResolves() throws Exception {
         String initiatorToken = login("zhangsan");
 
@@ -1552,6 +1897,80 @@ class ProcessRuntimeControllerTest {
                       "target": "end_1",
                       "priority": 20,
                       "label": "审批通过"
+                    }
+                  ]
+                }
+                """;
+    }
+
+    private String validHandoverProcessDsl() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_handover_route",
+                  "processName": "离职转办审批",
+                  "category": "OA",
+                  "processFormKey": "oa-handover-route-form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_001"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
                     }
                   ]
                 }
