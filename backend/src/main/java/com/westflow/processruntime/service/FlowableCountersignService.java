@@ -1,6 +1,8 @@
 package com.westflow.processruntime.service;
 
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.processruntime.api.CountersignTaskGroupMemberResponse;
+import com.westflow.processruntime.api.CountersignTaskGroupResponse;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -43,6 +45,48 @@ public class FlowableCountersignService {
      */
     public void syncAfterTaskCompleted(String processDefinitionId, String processInstanceId, String completedTaskId) {
         syncTaskGroups(processDefinitionId, processInstanceId, completedTaskId);
+    }
+
+    /**
+     * 查询流程实例下的会签任务组快照。
+     */
+    public List<CountersignTaskGroupResponse> queryTaskGroups(String processInstanceId) {
+        return listGroups(processInstanceId).stream()
+                .map(group -> {
+                    List<TaskGroupMemberRecord> members = listMembers(group.id());
+                    int totalCount = members.size();
+                    int completedCount = (int) members.stream()
+                            .filter(member -> "COMPLETED".equals(member.memberStatus()))
+                            .count();
+                    int activeCount = (int) members.stream()
+                            .filter(member -> "ACTIVE".equals(member.memberStatus()))
+                            .count();
+                    int waitingCount = (int) members.stream()
+                            .filter(member -> "WAITING".equals(member.memberStatus()))
+                            .count();
+                    return new CountersignTaskGroupResponse(
+                            group.id(),
+                            group.processInstanceId(),
+                            group.nodeId(),
+                            group.nodeName(),
+                            group.approvalMode(),
+                            group.groupStatus(),
+                            totalCount,
+                            completedCount,
+                            activeCount,
+                            waitingCount,
+                            members.stream()
+                                    .map(member -> new CountersignTaskGroupMemberResponse(
+                                            member.id(),
+                                            member.taskId(),
+                                            member.assigneeUserId(),
+                                            member.sequenceNo(),
+                                            member.memberStatus()
+                                    ))
+                                    .toList()
+                    );
+                })
+                .toList();
     }
 
     private void syncTaskGroups(String processDefinitionId, String processInstanceId, String completedTaskId) {
@@ -157,7 +201,7 @@ public class FlowableCountersignService {
                     null
             );
         }
-        return new TaskGroupRecord(groupId, processInstanceId, metadata.nodeId(), metadata.nodeName(), metadata.approvalMode());
+        return new TaskGroupRecord(groupId, processInstanceId, metadata.nodeId(), metadata.nodeName(), metadata.approvalMode(), "RUNNING");
     }
 
     private void bindActiveTasks(TaskGroupRecord group, CountersignNodeMetadata metadata, List<Task> activeTasks) {
@@ -231,7 +275,7 @@ public class FlowableCountersignService {
     private Optional<TaskGroupRecord> findRunningGroup(String processInstanceId, String nodeId) {
         List<TaskGroupRecord> records = jdbcTemplate.query(
                 """
-                SELECT id, process_instance_id, node_id, node_name, approval_mode
+                SELECT id, process_instance_id, node_id, node_name, approval_mode, group_status
                 FROM wf_task_group
                 WHERE process_instance_id = ?
                   AND node_id = ?
@@ -248,10 +292,23 @@ public class FlowableCountersignService {
     private List<TaskGroupRecord> listRunningGroups(String processInstanceId) {
         return jdbcTemplate.query(
                 """
-                SELECT id, process_instance_id, node_id, node_name, approval_mode
+                SELECT id, process_instance_id, node_id, node_name, approval_mode, group_status
                 FROM wf_task_group
                 WHERE process_instance_id = ?
                   AND group_status = 'RUNNING'
+                ORDER BY created_at ASC
+                """,
+                this::mapTaskGroup,
+                processInstanceId
+        );
+    }
+
+    private List<TaskGroupRecord> listGroups(String processInstanceId) {
+        return jdbcTemplate.query(
+                """
+                SELECT id, process_instance_id, node_id, node_name, approval_mode, group_status
+                FROM wf_task_group
+                WHERE process_instance_id = ?
                 ORDER BY created_at ASC
                 """,
                 this::mapTaskGroup,
@@ -339,7 +396,8 @@ public class FlowableCountersignService {
                 resultSet.getString("process_instance_id"),
                 resultSet.getString("node_id"),
                 resultSet.getString("node_name"),
-                resultSet.getString("approval_mode")
+                resultSet.getString("approval_mode"),
+                resultSet.getString("group_status")
         );
     }
 
@@ -376,7 +434,8 @@ public class FlowableCountersignService {
             String processInstanceId,
             String nodeId,
             String nodeName,
-            String approvalMode
+            String approvalMode,
+            String groupStatus
     ) {
     }
 

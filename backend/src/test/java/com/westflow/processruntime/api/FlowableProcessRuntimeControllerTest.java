@@ -198,6 +198,41 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeCountersignTaskGroupsOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishExplicitSequentialCountersignProcess();
+        seedLeaveBill("leave_022");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_022");
+        String instanceId = startBody.path("instanceId").asText();
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(detailBody.path("countersignGroups").isArray()).isTrue();
+        assertThat(detailBody.path("countersignGroups").size()).isEqualTo(1);
+        assertThat(detailBody.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("SEQUENTIAL");
+        assertThat(detailBody.path("countersignGroups").get(0).path("activeCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("countersignGroups").get(0).path("waitingCount").asInt()).isEqualTo(1);
+
+        JsonNode groupsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/instances/{instanceId}/task-groups", instanceId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(groupsBody.isArray()).isTrue();
+        assertThat(groupsBody.get(0).path("members").size()).isEqualTo(2);
+        assertThat(groupsBody.get(0).path("members").get(0).path("memberStatus").asText()).isEqualTo("ACTIVE");
+        assertThat(groupsBody.get(0).path("members").get(1).path("memberStatus").asText()).isEqualTo("WAITING");
+    }
+
+    @Test
     void shouldExposeAutomationAndNotificationTraceOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         publishAutomationLeaveProcess();
@@ -1028,6 +1063,81 @@ class FlowableProcessRuntimeControllerTest {
                             "mode": "COPY"
                           }
                         ]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishExplicitSequentialCountersignProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假顺序会签",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人会签",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "approvalMode": "SEQUENTIAL",
+                        "reapprovePolicy": "RESTART_ALL",
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002", "usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
                       },
                       "ui": {"width": 240, "height": 88}
                     },

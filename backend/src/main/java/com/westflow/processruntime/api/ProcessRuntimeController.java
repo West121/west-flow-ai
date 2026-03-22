@@ -63,6 +63,13 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.detailByBusiness(businessType, businessId));
     }
 
+    @GetMapping("/instances/{instanceId}/task-groups")
+    @SaCheckLogin
+    // 查询流程实例的会签任务组进度。
+    public ApiResponse<java.util.List<CountersignTaskGroupResponse>> taskGroups(@PathVariable String instanceId) {
+        return ApiResponse.success(flowableProcessRuntimeService.taskGroups(instanceId));
+    }
+
     @GetMapping("/tasks/{taskId}/actions")
     @SaCheckLogin
     // 查询任务可执行动作。

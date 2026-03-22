@@ -61,6 +61,7 @@ public record ProcessTaskDetailResponse(
         List<WorkflowFieldBinding> fieldBindings,
         Map<String, Object> formData,
         Map<String, Object> taskFormData,
+        List<CountersignTaskGroupResponse> countersignGroups,
         List<String> activeTaskIds
 ) {
 }

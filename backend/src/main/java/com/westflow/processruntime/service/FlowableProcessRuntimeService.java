@@ -17,6 +17,7 @@ import com.westflow.processruntime.api.ClaimTaskRequest;
 import com.westflow.processruntime.api.ClaimTaskResponse;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
+import com.westflow.processruntime.api.CountersignTaskGroupResponse;
 import com.westflow.processruntime.api.DelegateTaskRequest;
 import com.westflow.processruntime.api.DemoTaskView;
 import com.westflow.processruntime.api.HandoverExecutionResponse;
@@ -193,6 +194,14 @@ public class FlowableProcessRuntimeService {
                 link.map(BusinessLinkSnapshot::processDefinitionId).orElse(null),
                 activeTask != null
         );
+    }
+
+    /**
+     * 查询实例维度的会签任务组快照。
+     */
+    public List<CountersignTaskGroupResponse> taskGroups(String instanceId) {
+        requireHistoricProcessInstance(instanceId);
+        return flowableCountersignService.queryTaskGroups(instanceId);
     }
 
     /**
@@ -1117,6 +1126,7 @@ public class FlowableProcessRuntimeService {
                 payload,
                 toOffsetDateTime(historicProcessInstance.getStartTime())
         );
+        List<CountersignTaskGroupResponse> countersignGroups = flowableCountersignService.queryTaskGroups(processInstanceId);
         OffsetDateTime createdAt = referenceActiveTask != null
                 ? toOffsetDateTime(referenceActiveTask.getCreateTime())
                 : referenceHistoricTask == null ? toOffsetDateTime(historicProcessInstance.getStartTime()) : toOffsetDateTime(referenceHistoricTask.getCreateTime());
@@ -1176,6 +1186,7 @@ public class FlowableProcessRuntimeService {
                 fieldBindings,
                 mapValue(variables.get("westflowFormData")),
                 mapValue(variables.get("westflowTaskFormData")),
+                countersignGroups,
                 blockingActiveTasks.stream().map(Task::getId).toList()
         );
     }
