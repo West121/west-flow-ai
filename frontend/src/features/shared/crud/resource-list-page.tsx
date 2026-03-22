@@ -51,6 +51,7 @@ type ResourceListPageProps<TData> = {
   navigate: NavigateFn
   columns: ColumnDef<TData, unknown>[]
   data: TData[]
+  total?: number
   summaries: SummaryItem[]
   createAction?: {
     label: string
@@ -74,6 +75,7 @@ export function ResourceListPage<TData>({
   navigate,
   columns,
   data,
+  total,
   summaries,
   createAction,
 }: ResourceListPageProps<TData>) {
@@ -138,9 +140,16 @@ export function ResourceListPage<TData>({
     onSortingChange,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
+    ...(total !== undefined
+      ? {
+          manualPagination: true as const,
+          pageCount: Math.max(1, Math.ceil(total / search.pageSize)),
+        }
+      : {
+          getFilteredRowModel: getFilteredRowModel(),
+          getSortedRowModel: getSortedRowModel(),
+          getPaginationRowModel: getPaginationRowModel(),
+        }),
   })
 
   useEffect(() => {

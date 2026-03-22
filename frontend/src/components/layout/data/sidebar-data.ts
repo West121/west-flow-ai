@@ -57,19 +57,51 @@ export const sidebarData: SidebarData = {
           ],
         },
         {
+          title: '公司管理',
+          icon: Building2,
+          items: [
+            {
+              title: '公司列表',
+              url: '/system/companies/list',
+            },
+            {
+              title: '新建公司',
+              url: '/system/companies/create',
+            },
+          ],
+        },
+        {
           title: '角色管理',
           url: '/system/roles/list',
           icon: ShieldCheck,
         },
         {
           title: '部门管理',
-          url: '/system/departments/list',
           icon: Building2,
+          items: [
+            {
+              title: '部门列表',
+              url: '/system/departments/list',
+            },
+            {
+              title: '新建部门',
+              url: '/system/departments/create',
+            },
+          ],
         },
         {
           title: '岗位管理',
-          url: '/system/posts/list',
           icon: CircleUserRound,
+          items: [
+            {
+              title: '岗位列表',
+              url: '/system/posts/list',
+            },
+            {
+              title: '新建岗位',
+              url: '/system/posts/create',
+            },
+          ],
         },
       ],
     },

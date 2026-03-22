@@ -1,0 +1,224 @@
+package com.westflow.system.org.post.service;
+
+import com.westflow.common.error.ContractException;
+import com.westflow.common.query.FilterItem;
+import com.westflow.common.query.PageRequest;
+import com.westflow.common.query.PageResponse;
+import com.westflow.common.query.SortItem;
+import com.westflow.system.org.department.api.SystemDepartmentDetailResponse;
+import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
+import com.westflow.system.org.post.api.SaveSystemPostRequest;
+import com.westflow.system.org.post.api.SystemPostDetailResponse;
+import com.westflow.system.org.post.api.SystemPostFormOptionsResponse;
+import com.westflow.system.org.post.api.SystemPostListItemResponse;
+import com.westflow.system.org.post.api.SystemPostMutationResponse;
+import com.westflow.system.org.post.mapper.SystemPostMapper;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class SystemPostService {
+
+    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "companyId", "departmentId");
+    private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "postName", "departmentName", "companyName");
+
+    private final SystemPostMapper systemPostMapper;
+    private final SystemDepartmentMapper systemDepartmentMapper;
+
+    public SystemPostService(SystemPostMapper systemPostMapper, SystemDepartmentMapper systemDepartmentMapper) {
+        this.systemPostMapper = systemPostMapper;
+        this.systemDepartmentMapper = systemDepartmentMapper;
+    }
+
+    public PageResponse<SystemPostListItemResponse> page(PageRequest request) {
+        Filters filters = resolveFilters(request.filters());
+        String orderBy = resolveOrderBy(request.sorts());
+        String orderDirection = resolveOrderDirection(request.sorts());
+        long total = systemPostMapper.countPage(
+                request.keyword(),
+                filters.enabled(),
+                filters.companyId(),
+                filters.departmentId()
+        );
+        long pageSize = request.pageSize();
+        long pages = total == 0 ? 0 : (total + pageSize - 1) / pageSize;
+        long offset = (long) (request.page() - 1) * pageSize;
+
+        List<SystemPostListItemResponse> records = total == 0
+                ? List.of()
+                : systemPostMapper.selectPage(
+                        request.keyword(),
+                        filters.enabled(),
+                        filters.companyId(),
+                        filters.departmentId(),
+                        orderBy,
+                        orderDirection,
+                        pageSize,
+                        offset
+                );
+
+        return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
+    }
+
+    public SystemPostDetailResponse detail(String postId) {
+        SystemPostDetailResponse detail = systemPostMapper.selectDetail(postId);
+        if (detail == null) {
+            throw new ContractException(
+                    "BIZ.RESOURCE_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "岗位不存在",
+                    Map.of("postId", postId)
+            );
+        }
+        return detail;
+    }
+
+    public SystemPostFormOptionsResponse formOptions(String companyId) {
+        return new SystemPostFormOptionsResponse(systemPostMapper.selectDepartmentOptions(companyId));
+    }
+
+    @Transactional
+    public SystemPostMutationResponse create(SaveSystemPostRequest request) {
+        SystemDepartmentDetailResponse department = validateDepartmentExists(request.departmentId());
+        validatePostName(request.departmentId(), request.postName(), null);
+        String postId = buildId("post");
+        systemPostMapper.insertPost(new SystemPostEntity(
+                postId,
+                request.departmentId(),
+                request.postName(),
+                request.enabled()
+        ));
+        return new SystemPostMutationResponse(postId);
+    }
+
+    @Transactional
+    public SystemPostMutationResponse update(String postId, SaveSystemPostRequest request) {
+        detail(postId);
+        validateDepartmentExists(request.departmentId());
+        validatePostName(request.departmentId(), request.postName(), postId);
+        systemPostMapper.updatePost(new SystemPostEntity(
+                postId,
+                request.departmentId(),
+                request.postName(),
+                request.enabled()
+        ));
+        return new SystemPostMutationResponse(postId);
+    }
+
+    private SystemDepartmentDetailResponse validateDepartmentExists(String departmentId) {
+        SystemDepartmentDetailResponse department = systemDepartmentMapper.selectDetail(departmentId);
+        if (department == null) {
+            throw new ContractException(
+                    "BIZ.RESOURCE_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "部门不存在",
+                    Map.of("departmentId", departmentId)
+            );
+        }
+        return department;
+    }
+
+    private void validatePostName(String departmentId, String postName, String excludePostId) {
+        Long total = systemPostMapper.countByPostName(departmentId, postName, excludePostId);
+        if (total != null && total > 0) {
+            throw new ContractException(
+                    "BIZ.POST_NAME_DUPLICATED",
+                    HttpStatus.CONFLICT,
+                    "岗位名称已存在",
+                    Map.of("postName", postName)
+            );
+        }
+    }
+
+    private Filters resolveFilters(List<FilterItem> filters) {
+        Boolean enabled = null;
+        String companyId = null;
+        String departmentId = null;
+
+        for (FilterItem filter : filters) {
+            if (!SUPPORTED_FILTER_FIELDS.contains(filter.field())) {
+                throw unsupported("不支持的筛选字段", filter.field(), SUPPORTED_FILTER_FIELDS);
+            }
+            if (!List.of("eq").contains(filter.operator())) {
+                throw unsupported("不支持的筛选操作符", filter.operator(), List.of("eq"));
+            }
+            String value = filter.value() == null ? null : filter.value().asText();
+            switch (filter.field()) {
+                case "status" -> {
+                    if ("ENABLED".equals(value)) {
+                        enabled = true;
+                    } else if ("DISABLED".equals(value)) {
+                        enabled = false;
+                    } else {
+                        throw new ContractException(
+                                "VALIDATION.REQUEST_INVALID",
+                                HttpStatus.BAD_REQUEST,
+                                "状态筛选值不合法",
+                                Map.of("status", value)
+                        );
+                    }
+                }
+                case "companyId" -> companyId = value;
+                case "departmentId" -> departmentId = value;
+                default -> {
+                }
+            }
+        }
+        return new Filters(enabled, companyId, departmentId);
+    }
+
+    private String resolveOrderBy(List<SortItem> sorts) {
+        if (sorts == null || sorts.isEmpty()) {
+            return "p.created_at";
+        }
+        SortItem sort = sorts.get(0);
+        if (!SUPPORTED_SORT_FIELDS.contains(sort.field())) {
+            throw unsupported("不支持的排序字段", sort.field(), SUPPORTED_SORT_FIELDS);
+        }
+        return switch (sort.field()) {
+            case "postName" -> "p.post_name";
+            case "departmentName" -> "d.department_name";
+            case "companyName" -> "c.company_name";
+            default -> "p.created_at";
+        };
+    }
+
+    private String resolveOrderDirection(List<SortItem> sorts) {
+        if (sorts == null || sorts.isEmpty()) {
+            return "DESC";
+        }
+        return "asc".equalsIgnoreCase(sorts.get(0).direction()) ? "ASC" : "DESC";
+    }
+
+    private ContractException unsupported(String message, String field, List<String> allowedFields) {
+        return new ContractException(
+                "VALIDATION.REQUEST_INVALID",
+                HttpStatus.BAD_REQUEST,
+                message,
+                Map.of("field", field, "allowedFields", allowedFields)
+        );
+    }
+
+    private String buildId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    public record Filters(
+            Boolean enabled,
+            String companyId,
+            String departmentId
+    ) {
+    }
+
+    public record SystemPostEntity(
+            String id,
+            String departmentId,
+            String postName,
+            Boolean enabled
+    ) {
+    }
+}
