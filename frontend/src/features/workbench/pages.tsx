@@ -60,6 +60,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import {
+  getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
   completeWorkbenchTask,
   getWorkbenchTaskActions,
@@ -570,7 +571,7 @@ export function WorkbenchStartPage() {
           </CardHeader>
           <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
             <p>1. OA 业务入口先保存业务单据，再自动匹配流程绑定。</p>
-            <p>2. 成功后直接跳转首个待办任务；没有待办时回到待办列表。</p>
+            <p>2. 发起成功后优先进入业务审批单详情页；没有待办时也能查看流程轨迹。</p>
             <p>3. 流程中心待办列表仍然保留在工作台中，方便统一处理。</p>
           </CardContent>
         </Card>
@@ -579,20 +580,79 @@ export function WorkbenchStartPage() {
   )
 }
 
-export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
+type WorkbenchTodoDetailPageProps = {
+  taskId?: string
+  businessType?: string
+  businessId?: string
+  backHref?: '/workbench/todos/list' | '/oa/query'
+  backLabel?: string
+}
+
+export function WorkbenchTodoDetailPage({
+  taskId,
+  businessType,
+  businessId,
+  backHref = '/workbench/todos/list',
+  backLabel = '返回待办列表',
+}: WorkbenchTodoDetailPageProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
+  const locator = taskId
+    ? { mode: 'task' as const, taskId }
+    : businessType && businessId
+      ? {
+          mode: 'business' as const,
+          businessType,
+          businessId,
+        }
+      : null
+
+  if (!locator) {
+    throw new Error('审批单详情页需要 taskId 或 business locator')
+  }
+
+  const detailQueryKey = useMemo(
+    () =>
+      locator.mode === 'task'
+        ? (['workbench', 'todo-detail', locator.taskId] as const)
+        : ([
+            'workbench',
+            'approval-sheet-detail',
+            locator.businessType,
+            locator.businessId,
+          ] as const),
+    [locator.businessId, locator.businessType, locator.mode, locator.taskId]
+  )
+
   const detailQuery = useQuery({
-    queryKey: ['workbench', 'todo-detail', taskId],
-    queryFn: () => getWorkbenchTaskDetail(taskId),
-  })
-  const actionsQuery = useQuery({
-    queryKey: ['workbench', 'todo-actions', taskId],
-    queryFn: () => getWorkbenchTaskActions(taskId),
+    queryKey: detailQueryKey,
+    queryFn: () =>
+      locator.mode === 'task'
+        ? getWorkbenchTaskDetail(locator.taskId)
+        : getApprovalSheetDetailByBusiness({
+            businessType: locator.businessType,
+            businessId: locator.businessId,
+          }),
   })
   const detail = detailQuery.data
+  const resolvedTaskId =
+    detail?.activeTaskIds[0] ?? (locator.mode === 'task' ? locator.taskId : null)
+  const actionsQuery = useQuery({
+    queryKey: ['workbench', 'todo-actions', resolvedTaskId ?? 'none'],
+    queryFn: () => getWorkbenchTaskActions(resolvedTaskId as string),
+    enabled: Boolean(resolvedTaskId),
+  })
+
+  function requireActionTaskId() {
+    if (!resolvedTaskId) {
+      throw new Error('当前审批单没有可操作任务')
+    }
+
+    return resolvedTaskId
+  }
+
   const claimForm = useForm<ClaimTaskFormValues>({
     resolver: zodResolver(claimTaskSchema),
     defaultValues: {
@@ -633,36 +693,39 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
   async function refreshWorkbenchQueries() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-page'] }),
-      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-detail', taskId] }),
-      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-actions', taskId] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-detail'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'approval-sheet-detail'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-actions'] }),
     ])
   }
 
   const completeMutation = useMutation({
     mutationFn: (payload: CompleteWorkbenchTaskPayload) =>
-      completeWorkbenchTask(taskId, payload),
+      completeWorkbenchTask(requireActionTaskId(), payload),
     onSuccess: async (response) => {
       await refreshWorkbenchQueries()
-      const nextTask = response.nextTasks[0]
-      if (nextTask) {
-        startTransition(() => {
-          navigate({
-            to: '/workbench/todos/$taskId',
-            params: { taskId: nextTask.taskId },
+      if (locator.mode === 'task') {
+        const nextTask = response.nextTasks[0]
+        if (nextTask) {
+          startTransition(() => {
+            navigate({
+              to: '/workbench/todos/$taskId',
+              params: { taskId: nextTask.taskId },
+            })
           })
-        })
-        return
-      }
+          return
+        }
 
-      startTransition(() => {
-        navigate({ to: '/workbench/todos/list' })
-      })
+        startTransition(() => {
+          navigate({ to: '/workbench/todos/list' })
+        })
+      }
     },
     onError: handleServerError,
   })
   const claimMutation = useMutation({
     mutationFn: (payload: ClaimTaskFormValues) =>
-      claimWorkbenchTask(taskId, {
+      claimWorkbenchTask(requireActionTaskId(), {
         comment: payload.comment?.trim() || undefined,
       }),
     onSuccess: async () => {
@@ -675,7 +738,7 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
   })
   const transferMutation = useMutation({
     mutationFn: (payload: TransferTaskFormValues) =>
-      transferWorkbenchTask(taskId, {
+      transferWorkbenchTask(requireActionTaskId(), {
         targetUserId: payload.targetUserId.trim(),
         comment: payload.comment?.trim() || undefined,
       }),
@@ -686,15 +749,17 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
         targetUserId: '',
         comment: '',
       })
-      startTransition(() => {
-        navigate({ to: '/workbench/todos/list' })
-      })
+      if (locator.mode === 'task') {
+        startTransition(() => {
+          navigate({ to: '/workbench/todos/list' })
+        })
+      }
     },
     onError: handleServerError,
   })
   const returnMutation = useMutation({
     mutationFn: (payload: ReturnTaskFormValues) =>
-      returnWorkbenchTask(taskId, {
+      returnWorkbenchTask(requireActionTaskId(), {
         targetStrategy: 'PREVIOUS_USER_TASK',
         comment: payload.comment?.trim() || undefined,
       }),
@@ -704,9 +769,11 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
       returnForm.reset({
         comment: '',
       })
-      startTransition(() => {
-        navigate({ to: '/workbench/todos/list' })
-      })
+      if (locator.mode === 'task') {
+        startTransition(() => {
+          navigate({ to: '/workbench/todos/list' })
+        })
+      }
     },
     onError: handleServerError,
   })
@@ -739,9 +806,9 @@ export function WorkbenchTodoDetailPage({ taskId }: { taskId: string }) {
       description='统一审批单详情页，支持业务正文、流程回顾和运行态处理动作。'
       actions={
         <Button asChild variant='outline'>
-          <Link to='/workbench/todos/list'>
+          <Link to={backHref}>
             <ArrowLeft />
-            返回待办列表
+            {backLabel}
           </Link>
         </Button>
       }

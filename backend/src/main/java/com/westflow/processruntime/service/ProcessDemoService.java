@@ -164,6 +164,12 @@ public class ProcessDemoService {
         return toDetailResponse(task, instance);
     }
 
+    public synchronized ProcessTaskDetailResponse detailByBusiness(String businessType, String businessId) {
+        DemoProcessInstance instance = requireInstanceByBusiness(businessType, businessId);
+        DemoTask task = resolveDetailTask(instance);
+        return detail(task.taskId);
+    }
+
     public synchronized TaskActionAvailabilityResponse actions(String taskId) {
         DemoTask task = requireTask(taskId);
         return actionAvailability(task, currentUserId());
@@ -922,6 +928,54 @@ public class ProcessDemoService {
             );
         }
         return task;
+    }
+
+    private DemoTask resolveDetailTask(DemoProcessInstance instance) {
+        if (!instance.activeTaskIds.isEmpty()) {
+            return instance.activeTaskIds.stream()
+                    .sorted()
+                    .map(tasksById::get)
+                    .filter(task -> task != null)
+                    .findFirst()
+                    .orElseThrow(() -> new ContractException(
+                            "PROCESS.INSTANCE_NOT_FOUND",
+                            HttpStatus.NOT_FOUND,
+                            "审批单不存在或未关联流程实例",
+                            Map.of("businessType", instance.businessType, "businessId", instance.businessKey)
+                    ));
+        }
+
+        return tasksById.values().stream()
+                .filter(task -> instance.instanceId.equals(task.instanceId))
+                .max(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
+                .orElseThrow(() -> new ContractException(
+                        "PROCESS.INSTANCE_NOT_FOUND",
+                        HttpStatus.NOT_FOUND,
+                        "审批单不存在或未关联流程实例",
+                        Map.of("businessType", instance.businessType, "businessId", instance.businessKey)
+                ));
+    }
+
+    private DemoProcessInstance requireInstanceByBusiness(String businessType, String businessId) {
+        if (businessType == null || businessType.isBlank() || businessId == null || businessId.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "businessType 和 businessId 不能为空",
+                    Map.of("businessType", businessType, "businessId", businessId)
+            );
+        }
+
+        return instancesById.values().stream()
+                .filter(instance -> businessType.equals(instance.businessType) && businessId.equals(instance.businessKey))
+                .max(Comparator.comparing((DemoProcessInstance instance) -> instance.createdAt)
+                        .thenComparing(instance -> instance.instanceId))
+                .orElseThrow(() -> new ContractException(
+                        "PROCESS.INSTANCE_NOT_FOUND",
+                        HttpStatus.NOT_FOUND,
+                        "审批单不存在或未关联流程实例",
+                        Map.of("businessType", businessType, "businessId", businessId)
+                ));
     }
 
     private DemoProcessInstance requireInstance(String instanceId) {

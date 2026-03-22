@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { sidebarData } from '@/components/layout/data/sidebar-data'
 import {
+  OAApprovalSheetDetailPage,
   OACommonCreatePage,
   OAExpenseCreatePage,
   OAQueryPage,
@@ -15,6 +16,13 @@ const { navigateMock, oaApiMocks } = vi.hoisted(() => ({
     createOALeaveBill: vi.fn(),
     createOAExpenseBill: vi.fn(),
     createOACommonRequestBill: vi.fn(),
+    getApprovalSheetDetailByBusiness: vi.fn(),
+    getWorkbenchTaskDetail: vi.fn(),
+    getWorkbenchTaskActions: vi.fn(),
+    claimWorkbenchTask: vi.fn(),
+    completeWorkbenchTask: vi.fn(),
+    transferWorkbenchTask: vi.fn(),
+    returnWorkbenchTask: vi.fn(),
   },
 }))
 
@@ -29,6 +37,17 @@ vi.mock('@tanstack/react-router', () => ({
     </a>
   ),
   useNavigate: () => navigateMock,
+  getRouteApi: () => ({
+    useSearch: () => ({
+      page: 1,
+      pageSize: 20,
+      keyword: '',
+      filters: [],
+      sorts: [],
+      groups: [],
+    }),
+    useNavigate: () => navigateMock,
+  }),
 }))
 
 vi.mock('@/features/shared/page-shell', () => ({
@@ -53,6 +72,7 @@ vi.mock('@/features/shared/page-shell', () => ({
 }))
 
 vi.mock('@/lib/api/oa', () => oaApiMocks)
+vi.mock('@/lib/api/workbench', () => oaApiMocks)
 
 function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -87,6 +107,60 @@ function mockLaunchResponse(taskId = 'task_001') {
         assigneeUserId: 'usr_002',
       },
     ],
+  }
+}
+
+function mockApprovalSheetDetail() {
+  return {
+    taskId: 'task_001',
+    instanceId: 'pi_001',
+    processDefinitionId: 'pd_001',
+    processKey: 'oa_leave',
+    processName: '请假审批',
+    businessKey: 'leave_001',
+    businessType: 'OA_LEAVE',
+    applicantUserId: 'usr_001',
+    nodeId: 'approve_manager',
+    nodeName: '部门负责人审批',
+    status: 'PENDING',
+    assignmentMode: 'USER',
+    candidateUserIds: ['usr_002'],
+    assigneeUserId: 'usr_002',
+    action: null,
+    operatorUserId: null,
+    comment: null,
+    processFormKey: 'oa-leave-start-form',
+    processFormVersion: '1.0.0',
+    effectiveFormKey: 'oa-leave-approve-form',
+    effectiveFormVersion: '1.0.0',
+    nodeFormKey: 'oa-leave-approve-form',
+    nodeFormVersion: '1.0.0',
+    fieldBindings: [],
+    taskFormData: { approved: true },
+    activeTaskIds: ['task_001'],
+    createdAt: '2026-03-22T09:00:00+08:00',
+    updatedAt: '2026-03-22T09:00:00+08:00',
+    completedAt: null,
+    receiveTime: '2026-03-22T09:00:00+08:00',
+    readTime: '2026-03-22T09:02:00+08:00',
+    handleStartTime: '2026-03-22T09:03:00+08:00',
+    handleEndTime: null,
+    handleDurationSeconds: null,
+    instanceStatus: 'RUNNING',
+    formData: { days: 2, reason: '外出处理事务' },
+    businessData: {
+      billId: 'leave_001',
+      billNo: 'LEAVE-001',
+      sceneCode: 'default',
+      days: 2,
+      reason: '外出处理事务',
+      status: 'RUNNING',
+      creatorUserId: 'usr_001',
+    },
+    flowNodes: [],
+    flowEdges: [],
+    instanceEvents: [],
+    taskTrace: [],
   }
 }
 
@@ -126,8 +200,8 @@ describe('oa pages', () => {
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith({
-        to: '/workbench/todos/$taskId',
-        params: { taskId: 'task_001' },
+        to: '/oa/leave/$billId',
+        params: { billId: 'bill_001' },
       })
     })
   })
@@ -159,8 +233,8 @@ describe('oa pages', () => {
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith({
-        to: '/workbench/todos/$taskId',
-        params: { taskId: 'task_002' },
+        to: '/oa/expense/$billId',
+        params: { billId: 'bill_001' },
       })
     })
   })
@@ -194,8 +268,8 @@ describe('oa pages', () => {
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith({
-        to: '/workbench/todos/$taskId',
-        params: { taskId: 'task_003' },
+        to: '/oa/common/$billId',
+        params: { billId: 'bill_001' },
       })
     })
   })
@@ -210,6 +284,36 @@ describe('oa pages', () => {
     expect(
       screen.getByRole('link', { name: '进入流程中心发起流程' })
     ).toHaveAttribute('href', '/workbench/start')
+  })
+
+  it('loads OA approval sheet detail by business locator', async () => {
+    oaApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
+      mockApprovalSheetDetail()
+    )
+    oaApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canTransfer: false,
+      canReturn: false,
+    })
+
+    renderWithQuery(
+      <OAApprovalSheetDetailPage businessType='OA_LEAVE' billId='leave_001' />
+    )
+
+    await waitFor(() => {
+      expect(oaApiMocks.getApprovalSheetDetailByBusiness).toHaveBeenCalledWith(
+        {
+          businessType: 'OA_LEAVE',
+          businessId: 'leave_001',
+        }
+      )
+    })
+
+    expect(await screen.findByText('审批单详情')).toBeInTheDocument()
+    expect(screen.getByText('业务正文')).toBeInTheDocument()
+    expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
   })
 
   it('exposes OA and process-center entries in the sidebar data', () => {

@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -39,6 +40,15 @@ public class ProcessRuntimeController {
     @SaCheckLogin
     public ApiResponse<ProcessTaskDetailResponse> detail(@PathVariable String taskId) {
         return ApiResponse.success(processDemoService.detail(taskId));
+    }
+
+    @GetMapping("/approval-sheets/by-business")
+    @SaCheckLogin
+    public ApiResponse<ProcessTaskDetailResponse> detailByBusiness(
+            @RequestParam String businessType,
+            @RequestParam String businessId
+    ) {
+        return ApiResponse.success(processDemoService.detailByBusiness(businessType, businessId));
     }
 
     @GetMapping("/tasks/{taskId}/actions")

@@ -2,7 +2,7 @@ import { startTransition, type ElementType } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { Loader2, NotebookText, ReceiptText, Search, Send } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -26,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { PageShell } from '@/features/shared/page-shell'
+import { WorkbenchTodoDetailPage } from '@/features/workbench/pages'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
   createOACommonRequestBill,
@@ -64,6 +65,11 @@ const commonFormSchema = z.object({
 type LeaveFormValues = z.infer<typeof leaveFormSchema>
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>
 type CommonFormValues = z.infer<typeof commonFormSchema>
+type OABusinessType = 'OA_LEAVE' | 'OA_EXPENSE' | 'OA_COMMON'
+
+const leaveDetailRoute = getRouteApi('/_authenticated/oa/leave/$billId')
+const expenseDetailRoute = getRouteApi('/_authenticated/oa/expense/$billId')
+const commonDetailRoute = getRouteApi('/_authenticated/oa/common/$billId')
 
 function navigateToFirstTask(
   navigate: ReturnType<typeof useNavigate>,
@@ -84,6 +90,24 @@ function navigateToFirstTask(
   startTransition(() => {
     navigate({ to: '/workbench/todos/list' })
   })
+}
+
+function navigateToApprovalSheetDetail(
+  navigate: ReturnType<typeof useNavigate>,
+  response: OALaunchResponse,
+  href: '/oa/leave/$billId' | '/oa/expense/$billId' | '/oa/common/$billId'
+) {
+  if (response.billId) {
+    startTransition(() => {
+      navigate({
+        to: href,
+        params: { billId: response.billId },
+      })
+    })
+    return
+  }
+
+  navigateToFirstTask(navigate, response)
 }
 
 function LaunchSummaryCard({
@@ -140,7 +164,7 @@ function LeaveCreateForm() {
   const launchMutation = useMutation({
     mutationFn: createOALeaveBill,
     onSuccess: (response) => {
-      navigateToFirstTask(navigate, response)
+      navigateToApprovalSheetDetail(navigate, response, '/oa/leave/$billId')
     },
     onError: handleServerError,
   })
@@ -225,7 +249,7 @@ function ExpenseCreateForm() {
   const launchMutation = useMutation({
     mutationFn: createOAExpenseBill,
     onSuccess: (response) => {
-      navigateToFirstTask(navigate, response)
+      navigateToApprovalSheetDetail(navigate, response, '/oa/expense/$billId')
     },
     onError: handleServerError,
   })
@@ -310,7 +334,7 @@ function CommonCreateForm() {
   const launchMutation = useMutation({
     mutationFn: createOACommonRequestBill,
     onSuccess: (response) => {
-      navigateToFirstTask(navigate, response)
+      navigateToApprovalSheetDetail(navigate, response, '/oa/common/$billId')
     },
     onError: handleServerError,
   })
@@ -488,11 +512,71 @@ export function OAQueryPage() {
           </CardHeader>
           <CardContent className='space-y-3 text-sm text-muted-foreground'>
             <p>1. OA 下的流程查询入口与流程中心共享待办列表和详情页。</p>
-            <p>2. 发起后成功进入首个待办任务页面，方便继续处理。</p>
-            <p>3. 如果没有待办任务，系统会回到待办列表页。</p>
+            <p>2. 发起成功后优先进入业务审批单详情页，流程图和业务正文都在同一页查看。</p>
+            <p>3. 即使当前没有待办任务，也可以继续查看实例轨迹和办理记录。</p>
           </CardContent>
         </Card>
       </div>
     </PageShell>
+  )
+}
+
+export function OAApprovalSheetDetailPage({
+  businessType,
+  billId,
+  backHref = '/oa/query',
+  backLabel = '返回 OA 流程查询',
+}: {
+  businessType: OABusinessType
+  billId: string
+  backHref?: '/oa/query' | '/workbench/todos/list'
+  backLabel?: string
+}) {
+  return (
+    <WorkbenchTodoDetailPage
+      businessType={businessType}
+      businessId={billId}
+      backHref={backHref}
+      backLabel={backLabel}
+    />
+  )
+}
+
+export function OALeaveBillDetailPage() {
+  const { billId } = leaveDetailRoute.useParams()
+
+  return (
+    <OAApprovalSheetDetailPage
+      businessType='OA_LEAVE'
+      billId={billId}
+      backHref='/oa/query'
+      backLabel='返回 OA 流程查询'
+    />
+  )
+}
+
+export function OAExpenseBillDetailPage() {
+  const { billId } = expenseDetailRoute.useParams()
+
+  return (
+    <OAApprovalSheetDetailPage
+      businessType='OA_EXPENSE'
+      billId={billId}
+      backHref='/oa/query'
+      backLabel='返回 OA 流程查询'
+    />
+  )
+}
+
+export function OACommonBillDetailPage() {
+  const { billId } = commonDetailRoute.useParams()
+
+  return (
+    <OAApprovalSheetDetailPage
+      businessType='OA_COMMON'
+      billId={billId}
+      backHref='/oa/query'
+      backLabel='返回 OA 流程查询'
+    />
   )
 }

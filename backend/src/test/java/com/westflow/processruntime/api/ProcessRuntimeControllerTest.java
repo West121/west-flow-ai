@@ -271,6 +271,136 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldResolveApprovalSheetDetailByBusinessWhenTaskIsActive() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_001");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 3,
+                                    "reason": "事假"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String taskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+
+        String response = mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + token)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode body = objectMapper.readTree(response);
+        assertThat(body.path("code").asText()).isEqualTo("OK");
+        assertThat(body.path("data").path("taskId").asText()).isEqualTo(taskId);
+        assertThat(body.path("data").path("businessKey").asText()).isEqualTo("leave_001");
+        assertThat(body.path("data").path("businessType").asText()).isEqualTo("OA_LEAVE");
+        assertThat(body.path("data").path("instanceId").asText()).isNotBlank();
+        assertThat(body.path("data").path("taskTrace").size()).isGreaterThanOrEqualTo(1);
+        assertThat(body.path("data").path("activeTaskIds").size()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldResolveApprovalSheetDetailByBusinessUsingLatestTaskWhenInstanceCompleted() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_002");
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_002",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "外出"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String taskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+
+        mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", taskId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "同意",
+                                  "taskFormData": {
+                                    "approvedDays": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + token)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_002"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode body = objectMapper.readTree(response);
+        assertThat(body.path("code").asText()).isEqualTo("OK");
+        assertThat(body.path("data").path("taskId").asText()).isEqualTo(taskId);
+        assertThat(body.path("data").path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(body.path("data").path("completedAt").isNull()).isFalse();
+        assertThat(body.path("data").path("activeTaskIds").size()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenApprovalSheetBusinessHasNoProcessInstance() throws Exception {
+        String token = login();
+
+        mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + token)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "leave_missing"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void shouldRejectInvalidDslPublishRequests() throws Exception {
         String token = login();
 

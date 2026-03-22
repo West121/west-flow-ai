@@ -48,8 +48,11 @@ import { Route as AuthenticatedSystemDepartmentsCreateRouteImport } from './rout
 import { Route as AuthenticatedSystemCompaniesListRouteImport } from './routes/_authenticated/system/companies/list'
 import { Route as AuthenticatedSystemCompaniesCreateRouteImport } from './routes/_authenticated/system/companies/create'
 import { Route as AuthenticatedOaLeaveCreateRouteImport } from './routes/_authenticated/oa/leave/create'
+import { Route as AuthenticatedOaLeaveBillIdRouteImport } from './routes/_authenticated/oa/leave/$billId'
 import { Route as AuthenticatedOaExpenseCreateRouteImport } from './routes/_authenticated/oa/expense/create'
+import { Route as AuthenticatedOaExpenseBillIdRouteImport } from './routes/_authenticated/oa/expense/$billId'
 import { Route as AuthenticatedOaCommonCreateRouteImport } from './routes/_authenticated/oa/common/create'
+import { Route as AuthenticatedOaCommonBillIdRouteImport } from './routes/_authenticated/oa/common/$billId'
 import { Route as AuthenticatedSystemUsersUserIdIndexRouteImport } from './routes/_authenticated/system/users/$userId/index'
 import { Route as AuthenticatedSystemRolesRoleIdIndexRouteImport } from './routes/_authenticated/system/roles/$roleId/index'
 import { Route as AuthenticatedSystemPostsPostIdIndexRouteImport } from './routes/_authenticated/system/posts/$postId/index'
@@ -283,16 +286,34 @@ const AuthenticatedOaLeaveCreateRoute =
     path: '/oa/leave/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOaLeaveBillIdRoute =
+  AuthenticatedOaLeaveBillIdRouteImport.update({
+    id: '/oa/leave/$billId',
+    path: '/oa/leave/$billId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedOaExpenseCreateRoute =
   AuthenticatedOaExpenseCreateRouteImport.update({
     id: '/oa/expense/create',
     path: '/oa/expense/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOaExpenseBillIdRoute =
+  AuthenticatedOaExpenseBillIdRouteImport.update({
+    id: '/oa/expense/$billId',
+    path: '/oa/expense/$billId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedOaCommonCreateRoute =
   AuthenticatedOaCommonCreateRouteImport.update({
     id: '/oa/common/create',
     path: '/oa/common/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOaCommonBillIdRoute =
+  AuthenticatedOaCommonBillIdRouteImport.update({
+    id: '/oa/common/$billId',
+    path: '/oa/common/$billId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemUsersUserIdIndexRoute =
@@ -391,8 +412,11 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/oa/expense/$billId': typeof AuthenticatedOaExpenseBillIdRoute
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
@@ -444,8 +468,11 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/oa/expense/$billId': typeof AuthenticatedOaExpenseBillIdRoute
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
@@ -500,8 +527,11 @@ export interface FileRoutesById {
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/_authenticated/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/_authenticated/oa/expense/$billId': typeof AuthenticatedOaExpenseBillIdRoute
   '/_authenticated/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/_authenticated/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/_authenticated/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
   '/_authenticated/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/_authenticated/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
@@ -556,8 +586,11 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/tasks'
     | '/users'
+    | '/oa/common/$billId'
     | '/oa/common/create'
+    | '/oa/expense/$billId'
     | '/oa/expense/create'
+    | '/oa/leave/$billId'
     | '/oa/leave/create'
     | '/system/companies/create'
     | '/system/companies/list'
@@ -609,8 +642,11 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tasks'
     | '/users'
+    | '/oa/common/$billId'
     | '/oa/common/create'
+    | '/oa/expense/$billId'
     | '/oa/expense/create'
+    | '/oa/leave/$billId'
     | '/oa/leave/create'
     | '/system/companies/create'
     | '/system/companies/list'
@@ -664,8 +700,11 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
+    | '/_authenticated/oa/common/$billId'
     | '/_authenticated/oa/common/create'
+    | '/_authenticated/oa/expense/$billId'
     | '/_authenticated/oa/expense/create'
+    | '/_authenticated/oa/leave/$billId'
     | '/_authenticated/oa/leave/create'
     | '/_authenticated/system/companies/create'
     | '/_authenticated/system/companies/list'
@@ -981,6 +1020,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOaLeaveCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/oa/leave/$billId': {
+      id: '/_authenticated/oa/leave/$billId'
+      path: '/oa/leave/$billId'
+      fullPath: '/oa/leave/$billId'
+      preLoaderRoute: typeof AuthenticatedOaLeaveBillIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/oa/expense/create': {
       id: '/_authenticated/oa/expense/create'
       path: '/oa/expense/create'
@@ -988,11 +1034,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOaExpenseCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/oa/expense/$billId': {
+      id: '/_authenticated/oa/expense/$billId'
+      path: '/oa/expense/$billId'
+      fullPath: '/oa/expense/$billId'
+      preLoaderRoute: typeof AuthenticatedOaExpenseBillIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/oa/common/create': {
       id: '/_authenticated/oa/common/create'
       path: '/oa/common/create'
       fullPath: '/oa/common/create'
       preLoaderRoute: typeof AuthenticatedOaCommonCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/oa/common/$billId': {
+      id: '/_authenticated/oa/common/$billId'
+      path: '/oa/common/$billId'
+      fullPath: '/oa/common/$billId'
+      preLoaderRoute: typeof AuthenticatedOaCommonBillIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/users/$userId/': {
@@ -1117,8 +1177,11 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedOaCommonBillIdRoute: typeof AuthenticatedOaCommonBillIdRoute
   AuthenticatedOaCommonCreateRoute: typeof AuthenticatedOaCommonCreateRoute
+  AuthenticatedOaExpenseBillIdRoute: typeof AuthenticatedOaExpenseBillIdRoute
   AuthenticatedOaExpenseCreateRoute: typeof AuthenticatedOaExpenseCreateRoute
+  AuthenticatedOaLeaveBillIdRoute: typeof AuthenticatedOaLeaveBillIdRoute
   AuthenticatedOaLeaveCreateRoute: typeof AuthenticatedOaLeaveCreateRoute
   AuthenticatedSystemCompaniesCreateRoute: typeof AuthenticatedSystemCompaniesCreateRoute
   AuthenticatedSystemCompaniesListRoute: typeof AuthenticatedSystemCompaniesListRoute
@@ -1161,8 +1224,11 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedOaCommonBillIdRoute: AuthenticatedOaCommonBillIdRoute,
   AuthenticatedOaCommonCreateRoute: AuthenticatedOaCommonCreateRoute,
+  AuthenticatedOaExpenseBillIdRoute: AuthenticatedOaExpenseBillIdRoute,
   AuthenticatedOaExpenseCreateRoute: AuthenticatedOaExpenseCreateRoute,
+  AuthenticatedOaLeaveBillIdRoute: AuthenticatedOaLeaveBillIdRoute,
   AuthenticatedOaLeaveCreateRoute: AuthenticatedOaLeaveCreateRoute,
   AuthenticatedSystemCompaniesCreateRoute:
     AuthenticatedSystemCompaniesCreateRoute,

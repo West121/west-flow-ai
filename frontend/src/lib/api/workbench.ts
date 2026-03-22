@@ -101,6 +101,11 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   activeTaskIds: string[]
 }
 
+export type ApprovalSheetBusinessLocator = {
+  businessType: string
+  businessId: string
+}
+
 export type WorkbenchTaskActionAvailability = {
   canClaim: boolean
   canApprove: boolean
@@ -203,6 +208,21 @@ export async function getWorkbenchTaskDetail(
     data: WorkbenchTaskDetail
     requestId: string
   }>(`/process-runtime/demo/tasks/${taskId}`)
+
+  return unwrapResponse(response)
+}
+
+export async function getApprovalSheetDetailByBusiness(
+  locator: ApprovalSheetBusinessLocator
+): Promise<WorkbenchTaskDetail> {
+  const response = await apiClient.get<{
+    code: 'OK'
+    message: string
+    data: WorkbenchTaskDetail
+    requestId: string
+  }>('/process-runtime/demo/approval-sheets/by-business', {
+    params: locator,
+  })
 
   return unwrapResponse(response)
 }

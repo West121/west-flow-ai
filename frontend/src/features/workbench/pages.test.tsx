@@ -19,6 +19,7 @@ const {
   workbenchApiMocks: {
     listWorkbenchTasks: vi.fn(),
     getWorkbenchTaskDetail: vi.fn(),
+    getApprovalSheetDetailByBusiness: vi.fn(),
     getWorkbenchTaskActions: vi.fn(),
     startWorkbenchProcess: vi.fn(),
     completeWorkbenchTask: vi.fn(),
@@ -48,13 +49,16 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/features/shared/page-shell', () => ({
   PageShell: ({
     title,
+    actions,
     children,
   }: {
     title: string
+    actions?: React.ReactNode
     children: React.ReactNode
   }) => (
     <div>
       <h1>{title}</h1>
+      {actions}
       {children}
     </div>
   ),
@@ -409,6 +413,46 @@ describe('workbench pages', () => {
 
     expect(await screen.findByRole('button', { name: '认领任务' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '退回上一步' })).toBeInTheDocument()
+  })
+
+  it('loads approval-sheet detail through the business locator path', async () => {
+    workbenchApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_business_001',
+        activeTaskIds: ['task_business_001'],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canTransfer: true,
+      canReturn: false,
+    })
+
+    renderWithQuery(
+      <WorkbenchTodoDetailPage
+        businessType='OA_LEAVE'
+        businessId='leave_001'
+        backHref='/oa/query'
+        backLabel='返回 OA 流程查询'
+      />
+    )
+
+    await waitFor(() => {
+      expect(
+        workbenchApiMocks.getApprovalSheetDetailByBusiness
+      ).toHaveBeenCalledWith({
+        businessType: 'OA_LEAVE',
+        businessId: 'leave_001',
+      })
+    })
+
+    expect(await screen.findByText('业务正文')).toBeInTheDocument()
+    expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '返回 OA 流程查询' })
+    ).toHaveAttribute('href', '/oa/query')
   })
 
   it('submits the transfer dialog with target user id', async () => {
