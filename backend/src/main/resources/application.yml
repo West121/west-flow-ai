@@ -77,7 +77,3 @@ minio:
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket: ${MINIO_BUCKET:west-flow-ai}
-
-westflow:
-  auth:
-    fixture-enabled: true

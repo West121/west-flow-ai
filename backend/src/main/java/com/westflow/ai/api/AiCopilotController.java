@@ -1,0 +1,95 @@
+package com.westflow.ai.api;
+
+import com.westflow.ai.model.AiConfirmToolCallRequest;
+import com.westflow.ai.model.AiConversationCreateRequest;
+import com.westflow.ai.model.AiMessageAppendRequest;
+import com.westflow.ai.model.AiToolCallRequest;
+import com.westflow.ai.model.AiToolCallResultResponse;
+import com.westflow.ai.service.AiCopilotService;
+import com.westflow.common.api.ApiResponse;
+import com.westflow.common.query.PageRequest;
+import com.westflow.common.query.PageResponse;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * AI Copilot 的对外 HTTP 接口。
+ */
+@RestController
+@RequestMapping("/api/v1/ai/copilot")
+public class AiCopilotController {
+
+    private final AiCopilotService aiCopilotService;
+
+    public AiCopilotController(AiCopilotService aiCopilotService) {
+        this.aiCopilotService = aiCopilotService;
+    }
+
+    /**
+     * 分页查询会话列表。
+     */
+    @PostMapping("/conversations/page")
+    public ApiResponse<PageResponse<com.westflow.ai.model.AiConversationSummaryResponse>> pageConversations(
+            @Valid @RequestBody PageRequest request
+    ) {
+        return ApiResponse.success(aiCopilotService.pageConversations(request));
+    }
+
+    /**
+     * 新建会话。
+     */
+    @PostMapping("/conversations")
+    public ApiResponse<com.westflow.ai.model.AiConversationDetailResponse> createConversation(
+            @Valid @RequestBody AiConversationCreateRequest request
+    ) {
+        return ApiResponse.success(aiCopilotService.createConversation(request));
+    }
+
+    /**
+     * 查询会话详情。
+     */
+    @GetMapping("/conversations/{conversationId}")
+    public ApiResponse<com.westflow.ai.model.AiConversationDetailResponse> getConversation(
+            @PathVariable String conversationId
+    ) {
+        return ApiResponse.success(aiCopilotService.getConversation(conversationId));
+    }
+
+    /**
+     * 追加会话消息。
+     */
+    @PostMapping("/conversations/{conversationId}/messages")
+    public ApiResponse<com.westflow.ai.model.AiConversationDetailResponse> appendMessage(
+            @PathVariable String conversationId,
+            @Valid @RequestBody AiMessageAppendRequest request
+    ) {
+        return ApiResponse.success(aiCopilotService.appendMessage(conversationId, request));
+    }
+
+    /**
+     * 执行工具调用。
+     */
+    @PostMapping("/conversations/{conversationId}/tool-calls")
+    public ApiResponse<AiToolCallResultResponse> executeToolCall(
+            @PathVariable String conversationId,
+            @Valid @RequestBody AiToolCallRequest request
+    ) {
+        return ApiResponse.success(aiCopilotService.executeToolCall(conversationId, request));
+    }
+
+    /**
+     * 确认写操作工具调用。
+     */
+    @PostMapping("/tool-calls/{toolCallId}/confirm")
+    public ApiResponse<AiToolCallResultResponse> confirmToolCall(
+            @PathVariable String toolCallId,
+            @Valid @RequestBody AiConfirmToolCallRequest request
+    ) {
+        return ApiResponse.success(aiCopilotService.confirmToolCall(toolCallId, request));
+    }
+}

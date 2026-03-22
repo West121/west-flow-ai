@@ -5,7 +5,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.notification.model.NotificationChannelType;
 import com.westflow.system.notification.template.api.NotificationTemplateDetailResponse;
 import com.westflow.system.notification.template.api.NotificationTemplateFormOptionsResponse;
@@ -35,7 +35,7 @@ public class NotificationTemplateService {
     private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "templateCode", "templateName", "channelType");
 
     private final NotificationTemplateMapper notificationTemplateMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<NotificationTemplateListItemResponse> page(PageRequest request) {
         ensureProcessAdmin();

@@ -7,7 +7,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.workflowadmin.api.ApprovalOpinionConfigDetailResponse;
 import com.westflow.workflowadmin.api.ApprovalOpinionConfigFormOptionsResponse;
 import com.westflow.workflowadmin.api.ApprovalOpinionConfigListItemResponse;
@@ -38,7 +38,7 @@ public class ApprovalOpinionConfigService {
     };
 
     private final ApprovalOpinionConfigMapper approvalOpinionConfigMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
     private final ObjectMapper objectMapper;
 
     public PageResponse<ApprovalOpinionConfigListItemResponse> page(PageRequest request) {

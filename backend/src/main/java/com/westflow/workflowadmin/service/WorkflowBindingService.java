@@ -4,7 +4,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processbinding.mapper.BusinessProcessBindingMapper;
 import com.westflow.processbinding.model.BusinessProcessBindingRecord;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
@@ -33,7 +33,7 @@ public class WorkflowBindingService {
 
     private final BusinessProcessBindingMapper businessProcessBindingMapper;
     private final ProcessDefinitionMapper processDefinitionMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<WorkflowBindingListItemResponse> page(PageRequest request) {
         ensureWorkflowAdminAccess();

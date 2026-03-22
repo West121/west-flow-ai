@@ -6,7 +6,7 @@ import com.westflow.common.query.GroupItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.system.message.api.SaveSystemMessageRequest;
 import com.westflow.system.message.api.SystemMessageDetailResponse;
 import com.westflow.system.message.api.SystemMessageFormOptionsResponse;
@@ -40,7 +40,7 @@ public class SystemMessageService {
     private static final List<String> SUPPORTED_SORT_DIRECTIONS = List.of("asc", "desc");
 
     private final SystemMessageMapper systemMessageMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<SystemMessageListItemResponse> page(PageRequest request) {
         ensureSystemAccess();

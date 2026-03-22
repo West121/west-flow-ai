@@ -6,7 +6,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.system.trigger.api.SaveSystemTriggerRequest;
 import com.westflow.system.trigger.api.SystemTriggerDetailResponse;
@@ -37,7 +37,7 @@ public class SystemTriggerService {
 
     private final SystemTriggerMapper systemTriggerMapper;
     private final NotificationChannelMapper notificationChannelMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     /**
      * 分页查询触发器。

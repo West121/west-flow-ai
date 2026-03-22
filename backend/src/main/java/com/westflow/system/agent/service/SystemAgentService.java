@@ -6,7 +6,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.system.agent.api.SaveSystemAgentRequest;
 import com.westflow.system.agent.api.SystemAgentDetailResponse;
 import com.westflow.system.agent.api.SystemAgentFormOptionsResponse;
@@ -35,7 +35,7 @@ public class SystemAgentService {
 
     private final SystemAgentMapper systemAgentMapper;
     private final SystemUserMapper systemUserMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     /**
      * 分页查询代理关系列表。

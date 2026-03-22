@@ -5,7 +5,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.mapper.NotificationLogMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
@@ -31,7 +31,7 @@ public class NotificationRecordService {
 
     private final NotificationLogMapper notificationLogMapper;
     private final NotificationChannelMapper notificationChannelMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<NotificationRecordListItemResponse> page(PageRequest request) {
         ensureProcessAdmin();

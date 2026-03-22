@@ -29,6 +29,9 @@ public class ApprovalSheetQueryService {
             case "OA_LEAVE" -> resolveLeaveBusinessData(businessKey);
             case "OA_EXPENSE" -> resolveExpenseBusinessData(businessKey);
             case "OA_COMMON" -> resolveCommonBusinessData(businessKey);
+            case "PLM_ECR" -> resolvePlmEcrBusinessData(businessKey);
+            case "PLM_ECO" -> resolvePlmEcoBusinessData(businessKey);
+            case "PLM_MATERIAL" -> resolvePlmMaterialBusinessData(businessKey);
             default -> Map.of();
         };
     }
@@ -106,6 +109,90 @@ public class ApprovalSheetQueryService {
                     data.put("processInstanceId", resultSet.getObject(6));
                     data.put("status", resultSet.getObject(7));
                     data.put("creatorUserId", resultSet.getObject(8));
+                    return data;
+                }
+        );
+    }
+
+    /**
+     * 读取 PLM ECR 业务数据。
+     */
+    private Map<String, Object> resolvePlmEcrBusinessData(String businessKey) {
+        return queryBusinessData(
+                """
+                SELECT id, bill_no, scene_code, change_title, change_reason, affected_product_code, priority_level, process_instance_id, status, creator_user_id
+                FROM plm_ecr_change
+                WHERE id = ?
+                """,
+                businessKey,
+                resultSet -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("billId", resultSet.getObject(1));
+                    data.put("billNo", resultSet.getObject(2));
+                    data.put("sceneCode", resultSet.getObject(3));
+                    data.put("changeTitle", resultSet.getObject(4));
+                    data.put("changeReason", resultSet.getObject(5));
+                    data.put("affectedProductCode", resultSet.getObject(6));
+                    data.put("priorityLevel", resultSet.getObject(7));
+                    data.put("processInstanceId", resultSet.getObject(8));
+                    data.put("status", resultSet.getObject(9));
+                    data.put("creatorUserId", resultSet.getObject(10));
+                    return data;
+                }
+        );
+    }
+
+    /**
+     * 读取 PLM ECO 业务数据。
+     */
+    private Map<String, Object> resolvePlmEcoBusinessData(String businessKey) {
+        return queryBusinessData(
+                """
+                SELECT id, bill_no, scene_code, execution_title, execution_plan, effective_date, change_reason, process_instance_id, status, creator_user_id
+                FROM plm_eco_execution
+                WHERE id = ?
+                """,
+                businessKey,
+                resultSet -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("billId", resultSet.getObject(1));
+                    data.put("billNo", resultSet.getObject(2));
+                    data.put("sceneCode", resultSet.getObject(3));
+                    data.put("executionTitle", resultSet.getObject(4));
+                    data.put("executionPlan", resultSet.getObject(5));
+                    data.put("effectiveDate", resultSet.getObject(6));
+                    data.put("changeReason", resultSet.getObject(7));
+                    data.put("processInstanceId", resultSet.getObject(8));
+                    data.put("status", resultSet.getObject(9));
+                    data.put("creatorUserId", resultSet.getObject(10));
+                    return data;
+                }
+        );
+    }
+
+    /**
+     * 读取 PLM 物料主数据变更业务数据。
+     */
+    private Map<String, Object> resolvePlmMaterialBusinessData(String businessKey) {
+        return queryBusinessData(
+                """
+                SELECT id, bill_no, scene_code, material_code, material_name, change_reason, change_type, process_instance_id, status, creator_user_id
+                FROM plm_material_change
+                WHERE id = ?
+                """,
+                businessKey,
+                resultSet -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("billId", resultSet.getObject(1));
+                    data.put("billNo", resultSet.getObject(2));
+                    data.put("sceneCode", resultSet.getObject(3));
+                    data.put("materialCode", resultSet.getObject(4));
+                    data.put("materialName", resultSet.getObject(5));
+                    data.put("changeReason", resultSet.getObject(6));
+                    data.put("changeType", resultSet.getObject(7));
+                    data.put("processInstanceId", resultSet.getObject(8));
+                    data.put("status", resultSet.getObject(9));
+                    data.put("creatorUserId", resultSet.getObject(10));
                     return data;
                 }
         );

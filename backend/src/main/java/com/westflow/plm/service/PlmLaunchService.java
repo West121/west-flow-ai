@@ -1,0 +1,267 @@
+package com.westflow.plm.service;
+
+import cn.dev33.satoken.stp.StpUtil;
+import com.westflow.common.error.ContractException;
+import com.westflow.plm.api.CreatePLMEcoBillRequest;
+import com.westflow.plm.api.CreatePLMEcrBillRequest;
+import com.westflow.plm.api.CreatePLMMaterialChangeBillRequest;
+import com.westflow.plm.api.PlmEcoBillDetailResponse;
+import com.westflow.plm.api.PlmEcrBillDetailResponse;
+import com.westflow.plm.api.PlmLaunchResponse;
+import com.westflow.plm.api.PlmMaterialChangeBillDetailResponse;
+import com.westflow.plm.mapper.PlmEcoBillMapper;
+import com.westflow.plm.mapper.PlmEcrBillMapper;
+import com.westflow.plm.mapper.PlmMaterialChangeBillMapper;
+import com.westflow.plm.model.PlmEcoBillRecord;
+import com.westflow.plm.model.PlmEcrBillRecord;
+import com.westflow.plm.model.PlmMaterialChangeBillRecord;
+import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
+import com.westflow.processbinding.model.BusinessProcessLinkRecord;
+import com.westflow.processbinding.service.BusinessProcessBindingService;
+import com.westflow.processruntime.api.StartProcessRequest;
+import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.service.FlowableRuntimeStartService;
+import java.time.LocalDate;
+import java.util.Map;
+import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * PLM 单据发起与详情查询服务。
+ */
+@Service
+@RequiredArgsConstructor
+public class PlmLaunchService {
+
+    private final BusinessProcessBindingService businessProcessBindingService;
+    private final BusinessProcessLinkMapper businessProcessLinkMapper;
+    private final PlmEcrBillMapper plmEcrBillMapper;
+    private final PlmEcoBillMapper plmEcoBillMapper;
+    private final PlmMaterialChangeBillMapper plmMaterialChangeBillMapper;
+    private final FlowableRuntimeStartService flowableRuntimeStartService;
+
+    /**
+     * 发起 ECR 变更申请。
+     */
+    @Transactional
+    public PlmLaunchResponse createEcrBill(CreatePLMEcrBillRequest request) {
+        String billId = buildId("ecr");
+        String billNo = buildBillNo("ECR");
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String userId = currentUserId();
+        plmEcrBillMapper.insert(new PlmEcrBillRecord(
+                billId,
+                billNo,
+                sceneCode,
+                request.changeTitle().trim(),
+                request.changeReason().trim(),
+                blankToNull(request.affectedProductCode()),
+                blankToNull(request.priorityLevel()),
+                null,
+                "DRAFT",
+                userId
+        ));
+        StartProcessResponse startResponse = startBusinessProcess(
+                "PLM_ECR",
+                sceneCode,
+                billId,
+                buildFormData(
+                        "changeTitle", request.changeTitle().trim(),
+                        "changeReason", request.changeReason().trim(),
+                        "affectedProductCode", blankToNull(request.affectedProductCode()),
+                        "priorityLevel", blankToNull(request.priorityLevel())
+                )
+        );
+        plmEcrBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
+        insertLink("PLM_ECR", billId, startResponse, userId);
+        return toLaunchResponse(billId, billNo, startResponse);
+    }
+
+    /**
+     * 发起 ECO 变更执行。
+     */
+    @Transactional
+    public PlmLaunchResponse createEcoBill(CreatePLMEcoBillRequest request) {
+        String billId = buildId("eco");
+        String billNo = buildBillNo("ECO");
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String userId = currentUserId();
+        plmEcoBillMapper.insert(new PlmEcoBillRecord(
+                billId,
+                billNo,
+                sceneCode,
+                request.executionTitle().trim(),
+                request.executionPlan().trim(),
+                request.effectiveDate(),
+                request.changeReason().trim(),
+                null,
+                "DRAFT",
+                userId
+        ));
+        StartProcessResponse startResponse = startBusinessProcess(
+                "PLM_ECO",
+                sceneCode,
+                billId,
+                buildFormData(
+                        "executionTitle", request.executionTitle().trim(),
+                        "executionPlan", request.executionPlan().trim(),
+                        "effectiveDate", request.effectiveDate() == null ? null : request.effectiveDate().toString(),
+                        "changeReason", request.changeReason().trim()
+                )
+        );
+        plmEcoBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
+        insertLink("PLM_ECO", billId, startResponse, userId);
+        return toLaunchResponse(billId, billNo, startResponse);
+    }
+
+    /**
+     * 发起物料主数据变更申请。
+     */
+    @Transactional
+    public PlmLaunchResponse createMaterialChangeBill(CreatePLMMaterialChangeBillRequest request) {
+        String billId = buildId("material");
+        String billNo = buildBillNo("MAT");
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String userId = currentUserId();
+        plmMaterialChangeBillMapper.insert(new PlmMaterialChangeBillRecord(
+                billId,
+                billNo,
+                sceneCode,
+                request.materialCode().trim(),
+                request.materialName().trim(),
+                request.changeReason().trim(),
+                blankToNull(request.changeType()),
+                null,
+                "DRAFT",
+                userId
+        ));
+        StartProcessResponse startResponse = startBusinessProcess(
+                "PLM_MATERIAL",
+                sceneCode,
+                billId,
+                buildFormData(
+                        "materialCode", request.materialCode().trim(),
+                        "materialName", request.materialName().trim(),
+                        "changeReason", request.changeReason().trim(),
+                        "changeType", blankToNull(request.changeType())
+                )
+        );
+        plmMaterialChangeBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
+        insertLink("PLM_MATERIAL", billId, startResponse, userId);
+        return toLaunchResponse(billId, billNo, startResponse);
+    }
+
+    /**
+     * 查询 ECR 详情。
+     */
+    public PlmEcrBillDetailResponse ecrDetail(String billId) {
+        PlmEcrBillDetailResponse detail = plmEcrBillMapper.selectDetail(billId);
+        if (detail == null) {
+            throw resourceNotFound("ECR 变更申请不存在", billId);
+        }
+        return detail;
+    }
+
+    /**
+     * 查询 ECO 详情。
+     */
+    public PlmEcoBillDetailResponse ecoDetail(String billId) {
+        PlmEcoBillDetailResponse detail = plmEcoBillMapper.selectDetail(billId);
+        if (detail == null) {
+            throw resourceNotFound("ECO 变更执行不存在", billId);
+        }
+        return detail;
+    }
+
+    /**
+     * 查询物料主数据变更详情。
+     */
+    public PlmMaterialChangeBillDetailResponse materialChangeDetail(String billId) {
+        PlmMaterialChangeBillDetailResponse detail = plmMaterialChangeBillMapper.selectDetail(billId);
+        if (detail == null) {
+            throw resourceNotFound("物料主数据变更申请不存在", billId);
+        }
+        return detail;
+    }
+
+    private StartProcessResponse startBusinessProcess(
+            String businessType,
+            String sceneCode,
+            String billId,
+            Map<String, Object> formData
+    ) {
+        String processKey = businessProcessBindingService.resolveProcessKey(businessType, sceneCode);
+        return flowableRuntimeStartService.start(new StartProcessRequest(
+                processKey,
+                billId,
+                businessType,
+                formData
+        ));
+    }
+
+    private void insertLink(String businessType, String billId, StartProcessResponse startResponse, String userId) {
+        businessProcessLinkMapper.insertLink(new BusinessProcessLinkRecord(
+                buildId("bpl"),
+                businessType,
+                billId,
+                startResponse.instanceId(),
+                startResponse.processDefinitionId(),
+                userId,
+                startResponse.status()
+        ));
+    }
+
+    private PlmLaunchResponse toLaunchResponse(String billId, String billNo, StartProcessResponse startResponse) {
+        return new PlmLaunchResponse(
+                billId,
+                billNo,
+                startResponse.instanceId(),
+                startResponse.activeTasks().isEmpty() ? null : startResponse.activeTasks().get(0),
+                startResponse.activeTasks()
+        );
+    }
+
+    private String normalizeSceneCode(String sceneCode) {
+        return sceneCode == null || sceneCode.isBlank() ? "default" : sceneCode.trim();
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private Map<String, Object> buildFormData(Object... keyValues) {
+        Map<String, Object> formData = new java.util.LinkedHashMap<>();
+        for (int index = 0; index < keyValues.length; index += 2) {
+            String key = String.valueOf(keyValues[index]);
+            Object value = keyValues[index + 1];
+            if (value != null) {
+                formData.put(key, value);
+            }
+        }
+        return formData;
+    }
+
+    private String currentUserId() {
+        return StpUtil.getLoginIdAsString();
+    }
+
+    private String buildId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private String buildBillNo(String prefix) {
+        return prefix + "-" + java.time.LocalDate.now() + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+    }
+
+    private ContractException resourceNotFound(String message, String billId) {
+        return new ContractException(
+                "BIZ.RESOURCE_NOT_FOUND",
+                HttpStatus.NOT_FOUND,
+                message,
+                Map.of("billId", billId)
+        );
+    }
+}

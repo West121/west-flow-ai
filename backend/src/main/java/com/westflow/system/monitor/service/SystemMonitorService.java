@@ -7,7 +7,7 @@ import com.westflow.common.query.GroupItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.mapper.NotificationLogMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
@@ -117,14 +117,14 @@ public class SystemMonitorService {
     private final TriggerExecutionRecordMapper triggerExecutionRecordMapper;
     private final NotificationChannelMapper notificationChannelMapper;
     private final NotificationLogMapper notificationLogMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public SystemMonitorService(
             OrchestratorScanRecordMapper orchestratorScanRecordMapper,
             TriggerExecutionRecordMapper triggerExecutionRecordMapper,
             NotificationChannelMapper notificationChannelMapper,
             NotificationLogMapper notificationLogMapper,
-            FixtureAuthService fixtureAuthService
+            IdentityAuthService fixtureAuthService
     ) {
         this.orchestratorScanRecordMapper = orchestratorScanRecordMapper;
         this.triggerExecutionRecordMapper = triggerExecutionRecordMapper;

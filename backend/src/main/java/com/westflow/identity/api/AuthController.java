@@ -6,7 +6,7 @@ import com.westflow.identity.dto.CurrentUserResponse;
 import com.westflow.identity.dto.LoginRequest;
 import com.westflow.identity.dto.LoginResponse;
 import com.westflow.identity.dto.SwitchContextRequest;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     /**
      * 登录并返回令牌信息。

@@ -7,7 +7,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.workflowadmin.api.WorkflowOperationLogDetailResponse;
@@ -35,7 +35,7 @@ public class WorkflowOperationLogService {
 
     private final WorkflowOperationLogMapper workflowOperationLogMapper;
     private final BusinessProcessLinkMapper businessProcessLinkMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
     private final ObjectMapper objectMapper;
 
     /**

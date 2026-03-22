@@ -6,7 +6,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
 import com.westflow.notification.model.NotificationChannelType;
@@ -37,7 +37,7 @@ public class SystemNotificationChannelService {
     private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "channelName", "channelType", "endpoint");
 
     private final NotificationChannelMapper notificationChannelMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     /**
      * 分页查询通知渠道。

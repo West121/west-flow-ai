@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CurrentUserAccessService {
 
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
     private final SystemDepartmentMapper systemDepartmentMapper;
 
     /**

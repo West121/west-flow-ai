@@ -5,7 +5,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.system.file.api.SaveSystemFileRequest;
 import com.westflow.system.file.api.SystemFileDetailResponse;
 import com.westflow.system.file.api.SystemFileListItemResponse;
@@ -36,7 +36,7 @@ public class SystemFileService {
     private static final String DEFAULT_BUCKET_NAME = "west-flow-ai";
 
     private final SystemFileMapper systemFileMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<SystemFileListItemResponse> page(PageRequest request) {
         ensureProcessAdmin();

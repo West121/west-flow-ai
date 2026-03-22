@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAiRouteImport } from './routes/_authenticated/ai'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -26,6 +27,8 @@ import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedPlmStartRouteImport } from './routes/_authenticated/plm/start'
+import { Route as AuthenticatedPlmQueryRouteImport } from './routes/_authenticated/plm/query'
 import { Route as AuthenticatedOaQueryRouteImport } from './routes/_authenticated/oa/query'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedWorkflowVersionsListRouteImport } from './routes/_authenticated/workflow/versions/list'
@@ -69,6 +72,12 @@ import { Route as AuthenticatedSystemCompaniesListRouteImport } from './routes/_
 import { Route as AuthenticatedSystemCompaniesCreateRouteImport } from './routes/_authenticated/system/companies/create'
 import { Route as AuthenticatedSystemAgentsListRouteImport } from './routes/_authenticated/system/agents/list'
 import { Route as AuthenticatedSystemAgentsCreateRouteImport } from './routes/_authenticated/system/agents/create'
+import { Route as AuthenticatedPlmMaterialMasterCreateRouteImport } from './routes/_authenticated/plm/material-master/create'
+import { Route as AuthenticatedPlmMaterialMasterBillIdRouteImport } from './routes/_authenticated/plm/material-master/$billId'
+import { Route as AuthenticatedPlmEcrCreateRouteImport } from './routes/_authenticated/plm/ecr/create'
+import { Route as AuthenticatedPlmEcrBillIdRouteImport } from './routes/_authenticated/plm/ecr/$billId'
+import { Route as AuthenticatedPlmEcoCreateRouteImport } from './routes/_authenticated/plm/eco/create'
+import { Route as AuthenticatedPlmEcoBillIdRouteImport } from './routes/_authenticated/plm/eco/$billId'
 import { Route as AuthenticatedOaLeaveCreateRouteImport } from './routes/_authenticated/oa/leave/create'
 import { Route as AuthenticatedOaLeaveBillIdRouteImport } from './routes/_authenticated/oa/leave/$billId'
 import { Route as AuthenticatedOaExpenseCreateRouteImport } from './routes/_authenticated/oa/expense/create'
@@ -135,6 +144,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAiRoute = AuthenticatedAiRouteImport.update({
+  id: '/ai',
+  path: '/ai',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const errors503Route = errors503RouteImport.update({
@@ -220,6 +234,16 @@ const AuthenticatedSettingsAccountRoute =
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedPlmStartRoute = AuthenticatedPlmStartRouteImport.update({
+  id: '/plm/start',
+  path: '/plm/start',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedPlmQueryRoute = AuthenticatedPlmQueryRouteImport.update({
+  id: '/plm/query',
+  path: '/plm/query',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedOaQueryRoute = AuthenticatedOaQueryRouteImport.update({
   id: '/oa/query',
   path: '/oa/query',
@@ -475,6 +499,42 @@ const AuthenticatedSystemAgentsCreateRoute =
   AuthenticatedSystemAgentsCreateRouteImport.update({
     id: '/system/agents/create',
     path: '/system/agents/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmMaterialMasterCreateRoute =
+  AuthenticatedPlmMaterialMasterCreateRouteImport.update({
+    id: '/plm/material-master/create',
+    path: '/plm/material-master/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmMaterialMasterBillIdRoute =
+  AuthenticatedPlmMaterialMasterBillIdRouteImport.update({
+    id: '/plm/material-master/$billId',
+    path: '/plm/material-master/$billId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmEcrCreateRoute =
+  AuthenticatedPlmEcrCreateRouteImport.update({
+    id: '/plm/ecr/create',
+    path: '/plm/ecr/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmEcrBillIdRoute =
+  AuthenticatedPlmEcrBillIdRouteImport.update({
+    id: '/plm/ecr/$billId',
+    path: '/plm/ecr/$billId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmEcoCreateRoute =
+  AuthenticatedPlmEcoCreateRouteImport.update({
+    id: '/plm/eco/create',
+    path: '/plm/eco/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmEcoBillIdRoute =
+  AuthenticatedPlmEcoBillIdRouteImport.update({
+    id: '/plm/eco/$billId',
+    path: '/plm/eco/$billId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedOaLeaveCreateRoute =
@@ -842,9 +902,12 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/ai': typeof AuthenticatedAiRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/oa/query': typeof AuthenticatedOaQueryRoute
+  '/plm/query': typeof AuthenticatedPlmQueryRoute
+  '/plm/start': typeof AuthenticatedPlmStartRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -859,6 +922,12 @@ export interface FileRoutesByFullPath {
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
   '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/plm/eco/$billId': typeof AuthenticatedPlmEcoBillIdRoute
+  '/plm/eco/create': typeof AuthenticatedPlmEcoCreateRoute
+  '/plm/ecr/$billId': typeof AuthenticatedPlmEcrBillIdRoute
+  '/plm/ecr/create': typeof AuthenticatedPlmEcrCreateRoute
+  '/plm/material-master/$billId': typeof AuthenticatedPlmMaterialMasterBillIdRoute
+  '/plm/material-master/create': typeof AuthenticatedPlmMaterialMasterCreateRoute
   '/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
   '/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
@@ -960,9 +1029,12 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/ai': typeof AuthenticatedAiRoute
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/oa/query': typeof AuthenticatedOaQueryRoute
+  '/plm/query': typeof AuthenticatedPlmQueryRoute
+  '/plm/start': typeof AuthenticatedPlmStartRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -977,6 +1049,12 @@ export interface FileRoutesByTo {
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
   '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/plm/eco/$billId': typeof AuthenticatedPlmEcoBillIdRoute
+  '/plm/eco/create': typeof AuthenticatedPlmEcoCreateRoute
+  '/plm/ecr/$billId': typeof AuthenticatedPlmEcrBillIdRoute
+  '/plm/ecr/create': typeof AuthenticatedPlmEcrCreateRoute
+  '/plm/material-master/$billId': typeof AuthenticatedPlmMaterialMasterBillIdRoute
+  '/plm/material-master/create': typeof AuthenticatedPlmMaterialMasterCreateRoute
   '/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
   '/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
@@ -1081,9 +1159,12 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_authenticated/ai': typeof AuthenticatedAiRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/oa/query': typeof AuthenticatedOaQueryRoute
+  '/_authenticated/plm/query': typeof AuthenticatedPlmQueryRoute
+  '/_authenticated/plm/start': typeof AuthenticatedPlmStartRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -1098,6 +1179,12 @@ export interface FileRoutesById {
   '/_authenticated/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
   '/_authenticated/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/_authenticated/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/_authenticated/plm/eco/$billId': typeof AuthenticatedPlmEcoBillIdRoute
+  '/_authenticated/plm/eco/create': typeof AuthenticatedPlmEcoCreateRoute
+  '/_authenticated/plm/ecr/$billId': typeof AuthenticatedPlmEcrBillIdRoute
+  '/_authenticated/plm/ecr/create': typeof AuthenticatedPlmEcrCreateRoute
+  '/_authenticated/plm/material-master/$billId': typeof AuthenticatedPlmMaterialMasterBillIdRoute
+  '/_authenticated/plm/material-master/create': typeof AuthenticatedPlmMaterialMasterCreateRoute
   '/_authenticated/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
   '/_authenticated/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/_authenticated/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
@@ -1202,9 +1289,12 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/ai'
     | '/'
     | '/errors/$error'
     | '/oa/query'
+    | '/plm/query'
+    | '/plm/start'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -1219,6 +1309,12 @@ export interface FileRouteTypes {
     | '/oa/expense/create'
     | '/oa/leave/$billId'
     | '/oa/leave/create'
+    | '/plm/eco/$billId'
+    | '/plm/eco/create'
+    | '/plm/ecr/$billId'
+    | '/plm/ecr/create'
+    | '/plm/material-master/$billId'
+    | '/plm/material-master/create'
     | '/system/agents/create'
     | '/system/agents/list'
     | '/system/companies/create'
@@ -1320,9 +1416,12 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/ai'
     | '/'
     | '/errors/$error'
     | '/oa/query'
+    | '/plm/query'
+    | '/plm/start'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -1337,6 +1436,12 @@ export interface FileRouteTypes {
     | '/oa/expense/create'
     | '/oa/leave/$billId'
     | '/oa/leave/create'
+    | '/plm/eco/$billId'
+    | '/plm/eco/create'
+    | '/plm/ecr/$billId'
+    | '/plm/ecr/create'
+    | '/plm/material-master/$billId'
+    | '/plm/material-master/create'
     | '/system/agents/create'
     | '/system/agents/list'
     | '/system/companies/create'
@@ -1440,9 +1545,12 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_authenticated/ai'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
     | '/_authenticated/oa/query'
+    | '/_authenticated/plm/query'
+    | '/_authenticated/plm/start'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -1457,6 +1565,12 @@ export interface FileRouteTypes {
     | '/_authenticated/oa/expense/create'
     | '/_authenticated/oa/leave/$billId'
     | '/_authenticated/oa/leave/create'
+    | '/_authenticated/plm/eco/$billId'
+    | '/_authenticated/plm/eco/create'
+    | '/_authenticated/plm/ecr/$billId'
+    | '/_authenticated/plm/ecr/create'
+    | '/_authenticated/plm/material-master/$billId'
+    | '/_authenticated/plm/material-master/create'
     | '/_authenticated/system/agents/create'
     | '/_authenticated/system/agents/list'
     | '/_authenticated/system/companies/create'
@@ -1578,6 +1692,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ai': {
+      id: '/_authenticated/ai'
+      path: '/ai'
+      fullPath: '/ai'
+      preLoaderRoute: typeof AuthenticatedAiRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/(errors)/503': {
       id: '/(errors)/503'
       path: '/503'
@@ -1682,6 +1803,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/account'
       preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
+    '/_authenticated/plm/start': {
+      id: '/_authenticated/plm/start'
+      path: '/plm/start'
+      fullPath: '/plm/start'
+      preLoaderRoute: typeof AuthenticatedPlmStartRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/query': {
+      id: '/_authenticated/plm/query'
+      path: '/plm/query'
+      fullPath: '/plm/query'
+      preLoaderRoute: typeof AuthenticatedPlmQueryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/oa/query': {
       id: '/_authenticated/oa/query'
@@ -1982,6 +2117,48 @@ declare module '@tanstack/react-router' {
       path: '/system/agents/create'
       fullPath: '/system/agents/create'
       preLoaderRoute: typeof AuthenticatedSystemAgentsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/material-master/create': {
+      id: '/_authenticated/plm/material-master/create'
+      path: '/plm/material-master/create'
+      fullPath: '/plm/material-master/create'
+      preLoaderRoute: typeof AuthenticatedPlmMaterialMasterCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/material-master/$billId': {
+      id: '/_authenticated/plm/material-master/$billId'
+      path: '/plm/material-master/$billId'
+      fullPath: '/plm/material-master/$billId'
+      preLoaderRoute: typeof AuthenticatedPlmMaterialMasterBillIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/ecr/create': {
+      id: '/_authenticated/plm/ecr/create'
+      path: '/plm/ecr/create'
+      fullPath: '/plm/ecr/create'
+      preLoaderRoute: typeof AuthenticatedPlmEcrCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/ecr/$billId': {
+      id: '/_authenticated/plm/ecr/$billId'
+      path: '/plm/ecr/$billId'
+      fullPath: '/plm/ecr/$billId'
+      preLoaderRoute: typeof AuthenticatedPlmEcrBillIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/eco/create': {
+      id: '/_authenticated/plm/eco/create'
+      path: '/plm/eco/create'
+      fullPath: '/plm/eco/create'
+      preLoaderRoute: typeof AuthenticatedPlmEcoCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/eco/$billId': {
+      id: '/_authenticated/plm/eco/$billId'
+      path: '/plm/eco/$billId'
+      fullPath: '/plm/eco/$billId'
+      preLoaderRoute: typeof AuthenticatedPlmEcoBillIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/oa/leave/create': {
@@ -2418,9 +2595,12 @@ const AuthenticatedSettingsRouteRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
+  AuthenticatedAiRoute: typeof AuthenticatedAiRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedOaQueryRoute: typeof AuthenticatedOaQueryRoute
+  AuthenticatedPlmQueryRoute: typeof AuthenticatedPlmQueryRoute
+  AuthenticatedPlmStartRoute: typeof AuthenticatedPlmStartRoute
   AuthenticatedWorkbenchStartRoute: typeof AuthenticatedWorkbenchStartRoute
   AuthenticatedWorkflowDesignerRoute: typeof AuthenticatedWorkflowDesignerRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
@@ -2430,6 +2610,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOaExpenseCreateRoute: typeof AuthenticatedOaExpenseCreateRoute
   AuthenticatedOaLeaveBillIdRoute: typeof AuthenticatedOaLeaveBillIdRoute
   AuthenticatedOaLeaveCreateRoute: typeof AuthenticatedOaLeaveCreateRoute
+  AuthenticatedPlmEcoBillIdRoute: typeof AuthenticatedPlmEcoBillIdRoute
+  AuthenticatedPlmEcoCreateRoute: typeof AuthenticatedPlmEcoCreateRoute
+  AuthenticatedPlmEcrBillIdRoute: typeof AuthenticatedPlmEcrBillIdRoute
+  AuthenticatedPlmEcrCreateRoute: typeof AuthenticatedPlmEcrCreateRoute
+  AuthenticatedPlmMaterialMasterBillIdRoute: typeof AuthenticatedPlmMaterialMasterBillIdRoute
+  AuthenticatedPlmMaterialMasterCreateRoute: typeof AuthenticatedPlmMaterialMasterCreateRoute
   AuthenticatedSystemAgentsCreateRoute: typeof AuthenticatedSystemAgentsCreateRoute
   AuthenticatedSystemAgentsListRoute: typeof AuthenticatedSystemAgentsListRoute
   AuthenticatedSystemCompaniesCreateRoute: typeof AuthenticatedSystemCompaniesCreateRoute
@@ -2527,9 +2713,12 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
+  AuthenticatedAiRoute: AuthenticatedAiRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedOaQueryRoute: AuthenticatedOaQueryRoute,
+  AuthenticatedPlmQueryRoute: AuthenticatedPlmQueryRoute,
+  AuthenticatedPlmStartRoute: AuthenticatedPlmStartRoute,
   AuthenticatedWorkbenchStartRoute: AuthenticatedWorkbenchStartRoute,
   AuthenticatedWorkflowDesignerRoute: AuthenticatedWorkflowDesignerRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
@@ -2539,6 +2728,14 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOaExpenseCreateRoute: AuthenticatedOaExpenseCreateRoute,
   AuthenticatedOaLeaveBillIdRoute: AuthenticatedOaLeaveBillIdRoute,
   AuthenticatedOaLeaveCreateRoute: AuthenticatedOaLeaveCreateRoute,
+  AuthenticatedPlmEcoBillIdRoute: AuthenticatedPlmEcoBillIdRoute,
+  AuthenticatedPlmEcoCreateRoute: AuthenticatedPlmEcoCreateRoute,
+  AuthenticatedPlmEcrBillIdRoute: AuthenticatedPlmEcrBillIdRoute,
+  AuthenticatedPlmEcrCreateRoute: AuthenticatedPlmEcrCreateRoute,
+  AuthenticatedPlmMaterialMasterBillIdRoute:
+    AuthenticatedPlmMaterialMasterBillIdRoute,
+  AuthenticatedPlmMaterialMasterCreateRoute:
+    AuthenticatedPlmMaterialMasterCreateRoute,
   AuthenticatedSystemAgentsCreateRoute: AuthenticatedSystemAgentsCreateRoute,
   AuthenticatedSystemAgentsListRoute: AuthenticatedSystemAgentsListRoute,
   AuthenticatedSystemCompaniesCreateRoute:

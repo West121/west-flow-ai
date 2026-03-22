@@ -7,7 +7,7 @@ import com.westflow.common.query.GroupItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.mapper.NotificationLogMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
@@ -55,7 +55,7 @@ public class SystemLogService {
     private final LoginLogMapper loginLogMapper;
     private final NotificationLogMapper notificationLogMapper;
     private final NotificationChannelMapper notificationChannelMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<AuditLogListItemResponse> pageAudit(PageRequest request) {
         ensureAccess();

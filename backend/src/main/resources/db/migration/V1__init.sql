@@ -26,7 +26,13 @@ CREATE TABLE IF NOT EXISTS wf_user (
     company_id VARCHAR(64) NOT NULL,
     active_department_id VARCHAR(64) NOT NULL,
     active_post_id VARCHAR(64) NOT NULL,
+    password_hash VARCHAR(255) NOT NULL DEFAULT '$2b$12$hnDyFmHcz5ztyI6c8Mf6Qup5rCPnQVe7sjR57nqM1UwzQ102bw5Ce',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    login_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    failed_login_count INTEGER NOT NULL DEFAULT 0,
+    locked_until TIMESTAMP,
+    last_login_at TIMESTAMP,
+    password_updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -80,6 +86,131 @@ CREATE TABLE IF NOT EXISTS wf_user_role (
     user_id VARCHAR(64) NOT NULL,
     role_id VARCHAR(64) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_user_ai_capability (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    capability_code VARCHAR(128) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, capability_code)
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_conversation (
+    id VARCHAR(64) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    preview VARCHAR(2000),
+    status VARCHAR(32) NOT NULL DEFAULT 'active',
+    context_tags_json TEXT NOT NULL DEFAULT '[]',
+    message_count INTEGER NOT NULL DEFAULT 0,
+    operator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_message (
+    id VARCHAR(64) PRIMARY KEY,
+    conversation_id VARCHAR(64) NOT NULL,
+    role VARCHAR(32) NOT NULL,
+    author_name VARCHAR(64) NOT NULL,
+    content TEXT NOT NULL,
+    blocks_json TEXT NOT NULL DEFAULT '[]',
+    operator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_tool_call (
+    id VARCHAR(64) PRIMARY KEY,
+    conversation_id VARCHAR(64) NOT NULL,
+    tool_key VARCHAR(128) NOT NULL,
+    tool_type VARCHAR(32) NOT NULL,
+    tool_source VARCHAR(32) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    requires_confirmation BOOLEAN NOT NULL DEFAULT FALSE,
+    arguments_json TEXT NOT NULL DEFAULT '{}',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    summary VARCHAR(2000),
+    confirmation_id VARCHAR(64),
+    operator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_confirmation (
+    id VARCHAR(64) PRIMARY KEY,
+    tool_call_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    approved BOOLEAN NOT NULL DEFAULT FALSE,
+    comment VARCHAR(2000),
+    resolved_by VARCHAR(64),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_audit (
+    id VARCHAR(64) PRIMARY KEY,
+    conversation_id VARCHAR(64),
+    tool_call_id VARCHAR(64),
+    action_type VARCHAR(64) NOT NULL,
+    summary VARCHAR(2000),
+    operator_user_id VARCHAR(64) NOT NULL,
+    occurred_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_agent_registry (
+    id VARCHAR(64) PRIMARY KEY,
+    agent_code VARCHAR(128) NOT NULL,
+    agent_name VARCHAR(255) NOT NULL,
+    capability_code VARCHAR(128) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    system_prompt TEXT NOT NULL DEFAULT '',
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (agent_code)
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_tool_registry (
+    id VARCHAR(64) PRIMARY KEY,
+    tool_code VARCHAR(128) NOT NULL,
+    tool_name VARCHAR(255) NOT NULL,
+    tool_category VARCHAR(32) NOT NULL,
+    action_mode VARCHAR(16) NOT NULL,
+    required_capability_code VARCHAR(128),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (tool_code)
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_mcp_registry (
+    id VARCHAR(64) PRIMARY KEY,
+    mcp_code VARCHAR(128) NOT NULL,
+    mcp_name VARCHAR(255) NOT NULL,
+    endpoint_url VARCHAR(512),
+    transport_type VARCHAR(32) NOT NULL DEFAULT 'INTERNAL',
+    required_capability_code VARCHAR(128),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (mcp_code)
+);
+
+CREATE TABLE IF NOT EXISTS wf_ai_skill_registry (
+    id VARCHAR(64) PRIMARY KEY,
+    skill_code VARCHAR(128) NOT NULL,
+    skill_name VARCHAR(255) NOT NULL,
+    skill_path VARCHAR(512),
+    required_capability_code VARCHAR(128),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (skill_code)
 );
 
 CREATE TABLE IF NOT EXISTS wf_role_menu (
@@ -248,6 +379,126 @@ CREATE TABLE IF NOT EXISTS wf_task_vote_snapshot (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (process_instance_id, node_id)
 );
+
+INSERT INTO wf_process_definition (
+    id, process_key, process_name, category, version, status, dsl_json, bpmn_xml,
+    publisher_user_id, deployment_id, flowable_definition_id, created_at, updated_at
+)
+SELECT
+    'oa_leave:1',
+    'oa_leave',
+    '请假审批',
+    'OA',
+    1,
+    'PUBLISHED',
+    '{"dslVersion":"1.0.0","processKey":"oa_leave","processName":"请假审批","category":"OA","processFormKey":"oa-leave-start-form","processFormVersion":"1.0.0","settings":{"allowWithdraw":true,"allowUrge":true,"allowTransfer":true},"nodes":[{"id":"start_1","type":"start","name":"开始","position":{"x":100,"y":100},"config":{"initiatorEditable":true},"ui":{"width":240,"height":88}},{"id":"approve_manager","type":"approver","name":"部门负责人审批","position":{"x":320,"y":100},"config":{"assignment":{"mode":"USER","userIds":["usr_002"],"roleCodes":[],"departmentRef":"","formFieldKey":""},"approvalPolicy":{"type":"SEQUENTIAL","voteThreshold":null},"operations":["APPROVE","REJECT","RETURN"],"commentRequired":false},"ui":{"width":240,"height":88}},{"id":"end_1","type":"end","name":"结束","position":{"x":540,"y":100},"config":{},"ui":{"width":240,"height":88}}],"edges":[{"id":"edge_1","source":"start_1","target":"approve_manager","priority":10,"label":"提交"},{"id":"edge_2","source":"approve_manager","target":"end_1","priority":10,"label":"通过"}]}',
+    '<?xml version="1.0" encoding="UTF-8"?><definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.westflow.com/bpmn"><process id="oa_leave" name="请假审批" isExecutable="true"><startEvent id="start_1" name="开始"/><userTask id="approve_manager" name="部门负责人审批" flowable:assignee="usr_002"/><endEvent id="end_1" name="结束"/><sequenceFlow id="flow_1" sourceRef="start_1" targetRef="approve_manager"/><sequenceFlow id="flow_2" sourceRef="approve_manager" targetRef="end_1"/></process></definitions>',
+    'usr_admin',
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_process_definition WHERE id = 'oa_leave:1');
+
+INSERT INTO wf_process_definition (
+    id, process_key, process_name, category, version, status, dsl_json, bpmn_xml,
+    publisher_user_id, deployment_id, flowable_definition_id, created_at, updated_at
+)
+SELECT
+    'oa_expense:1',
+    'oa_expense',
+    '报销审批',
+    'OA',
+    1,
+    'PUBLISHED',
+    '{"dslVersion":"1.0.0","processKey":"oa_expense","processName":"报销审批","category":"OA","processFormKey":"oa-expense-start-form","processFormVersion":"1.0.0","settings":{"allowWithdraw":true,"allowUrge":true,"allowTransfer":true},"nodes":[{"id":"start_1","type":"start","name":"开始","position":{"x":100,"y":100},"config":{"initiatorEditable":true},"ui":{"width":240,"height":88}},{"id":"approve_manager","type":"approver","name":"财务复核审批","position":{"x":320,"y":100},"config":{"assignment":{"mode":"USER","userIds":["usr_002"],"roleCodes":[],"departmentRef":"","formFieldKey":""},"approvalPolicy":{"type":"SEQUENTIAL","voteThreshold":null},"operations":["APPROVE","REJECT","RETURN"],"commentRequired":false},"ui":{"width":240,"height":88}},{"id":"end_1","type":"end","name":"结束","position":{"x":540,"y":100},"config":{},"ui":{"width":240,"height":88}}],"edges":[{"id":"edge_1","source":"start_1","target":"approve_manager","priority":10,"label":"提交"},{"id":"edge_2","source":"approve_manager","target":"end_1","priority":10,"label":"通过"}]}',
+    '<?xml version="1.0" encoding="UTF-8"?><definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.westflow.com/bpmn"><process id="oa_expense" name="报销审批" isExecutable="true"><startEvent id="start_1" name="开始"/><userTask id="approve_manager" name="财务复核审批" flowable:assignee="usr_002"/><endEvent id="end_1" name="结束"/><sequenceFlow id="flow_1" sourceRef="start_1" targetRef="approve_manager"/><sequenceFlow id="flow_2" sourceRef="approve_manager" targetRef="end_1"/></process></definitions>',
+    'usr_admin',
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_process_definition WHERE id = 'oa_expense:1');
+
+INSERT INTO wf_process_definition (
+    id, process_key, process_name, category, version, status, dsl_json, bpmn_xml,
+    publisher_user_id, deployment_id, flowable_definition_id, created_at, updated_at
+)
+SELECT
+    'oa_common:1',
+    'oa_common',
+    '通用申请审批',
+    'OA',
+    1,
+    'PUBLISHED',
+    '{"dslVersion":"1.0.0","processKey":"oa_common","processName":"通用申请审批","category":"OA","processFormKey":"oa-common-start-form","processFormVersion":"1.0.0","settings":{"allowWithdraw":true,"allowUrge":true,"allowTransfer":true},"nodes":[{"id":"start_1","type":"start","name":"开始","position":{"x":100,"y":100},"config":{"initiatorEditable":true},"ui":{"width":240,"height":88}},{"id":"approve_manager","type":"approver","name":"业务负责人审批","position":{"x":320,"y":100},"config":{"assignment":{"mode":"USER","userIds":["usr_002"],"roleCodes":[],"departmentRef":"","formFieldKey":""},"approvalPolicy":{"type":"SEQUENTIAL","voteThreshold":null},"operations":["APPROVE","REJECT","RETURN"],"commentRequired":false},"ui":{"width":240,"height":88}},{"id":"end_1","type":"end","name":"结束","position":{"x":540,"y":100},"config":{},"ui":{"width":240,"height":88}}],"edges":[{"id":"edge_1","source":"start_1","target":"approve_manager","priority":10,"label":"提交"},{"id":"edge_2","source":"approve_manager","target":"end_1","priority":10,"label":"通过"}]}',
+    '<?xml version="1.0" encoding="UTF-8"?><definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.westflow.com/bpmn"><process id="oa_common" name="通用申请审批" isExecutable="true"><startEvent id="start_1" name="开始"/><userTask id="approve_manager" name="业务负责人审批" flowable:assignee="usr_002"/><endEvent id="end_1" name="结束"/><sequenceFlow id="flow_1" sourceRef="start_1" targetRef="approve_manager"/><sequenceFlow id="flow_2" sourceRef="approve_manager" targetRef="end_1"/></process></definitions>',
+    'usr_admin',
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_process_definition WHERE id = 'oa_common:1');
+
+INSERT INTO wf_process_definition (
+    id, process_key, process_name, category, version, status, dsl_json, bpmn_xml,
+    publisher_user_id, deployment_id, flowable_definition_id, created_at, updated_at
+)
+SELECT
+    'plm_ecr:1',
+    'plm_ecr',
+    'ECR 变更申请',
+    'PLM',
+    1,
+    'PUBLISHED',
+    '{"dslVersion":"1.0.0","processKey":"plm_ecr","processName":"ECR 变更申请","category":"PLM","processFormKey":"plm-ecr-start-form","processFormVersion":"1.0.0","settings":{"allowWithdraw":true,"allowUrge":true,"allowTransfer":true},"nodes":[{"id":"start_1","type":"start","name":"开始","position":{"x":100,"y":100},"config":{"initiatorEditable":true},"ui":{"width":240,"height":88}},{"id":"approve_manager","type":"approver","name":"PLM 负责人审批","position":{"x":320,"y":100},"config":{"assignment":{"mode":"USER","userIds":["usr_002"],"roleCodes":[],"departmentRef":"","formFieldKey":""},"approvalPolicy":{"type":"SEQUENTIAL","voteThreshold":null},"operations":["APPROVE","REJECT","RETURN"],"commentRequired":false},"ui":{"width":240,"height":88}},{"id":"end_1","type":"end","name":"结束","position":{"x":540,"y":100},"config":{},"ui":{"width":240,"height":88}}],"edges":[{"id":"edge_1","source":"start_1","target":"approve_manager","priority":10,"label":"提交"},{"id":"edge_2","source":"approve_manager","target":"end_1","priority":10,"label":"通过"}]}',
+    '<?xml version="1.0" encoding="UTF-8"?><definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.westflow.com/bpmn"><process id="plm_ecr" name="ECR 变更申请" isExecutable="true"><startEvent id="start_1" name="开始"/><userTask id="approve_manager" name="PLM 负责人审批" flowable:assignee="usr_002"/><endEvent id="end_1" name="结束"/><sequenceFlow id="flow_1" sourceRef="start_1" targetRef="approve_manager"/><sequenceFlow id="flow_2" sourceRef="approve_manager" targetRef="end_1"/></process></definitions>',
+    'usr_admin',
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_process_definition WHERE id = 'plm_ecr:1');
+
+INSERT INTO wf_process_definition (
+    id, process_key, process_name, category, version, status, dsl_json, bpmn_xml,
+    publisher_user_id, deployment_id, flowable_definition_id, created_at, updated_at
+)
+SELECT
+    'plm_eco:1',
+    'plm_eco',
+    'ECO 变更执行',
+    'PLM',
+    1,
+    'PUBLISHED',
+    '{"dslVersion":"1.0.0","processKey":"plm_eco","processName":"ECO 变更执行","category":"PLM","processFormKey":"plm-eco-start-form","processFormVersion":"1.0.0","settings":{"allowWithdraw":true,"allowUrge":true,"allowTransfer":true},"nodes":[{"id":"start_1","type":"start","name":"开始","position":{"x":100,"y":100},"config":{"initiatorEditable":true},"ui":{"width":240,"height":88}},{"id":"approve_manager","type":"approver","name":"执行负责人审批","position":{"x":320,"y":100},"config":{"assignment":{"mode":"USER","userIds":["usr_002"],"roleCodes":[],"departmentRef":"","formFieldKey":""},"approvalPolicy":{"type":"SEQUENTIAL","voteThreshold":null},"operations":["APPROVE","REJECT","RETURN"],"commentRequired":false},"ui":{"width":240,"height":88}},{"id":"end_1","type":"end","name":"结束","position":{"x":540,"y":100},"config":{},"ui":{"width":240,"height":88}}],"edges":[{"id":"edge_1","source":"start_1","target":"approve_manager","priority":10,"label":"提交"},{"id":"edge_2","source":"approve_manager","target":"end_1","priority":10,"label":"通过"}]}',
+    '<?xml version="1.0" encoding="UTF-8"?><definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.westflow.com/bpmn"><process id="plm_eco" name="ECO 变更执行" isExecutable="true"><startEvent id="start_1" name="开始"/><userTask id="approve_manager" name="执行负责人审批" flowable:assignee="usr_002"/><endEvent id="end_1" name="结束"/><sequenceFlow id="flow_1" sourceRef="start_1" targetRef="approve_manager"/><sequenceFlow id="flow_2" sourceRef="approve_manager" targetRef="end_1"/></process></definitions>',
+    'usr_admin',
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_process_definition WHERE id = 'plm_eco:1');
+
+INSERT INTO wf_process_definition (
+    id, process_key, process_name, category, version, status, dsl_json, bpmn_xml,
+    publisher_user_id, deployment_id, flowable_definition_id, created_at, updated_at
+)
+SELECT
+    'plm_material_change:1',
+    'plm_material_change',
+    '物料主数据变更申请',
+    'PLM',
+    1,
+    'PUBLISHED',
+    '{"dslVersion":"1.0.0","processKey":"plm_material_change","processName":"物料主数据变更申请","category":"PLM","processFormKey":"plm-material-start-form","processFormVersion":"1.0.0","settings":{"allowWithdraw":true,"allowUrge":true,"allowTransfer":true},"nodes":[{"id":"start_1","type":"start","name":"开始","position":{"x":100,"y":100},"config":{"initiatorEditable":true},"ui":{"width":240,"height":88}},{"id":"approve_manager","type":"approver","name":"物料数据负责人审批","position":{"x":320,"y":100},"config":{"assignment":{"mode":"USER","userIds":["usr_002"],"roleCodes":[],"departmentRef":"","formFieldKey":""},"approvalPolicy":{"type":"SEQUENTIAL","voteThreshold":null},"operations":["APPROVE","REJECT","RETURN"],"commentRequired":false},"ui":{"width":240,"height":88}},{"id":"end_1","type":"end","name":"结束","position":{"x":540,"y":100},"config":{},"ui":{"width":240,"height":88}}],"edges":[{"id":"edge_1","source":"start_1","target":"approve_manager","priority":10,"label":"提交"},{"id":"edge_2","source":"approve_manager","target":"end_1","priority":10,"label":"通过"}]}',
+    '<?xml version="1.0" encoding="UTF-8"?><definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.westflow.com/bpmn"><process id="plm_material_change" name="物料主数据变更申请" isExecutable="true"><startEvent id="start_1" name="开始"/><userTask id="approve_manager" name="物料数据负责人审批" flowable:assignee="usr_002"/><endEvent id="end_1" name="结束"/><sequenceFlow id="flow_1" sourceRef="start_1" targetRef="approve_manager"/><sequenceFlow id="flow_2" sourceRef="approve_manager" targetRef="end_1"/></process></definitions>',
+    'usr_admin',
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_process_definition WHERE id = 'plm_material_change:1');
 
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS publisher_user_id VARCHAR(64);
 ALTER TABLE wf_process_definition ADD COLUMN IF NOT EXISTS deployment_id VARCHAR(64);
@@ -1167,7 +1418,13 @@ INSERT INTO wf_user (
     company_id,
     active_department_id,
     active_post_id,
+    password_hash,
     enabled,
+    login_enabled,
+    failed_login_count,
+    locked_until,
+    last_login_at,
+    password_updated_at,
     created_at,
     updated_at
 )
@@ -1181,7 +1438,13 @@ SELECT
     'cmp_001',
     'dept_001',
     'post_001',
+    '$2b$12$hnDyFmHcz5ztyI6c8Mf6Qup5rCPnQVe7sjR57nqM1UwzQ102bw5Ce',
     TRUE,
+    TRUE,
+    0,
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user WHERE id = 'usr_001');
@@ -1196,7 +1459,13 @@ INSERT INTO wf_user (
     company_id,
     active_department_id,
     active_post_id,
+    password_hash,
     enabled,
+    login_enabled,
+    failed_login_count,
+    locked_until,
+    last_login_at,
+    password_updated_at,
     created_at,
     updated_at
 )
@@ -1210,7 +1479,13 @@ SELECT
     'cmp_001',
     'dept_002',
     'post_002',
+    '$2b$12$hnDyFmHcz5ztyI6c8Mf6Qup5rCPnQVe7sjR57nqM1UwzQ102bw5Ce',
     TRUE,
+    TRUE,
+    0,
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user WHERE id = 'usr_002');
@@ -1225,7 +1500,13 @@ INSERT INTO wf_user (
     company_id,
     active_department_id,
     active_post_id,
+    password_hash,
     enabled,
+    login_enabled,
+    failed_login_count,
+    locked_until,
+    last_login_at,
+    password_updated_at,
     created_at,
     updated_at
 )
@@ -1239,7 +1520,13 @@ SELECT
     'cmp_001',
     'dept_003',
     'post_003',
-    FALSE,
+    '$2b$12$hnDyFmHcz5ztyI6c8Mf6Qup5rCPnQVe7sjR57nqM1UwzQ102bw5Ce',
+    TRUE,
+    TRUE,
+    0,
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user WHERE id = 'usr_003');
@@ -1254,7 +1541,13 @@ INSERT INTO wf_user (
     company_id,
     active_department_id,
     active_post_id,
+    password_hash,
     enabled,
+    login_enabled,
+    failed_login_count,
+    locked_until,
+    last_login_at,
+    password_updated_at,
     created_at,
     updated_at
 )
@@ -1268,7 +1561,13 @@ SELECT
     'cmp_001',
     'dept_001',
     'post_001',
+    '$2b$12$UPsbruT4hka4D0Ce3keZC.BbXxsBD0TcWTRTVznkf.WVNwg9CAWou',
     TRUE,
+    TRUE,
+    0,
+    NULL,
+    NULL,
+    CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user WHERE id = 'usr_admin');
@@ -1289,6 +1588,10 @@ INSERT INTO wf_user_post (id, user_id, post_id, is_primary, created_at)
 SELECT 'up_004', 'usr_admin', 'post_001', TRUE, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_004');
 
+INSERT INTO wf_user_post (id, user_id, post_id, is_primary, created_at)
+SELECT 'up_005', 'usr_001', 'post_002', FALSE, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_post WHERE id = 'up_005');
+
 INSERT INTO wf_user_role (id, user_id, role_id, created_at)
 SELECT 'ur_001', 'usr_001', 'role_oa_user', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_001');
@@ -1308,6 +1611,110 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_004');
 INSERT INTO wf_user_role (id, user_id, role_id, created_at)
 SELECT 'ur_005', 'usr_admin', 'role_system_admin', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_005');
+
+INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+SELECT 'ur_006', 'usr_admin', 'role_process_admin', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_006');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_001', 'usr_001', 'ai:copilot:open', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_001');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_002', 'usr_001', 'ai:process:start', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_002');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_003', 'usr_001', 'ai:task:handle', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_003');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_009', 'usr_001', 'ai:stats:query', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_009');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_004', 'usr_002', 'ai:copilot:open', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_004');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_005', 'usr_003', 'ai:copilot:open', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_005');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_006', 'usr_admin', 'ai:copilot:open', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_006');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_007', 'usr_admin', 'ai:process:start', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_007');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_008', 'usr_admin', 'ai:task:handle', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_008');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_010', 'usr_admin', 'ai:stats:query', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_010');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_011', 'usr_admin', 'ai:workflow:design', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_011');
+
+INSERT INTO wf_user_ai_capability (id, user_id, capability_code, created_at)
+SELECT 'uac_012', 'usr_admin', 'ai:plm:assist', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_user_ai_capability WHERE id = 'uac_012');
+
+INSERT INTO wf_ai_agent_registry (id, agent_code, agent_name, capability_code, enabled, system_prompt, metadata_json, created_at, updated_at)
+SELECT 'ai_agent_001', 'workflow-design-agent', '流程设计智能体', 'ai:workflow:design', TRUE, '负责根据业务意图生成流程定义、节点建议和发布前检查。', '{"businessDomains":["OA","PLM"]}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_agent_registry WHERE id = 'ai_agent_001');
+
+INSERT INTO wf_ai_agent_registry (id, agent_code, agent_name, capability_code, enabled, system_prompt, metadata_json, created_at, updated_at)
+SELECT 'ai_agent_002', 'smart-form-agent', '智能填报智能体', 'ai:process:start', TRUE, '负责根据用户输入、语音转写和 OCR 结果生成表单草稿。', '{"supports":["text","voice","ocr"]}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_agent_registry WHERE id = 'ai_agent_002');
+
+INSERT INTO wf_ai_agent_registry (id, agent_code, agent_name, capability_code, enabled, system_prompt, metadata_json, created_at, updated_at)
+SELECT 'ai_agent_003', 'task-handle-agent', '待办处理智能体', 'ai:task:handle', TRUE, '负责解释待办、生成处理建议并触发受控操作卡。', '{"actionPolicy":"READ_DIRECT_WRITE_CONFIRM"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_agent_registry WHERE id = 'ai_agent_003');
+
+INSERT INTO wf_ai_agent_registry (id, agent_code, agent_name, capability_code, enabled, system_prompt, metadata_json, created_at, updated_at)
+SELECT 'ai_agent_004', 'stats-agent', '统计问答智能体', 'ai:stats:query', TRUE, '负责查询流程中心、OA、PLM 的统计与图表摘要。', '{"widgets":["stats","chart"]}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_agent_registry WHERE id = 'ai_agent_004');
+
+INSERT INTO wf_ai_agent_registry (id, agent_code, agent_name, capability_code, enabled, system_prompt, metadata_json, created_at, updated_at)
+SELECT 'ai_agent_005', 'plm-assistant-agent', 'PLM 助手', 'ai:plm:assist', TRUE, '负责解释 PLM 变更流程、推荐流程模板并辅助定位历史变更单。', '{"businessDomains":["PLM"]}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_agent_registry WHERE id = 'ai_agent_005');
+
+INSERT INTO wf_ai_tool_registry (id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_tool_001', 'workflow.definition.list', '查询流程定义', 'PLATFORM', 'READ', 'ai:copilot:open', TRUE, '{"resource":"process-definition"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_tool_registry WHERE id = 'ai_tool_001');
+
+INSERT INTO wf_ai_tool_registry (id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_tool_002', 'process.start', '发起流程', 'PLATFORM', 'WRITE', 'ai:process:start', TRUE, '{"resource":"process-instance"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_tool_registry WHERE id = 'ai_tool_002');
+
+INSERT INTO wf_ai_tool_registry (id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_tool_003', 'task.query', '查询待办', 'PLATFORM', 'READ', 'ai:copilot:open', TRUE, '{"resource":"task"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_tool_registry WHERE id = 'ai_tool_003');
+
+INSERT INTO wf_ai_tool_registry (id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_tool_004', 'task.handle', '处理待办', 'PLATFORM', 'WRITE', 'ai:task:handle', TRUE, '{"resource":"task-action","confirmRequired":true}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_tool_registry WHERE id = 'ai_tool_004');
+
+INSERT INTO wf_ai_tool_registry (id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_tool_005', 'stats.query', '查询统计', 'PLATFORM', 'READ', 'ai:stats:query', TRUE, '{"resource":"stats"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_tool_registry WHERE id = 'ai_tool_005');
+
+INSERT INTO wf_ai_tool_registry (id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_tool_006', 'plm.bill.query', '查询 PLM 单据', 'PLATFORM', 'READ', 'ai:plm:assist', TRUE, '{"resource":"plm-bill"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_tool_registry WHERE id = 'ai_tool_006');
+
+INSERT INTO wf_ai_mcp_registry (id, mcp_code, mcp_name, endpoint_url, transport_type, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_mcp_001', 'westflow-internal-mcp', '平台内置 MCP 桥', NULL, 'INTERNAL', 'ai:copilot:open', TRUE, '{"description":"统一桥接平台内外部 MCP 工具"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_mcp_registry WHERE id = 'ai_mcp_001');
+
+INSERT INTO wf_ai_skill_registry (id, skill_code, skill_name, skill_path, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT 'ai_skill_001', 'workflow-design-skill', '流程设计技能', '/Users/west/.agents/skills/using-superpowers/SKILL.md', 'ai:workflow:design', TRUE, '{"type":"local-skill"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_skill_registry WHERE id = 'ai_skill_001');
 
 INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
 SELECT
@@ -1451,6 +1858,51 @@ CREATE TABLE IF NOT EXISTS oa_common_request_bill (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS plm_ecr_change (
+    id VARCHAR(64) PRIMARY KEY,
+    bill_no VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    change_title VARCHAR(256) NOT NULL,
+    change_reason VARCHAR(2000) NOT NULL,
+    affected_product_code VARCHAR(128) NOT NULL,
+    priority_level VARCHAR(32) NOT NULL,
+    process_instance_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL,
+    creator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS plm_eco_execution (
+    id VARCHAR(64) PRIMARY KEY,
+    bill_no VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    execution_title VARCHAR(256) NOT NULL,
+    execution_plan VARCHAR(2000) NOT NULL,
+    effective_date DATE,
+    change_reason VARCHAR(2000) NOT NULL,
+    process_instance_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL,
+    creator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS plm_material_change (
+    id VARCHAR(64) PRIMARY KEY,
+    bill_no VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    material_code VARCHAR(128) NOT NULL,
+    material_name VARCHAR(256) NOT NULL,
+    change_reason VARCHAR(2000) NOT NULL,
+    change_type VARCHAR(64) NOT NULL,
+    process_instance_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL,
+    creator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 INSERT INTO wf_business_process_binding (
     id,
     business_type,
@@ -1519,6 +1971,75 @@ SELECT
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_common_default');
+
+INSERT INTO wf_business_process_binding (
+    id,
+    business_type,
+    scene_code,
+    process_key,
+    process_definition_id,
+    enabled,
+    priority,
+    created_at,
+    updated_at
+)
+SELECT
+    'bind_seed_plm_ecr_default',
+    'PLM_ECR',
+    'default',
+    'plm_ecr',
+    NULL,
+    TRUE,
+    10,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_plm_ecr_default');
+
+INSERT INTO wf_business_process_binding (
+    id,
+    business_type,
+    scene_code,
+    process_key,
+    process_definition_id,
+    enabled,
+    priority,
+    created_at,
+    updated_at
+)
+SELECT
+    'bind_seed_plm_eco_default',
+    'PLM_ECO',
+    'default',
+    'plm_eco',
+    NULL,
+    TRUE,
+    10,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_plm_eco_default');
+
+INSERT INTO wf_business_process_binding (
+    id,
+    business_type,
+    scene_code,
+    process_key,
+    process_definition_id,
+    enabled,
+    priority,
+    created_at,
+    updated_at
+)
+SELECT
+    'bind_seed_plm_material_default',
+    'PLM_MATERIAL',
+    'default',
+    'plm_material_change',
+    NULL,
+    TRUE,
+    10,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_plm_material_default');
 
 CREATE TABLE IF NOT EXISTS wf_notification_channel (
     id VARCHAR(64) PRIMARY KEY,

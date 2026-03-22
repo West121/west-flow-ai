@@ -5,7 +5,7 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.flowable.FlowableEngineFacade;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
@@ -44,7 +44,7 @@ public class WorkflowManagementService {
     private final ProcessDefinitionMapper processDefinitionMapper;
     private final BusinessProcessLinkMapper businessProcessLinkMapper;
     private final WorkflowOperationLogService workflowOperationLogService;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
     private final FlowableEngineFacade flowableEngineFacade;
 
     public PageResponse<WorkflowVersionListItemResponse> pageVersions(PageRequest request) {

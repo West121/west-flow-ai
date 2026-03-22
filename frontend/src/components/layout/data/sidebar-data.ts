@@ -8,6 +8,7 @@ import {
   FileText,
   FolderKanban,
   Gauge,
+  Package2,
   ListTodo,
   Mail,
   Network,
@@ -58,6 +59,36 @@ export const sidebarData: SidebarData = {
         {
           title: 'OA 流程查询',
           url: '/oa/query',
+          icon: Search,
+        },
+      ],
+    },
+    {
+      title: 'PLM',
+      items: [
+        {
+          title: 'PLM 发起中心',
+          url: '/plm/start',
+          icon: Package2,
+        },
+        {
+          title: 'ECR 变更申请',
+          url: '/plm/ecr/create',
+          icon: FileText,
+        },
+        {
+          title: 'ECO 变更执行',
+          url: '/plm/eco/create',
+          icon: ScrollText,
+        },
+        {
+          title: '物料主数据变更申请',
+          url: '/plm/material-master/create',
+          icon: NotebookText,
+        },
+        {
+          title: 'PLM 流程查询',
+          url: '/plm/query',
           icon: Search,
         },
       ],

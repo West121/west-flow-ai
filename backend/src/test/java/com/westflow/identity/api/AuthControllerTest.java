@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,6 +26,9 @@ class AuthControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void shouldExposeLoginCurrentUserAndContextSwitchContracts() throws Exception {
@@ -124,5 +128,29 @@ class AuthControllerTest {
         mockMvc.perform(get("/api/v1/auth/permission-probe")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldRejectDisabledUserFromDatabase() throws Exception {
+        jdbcTemplate.update("UPDATE wf_user SET enabled = FALSE WHERE id = ?", "usr_003");
+        try {
+            String response = mockMvc.perform(post("/api/v1/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "username": "wangwu",
+                                      "password": "password123"
+                                    }
+                                    """))
+                    .andExpect(status().isForbidden())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString();
+
+            JsonNode body = objectMapper.readTree(response);
+            assertThat(body.path("code").asText()).isEqualTo("AUTH.USER_DISABLED");
+        } finally {
+            jdbcTemplate.update("UPDATE wf_user SET enabled = TRUE WHERE id = ?", "usr_003");
+        }
     }
 }

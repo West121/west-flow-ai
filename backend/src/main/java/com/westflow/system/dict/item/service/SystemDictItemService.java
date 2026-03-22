@@ -6,7 +6,7 @@ import com.westflow.common.query.GroupItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.system.dict.item.api.SaveSystemDictItemRequest;
 import com.westflow.system.dict.item.api.SystemDictItemDetailResponse;
 import com.westflow.system.dict.item.api.SystemDictItemFormOptionsResponse;
@@ -41,7 +41,7 @@ public class SystemDictItemService {
 
     private final SystemDictItemMapper systemDictItemMapper;
     private final SystemDictTypeMapper systemDictTypeMapper;
-    private final FixtureAuthService fixtureAuthService;
+    private final IdentityAuthService fixtureAuthService;
 
     public PageResponse<SystemDictItemListItemResponse> page(PageRequest request) {
         ensureSystemAccess();

@@ -1,7 +1,7 @@
 package com.westflow.identity.security;
 
 import cn.dev33.satoken.stp.StpInterface;
-import com.westflow.identity.service.FixtureAuthService;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.system.audit.AuditLogInterceptor;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
@@ -25,7 +25,7 @@ public class SaTokenConfiguration implements WebMvcConfigurer {
      * 提供 Sa-Token 权限角色查询实现。
      */
     @Bean
-    public StpInterface stpInterface(FixtureAuthService fixtureAuthService) {
+    public StpInterface stpInterface(IdentityAuthService fixtureAuthService) {
         return new StpInterface() {
             @Override
             public List<String> getPermissionList(Object loginId, String loginType) {
