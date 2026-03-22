@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/card'
 import { AnalyticsChart } from './analytics-chart'
 
+// 统计概览区，展示流量趋势和核心指标卡片。
 export function Analytics() {
   return (
     <div className='space-y-4'>
@@ -151,6 +152,7 @@ export function Analytics() {
   )
 }
 
+// 简单条形列表，用于展示来源或设备占比。
 function SimpleBarList({
   items,
   valueFormatter,

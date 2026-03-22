@@ -10,6 +10,7 @@ import {
 import { AuthLayout } from '../auth-layout'
 import { OtpForm } from './components/otp-form'
 
+// 二次验证页入口，提示用户输入一次性验证码。
 export function Otp() {
   return (
     <AuthLayout>

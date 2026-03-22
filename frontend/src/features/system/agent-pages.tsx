@@ -103,6 +103,7 @@ type AgentFormValues = z.infer<typeof agentFormSchema>
 type HandoverFormValues = z.infer<typeof handoverFormSchema>
 type SubmitAction = 'list' | 'continue'
 
+// 代理关系管理页统一用这个方法格式化时间。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -123,14 +124,17 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 代理关系状态只展示启用/停用。
 function resolveAgentStatusLabel(status: SystemAgentStatus) {
   return status === 'ACTIVE' ? '启用' : '停用'
 }
 
+// 状态 badge 使用统一的视觉语义。
 function resolveAgentStatusVariant(status: SystemAgentStatus) {
   return status === 'ACTIVE' ? 'secondary' : 'outline'
 }
 
+// 用户选择项在列表里展开成姓名、账号和部门岗位。
 function resolveUserLabel(user?: SystemAgentUserOption | null) {
   if (!user) {
     return '--'
@@ -142,6 +146,7 @@ function resolveUserLabel(user?: SystemAgentUserOption | null) {
     : `${user.displayName} / @${user.username}`
 }
 
+// 编辑页回填时把详情转换成表单默认值。
 function toAgentFormValues(detail?: SystemAgentDetail): AgentFormValues {
   return {
     sourceUserId: detail?.sourceUserId ?? '',
@@ -151,6 +156,7 @@ function toAgentFormValues(detail?: SystemAgentDetail): AgentFormValues {
   }
 }
 
+// 请求失败时用空分页兜底，避免列表结构抖动。
 function buildEmptyAgentPage(search: ListQuerySearch) {
   return {
     page: search.page,
@@ -162,11 +168,13 @@ function buildEmptyAgentPage(search: ListQuerySearch) {
   }
 }
 
+// 从 URL 筛选条件里读取当前状态值。
 function getAgentStatusFilterValue(search: ListQuerySearch) {
   const filter = (search.filters ?? []).find((item) => item.field === 'status')
   return typeof filter?.value === 'string' ? filter.value : undefined
 }
 
+// 通过 URL 切换状态筛选，便于分享和返回定位。
 function updateAgentStatusFilter(
   search: ListQuerySearch,
   navigate: NavigateFn,
@@ -194,6 +202,7 @@ function updateAgentStatusFilter(
   })
 }
 
+// 把代理关系表单的字段错误映射回对应输入框。
 function applyAgentFieldErrors(
   form: UseFormReturn<AgentFormValues>,
   error: unknown
@@ -217,6 +226,7 @@ function applyAgentFieldErrors(
   return apiError
 }
 
+// 离职转办表单的字段错误也统一回写到控件上。
 function applyHandoverFieldErrors(
   form: UseFormReturn<HandoverFormValues>,
   error: unknown
@@ -239,6 +249,7 @@ function applyHandoverFieldErrors(
   return apiError
 }
 
+// 页面加载失败时统一给出错误态和返回入口。
 function AgentPageErrorState({
   title,
   description,

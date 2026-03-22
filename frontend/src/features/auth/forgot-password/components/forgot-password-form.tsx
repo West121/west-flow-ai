@@ -23,6 +23,7 @@ const formSchema = z.object({
   }),
 })
 
+// 找回密码表单只负责收集邮箱并提交重置申请。
 export function ForgotPasswordForm({
   className,
   ...props

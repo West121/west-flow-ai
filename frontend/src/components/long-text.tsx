@@ -18,6 +18,7 @@ type LongTextProps = {
   contentClassName?: string
 }
 
+// 长文本展示组件，自动判断是否溢出并决定用提示层还是直接显示。
 export function LongText({
   children,
   className = '',

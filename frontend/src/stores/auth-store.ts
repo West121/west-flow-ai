@@ -7,6 +7,7 @@ import { getCookie, removeCookie, setCookie } from '@/lib/cookies'
 
 export { AUTH_ACCESS_TOKEN_COOKIE }
 
+// 统一管理登录令牌和当前用户信息，并同步到 Cookie。
 type AuthState = {
   accessToken: string
   currentUser: CurrentUser | null

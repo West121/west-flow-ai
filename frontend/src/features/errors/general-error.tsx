@@ -6,6 +6,7 @@ type GeneralErrorProps = React.HTMLAttributes<HTMLDivElement> & {
   minimal?: boolean
 }
 
+// 通用 500 错误页，支持完整模式和精简模式。
 export function GeneralError({
   className,
   minimal = false,

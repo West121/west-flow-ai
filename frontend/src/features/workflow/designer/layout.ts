@@ -5,14 +5,17 @@ import { type WorkflowNode, type WorkflowSnapshot } from './types'
 const NODE_WIDTH = 220
 const NODE_HEIGHT = 96
 
+// 布局前先补齐节点宽度。
 function resolveNodeWidth(node: WorkflowNode) {
   return node.width ?? NODE_WIDTH
 }
 
+// 布局前先补齐节点高度。
 function resolveNodeHeight(node: WorkflowNode) {
   return node.height ?? NODE_HEIGHT
 }
 
+// 自动布局只重新计算节点坐标，不改节点配置。
 export function autoLayoutWorkflow(
   snapshot: WorkflowSnapshot
 ): WorkflowSnapshot {

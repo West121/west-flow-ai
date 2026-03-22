@@ -39,6 +39,7 @@ type TaskImportDialogProps = {
   onOpenChange: (open: boolean) => void
 }
 
+// 任务导入弹窗，演示 CSV 文件上传入口。
 export function TasksImportDialog({
   open,
   onOpenChange,
@@ -50,6 +51,7 @@ export function TasksImportDialog({
 
   const fileRef = form.register('file')
 
+  // 提交后只展示文件信息，不改业务数据。
   const onSubmit = () => {
     const file = form.getValues('file')
 

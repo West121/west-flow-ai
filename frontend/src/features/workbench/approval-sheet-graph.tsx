@@ -46,6 +46,7 @@ type PlaybackEvent = {
 }
 
 // 回顾优先使用实例事件；如果后端没有给足事件，再回退到任务轨迹。
+// 先从实例事件构造播放序列，不够时再回退到任务轨迹。
 function buildPlaybackEvents(
   instanceEvents: WorkbenchProcessInstanceEvent[],
   taskTrace: WorkbenchTaskTraceItem[]
@@ -73,6 +74,7 @@ function buildPlaybackEvents(
   }))
 }
 
+// 节点基础样式按类型区分，方便回顾时快速识别。
 function baseNodeStyle(nodeType: string) {
   if (nodeType === 'start') {
     return {
@@ -101,6 +103,7 @@ function baseNodeStyle(nodeType: string) {
   }
 }
 
+// 流程图回顾组件负责高亮当前节点和已走过的路径。
 function ApprovalSheetGraphInner({
   flowNodes,
   flowEdges,

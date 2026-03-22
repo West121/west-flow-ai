@@ -1,6 +1,7 @@
 import { type SVGProps } from 'react'
 import { cn } from '@/lib/utils'
 
+// 品牌图标：GitHub。
 export function IconGithub({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

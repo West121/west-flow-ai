@@ -47,7 +47,7 @@ const profileFormSchema = z.object({
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>
 
-// This can come from your database or API.
+// 默认值通常来自数据库或接口。
 const defaultValues: Partial<ProfileFormValues> = {
   bio: 'I own a computer.',
   urls: [
@@ -139,6 +139,7 @@ export function ProfileForm() {
           )}
         />
         <div>
+          {/* 动态 URL 列表。 */}
           {fields.map((field, index) => (
             <FormField
               control={form.control}

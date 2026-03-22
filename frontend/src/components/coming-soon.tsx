@@ -1,5 +1,6 @@
 import { Telescope } from 'lucide-react'
 
+// 统一的占位页，用于尚未接入正式功能的入口。
 export function ComingSoon() {
   return (
     <div className='h-svh'>

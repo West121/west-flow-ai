@@ -2,6 +2,7 @@ import { MailPlus, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useUsers } from './users-provider'
 
+// 用户页主操作按钮，打开邀请和新增弹窗。
 export function UsersPrimaryButtons() {
   const { setOpen } = useUsers()
   return (

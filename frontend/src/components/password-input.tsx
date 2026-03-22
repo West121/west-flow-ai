@@ -10,6 +10,7 @@ type PasswordInputProps = Omit<
   ref?: React.Ref<HTMLInputElement>
 }
 
+// 密码输入框，支持一键切换明文和密文显示。
 export function PasswordInput({
   className,
   disabled,

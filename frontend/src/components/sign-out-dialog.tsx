@@ -7,6 +7,7 @@ interface SignOutDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+// 退出登录前二次确认，并保留当前地址用于登录后回跳。
 export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
   const navigate = useNavigate()
   const location = useLocation()

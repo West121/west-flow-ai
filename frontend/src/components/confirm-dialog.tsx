@@ -45,6 +45,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
         <AlertDialogHeader className='text-start'>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
+            {/* 允许直接传入文本或复杂节点，复用统一的说明区域样式。 */}
             <div>{desc}</div>
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -53,6 +54,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
           <AlertDialogCancel disabled={isLoading}>
             {cancelBtnText ?? '取消'}
           </AlertDialogCancel>
+          {/* 危险操作使用强调样式，降低误触风险。 */}
           <Button
             variant={destructive ? 'destructive' : 'default'}
             onClick={handleConfirm}

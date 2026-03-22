@@ -13,6 +13,7 @@ type LearnMoreProps = React.ComponentProps<typeof Root> & {
   triggerProps?: React.ComponentProps<typeof Trigger>
 }
 
+// 轻量说明弹层，用于补充字段或页面的额外解释。
 export function LearnMore({
   children,
   contentProps,

@@ -22,6 +22,7 @@ export function CommandMenu() {
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {
+      // 先收起命令面板，再执行具体动作，避免焦点和遮罩残留。
       setOpen(false)
       command()
     },
@@ -61,6 +62,7 @@ export function CommandMenu() {
                       runCommand(() => navigate({ to: subItem.url }))
                     }}
                   >
+                    {/* 有子项时展开为二级命令项，保证搜索命中完整路径。 */}
                     <div className='flex size-4 items-center justify-center'>
                       <ArrowRight className='size-2 text-muted-foreground/80' />
                     </div>
@@ -71,6 +73,7 @@ export function CommandMenu() {
             </CommandGroup>
           ))}
           <CommandSeparator />
+          {/* 主题切换也作为命令入口统一放在这里处理。 */}
           <CommandGroup heading='主题'>
             <CommandItem onSelect={() => runCommand(() => setTheme('light'))}>
               <Sun /> <span>浅色</span>

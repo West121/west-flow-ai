@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SignOutDialog } from '@/components/sign-out-dialog'
 
+// 头像下拉菜单，集中放个人入口和退出登录操作。
 export function ProfileDropdown() {
   const [open, setOpen] = useDialogState()
 

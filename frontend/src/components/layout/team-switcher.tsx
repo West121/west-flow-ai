@@ -24,6 +24,7 @@ type TeamSwitcherProps = {
   }[]
 }
 
+// 工作空间切换器，提供当前团队和新增工作空间入口。
 export function TeamSwitcher({ teams }: TeamSwitcherProps) {
   const { isMobile } = useSidebar()
   const [activeTeam, setActiveTeam] = React.useState(teams[0])

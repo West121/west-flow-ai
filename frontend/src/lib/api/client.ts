@@ -25,6 +25,7 @@ export type ApiErrorResponse = {
   fieldErrors?: ApiFieldError[]
 }
 
+// 统一封装前端 API 客户端，负责基础地址、鉴权头和错误归一化。
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1'
 
 export const apiClient = axios.create({
@@ -34,6 +35,7 @@ export const apiClient = axios.create({
   },
 })
 
+// 请求前自动补上当前登录态的访问令牌。
 apiClient.interceptors.request.use((config) => {
   const accessToken = getCookie(AUTH_ACCESS_TOKEN_COOKIE)
 
@@ -48,6 +50,7 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// 判断后端返回体是否符合统一错误结构，便于后续提取提示文案。
 export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   if (!value || typeof value !== 'object') {
     return false
@@ -62,6 +65,7 @@ export function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   )
 }
 
+// 从任意异常中提取接口错误详情，供页面直接展示。
 export function getApiErrorResponse(
   error: unknown
 ): ApiErrorResponse | undefined {
@@ -72,6 +76,7 @@ export function getApiErrorResponse(
   return undefined
 }
 
+// 统一把异常转换成可展示的中文提示，保留接口返回的优先级。
 export function getApiErrorMessage(
   error: unknown,
   fallback = '操作失败，请稍后重试。'
@@ -93,6 +98,7 @@ export function getApiErrorMessage(
   return fallback
 }
 
+// 把统一响应包裹层拆开，只返回真正的数据体。
 export function unwrapResponse<T>(
   response: AxiosResponse<ApiSuccessResponse<T>>
 ): T {

@@ -32,6 +32,7 @@ type RuntimeFormSelectorProps = {
   onChange: (selection: FormSelectionValue | null) => void
 }
 
+// 先按当前值匹配注册项，避免下拉框状态漂移。
 function findSelectedRegistration(
   registrations: RuntimeFormRegistration[],
   value: FormSelectionValue | null
@@ -49,6 +50,7 @@ function findSelectedRegistration(
   )
 }
 
+// 表单选择器把 key/version 的选择状态集中在一起。
 function RuntimeFormSelector({
   label,
   description,
@@ -185,6 +187,7 @@ export type NodeFormSelection = {
   nodeFormVersion: string
 }
 
+// 流程默认表单选择器只处理流程级表单注册。
 export function ProcessFormSelector({
   label,
   description,
@@ -227,6 +230,7 @@ export function ProcessFormSelector({
   )
 }
 
+// 节点表单选择器只处理节点级表单注册。
 export function NodeFormSelector({
   label,
   description,

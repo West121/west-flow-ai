@@ -1,6 +1,7 @@
 import { type SVGProps } from 'react'
 import { cn } from '@/lib/utils'
 
+// 品牌图标：Gmail。
 export function IconGmail({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

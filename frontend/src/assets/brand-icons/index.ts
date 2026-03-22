@@ -1,3 +1,4 @@
+// 品牌图标导出聚合入口。
 export { IconDiscord } from './icon-discord'
 export { IconDocker } from './icon-docker'
 export { IconFacebook } from './icon-facebook'

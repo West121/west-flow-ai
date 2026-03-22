@@ -89,6 +89,7 @@ export function DisplayForm() {
                         className='flex flex-row items-start'
                       >
                         <FormControl>
+                          {/* 通过勾选项控制侧边栏展示内容。 */}
                           <Checkbox
                             checked={field.value?.includes(item.id)}
                             onCheckedChange={(checked) => {

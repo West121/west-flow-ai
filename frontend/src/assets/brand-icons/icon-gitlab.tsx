@@ -1,6 +1,7 @@
 import { type SVGProps } from 'react'
 import { cn } from '@/lib/utils'
 
+// 品牌图标：GitLab。
 export function IconGitlab({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

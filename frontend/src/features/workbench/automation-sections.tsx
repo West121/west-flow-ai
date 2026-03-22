@@ -9,6 +9,7 @@ import {
   type WorkbenchNotificationSendRecord,
 } from '@/lib/api/workbench'
 
+// 自动动作轨迹状态只展示简短中文标签。
 function resolveTraceStatusLabel(status: string) {
   switch (status) {
     case 'SUCCESS':
@@ -24,6 +25,7 @@ function resolveTraceStatusLabel(status: string) {
   }
 }
 
+// 自动动作轨迹的 badge 颜色保持统一。
 function resolveTraceStatusVariant(status: string) {
   switch (status) {
     case 'SUCCESS':
@@ -37,6 +39,7 @@ function resolveTraceStatusVariant(status: string) {
   }
 }
 
+// 通知发送记录状态统一转成中文文案。
 function resolveRecordStatusLabel(status: string) {
   switch (status) {
     case 'SUCCESS':
@@ -52,6 +55,7 @@ function resolveRecordStatusLabel(status: string) {
   }
 }
 
+// 通知发送记录状态也复用同一套 badge 语义。
 function resolveRecordStatusVariant(status: string) {
   switch (status) {
     case 'SUCCESS':
@@ -66,6 +70,7 @@ function resolveRecordStatusVariant(status: string) {
   }
 }
 
+// 轨迹标题把名称和类型拼在一起，方便快速识别。
 function resolveAutomationTraceLabel(item: WorkbenchAutomationActionTraceItem) {
   return `${item.traceName} · ${item.traceType}`
 }

@@ -38,6 +38,7 @@ const data = [
   },
 ]
 
+// 周度趋势图，叠加展示点击量和独立访客数。
 export function AnalyticsChart() {
   return (
     <ResponsiveContainer width='100%' height={300}>

@@ -84,6 +84,7 @@ const menuFormSchema = z.object({
 type MenuFormValues = z.infer<typeof menuFormSchema>
 type SubmitAction = 'list' | 'continue'
 
+// 菜单管理页统一用这个方法格式化时间展示。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -105,10 +106,12 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 菜单状态只保留最直观的启用/停用文案。
 function resolveStatusLabel(status: string) {
   return status === 'ENABLED' ? '启用' : '停用'
 }
 
+// 菜单类型标签用于列表和表单的同一套文案。
 function resolveMenuTypeLabel(menuType: MenuType) {
   return (
     {
@@ -119,6 +122,7 @@ function resolveMenuTypeLabel(menuType: MenuType) {
   )[menuType]
 }
 
+// 菜单类型 badge 颜色保持一致。
 function resolveMenuTypeVariant(menuType: MenuType) {
   return (
     {
@@ -129,6 +133,7 @@ function resolveMenuTypeVariant(menuType: MenuType) {
   )[menuType]
 }
 
+// 表单错误统一落到对应字段上，方便直接提示。
 function applyMenuFieldErrors(form: UseFormReturn<MenuFormValues>, error: unknown) {
   const apiError = getApiErrorResponse(error)
 
@@ -164,6 +169,7 @@ function applyMenuFieldErrors(form: UseFormReturn<MenuFormValues>, error: unknow
   return apiError
 }
 
+// 页面异常时统一展示错误态和返回入口。
 function MenuPageErrorState({
   title,
   description,
@@ -195,6 +201,7 @@ function MenuPageErrorState({
   )
 }
 
+// 列表和表单加载时复用骨架屏。
 function MenuPageLoadingState({
   title,
   description,
@@ -235,6 +242,7 @@ function MenuPageLoadingState({
   )
 }
 
+// 详情页右侧指标卡只负责一个数值块。
 function MenuDetailMetric({
   icon: Icon,
   label,

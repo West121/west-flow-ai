@@ -97,6 +97,7 @@ const roleFormSchema = z.object({
 type RoleFormValues = z.infer<typeof roleFormSchema>
 type SubmitAction = 'list' | 'continue'
 
+// 角色管理页统一用这个方法格式化时间展示。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -118,14 +119,17 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 角色状态只保留启用/停用两种文案。
 function resolveStatusLabel(status: SystemRoleRecord['status']) {
   return status === 'ENABLED' ? '启用' : '停用'
 }
 
+// 角色类别标签用于列表和详情保持一致。
 function resolveRoleCategoryLabel(category: SystemRoleCategory) {
   return category === 'SYSTEM' ? '系统角色' : '业务角色'
 }
 
+// 数据权限范围使用统一的中文标签。
 function resolveScopeTypeLabel(scopeType: DataScopeType) {
   return (
     {
@@ -138,6 +142,7 @@ function resolveScopeTypeLabel(scopeType: DataScopeType) {
   )[scopeType]
 }
 
+// 详情回填时把后端数据整理成表单默认值。
 function toFormValues(detail?: SystemRoleDetail): RoleFormValues {
   return {
     roleName: detail?.roleName ?? '',
@@ -153,6 +158,7 @@ function toFormValues(detail?: SystemRoleDetail): RoleFormValues {
   }
 }
 
+// 后端字段错误直接回填到对应表单控件。
 function applyRoleFieldErrors(
   form: UseFormReturn<RoleFormValues>,
   error: unknown
@@ -188,6 +194,7 @@ function applyRoleFieldErrors(
   return apiError
 }
 
+// 页面加载失败时统一展示错误态。
 function PageErrorState({
   title,
   description,
@@ -219,6 +226,7 @@ function PageErrorState({
   )
 }
 
+// 列表、创建和编辑页共用同一套骨架屏。
 function PageLoadingState({
   title,
   description,

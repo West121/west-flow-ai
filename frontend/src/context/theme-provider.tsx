@@ -42,7 +42,7 @@ export function ThemeProvider({
     () => (getCookie(storageKey) as Theme) || defaultTheme
   )
 
-  // Optimized: Memoize the resolved theme calculation to prevent unnecessary re-computations
+  // 预先计算系统主题下的实际值，避免重复判断。
   const resolvedTheme = useMemo((): ResolvedTheme => {
     if (theme === 'system') {
       return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -57,8 +57,9 @@ export function ThemeProvider({
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
     const applyTheme = (currentResolvedTheme: ResolvedTheme) => {
-      root.classList.remove('light', 'dark') // Remove existing theme classes
-      root.classList.add(currentResolvedTheme) // Add the new theme class
+      // 先移除旧主题类，再写入当前主题类。
+      root.classList.remove('light', 'dark')
+      root.classList.add(currentResolvedTheme)
     }
 
     const handleChange = () => {
@@ -100,6 +101,7 @@ export function ThemeProvider({
   )
 }
 
+// 供组件读取和切换当前主题。
 // eslint-disable-next-line react-refresh/only-export-components
 export const useTheme = () => {
   const context = useContext(ThemeContext)

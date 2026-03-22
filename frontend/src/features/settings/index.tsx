@@ -37,10 +37,11 @@ const sidebarNavItems = [
   },
 ]
 
+// 设置模块壳层，统一顶部工具栏和左侧分栏导航。
 export function Settings() {
   return (
     <>
-      {/* ===== Top Heading ===== */}
+      {/* 顶部工具栏。 */}
       <Header>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>

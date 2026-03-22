@@ -35,6 +35,7 @@ const toneClassNames = {
   },
 } satisfies Record<string, Record<string, string>>
 
+// 不同节点种类用不同图标，帮助画布识别。
 function renderIcon(kind: WorkflowNodeData['kind']) {
   switch (kind) {
     case 'start':
@@ -56,6 +57,7 @@ function renderIcon(kind: WorkflowNodeData['kind']) {
   }
 }
 
+// 画布节点只负责渲染节点外观和连接点。
 export function WorkflowNodeCard({
   data,
   selected,

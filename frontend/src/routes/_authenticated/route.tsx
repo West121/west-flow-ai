@@ -3,6 +3,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { getCurrentUser } from '@/lib/api/auth'
 import { AuthenticatedLayout } from '@/components/layout/authenticated-layout'
 
+// 进入已登录区域前，先确认 token 和当前用户信息可用。
 async function ensureAuthenticatedUser(locationHref: string) {
   const { accessToken, currentUser, reset, setCurrentUser } =
     useAuthStore.getState()
@@ -34,6 +35,7 @@ async function ensureAuthenticatedUser(locationHref: string) {
 }
 
 export const Route = createFileRoute('/_authenticated')({
+  // 未登录或用户信息失效时统一回跳登录页。
   beforeLoad: ({ location }) => ensureAuthenticatedUser(location.href),
   component: AuthenticatedLayout,
 })

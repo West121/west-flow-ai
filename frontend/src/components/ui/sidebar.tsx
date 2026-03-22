@@ -66,8 +66,8 @@ function SidebarProvider({
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
 
-  // This is the internal state of the sidebar.
-  // We use openProp and setOpenProp for control from outside the component.
+  // 这里同时支持受控和非受控两种状态管理方式。
+  // 外部传入 open/onOpenChange 时由父组件接管，否则使用组件内部状态。
   const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
   const setOpen = React.useCallback(
@@ -79,18 +79,18 @@ function SidebarProvider({
         _setOpen(openState)
       }
 
-      // This sets the cookie to keep the sidebar state.
+      // 把侧边栏展开状态写入 cookie，保证刷新后还能恢复上次选择。
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
   )
 
-  // Helper to toggle the sidebar.
+  // 统一封装侧边栏开关逻辑，移动端和桌面端分别走各自的状态。
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
   }, [isMobile, setOpen, setOpenMobile])
 
-  // Adds a keyboard shortcut to toggle the sidebar.
+  // 监听快捷键切换侧边栏，减少鼠标操作成本。
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
@@ -106,8 +106,7 @@ function SidebarProvider({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [toggleSidebar])
 
-  // We add a state so that we can do data-state="expanded" or "collapsed".
-  // This makes it easier to style the sidebar with Tailwind classes.
+  // 通过 data-state 暴露展开/折叠状态，方便后续用 Tailwind 做条件样式。
   const state = open ? 'expanded' : 'collapsed'
 
   const contextValue = React.useMemo<SidebarContextProps>(
@@ -211,7 +210,7 @@ function Sidebar({
       data-side={side}
       data-slot='sidebar'
     >
-      {/* This is what handles the sidebar gap on desktop */}
+      {/* 这个占位层负责桌面端侧边栏收起后保留间距。 */}
       <div
         data-slot='sidebar-gap'
         className={cn(
@@ -230,7 +229,7 @@ function Sidebar({
           side === 'left'
             ? 'start-0 group-data-[collapsible=offcanvas]:-start-[calc(var(--sidebar-width))]'
             : 'end-0 group-data-[collapsible=offcanvas]:-end-[calc(var(--sidebar-width))]',
-          // Adjust the padding for floating and inset variants.
+          // floating 和 inset 变体需要额外留白，避免贴边过紧。
           variant === 'floating' || variant === 'inset'
             ? 'p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)+(--spacing(4))+2px)]'
             : 'group-data-[collapsible=icon]:w-(--sidebar-width-icon) group-data-[side=left]:border-e group-data-[side=right]:border-s',
@@ -295,7 +294,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
         '[[data-side=left][data-collapsible=offcanvas]_&]:-end-2',
         '[[data-side=right][data-collapsible=offcanvas]_&]:-start-2',
 
-        // RTL support
+        // 兼容 RTL 排版时的方向与拖拽手势。
         'rtl:translate-x-1/2',
         'rtl:in-data-[side=left]:cursor-e-resize rtl:in-data-[side=right]:cursor-w-resize',
         'rtl:[[data-side=left][data-state=collapsed]_&]:cursor-w-resize rtl:[[data-side=right][data-state=collapsed]_&]:cursor-e-resize',
@@ -429,7 +428,7 @@ function SidebarGroupAction({
       data-sidebar='group-action'
       className={cn(
         'absolute end-3 top-3.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
-        // Increases the hit area of the button on mobile.
+        // 放大移动端可点击区域，降低误触和点击失败。
         'after:absolute after:-inset-2 md:after:hidden',
         'group-data-[collapsible=icon]:hidden',
         className
@@ -564,7 +563,7 @@ function SidebarMenuAction({
       data-sidebar='menu-action'
       className={cn(
         'absolute end-1 top-1.5 flex aspect-square w-5 items-center justify-center rounded-md p-0 text-sidebar-foreground ring-sidebar-ring outline-hidden transition-transform peer-hover/menu-button:text-sidebar-accent-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0',
-        // Increases the hit area of the button on mobile.
+        // 放大移动端可点击区域，降低误触和点击失败。
         'after:absolute after:-inset-2 md:after:hidden',
         'peer-data-[size=sm]/menu-button:top-1',
         'peer-data-[size=default]/menu-button:top-1.5',
@@ -608,7 +607,7 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<'div'> & {
   showIcon?: boolean
 }) {
-  // Random width between 50 to 90%.
+  // 随机生成 50% 到 90% 的宽度，让骨架屏更接近真实内容长度。
   const width = React.useMemo(() => {
     return `${Math.floor(Math.random() * 40) + 50}%`
   }, [])

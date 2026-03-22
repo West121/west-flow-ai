@@ -6,6 +6,7 @@ type ContentSectionProps = {
   children: React.JSX.Element
 }
 
+// 设置页内容分区，负责标题、说明和滚动内容区域。
 export function ContentSection({ title, desc, children }: ContentSectionProps) {
   return (
     <div className='flex flex-1 flex-col'>

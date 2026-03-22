@@ -33,17 +33,18 @@ type DataTableProps = {
   navigate: NavigateFn
 }
 
+// 用户表格，负责 URL 同步筛选、排序和分页。
 export function UsersTable({ data, search, navigate }: DataTableProps) {
-  // Local UI-only states
+  // 本地 UI 状态。
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>([])
 
-  // Local state management for table (uncomment to use local-only state, not synced with URL)
+  // 如需改成仅本地状态，可改用下面这些注释里的写法。
   // const [columnFilters, onColumnFiltersChange] = useState<ColumnFiltersState>([])
   // const [pagination, onPaginationChange] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 })
 
-  // Synced with URL states (keys/defaults mirror users route search schema)
+  // 与 URL 同步的表格状态。
   const {
     columnFilters,
     onColumnFiltersChange,
@@ -63,7 +64,7 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
     ],
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // react-table 与当前状态绑定。
   const table = useReactTable({
     data,
     columns,
@@ -95,7 +96,7 @@ export function UsersTable({ data, search, navigate }: DataTableProps) {
   return (
     <div
       className={cn(
-        'max-sm:has-[div[role="toolbar"]]:mb-16', // Add margin bottom to the table on mobile when the toolbar is visible
+        'max-sm:has-[div[role="toolbar"]]:mb-16', // 移动端有批量工具条时预留底部空间。
         'flex flex-1 flex-col gap-4'
       )}
     >

@@ -26,9 +26,12 @@ type NewChatProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
+
+// 新建会话弹窗，支持多选联系人后发起聊天。
 export function NewChat({ users, onOpenChange, open }: NewChatProps) {
   const [selectedUsers, setSelectedUsers] = useState<User[]>([])
 
+  // 选择用户时切换选中状态。
   const handleSelectUser = (user: User) => {
     if (!selectedUsers.find((u) => u.id === user.id)) {
       setSelectedUsers([...selectedUsers, user])
@@ -37,10 +40,12 @@ export function NewChat({ users, onOpenChange, open }: NewChatProps) {
     }
   }
 
+  // 从已选联系人中移除指定用户。
   const handleRemoveUser = (userId: string) => {
     setSelectedUsers(selectedUsers.filter((user) => user.id !== userId))
   }
 
+  // 弹窗关闭时清空选择，避免下次打开残留。
   const handleOpenChange = (newOpen: boolean) => {
     onOpenChange(newOpen)
     // Reset selected users when dialog closes

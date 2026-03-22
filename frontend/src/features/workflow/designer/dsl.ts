@@ -84,6 +84,7 @@ const DEFAULT_NODE_WIDTH = 220
 const DEFAULT_NODE_HEIGHT = 96
 
 // 画布节点类型和流程定义节点类型不是完全一一对应，需要先做归一化。
+// 画布节点种类和流程定义节点类型需要先做映射。
 function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
   switch (kind) {
     case 'start':
@@ -102,6 +103,7 @@ function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
 }
 
 // 反向还原时，把定义里的节点类型映射回画布可编辑的节点种类。
+// 还原流程定义时，把 DSL 节点类型映射回画布可编辑种类。
 function nodeKindFor(type: ProcessDefinitionDslNodeType) {
   switch (type) {
     case 'parallel_split':
@@ -115,6 +117,7 @@ function nodeKindFor(type: ProcessDefinitionDslNodeType) {
   }
 }
 
+// 不同节点类型在画布里使用不同的视觉语气。
 function toneFor(type: ProcessDefinitionDslNodeType) {
   switch (type) {
     case 'start':

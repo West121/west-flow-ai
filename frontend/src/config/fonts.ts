@@ -1,18 +1,18 @@
 /**
- * List of available font names (visit the url `/settings/appearance`).
- * This array is used to generate dynamic font classes (e.g., `font-inter`, `font-manrope`).
+ * 可用字体名称列表（在 `/settings/appearance` 页面中使用）。
+ * 这个数组会被用于生成动态字体类名，例如 `font-inter`、`font-manrope`。
  *
- * 📝 How to Add a New Font (Tailwind v4+):
- * 1. Add the font name here.
- * 2. Update the `<link>` tag in 'index.html' to include the new font from Google Fonts (or any other source).
- * 3. Add the new font family to 'index.css' using the `@theme inline` and `font-family` CSS variable.
+ * 📝 添加新字体的步骤（Tailwind v4+）：
+ * 1. 在这里加入字体名称。
+ * 2. 更新 `index.html` 中的 `<link>` 标签，引入新的字体资源。
+ * 3. 在 `index.css` 中通过 `@theme inline` 和 `font-family` 变量补充新的字体族。
  *
- * Example:
- * fonts.ts           → Add 'roboto' to this array.
- * index.html         → Add Google Fonts link for Roboto.
- * index.css          → Add the new font in the CSS, e.g.:
+ * 示例：
+ * `fonts.ts`           → 在数组中加入 `roboto`。
+ * `index.html`         → 为 Roboto 添加 Google Fonts 链接。
+ * `index.css`          → 在 CSS 中添加新的字体，例如：
  *   @theme inline {
- *      // ... other font families
+ *      // 其他字体族
  *      --font-roboto: 'Roboto', var(--font-sans);
  *   }
  */

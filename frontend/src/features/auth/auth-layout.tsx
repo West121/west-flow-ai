@@ -4,6 +4,7 @@ type AuthLayoutProps = {
   children: React.ReactNode
 }
 
+// 认证页共用布局，只负责居中容器和品牌标题。
 export function AuthLayout({ children }: AuthLayoutProps) {
   return (
     <div className='container grid h-svh max-w-none items-center justify-center'>

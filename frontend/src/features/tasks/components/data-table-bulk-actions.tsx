@@ -24,6 +24,7 @@ type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
 }
 
+// 任务批量操作工具条，负责状态、优先级和导出等批处理动作。
 export function DataTableBulkActions<TData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
@@ -43,6 +44,7 @@ export function DataTableBulkActions<TData>({
     table.resetRowSelection()
   }
 
+  // 批量更新优先级。
   const handleBulkPriorityChange = (priority: string) => {
     const selectedTasks = selectedRows.map((row) => row.original as Task)
     toast.promise(sleep(2000), {
@@ -56,6 +58,7 @@ export function DataTableBulkActions<TData>({
     table.resetRowSelection()
   }
 
+  // 批量导出当前选中任务。
   const handleBulkExport = () => {
     const selectedTasks = selectedRows.map((row) => row.original as Task)
     toast.promise(sleep(2000), {

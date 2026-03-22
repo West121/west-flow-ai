@@ -30,7 +30,7 @@ export function AppearanceForm() {
   const { font, setFont } = useFont()
   const { theme, setTheme } = useTheme()
 
-  // This can come from your database or API.
+  // 默认值通常来自数据库或接口。
   const defaultValues: Partial<AppearanceFormValues> = {
     theme: theme as 'light' | 'dark',
     font,
@@ -42,6 +42,7 @@ export function AppearanceForm() {
   })
 
   function onSubmit(data: AppearanceFormValues) {
+    // 仅在选择变化时同步到全局偏好。
     if (data.font != font) setFont(data.font)
     if (data.theme != theme) setTheme(data.theme)
 

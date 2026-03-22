@@ -30,6 +30,7 @@ import { type ChatUser, type Convo } from './data/chat-types'
 // Fake Data
 import { conversations } from './data/convo.json'
 
+// 聊天页面骨架，负责会话筛选、消息分组和移动端切换。
 export function Chats() {
   const [search, setSearch] = useState('')
   const [selectedUser, setSelectedUser] = useState<ChatUser | null>(null)
@@ -39,21 +40,22 @@ export function Chats() {
   const [createConversationDialogOpened, setCreateConversationDialog] =
     useState(false)
 
-  // Filtered data based on the search query
+  // 按搜索词筛选会话列表。
   const filteredChatList = conversations.filter(({ fullName }) =>
     fullName.toLowerCase().includes(search.trim().toLowerCase())
   )
 
+  // 把当前会话按日期分组，便于渲染时间分隔线。
   const currentMessage = selectedUser?.messages.reduce(
     (acc: Record<string, Convo[]>, obj) => {
       const key = format(obj.timestamp, 'd MMM, yyyy')
 
-      // Create an array for the category if it doesn't exist
+      // 首次出现某天时创建分组数组。
       if (!acc[key]) {
         acc[key] = []
       }
 
-      // Push the current object to the array
+      // 将当前消息放入对应日期分组。
       acc[key].push(obj)
 
       return acc
@@ -61,11 +63,12 @@ export function Chats() {
     {}
   )
 
+  // 将消息数据剥离后，得到新建会话弹窗需要的联系人列表。
   const users = conversations.map(({ messages, ...user }) => user)
 
   return (
     <>
-      {/* ===== Top Heading ===== */}
+      {/* 顶部工具栏。 */}
       <Header>
         <Search />
         <div className='ms-auto flex items-center space-x-4'>
@@ -77,7 +80,7 @@ export function Chats() {
 
       <Main fixed>
         <section className='flex h-full gap-6'>
-          {/* Left Side */}
+          {/* 左侧会话列表。 */}
           <div className='flex w-full flex-col gap-2 sm:w-56 lg:w-72 2xl:w-80'>
             <div className='sticky top-0 z-10 -mx-4 bg-background px-4 pb-3 shadow-md sm:static sm:z-auto sm:mx-0 sm:p-0 sm:shadow-none'>
               <div className='flex items-center justify-between py-2'>
@@ -158,7 +161,7 @@ export function Chats() {
             </ScrollArea>
           </div>
 
-          {/* Right Side */}
+          {/* 右侧对话区。 */}
           {selectedUser ? (
             <div
               className={cn(
@@ -166,9 +169,9 @@ export function Chats() {
                 mobileSelectedUser && 'start-0 flex'
               )}
             >
-              {/* Top Part */}
+              {/* 对话头部。 */}
               <div className='mb-1 flex flex-none justify-between bg-card p-4 shadow-lg sm:rounded-t-md'>
-                {/* Left */}
+                {/* 左侧联系人信息。 */}
                 <div className='flex gap-3'>
                   <Button
                     size='icon'
@@ -197,7 +200,7 @@ export function Chats() {
                   </div>
                 </div>
 
-                {/* Right */}
+                {/* 右侧操作按钮。 */}
                 <div className='-me-1 flex items-center gap-1 lg:gap-2'>
                   <Button
                     size='icon'
@@ -223,7 +226,7 @@ export function Chats() {
                 </div>
               </div>
 
-              {/* Conversation */}
+              {/* 消息列表。 */}
               <div className='flex flex-1 flex-col gap-2 rounded-md px-4 pt-0 pb-4'>
                 <div className='flex size-full flex-1'>
                   <div className='chat-text-container relative -me-4 flex flex-1 flex-col overflow-y-hidden'>

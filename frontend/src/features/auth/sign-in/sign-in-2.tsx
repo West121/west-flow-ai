@@ -4,6 +4,7 @@ import dashboardDark from './assets/dashboard-dark.png'
 import dashboardLight from './assets/dashboard-light.png'
 import { UserAuthForm } from './components/user-auth-form'
 
+// 另一版登录页布局，左侧表单、右侧展示图。
 export function SignIn2() {
   return (
     <div className='relative container grid h-svh flex-col items-center justify-center lg:max-w-none lg:grid-cols-2 lg:px-0'>

@@ -19,6 +19,7 @@ import { routeTree } from './routeTree.gen'
 // Styles
 import './styles/index.css'
 
+// 全局查询客户端统一处理重试、鉴权失效和服务端错误提示。
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -65,7 +66,7 @@ const queryClient = new QueryClient({
   }),
 })
 
-// Create a new router instance
+// 创建路由实例，并把查询客户端注入到路由上下文中。
 const router = createRouter({
   routeTree,
   context: { queryClient },
@@ -73,14 +74,14 @@ const router = createRouter({
   defaultPreloadStaleTime: 0,
 })
 
-// Register the router instance for type safety
+// 注册路由类型，保证 `useNavigate` 等 API 能拿到正确的路由上下文。
 declare module '@tanstack/react-router' {
   interface Register {
     router: typeof router
   }
 }
 
-// Render the app
+// 只有根节点还未被挂载时才创建 React 根实例，避免重复渲染。
 const rootElement = document.getElementById('root')!
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)

@@ -10,11 +10,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+// 主题切换按钮，顺带同步浏览器的 theme-color。
 export function ThemeSwitch() {
   const { theme, setTheme } = useTheme()
 
-  /* Update theme-color meta tag
-   * when theme is updated */
+  // 主题变化时同步 theme-color，避免浏览器栏颜色不一致。
   useEffect(() => {
     const themeColor = theme === 'dark' ? '#020817' : '#fff'
     const metaThemeColor = document.querySelector("meta[name='theme-color']")

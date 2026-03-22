@@ -9,6 +9,7 @@ export function sleep(ms: number = 1000) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// 生成带省略号的分页序号，保持页码条在可读范围内。
 /**
  * Generates page numbers for pagination with ellipsis
  * @param currentPage - Current page number (1-based)

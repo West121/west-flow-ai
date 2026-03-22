@@ -16,6 +16,7 @@ import {
   IconWhatsapp,
 } from '@/assets/brand-icons'
 
+// 这组应用数据用于展示第三方集成列表和连接状态，只承载静态示例内容。
 export const apps = [
   {
     name: 'Telegram',

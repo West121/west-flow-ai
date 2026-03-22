@@ -1,5 +1,6 @@
 import { type SVGProps } from 'react'
 
+// 品牌图标：Clerk 完整版标志。
 export function ClerkFullLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg

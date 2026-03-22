@@ -1,6 +1,6 @@
 import { faker } from '@faker-js/faker'
 
-// Set a fixed seed for consistent data generation
+// 固定随机种子，保证每次生成的示例数据都稳定一致。
 faker.seed(67890)
 
 export const users = Array.from({ length: 500 }, () => {

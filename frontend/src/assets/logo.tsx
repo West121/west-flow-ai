@@ -1,6 +1,7 @@
 import { type SVGProps } from 'react'
 import { cn } from '@/lib/utils'
 
+// 品牌图标：Shadcn Admin 标志。
 export function Logo({ className, ...props }: SVGProps<SVGSVGElement>) {
   return (
     <svg

@@ -92,14 +92,17 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
   },
 ]
 
+// 节点模板决定连线锚点方向。
 function targetPositionFor(kind: WorkflowNodeKind) {
   return kind === 'start' ? undefined : Position.Top
 }
 
+// 节点模板决定出线锚点方向。
 function sourcePositionFor(kind: WorkflowNodeKind) {
   return kind === 'end' ? undefined : Position.Bottom
 }
 
+// 从模板创建画布节点，保持默认尺寸和配置一致。
 export function createWorkflowNode(
   template: WorkflowNodeTemplate,
   id: string,

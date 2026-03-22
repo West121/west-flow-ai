@@ -18,6 +18,7 @@ type TaskMultiDeleteDialogProps<TData> = {
 
 const CONFIRM_WORD = 'DELETE'
 
+// 批量删除任务的确认弹窗。
 export function TasksMultiDeleteDialog<TData>({
   open,
   onOpenChange,
@@ -27,6 +28,7 @@ export function TasksMultiDeleteDialog<TData>({
 
   const selectedRows = table.getFilteredSelectedRowModel().rows
 
+  // 删除前要求用户输入确认词，避免误操作。
   const handleDelete = () => {
     if (value.trim() !== CONFIRM_WORD) {
       toast.error(`Please type "${CONFIRM_WORD}" to confirm.`)

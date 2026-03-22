@@ -26,6 +26,7 @@ const usersSearchSchema = z.object({
   username: z.string().optional().catch(''),
 })
 
+// 用户列表页路由，保持分页和筛选查询态。
 export const Route = createFileRoute('/_authenticated/users/')({
   validateSearch: usersSearchSchema,
   component: Users,

@@ -71,6 +71,7 @@ function createInitialSnapshot(): WorkflowSnapshot {
   }
 }
 
+// 是否落历史栈由调用场景决定，这里只负责切换实现。
 function withPresentSnapshot(
   history: WorkflowHistoryState,
   snapshot: WorkflowSnapshot,
@@ -97,6 +98,7 @@ function resolveSelectedNodeId(
   return nextNodes[nextNodes.length - 1]?.id ?? null
 }
 
+// 新增节点时用当前节点列表推导下一个序号。
 function resolveNextNodeSequence(nodes: WorkflowNode[]) {
   let nextSequence = nodes.length
 

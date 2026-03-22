@@ -8,6 +8,7 @@ import { callTypes, roles } from '../data/data'
 import { type User } from '../data/schema'
 import { DataTableRowActions } from './data-table-row-actions'
 
+// 用户表格列定义，包含用户名、状态、角色和行操作。
 export const usersColumns: ColumnDef<User>[] = [
   {
     id: 'select',

@@ -16,6 +16,7 @@ function readNumber(value: unknown) {
   return ''
 }
 
+// OA 请假发起表单只负责展示和回填基础业务字段。
 export function OALeaveStartForm({
   value,
   onChange,

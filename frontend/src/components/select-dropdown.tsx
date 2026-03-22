@@ -30,6 +30,7 @@ export function SelectDropdown({
   className = '',
   isControlled = false,
 }: SelectDropdownProps) {
+  // 同时兼容受控和非受控两种用法，由调用方决定是否传 value。
   const defaultState = isControlled
     ? { value: defaultValue, onValueChange }
     : { defaultValue, onValueChange }
@@ -42,6 +43,7 @@ export function SelectDropdown({
       </FormControl>
       <SelectContent>
         {isPending ? (
+          // 加载中先保留一个不可选占位，避免下拉列表突然跳动。
           <SelectItem disabled value='loading' className='h-14'>
             <div className='flex items-center justify-center gap-2'>
               <Loader className='h-5 w-5 animate-spin' />

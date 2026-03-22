@@ -69,6 +69,7 @@ const channelFormSchema = z.object({
 type ChannelFormValues = z.infer<typeof channelFormSchema>
 type SubmitAction = 'list' | 'continue'
 
+// 通知渠道管理页统一用这个方法格式化时间。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -89,14 +90,17 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 渠道状态只展示启用/停用。
 function resolveStatusLabel(status: NotificationChannelRecord['status']) {
   return status === 'ENABLED' ? '启用' : '停用'
 }
 
+// 状态 badge 颜色和系统其他页面保持一致。
 function resolveStatusVariant(status: NotificationChannelRecord['status']) {
   return status === 'ENABLED' ? 'secondary' : 'outline'
 }
 
+// 编辑页回填时把详情转换成表单默认值。
 function toFormValues(detail?: NotificationChannelDetail): ChannelFormValues {
   return {
     channelName: detail?.channelName ?? '',
@@ -108,6 +112,7 @@ function toFormValues(detail?: NotificationChannelDetail): ChannelFormValues {
   }
 }
 
+// 把后端字段错误回写到通知渠道表单。
 function applyChannelFieldErrors(
   form: UseFormReturn<ChannelFormValues>,
   error: unknown
@@ -133,6 +138,7 @@ function applyChannelFieldErrors(
   return apiError
 }
 
+// 请求失败时先用空分页兜底。
 function buildEmptyChannelPage(search: ListQuerySearch) {
   return {
     page: search.page,
@@ -207,6 +213,7 @@ const channelColumns: ColumnDef<NotificationChannelRecord>[] = [
   },
 ]
 
+// 页面加载失败时统一展示错误态和返回按钮。
 function ChannelPageErrorState({
   title,
   description,

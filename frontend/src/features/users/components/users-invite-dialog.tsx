@@ -42,6 +42,7 @@ type UserInviteDialogProps = {
   onOpenChange: (open: boolean) => void
 }
 
+// 用户邀请弹窗，用于发送邀请邮件并指定角色。
 export function UsersInviteDialog({
   open,
   onOpenChange,
@@ -51,6 +52,7 @@ export function UsersInviteDialog({
     defaultValues: { email: '', role: '', desc: '' },
   })
 
+  // 提交后只展示结果，不接真实邀请逻辑。
   const onSubmit = (values: UserInviteForm) => {
     form.reset()
     showSubmittedData(values)

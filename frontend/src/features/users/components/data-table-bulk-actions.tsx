@@ -17,6 +17,7 @@ type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
 }
 
+// 用户批量操作工具条，负责邀请、启停用和删除等批处理动作。
 export function DataTableBulkActions<TData>({
   table,
 }: DataTableBulkActionsProps<TData>) {
@@ -36,6 +37,7 @@ export function DataTableBulkActions<TData>({
     table.resetRowSelection()
   }
 
+  // 批量邀请选中的用户。
   const handleBulkInvite = () => {
     const selectedUsers = selectedRows.map((row) => row.original as User)
     toast.promise(sleep(2000), {

@@ -11,6 +11,7 @@ function readDecision(value: unknown) {
   return 'APPROVE'
 }
 
+// OA 审批节点表单只负责展示审批结果和意见输入。
 export function OALeaveApproveForm({
   value,
   onChange,

@@ -1,6 +1,7 @@
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
+// 403 错误页，提示当前账号缺少访问权限。
 export function ForbiddenError() {
   const navigate = useNavigate()
   const { history } = useRouter()

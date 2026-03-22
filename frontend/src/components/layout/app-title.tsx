@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/sidebar'
 import { Button } from '../ui/button'
 
+// 侧边栏顶部标题区，提供回到首页和折叠侧边栏的入口。
 export function AppTitle() {
   const { setOpenMobile } = useSidebar()
   return (
@@ -36,6 +37,7 @@ export function AppTitle() {
   )
 }
 
+// 侧边栏折叠按钮，保持桌面和移动端图标一致。
 function ToggleSidebar({
   className,
   onClick,

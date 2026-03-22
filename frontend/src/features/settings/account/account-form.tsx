@@ -65,6 +65,7 @@ export function AccountForm() {
     defaultValues,
   })
 
+  // 提交后仅展示结果，不接真实保存逻辑。
   function onSubmit(data: AccountFormValues) {
     showSubmittedData(data)
   }

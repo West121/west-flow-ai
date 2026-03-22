@@ -35,6 +35,7 @@ type NavUserProps = {
   }
 }
 
+// 侧边栏底部的用户入口，负责头像、账号菜单和退出登录。
 function getInitials(value: string) {
   const trimmed = value.trim()
 
@@ -55,6 +56,7 @@ function getInitials(value: string) {
     .toUpperCase()
 }
 
+// 侧边栏底部的用户入口，负责头像、账号菜单和退出登录。
 export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
   const [open, setOpen] = useDialogState()

@@ -16,6 +16,7 @@ export type NodeFormRendererProps = {
   disabled?: boolean
 }
 
+// 节点覆盖表单的运行态入口，优先使用节点自身值，回退到任务表单数据。
 export function NodeFormRenderer({
   nodeFormKey,
   nodeFormVersion,
@@ -57,4 +58,3 @@ export function NodeFormRenderer({
 
   return <Component {...props} />
 }
-

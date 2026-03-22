@@ -16,6 +16,7 @@ export function SearchProvider({ children }: SearchProviderProps) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
+    // 监听 Ctrl/Cmd + K，快速打开或关闭命令面板。
     const down = (e: KeyboardEvent) => {
       if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
@@ -34,6 +35,7 @@ export function SearchProvider({ children }: SearchProviderProps) {
   )
 }
 
+// 供组件控制全局命令面板的开关状态。
 // eslint-disable-next-line react-refresh/only-export-components
 export const useSearch = () => {
   const searchContext = useContext(SearchContext)

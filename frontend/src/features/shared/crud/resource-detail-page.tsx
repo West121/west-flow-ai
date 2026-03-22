@@ -29,6 +29,7 @@ type ResourceDetailPageProps = {
   sections: DetailSection[]
 }
 
+// 详情页通用骨架，负责状态标签、分区信息和编辑入口。
 export function ResourceDetailPage({
   title,
   description,

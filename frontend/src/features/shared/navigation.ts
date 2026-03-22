@@ -6,6 +6,7 @@ export const appTopNavLinks = [
   { title: '流程设计器', href: '/workflow/designer' },
 ]
 
+// 判断顶部导航在当前地址下是否应该高亮。
 export function isAppTopNavActive(currentHref: string, href: string) {
   const pathname = currentHref.split('?')[0]
 

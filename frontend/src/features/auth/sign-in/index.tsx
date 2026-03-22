@@ -10,6 +10,7 @@ import {
 import { AuthLayout } from '../auth-layout'
 import { UserAuthForm } from './components/user-auth-form'
 
+// 登录页入口，承载账号登录表单和跳转参数。
 export function SignIn() {
   const { redirect } = useSearch({ from: '/(auth)/sign-in' })
 

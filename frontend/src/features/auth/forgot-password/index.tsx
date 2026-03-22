@@ -9,6 +9,7 @@ import {
 import { AuthLayout } from '../auth-layout'
 import { ForgotPasswordForm } from './components/forgot-password-form'
 
+// 找回密码页入口，展示重置申请表单和说明文案。
 export function ForgotPassword() {
   return (
     <AuthLayout>

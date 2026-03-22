@@ -20,6 +20,7 @@ export type RuntimeFormRegistration = {
   component: RuntimeFormComponent
 }
 
+// 运行态表单注册表，页面根据表单 key 和版本找到对应实现。
 export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
   {
     kind: 'PROCESS_FORM',
@@ -41,6 +42,7 @@ export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
   },
 ]
 
+// 先按表单类型过滤，再做 key/version 查找，保持查询逻辑简单。
 function sameKind(
   registration: RuntimeFormRegistration,
   kind?: RuntimeFormKind
@@ -48,18 +50,21 @@ function sameKind(
   return kind ? registration.kind === kind : true
 }
 
+// 列出指定类型的全部注册项，供下拉选择和版本列表复用。
 export function listRuntimeFormRegistrations(kind?: RuntimeFormKind) {
   return runtimeFormRegistrations.filter((registration) =>
     sameKind(registration, kind)
   )
 }
 
+// 读取当前可用的表单 key 列表。
 export function listRuntimeFormKeys(kind?: RuntimeFormKind) {
   return Array.from(
     new Set(listRuntimeFormRegistrations(kind).map((registration) => registration.formKey))
   )
 }
 
+// 按 key 列出可用版本，方便表单选择器展示。
 export function listRuntimeFormVersions(
   formKey: string,
   kind?: RuntimeFormKind
@@ -75,6 +80,7 @@ export function listRuntimeFormVersions(
     )
 }
 
+// 精确定位某个表单注册项。
 export function findRuntimeFormRegistration(
   formKey: string,
   formVersion?: string,
@@ -89,6 +95,7 @@ export function findRuntimeFormRegistration(
   )
 }
 
+// 根据流程编码找默认发起表单。
 export function findProcessRuntimeFormByProcessKey(processKey: string) {
   return (
     runtimeFormRegistrations.find(
@@ -99,6 +106,7 @@ export function findProcessRuntimeFormByProcessKey(processKey: string) {
   )
 }
 
+// 只按表单 key 解析组件实现，渲染器会在上层先校验注册项。
 export function resolveRuntimeFormComponent(formKey: string) {
   return runtimeFormRegistrations.find(
     (registration) => registration.formKey === formKey

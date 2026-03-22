@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button'
 
+// 503 维护页，告诉用户当前服务暂不可用。
 export function MaintenanceError() {
   return (
     <div className='h-svh'>

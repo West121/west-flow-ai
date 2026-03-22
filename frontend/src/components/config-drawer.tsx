@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/sheet'
 import { useSidebar } from './ui/sidebar'
 
+// 界面配置抽屉，集中管理主题、侧边栏、布局和方向设置。
 export function ConfigDrawer() {
   const { setOpen } = useSidebar()
   const { resetDir } = useDirection()

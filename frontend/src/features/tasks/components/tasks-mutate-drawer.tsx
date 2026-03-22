@@ -39,6 +39,7 @@ const formSchema = z.object({
 })
 type TaskForm = z.infer<typeof formSchema>
 
+// 任务新增和编辑抽屉，复用同一套表单布局。
 export function TasksMutateDrawer({
   open,
   onOpenChange,
@@ -56,6 +57,7 @@ export function TasksMutateDrawer({
     },
   })
 
+  // 这里仅演示表单提交结果和关闭抽屉。
   const onSubmit = (data: TaskForm) => {
     // do something with the form data
     onOpenChange(false)

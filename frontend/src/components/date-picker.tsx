@@ -36,6 +36,7 @@ export function DatePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className='w-auto p-0'>
+        {/* 限制可选范围，避免选到未来日期或过早的历史日期。 */}
         <Calendar
           mode='single'
           captionLayout='dropdown'

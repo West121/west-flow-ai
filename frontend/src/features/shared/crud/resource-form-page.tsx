@@ -30,6 +30,7 @@ type ResourceFormPageProps = {
   sections: FormSection[]
 }
 
+// 表单页通用骨架，保留保存、继续编辑和返回列表的固定布局。
 export function ResourceFormPage({
   title,
   description,

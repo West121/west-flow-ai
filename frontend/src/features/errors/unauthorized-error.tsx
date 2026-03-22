@@ -1,6 +1,7 @@
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
+// 401 错误页，提示未登录或认证失败。
 export function UnauthorisedError() {
   const navigate = useNavigate()
   const { history } = useRouter()

@@ -56,6 +56,7 @@ interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
 }
 
+// 登录表单负责校验、提交、写入登录态并处理错误映射。
 export function UserAuthForm({
   className,
   redirectTo,

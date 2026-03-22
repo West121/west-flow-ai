@@ -17,6 +17,7 @@ type DataTableRowActionsProps = {
   row: Row<User>
 }
 
+// 用户行操作菜单，负责编辑和删除当前行。
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const { setOpen, setCurrentRow } = useUsers()
   return (

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-// We're keeping a simple non-relational schema here.
-// IRL, you will have a schema for your data models.
+// 这里保留一个简单的非关系型示例 schema。
+// 实际项目里，这里通常会替换成真实数据模型对应的校验结构。
 export const taskSchema = z.object({
   id: z.string(),
   title: z.string(),

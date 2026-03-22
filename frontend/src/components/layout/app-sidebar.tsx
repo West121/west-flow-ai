@@ -11,6 +11,7 @@ import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
 
+// 应用侧边栏，集中承载工作空间、导航分组和用户菜单。
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
   return (

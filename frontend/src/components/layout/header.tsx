@@ -8,6 +8,7 @@ type HeaderProps = React.HTMLAttributes<HTMLElement> & {
   ref?: React.Ref<HTMLElement>
 }
 
+// 页面顶部通用头部，固定模式下会根据滚动状态切换视觉效果。
 export function Header({ className, fixed, children, ...props }: HeaderProps) {
   const [offset, setOffset] = useState(0)
 

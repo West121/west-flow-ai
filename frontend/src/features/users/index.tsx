@@ -13,6 +13,7 @@ import { users } from './data/users'
 
 const route = getRouteApi('/_authenticated/users/')
 
+// 用户页入口，组合用户表格、操作按钮和弹窗。
 export function Users() {
   const search = route.useSearch()
   const navigate = route.useNavigate()

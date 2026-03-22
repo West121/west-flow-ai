@@ -19,6 +19,7 @@ type SidebarNavProps = React.HTMLAttributes<HTMLElement> & {
   }[]
 }
 
+// 设置页侧边导航，移动端用下拉，桌面端用列表。
 export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
   const { pathname } = useLocation()
   const navigate = useNavigate() as (opts: { to: string }) => void

@@ -19,6 +19,7 @@ type BaseNavItem = {
   requiredRoles?: string[]
 }
 
+// 折叠导航会把父级标题和子级链接一起保留下来，供侧边栏与命令菜单共用。
 type NavLink = BaseNavItem & {
   url: LinkProps['to'] | (string & {})
   items?: never
@@ -36,6 +37,7 @@ type NavGroup = {
   items: NavItem[]
 }
 
+// 侧边栏完整数据结构，确保布局层和导航层读取同一份定义。
 type SidebarData = {
   user: User
   teams: Team[]

@@ -9,6 +9,7 @@ type SearchProps = {
   placeholder?: string
 }
 
+// 全局搜索入口，点击后打开命令面板。
 export function Search({
   className = '',
   placeholder = '搜索',

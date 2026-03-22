@@ -1,5 +1,6 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
+// 最近成交列表，用于展示示例用户和成交金额。
 export function RecentSales() {
   return (
     <div className='space-y-8'>

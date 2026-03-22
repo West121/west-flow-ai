@@ -11,6 +11,7 @@ type AuthenticatedLayoutProps = {
   children?: React.ReactNode
 }
 
+// 已登录区域的整体布局，负责挂载侧边栏、搜索和主内容容器。
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const defaultOpen = getCookie('sidebar_state') !== 'false'
   return (

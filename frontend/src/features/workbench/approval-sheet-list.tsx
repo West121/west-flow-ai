@@ -6,6 +6,7 @@ import { type ApprovalSheetListItem } from '@/lib/api/workbench'
 
 export type ApprovalSheetLinkMode = 'workbench' | 'oa'
 
+// 审批单列表统一用这个方法格式化时间。
 export function formatApprovalSheetDateTime(value: string | null | undefined) {
   if (!value) {
     return '--'
@@ -26,6 +27,7 @@ export function formatApprovalSheetDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 实例状态标签在工作台和 OA 页面保持一致。
 export function resolveApprovalSheetInstanceStatusLabel(status: string) {
   switch (status) {
     case 'COMPLETED':
@@ -41,6 +43,7 @@ function resolveApprovalSheetInstanceStatusVariant(status: string) {
 }
 
 // 流程中心把自动化状态直接暴露成标签，便于一眼看出规则是否已经生效。
+// 自动化状态标签统一由这里生成。
 export function resolveApprovalSheetAutomationStatusLabel(
   status: string | null | undefined
 ) {
@@ -130,6 +133,7 @@ function renderApprovalSheetDetailAction({
   )
 }
 
+// 列表顶部统计只看总量、进行中和已完成。
 export function summarizeApprovalSheets(records: ApprovalSheetListItem[]) {
   return {
     total: records.length,
@@ -138,6 +142,7 @@ export function summarizeApprovalSheets(records: ApprovalSheetListItem[]) {
   }
 }
 
+// 审批单列表列定义在工作台和 OA 页面复用。
 export function createApprovalSheetColumns(
   mode: ApprovalSheetLinkMode
 ): ColumnDef<ApprovalSheetListItem>[] {

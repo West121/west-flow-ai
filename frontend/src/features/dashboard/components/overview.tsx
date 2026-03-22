@@ -51,6 +51,7 @@ const data = [
   },
 ]
 
+// 月度概览图，展示全年趋势柱状图。
 export function Overview() {
   return (
     <ResponsiveContainer width='100%' height={350}>

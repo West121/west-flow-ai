@@ -22,6 +22,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   })
 
   useEffect(() => {
+    // 根据当前字体同步根节点的 font-* 类名。
     const applyFont = (font: string) => {
       const root = document.documentElement
       root.classList.forEach((cls) => {
@@ -48,6 +49,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+// 供组件读取和切换当前字体。
 // eslint-disable-next-line react-refresh/only-export-components
 export const useFont = () => {
   const context = useContext(FontContext)

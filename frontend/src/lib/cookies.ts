@@ -1,12 +1,12 @@
 /**
- * Cookie utility functions using manual document.cookie approach
- * Replaces js-cookie dependency for better consistency
+ * 使用 `document.cookie` 手工实现的 Cookie 工具函数。
+ * 这样可以避免引入 `js-cookie`，保持行为更可控。
  */
 
-const DEFAULT_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
+const DEFAULT_MAX_AGE = 60 * 60 * 24 * 7 // 7 天
 
 /**
- * Get a cookie value by name
+ * 按名称读取 Cookie 值。
  */
 export function getCookie(name: string): string | undefined {
   if (typeof document === 'undefined') return undefined
@@ -21,7 +21,7 @@ export function getCookie(name: string): string | undefined {
 }
 
 /**
- * Set a cookie with name, value, and optional max age
+ * 写入 Cookie，可选指定最大存活时间。
  */
 export function setCookie(
   name: string,
@@ -34,7 +34,7 @@ export function setCookie(
 }
 
 /**
- * Remove a cookie by setting its max age to 0
+ * 通过把最大存活时间设为 0 来删除 Cookie。
  */
 export function removeCookie(name: string): void {
   if (typeof document === 'undefined') return

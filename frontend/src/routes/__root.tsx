@@ -7,6 +7,7 @@ import { NavigationProgress } from '@/components/navigation-progress'
 import { GeneralError } from '@/features/errors/general-error'
 import { NotFoundError } from '@/features/errors/not-found-error'
 
+// 根路由负责挂载全局进度条、消息提示和开发调试工具。
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({

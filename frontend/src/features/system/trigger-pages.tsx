@@ -70,6 +70,7 @@ const triggerFormSchema = z.object({
 type TriggerFormValues = z.infer<typeof triggerFormSchema>
 type SubmitAction = 'list' | 'continue'
 
+// 触发器管理页统一用这个方法格式化时间。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -90,6 +91,7 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 自动化状态只展示最关键的中文标签。
 function resolveAutomationStatusLabel(status: TriggerRecord['automationStatus']) {
   switch (status) {
     case 'ACTIVE':
@@ -101,6 +103,7 @@ function resolveAutomationStatusLabel(status: TriggerRecord['automationStatus'])
   }
 }
 
+// 自动化状态 badge 保持统一视觉语义。
 function resolveAutomationStatusVariant(status: TriggerAutomationStatus | string) {
   switch (status) {
     case 'ACTIVE':
@@ -112,6 +115,7 @@ function resolveAutomationStatusVariant(status: TriggerAutomationStatus | string
   }
 }
 
+// 编辑页回填时把详情转换成表单默认值。
 function toFormValues(detail?: TriggerDetail): TriggerFormValues {
   return {
     triggerName: detail?.triggerName ?? '',
@@ -125,6 +129,7 @@ function toFormValues(detail?: TriggerDetail): TriggerFormValues {
   }
 }
 
+// 后端字段错误直接回写到触发器表单。
 function applyTriggerFieldErrors(
   form: UseFormReturn<TriggerFormValues>,
   error: unknown
@@ -152,6 +157,7 @@ function applyTriggerFieldErrors(
   return apiError
 }
 
+// 列表请求失败时先返回空分页兜底。
 function buildEmptyTriggerPage(search: ListQuerySearch) {
   return {
     page: search.page,
@@ -221,6 +227,7 @@ const triggerColumns: ColumnDef<TriggerRecord>[] = [
   },
 ]
 
+// 页面异常时统一展示错误态。
 function TriggerPageErrorState({
   title,
   description,

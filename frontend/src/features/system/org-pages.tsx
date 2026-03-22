@@ -156,6 +156,7 @@ const basicColumns: ColumnDef<{
   },
 ]
 
+// 统一把组织管理页里的时间格式化成中文展示。
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return '-'
@@ -177,10 +178,12 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+// 把后端启停状态映射成页面文案。
 function resolveStatusLabel(status: string) {
   return status === 'ENABLED' ? '启用' : '停用'
 }
 
+// 详情页的指标卡只负责展示一个图标、标题和数值。
 function DetailMetric({
   icon: Icon,
   label,
@@ -201,6 +204,7 @@ function DetailMetric({
   )
 }
 
+// 页面加载失败时统一显示错误态和返回入口。
 function PageErrorState({
   title,
   description,
@@ -236,6 +240,7 @@ function PageErrorState({
   )
 }
 
+// 编辑页和详情页共用同一套骨架屏。
 function PageLoadingState({
   title,
   description,
@@ -476,6 +481,7 @@ const postColumns: ColumnDef<PostRow>[] = [
   },
 ]
 
+// 公司表单页负责创建和编辑共用逻辑。
 function CompanyFormPage({
   mode,
   companyId,
@@ -718,6 +724,7 @@ function CompanyFormPage({
   )
 }
 
+// 部门表单页负责创建和编辑共用逻辑。
 function DepartmentFormPage({
   mode,
   departmentId,
@@ -1065,6 +1072,7 @@ function DepartmentFormPage({
   )
 }
 
+// 岗位表单页负责创建和编辑共用逻辑。
 function PostFormPage({
   mode,
   postId,
@@ -1404,6 +1412,7 @@ function PostFormPage({
   )
 }
 
+// 角色列表页只承接查询和跳转。
 export function RolesListPage() {
   const search = rolesRoute.useSearch()
   const navigate = rolesRoute.useNavigate()
@@ -1442,6 +1451,7 @@ export function RolesListPage() {
   )
 }
 
+// 公司列表页只承接查询和跳转。
 export function CompaniesListPage() {
   const search = companiesRoute.useSearch()
   const navigate = companiesRoute.useNavigate()
@@ -1502,6 +1512,7 @@ export function CompaniesListPage() {
   )
 }
 
+// 部门列表页只承接查询和跳转。
 export function DepartmentsListPage() {
   const search = departmentsRoute.useSearch()
   const navigate = departmentsRoute.useNavigate()
@@ -1565,6 +1576,7 @@ export function DepartmentsListPage() {
   )
 }
 
+// 岗位列表页只承接查询和跳转。
 export function PostsListPage() {
   const search = postsRoute.useSearch()
   const navigate = postsRoute.useNavigate()
@@ -1625,14 +1637,17 @@ export function PostsListPage() {
   )
 }
 
+// 公司新建页复用同一套表单容器。
 export function CompanyCreatePage() {
   return <CompanyFormPage mode='create' />
 }
 
+// 公司编辑页只负责接收路由参数并下沉给表单。
 export function CompanyEditPage({ companyId }: { companyId: string }) {
   return <CompanyFormPage mode='edit' companyId={companyId} />
 }
 
+// 公司详情页复用通用详情布局。
 export function CompanyDetailPage({ companyId }: { companyId: string }) {
   const query = useQuery({
     queryKey: ['system-company', companyId],
@@ -1715,10 +1730,12 @@ export function CompanyDetailPage({ companyId }: { companyId: string }) {
   )
 }
 
+// 部门新建页复用同一套表单容器。
 export function DepartmentCreatePage() {
   return <DepartmentFormPage mode='create' />
 }
 
+// 部门编辑页只负责接收路由参数并下沉给表单。
 export function DepartmentEditPage({
   departmentId,
 }: {
@@ -1727,6 +1744,7 @@ export function DepartmentEditPage({
   return <DepartmentFormPage mode='edit' departmentId={departmentId} />
 }
 
+// 部门详情页复用通用详情布局。
 export function DepartmentDetailPage({
   departmentId,
 }: {
@@ -1829,14 +1847,17 @@ export function DepartmentDetailPage({
   )
 }
 
+// 岗位新建页复用同一套表单容器。
 export function PostCreatePage() {
   return <PostFormPage mode='create' />
 }
 
+// 岗位编辑页只负责接收路由参数并下沉给表单。
 export function PostEditPage({ postId }: { postId: string }) {
   return <PostFormPage mode='edit' postId={postId} />
 }
 
+// 岗位详情页复用通用详情布局。
 export function PostDetailPage({ postId }: { postId: string }) {
   const query = useQuery({
     queryKey: ['system-post', postId],

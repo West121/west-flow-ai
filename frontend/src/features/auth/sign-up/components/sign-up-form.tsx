@@ -33,6 +33,7 @@ const formSchema = z
     path: ['confirmPassword'],
   })
 
+// 注册表单负责收集账号信息，并演示第三方登录入口。
 export function SignUpForm({
   className,
   ...props

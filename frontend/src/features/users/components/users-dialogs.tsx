@@ -3,6 +3,7 @@ import { UsersDeleteDialog } from './users-delete-dialog'
 import { UsersInviteDialog } from './users-invite-dialog'
 import { useUsers } from './users-provider'
 
+// 用户页弹窗集合，统一管理新增、邀请、编辑和删除流程。
 export function UsersDialogs() {
   const { open, setOpen, currentRow, setCurrentRow } = useUsers()
   return (

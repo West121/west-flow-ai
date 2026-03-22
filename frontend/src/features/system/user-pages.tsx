@@ -104,6 +104,7 @@ type UserRow = {
   createdAt: string
 }
 
+// 用户列表和详情页统一用这个方法格式化时间。
 function formatDateTime(value: string) {
   const date = new Date(value)
 
@@ -121,14 +122,17 @@ function formatDateTime(value: string) {
   }).format(date)
 }
 
+// 用户状态只展示启用/停用，和系统管理其他页面保持一致。
 function resolveStatusLabel(status: SystemUserRecord['status']) {
   return status === 'ENABLED' ? '启用' : '停用'
 }
 
+// 用户已选角色的类别在页面里统一显示成中文。
 function resolveRoleCategoryLabel(roleCategory: 'SYSTEM' | 'BUSINESS') {
   return roleCategory === 'SYSTEM' ? '系统角色' : '业务角色'
 }
 
+// 编辑场景下把详情数据转换成表单默认值。
 function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
   return {
     displayName: detail?.displayName ?? '',
@@ -142,6 +146,7 @@ function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
   }
 }
 
+// 只允许把已知字段的服务端错误回写到表单。
 function isSystemUserField(
   field: string
 ): field is keyof SystemUserFormValues {
@@ -157,6 +162,7 @@ function isSystemUserField(
   )
 }
 
+// 把后端字段级错误映射到对应表单项。
 function applySystemUserFieldErrors(
   form: UseFormReturn<SystemUserFormValues>,
   error: unknown

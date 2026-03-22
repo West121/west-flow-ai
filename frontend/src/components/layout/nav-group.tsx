@@ -34,6 +34,7 @@ import {
   type NavGroup as NavGroupProps,
 } from './types'
 
+// 按权限过滤并渲染侧边栏导航分组。
 export function NavGroup({ title, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
@@ -72,6 +73,7 @@ function NavBadge({ children }: { children: ReactNode }) {
   return <Badge className='rounded-full px-1 py-0 text-xs'>{children}</Badge>
 }
 
+// 普通导航项，负责处理激活态和移动端收起侧边栏。
 function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
   const { setOpenMobile } = useSidebar()
   return (
@@ -137,6 +139,7 @@ function SidebarMenuCollapsible({
   )
 }
 
+// 收起侧边栏时使用的下拉菜单形式导航。
 function SidebarMenuCollapsedDropdown({
   item,
   href,
@@ -183,6 +186,7 @@ function SidebarMenuCollapsedDropdown({
   )
 }
 
+// 判断导航项是否命中当前地址。
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
   // 侧边栏高亮要同时兼容完整 URL、去掉 query 的路径和子菜单命中。
   return (
@@ -195,6 +199,7 @@ function checkIsActive(href: string, item: NavItem, mainNav = false) {
   )
 }
 
+// 根据当前用户角色过滤掉无权限可见的导航项。
 function filterNavItemByRole(item: NavItem, roleCodes: string[]) {
   if (item.requiredRoles?.length) {
     const matched = item.requiredRoles.some((roleCode) =>

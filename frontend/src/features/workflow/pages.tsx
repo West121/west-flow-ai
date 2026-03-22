@@ -103,6 +103,7 @@ const defaultDefinitionMeta: ProcessDefinitionMeta = {
   formFields: [],
 }
 
+// 把后端状态统一映射成列表页中文状态。
 function resolveStatusLabel(status: string): DefinitionRow['status'] {
   return status === 'PUBLISHED' ? '已发布' : '草稿'
 }
@@ -225,6 +226,7 @@ export function WorkflowDefinitionsListPage() {
   )
 }
 
+// 拖拽节点时寻找附近对齐辅助线，帮助画布快速排版。
 function findHelperLines(
   currentNode: Node,
   nodes: WorkflowNode[]
@@ -257,6 +259,7 @@ function findHelperLines(
   return { vertical, horizontal }
 }
 
+// 把辅助线单独覆盖在画布上，不干扰 React Flow 的交互层。
 function GuideLinesOverlay({ lines }: { lines: WorkflowHelperLines }) {
   const viewport = useViewport()
 
@@ -282,6 +285,7 @@ function GuideLinesOverlay({ lines }: { lines: WorkflowHelperLines }) {
   )
 }
 
+// 左侧节点面板负责提供可拖拽的流程节点模板。
 function DesignerPalette({
   onAppendNode,
 }: {
@@ -341,6 +345,7 @@ function DesignerPalette({
   )
 }
 
+// 设计器工作区把画布、右侧配置和保存发布动作串起来。
 function WorkflowDesignerWorkspace({
   processDefinitionId,
 }: {
@@ -802,6 +807,7 @@ function WorkflowDesignerWorkspace({
   )
 }
 
+// 页面入口只负责挂载 React Flow 容器和工作区组件。
 export function WorkflowDesignerPage() {
   const search = designerRoute.useSearch()
 

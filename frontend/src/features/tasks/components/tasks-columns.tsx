@@ -6,6 +6,7 @@ import { labels, priorities, statuses } from '../data/data'
 import { type Task } from '../data/schema'
 import { DataTableRowActions } from './data-table-row-actions'
 
+// 任务表格列定义，包含选择框、状态、优先级和行操作。
 export const tasksColumns: ColumnDef<Task>[] = [
   {
     id: 'select',

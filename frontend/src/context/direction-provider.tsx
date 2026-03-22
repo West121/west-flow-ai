@@ -23,6 +23,7 @@ export function DirectionProvider({ children }: { children: React.ReactNode }) {
   )
 
   useEffect(() => {
+    // 将方向同步到 HTML 根节点，保证全局布局一致。
     const htmlElement = document.documentElement
     htmlElement.setAttribute('dir', dir)
   }, [dir])
@@ -51,6 +52,7 @@ export function DirectionProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
+// 供组件读取和切换页面排版方向。
 // eslint-disable-next-line react-refresh/only-export-components
 export function useDirection() {
   const context = useContext(DirectionContext)

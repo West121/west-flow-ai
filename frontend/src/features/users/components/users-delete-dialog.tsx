@@ -15,6 +15,7 @@ type UserDeleteDialogProps = {
   currentRow: User
 }
 
+// 用户删除确认弹窗，要求输入用户名才能继续。
 export function UsersDeleteDialog({
   open,
   onOpenChange,
@@ -22,6 +23,7 @@ export function UsersDeleteDialog({
 }: UserDeleteDialogProps) {
   const [value, setValue] = useState('')
 
+  // 输入值与用户名一致时才允许确认删除。
   const handleDelete = () => {
     if (value.trim() !== currentRow.username) return
 

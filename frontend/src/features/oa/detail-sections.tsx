@@ -12,6 +12,7 @@ export function ApprovalSheetBusinessSection({
 }: {
   detail: WorkbenchTaskDetail
 }) {
+  // 详情页只读展示当前表单快照，避免后续渲染过程里被意外改写。
   const [formSnapshot] = useState<Record<string, unknown>>(detail.formData ?? {})
   const title = resolveApprovalSheetBusinessTitle(detail)
   const rows = resolveApprovalSheetBusinessRows(detail)

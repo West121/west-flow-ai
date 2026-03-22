@@ -7,6 +7,7 @@ export function NavigationProgress() {
   const state = useRouterState()
 
   useEffect(() => {
+    // 用路由状态驱动顶部进度条，避免在每个页面里重复接入加载逻辑。
     if (state.status === 'pending') {
       ref.current?.continuousStart()
     } else {

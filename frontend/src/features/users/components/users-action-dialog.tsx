@@ -99,6 +99,7 @@ type UserActionDialogProps = {
   onOpenChange: (open: boolean) => void
 }
 
+// 用户新增和编辑弹窗，共用同一套表单与校验。
 export function UsersActionDialog({
   currentRow,
   open,
@@ -128,6 +129,7 @@ export function UsersActionDialog({
   })
 
   const onSubmit = (values: UserForm) => {
+    // 这里只演示提交结果，不接真实接口。
     form.reset()
     showSubmittedData(values)
     onOpenChange(false)

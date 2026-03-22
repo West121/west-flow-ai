@@ -18,6 +18,7 @@ type PageShellProps = {
   contentClassName?: string
 }
 
+// 复用的页面壳层，统一承载标题区、操作区和主内容区。
 export function PageShell({
   title,
   description,

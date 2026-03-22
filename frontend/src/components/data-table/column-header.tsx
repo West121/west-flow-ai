@@ -21,6 +21,7 @@ type DataTableColumnHeaderProps<TData, TValue> =
     title: string
   }
 
+// 表头标题组件，提供排序和隐藏列的菜单入口。
 export function DataTableColumnHeader<TData, TValue>({
   column,
   title,

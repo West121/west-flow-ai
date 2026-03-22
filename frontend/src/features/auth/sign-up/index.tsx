@@ -10,6 +10,7 @@ import {
 import { AuthLayout } from '../auth-layout'
 import { SignUpForm } from './components/sign-up-form'
 
+// 注册页入口，承载账号创建表单。
 export function SignUp() {
   return (
     <AuthLayout>

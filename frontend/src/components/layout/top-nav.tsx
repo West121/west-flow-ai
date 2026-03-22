@@ -18,6 +18,7 @@ type TopNavProps = React.HTMLAttributes<HTMLElement> & {
   }[]
 }
 
+// 顶部导航，桌面端用横向链接，移动端用折叠菜单。
 export function TopNav({ className, links, ...props }: TopNavProps) {
   return (
     <>

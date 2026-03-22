@@ -66,6 +66,7 @@ function toSortingState(search: ListQuerySearch): SortingState {
   }))
 }
 
+// 列表页通用骨架，负责摘要区、表格区和分页查询态。
 export function ResourceListPage<TData>({
   title,
   description,

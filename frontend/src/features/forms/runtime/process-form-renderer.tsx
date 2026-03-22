@@ -14,6 +14,7 @@ export type ProcessFormRendererProps = {
   disabled?: boolean
 }
 
+// 流程默认表单的运行态入口，缺少注册时直接提示配置问题。
 export function ProcessFormRenderer({
   processFormKey,
   processFormVersion,
@@ -51,4 +52,3 @@ export function ProcessFormRenderer({
 
   return <Component {...props} />
 }
-

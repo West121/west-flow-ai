@@ -1,3 +1,4 @@
+// 无障碍跳转入口，方便键盘用户直接进入主内容区。
 export function SkipToMain() {
   return (
     <a

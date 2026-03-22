@@ -53,6 +53,7 @@ export type ListQueryState = ListQuerySearch & {
   }>
 }
 
+// 将列表查询态整理成接口请求可直接使用的结构。
 export function toPaginationRequest(state: ListQuerySearch) {
   return {
     page: state.page,

@@ -30,6 +30,7 @@ const formSchema = z.object({
 
 type OtpFormProps = React.HTMLAttributes<HTMLFormElement>
 
+// 验证码表单负责长度校验和示例提交。
 export function OtpForm({ className, ...props }: OtpFormProps) {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)

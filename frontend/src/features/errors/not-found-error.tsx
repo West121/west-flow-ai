@@ -1,6 +1,7 @@
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
+// 404 错误页，提示当前路径不存在。
 export function NotFoundError() {
   const navigate = useNavigate()
   const { history } = useRouter()

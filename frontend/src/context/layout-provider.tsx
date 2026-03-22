@@ -4,12 +4,12 @@ import { getCookie, setCookie } from '@/lib/cookies'
 export type Collapsible = 'offcanvas' | 'icon' | 'none'
 export type Variant = 'inset' | 'sidebar' | 'floating'
 
-// Cookie constants following the pattern from sidebar.tsx
+// 布局相关配置通过 Cookie 持久化，保证刷新后可恢复。
 const LAYOUT_COLLAPSIBLE_COOKIE_NAME = 'layout_collapsible'
 const LAYOUT_VARIANT_COOKIE_NAME = 'layout_variant'
 const LAYOUT_COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
-// Default values
+// 默认布局配置。
 const DEFAULT_VARIANT = 'inset'
 const DEFAULT_COLLAPSIBLE = 'icon'
 
@@ -74,7 +74,7 @@ export function LayoutProvider({ children }: LayoutProviderProps) {
   return <LayoutContext value={contextValue}>{children}</LayoutContext>
 }
 
-// Define the hook for the provider
+// 供组件读取和切换当前布局配置。
 // eslint-disable-next-line react-refresh/only-export-components
 export function useLayout() {
   const context = useContext(LayoutContext)
