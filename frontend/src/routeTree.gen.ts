@@ -30,6 +30,7 @@ import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
+import { Route as AuthenticatedOaQueryRouteImport } from './routes/_authenticated/oa/query'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedWorkflowDefinitionsListRouteImport } from './routes/_authenticated/workflow/definitions/list'
 import { Route as AuthenticatedWorkbenchTodosListRouteImport } from './routes/_authenticated/workbench/todos/list'
@@ -46,6 +47,9 @@ import { Route as AuthenticatedSystemDepartmentsListRouteImport } from './routes
 import { Route as AuthenticatedSystemDepartmentsCreateRouteImport } from './routes/_authenticated/system/departments/create'
 import { Route as AuthenticatedSystemCompaniesListRouteImport } from './routes/_authenticated/system/companies/list'
 import { Route as AuthenticatedSystemCompaniesCreateRouteImport } from './routes/_authenticated/system/companies/create'
+import { Route as AuthenticatedOaLeaveCreateRouteImport } from './routes/_authenticated/oa/leave/create'
+import { Route as AuthenticatedOaExpenseCreateRouteImport } from './routes/_authenticated/oa/expense/create'
+import { Route as AuthenticatedOaCommonCreateRouteImport } from './routes/_authenticated/oa/common/create'
 import { Route as AuthenticatedSystemUsersUserIdIndexRouteImport } from './routes/_authenticated/system/users/$userId/index'
 import { Route as AuthenticatedSystemRolesRoleIdIndexRouteImport } from './routes/_authenticated/system/roles/$roleId/index'
 import { Route as AuthenticatedSystemPostsPostIdIndexRouteImport } from './routes/_authenticated/system/posts/$postId/index'
@@ -172,6 +176,11 @@ const AuthenticatedSettingsAccountRoute =
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedOaQueryRoute = AuthenticatedOaQueryRouteImport.update({
+  id: '/oa/query',
+  path: '/oa/query',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -268,6 +277,24 @@ const AuthenticatedSystemCompaniesCreateRoute =
     path: '/system/companies/create',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOaLeaveCreateRoute =
+  AuthenticatedOaLeaveCreateRouteImport.update({
+    id: '/oa/leave/create',
+    path: '/oa/leave/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOaExpenseCreateRoute =
+  AuthenticatedOaExpenseCreateRouteImport.update({
+    id: '/oa/expense/create',
+    path: '/oa/expense/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOaCommonCreateRoute =
+  AuthenticatedOaCommonCreateRouteImport.update({
+    id: '/oa/common/create',
+    path: '/oa/common/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemUsersUserIdIndexRoute =
   AuthenticatedSystemUsersUserIdIndexRouteImport.update({
     id: '/system/users/$userId/',
@@ -351,6 +378,7 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/oa/query': typeof AuthenticatedOaQueryRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -363,6 +391,9 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
   '/system/departments/create': typeof AuthenticatedSystemDepartmentsCreateRoute
@@ -400,6 +431,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/oa/query': typeof AuthenticatedOaQueryRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -412,6 +444,9 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/tasks': typeof AuthenticatedTasksIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
+  '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
   '/system/departments/create': typeof AuthenticatedSystemDepartmentsCreateRoute
@@ -452,6 +487,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
+  '/_authenticated/oa/query': typeof AuthenticatedOaQueryRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -464,6 +500,9 @@ export interface FileRoutesById {
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/tasks/': typeof AuthenticatedTasksIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
+  '/_authenticated/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/_authenticated/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/_authenticated/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
   '/_authenticated/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
   '/_authenticated/system/companies/list': typeof AuthenticatedSystemCompaniesListRoute
   '/_authenticated/system/departments/create': typeof AuthenticatedSystemDepartmentsCreateRoute
@@ -504,6 +543,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/'
     | '/errors/$error'
+    | '/oa/query'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -516,6 +556,9 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/tasks'
     | '/users'
+    | '/oa/common/create'
+    | '/oa/expense/create'
+    | '/oa/leave/create'
     | '/system/companies/create'
     | '/system/companies/list'
     | '/system/departments/create'
@@ -553,6 +596,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/'
     | '/errors/$error'
+    | '/oa/query'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -565,6 +609,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/tasks'
     | '/users'
+    | '/oa/common/create'
+    | '/oa/expense/create'
+    | '/oa/leave/create'
     | '/system/companies/create'
     | '/system/companies/list'
     | '/system/departments/create'
@@ -604,6 +651,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/'
     | '/_authenticated/errors/$error'
+    | '/_authenticated/oa/query'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -616,6 +664,9 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/'
     | '/_authenticated/tasks/'
     | '/_authenticated/users/'
+    | '/_authenticated/oa/common/create'
+    | '/_authenticated/oa/expense/create'
+    | '/_authenticated/oa/leave/create'
     | '/_authenticated/system/companies/create'
     | '/_authenticated/system/companies/list'
     | '/_authenticated/system/departments/create'
@@ -804,6 +855,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/oa/query': {
+      id: '/_authenticated/oa/query'
+      path: '/oa/query'
+      fullPath: '/oa/query'
+      preLoaderRoute: typeof AuthenticatedOaQueryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -914,6 +972,27 @@ declare module '@tanstack/react-router' {
       path: '/system/companies/create'
       fullPath: '/system/companies/create'
       preLoaderRoute: typeof AuthenticatedSystemCompaniesCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/oa/leave/create': {
+      id: '/_authenticated/oa/leave/create'
+      path: '/oa/leave/create'
+      fullPath: '/oa/leave/create'
+      preLoaderRoute: typeof AuthenticatedOaLeaveCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/oa/expense/create': {
+      id: '/_authenticated/oa/expense/create'
+      path: '/oa/expense/create'
+      fullPath: '/oa/expense/create'
+      preLoaderRoute: typeof AuthenticatedOaExpenseCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/oa/common/create': {
+      id: '/_authenticated/oa/common/create'
+      path: '/oa/common/create'
+      fullPath: '/oa/common/create'
+      preLoaderRoute: typeof AuthenticatedOaCommonCreateRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/users/$userId/': {
@@ -1030,6 +1109,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedOaQueryRoute: typeof AuthenticatedOaQueryRoute
   AuthenticatedWorkbenchStartRoute: typeof AuthenticatedWorkbenchStartRoute
   AuthenticatedWorkflowDesignerRoute: typeof AuthenticatedWorkflowDesignerRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
@@ -1037,6 +1117,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedTasksIndexRoute: typeof AuthenticatedTasksIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
+  AuthenticatedOaCommonCreateRoute: typeof AuthenticatedOaCommonCreateRoute
+  AuthenticatedOaExpenseCreateRoute: typeof AuthenticatedOaExpenseCreateRoute
+  AuthenticatedOaLeaveCreateRoute: typeof AuthenticatedOaLeaveCreateRoute
   AuthenticatedSystemCompaniesCreateRoute: typeof AuthenticatedSystemCompaniesCreateRoute
   AuthenticatedSystemCompaniesListRoute: typeof AuthenticatedSystemCompaniesListRoute
   AuthenticatedSystemDepartmentsCreateRoute: typeof AuthenticatedSystemDepartmentsCreateRoute
@@ -1070,6 +1153,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedOaQueryRoute: AuthenticatedOaQueryRoute,
   AuthenticatedWorkbenchStartRoute: AuthenticatedWorkbenchStartRoute,
   AuthenticatedWorkflowDesignerRoute: AuthenticatedWorkflowDesignerRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
@@ -1077,6 +1161,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedTasksIndexRoute: AuthenticatedTasksIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
+  AuthenticatedOaCommonCreateRoute: AuthenticatedOaCommonCreateRoute,
+  AuthenticatedOaExpenseCreateRoute: AuthenticatedOaExpenseCreateRoute,
+  AuthenticatedOaLeaveCreateRoute: AuthenticatedOaLeaveCreateRoute,
   AuthenticatedSystemCompaniesCreateRoute:
     AuthenticatedSystemCompaniesCreateRoute,
   AuthenticatedSystemCompaniesListRoute: AuthenticatedSystemCompaniesListRoute,

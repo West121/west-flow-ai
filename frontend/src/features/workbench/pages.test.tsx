@@ -30,9 +30,14 @@ const {
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
+    to,
     children,
     ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>,
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
   useNavigate: () => navigateMock,
   getRouteApi: () => ({
     useSearch: useSearchMock,
@@ -148,48 +153,23 @@ describe('workbench pages', () => {
     expect(screen.getByText('待认领')).toBeInTheDocument()
   })
 
-  it('submits the runtime leave form data from the start page', async () => {
-    workbenchApiMocks.startWorkbenchProcess.mockResolvedValue({
-      processDefinitionId: 'pd_001',
-      instanceId: 'pi_001',
-      status: 'RUNNING',
-      activeTasks: [
-        {
-          taskId: 'task_001',
-          nodeId: 'approve_manager',
-          nodeName: '部门负责人审批',
-          status: 'PENDING',
-          assignmentMode: 'USER',
-          candidateUserIds: ['usr_002'],
-          assigneeUserId: 'usr_002',
-        },
-      ],
-    })
-
+  it('shows business entry cards instead of the legacy processKey form', async () => {
     renderWithQuery(<WorkbenchStartPage />)
 
-    expect(screen.queryByLabelText('流程表单 JSON')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('请假天数'), {
-      target: { value: '3' },
-    })
-    fireEvent.change(screen.getByLabelText('请假原因'), {
-      target: { value: '外出处理事务' },
-    })
-    fireEvent.change(screen.getByLabelText('业务单号'), {
-      target: { value: 'biz_20260322_001' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '发起并进入待办' }))
-
-    await waitFor(() => {
-      expect(workbenchApiMocks.startWorkbenchProcess).toHaveBeenCalledWith({
-        processKey: 'oa_leave',
-        businessKey: 'biz_20260322_001',
-        formData: {
-          days: 3,
-          reason: '外出处理事务',
-        },
-      })
-    })
+    expect(screen.queryByLabelText('流程标识')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('业务单号')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '请假申请' })
+    ).toHaveAttribute('href', '/oa/leave/create')
+    expect(
+      screen.getByRole('link', { name: '报销申请' })
+    ).toHaveAttribute('href', '/oa/expense/create')
+    expect(
+      screen.getByRole('link', { name: '通用申请' })
+    ).toHaveAttribute('href', '/oa/common/create')
+    expect(
+      screen.getByRole('link', { name: 'OA 流程查询' })
+    ).toHaveAttribute('href', '/oa/query')
   })
 
   it('shows claim and return actions conditionally in the task detail page', async () => {

@@ -11,6 +11,7 @@ public record ProcessTaskDetailResponse(
         String processKey,
         String processName,
         String businessKey,
+        String businessType,
         String applicantUserId,
         String nodeId,
         String nodeName,

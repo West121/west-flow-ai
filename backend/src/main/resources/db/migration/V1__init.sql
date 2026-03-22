@@ -808,3 +808,135 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_user_role WHERE id = 'ur_004');
 INSERT INTO wf_delegation (id, principal_user_id, delegate_user_id, status, created_at)
 SELECT 'dlg_001', 'usr_002', 'usr_001', 'ACTIVE', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_delegation WHERE id = 'dlg_001');
+
+CREATE TABLE IF NOT EXISTS wf_business_process_binding (
+    id VARCHAR(64) PRIMARY KEY,
+    business_type VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    process_key VARCHAR(128) NOT NULL,
+    process_definition_id VARCHAR(64),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    priority INTEGER NOT NULL DEFAULT 10,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS wf_business_process_link (
+    id VARCHAR(64) PRIMARY KEY,
+    business_type VARCHAR(64) NOT NULL,
+    business_id VARCHAR(64) NOT NULL,
+    process_instance_id VARCHAR(64) NOT NULL,
+    process_definition_id VARCHAR(64) NOT NULL,
+    start_user_id VARCHAR(64) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS oa_leave_bill (
+    id VARCHAR(64) PRIMARY KEY,
+    bill_no VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    days INTEGER NOT NULL,
+    reason VARCHAR(512) NOT NULL,
+    process_instance_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL,
+    creator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS oa_expense_bill (
+    id VARCHAR(64) PRIMARY KEY,
+    bill_no VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    amount NUMERIC(18, 2) NOT NULL,
+    reason VARCHAR(512) NOT NULL,
+    process_instance_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL,
+    creator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS oa_common_request_bill (
+    id VARCHAR(64) PRIMARY KEY,
+    bill_no VARCHAR(64) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    title VARCHAR(256) NOT NULL,
+    content VARCHAR(2000) NOT NULL,
+    process_instance_id VARCHAR(64),
+    status VARCHAR(32) NOT NULL,
+    creator_user_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO wf_business_process_binding (
+    id,
+    business_type,
+    scene_code,
+    process_key,
+    process_definition_id,
+    enabled,
+    priority,
+    created_at,
+    updated_at
+)
+SELECT
+    'bind_seed_leave_default',
+    'OA_LEAVE',
+    'default',
+    'oa_leave',
+    NULL,
+    TRUE,
+    10,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_leave_default');
+
+INSERT INTO wf_business_process_binding (
+    id,
+    business_type,
+    scene_code,
+    process_key,
+    process_definition_id,
+    enabled,
+    priority,
+    created_at,
+    updated_at
+)
+SELECT
+    'bind_seed_expense_default',
+    'OA_EXPENSE',
+    'default',
+    'oa_expense',
+    NULL,
+    TRUE,
+    10,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_expense_default');
+
+INSERT INTO wf_business_process_binding (
+    id,
+    business_type,
+    scene_code,
+    process_key,
+    process_definition_id,
+    enabled,
+    priority,
+    created_at,
+    updated_at
+)
+SELECT
+    'bind_seed_common_default',
+    'OA_COMMON',
+    'default',
+    'oa_common',
+    NULL,
+    TRUE,
+    10,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_business_process_binding WHERE id = 'bind_seed_common_default');

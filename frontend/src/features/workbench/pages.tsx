@@ -20,7 +20,7 @@ import {
   UserCheck2,
   UserRoundPlus,
 } from 'lucide-react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -55,7 +55,6 @@ import {
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { handleServerError } from '@/lib/handle-server-error'
-import { findProcessRuntimeFormByProcessKey } from '@/features/forms/runtime/form-component-registry'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import {
@@ -65,10 +64,8 @@ import {
   getWorkbenchTaskDetail,
   listWorkbenchTasks,
   returnWorkbenchTask,
-  startWorkbenchProcess,
   transferWorkbenchTask,
   type CompleteWorkbenchTaskPayload,
-  type StartWorkbenchProcessPayload,
   type WorkbenchTaskDetail,
   type WorkbenchTaskListItem,
 } from '@/lib/api/workbench'
@@ -126,136 +123,6 @@ function summarizeTasks(records: WorkbenchTaskListItem[]) {
     ).length,
     completed: records.filter((record) => record.status === 'COMPLETED').length,
   }
-}
-
-function StartProcessRuntimeFormCard({
-  onSubmit,
-  isPending,
-}: {
-  onSubmit: (payload: StartWorkbenchProcessPayload) => void
-  isPending: boolean
-}) {
-  const form = useForm<StartProcessFormValues>({
-    resolver: zodResolver(startProcessSchema),
-    defaultValues: {
-      processKey: 'oa_leave',
-      businessKey: `biz_${new Date().getTime()}`,
-    },
-  })
-  const processKey = useWatch({
-    control: form.control,
-    name: 'processKey',
-  })
-  const processForm = useMemo(
-    () => findProcessRuntimeFormByProcessKey(processKey?.trim() ?? ''),
-    [processKey]
-  )
-  const [processFormData, setProcessFormData] = useState<Record<string, unknown>>({})
-
-  const onSubmitForm = form.handleSubmit((values) => {
-    if (!processForm) {
-      form.setError('processKey', {
-        type: 'manual',
-        message: '当前流程还没有注册流程默认表单',
-      })
-      return
-    }
-
-    onSubmit({
-      processKey: values.processKey.trim(),
-      businessKey: values.businessKey?.trim() || undefined,
-      formData: processFormData,
-    })
-  })
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>流程发起表单</CardTitle>
-        <CardDescription>
-          流程标识需要先在静态注册中心命中流程默认表单，发起后自动进入待办处理页。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form className='space-y-6' onSubmit={onSubmitForm}>
-            <FormField
-              control={form.control}
-              name='processKey'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>流程标识</FormLabel>
-                  <FormControl>
-                    <Input placeholder='例如：oa_leave' {...field} />
-                  </FormControl>
-                  <FormDescription>输入已经发布的流程标识。</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='businessKey'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>业务单号</FormLabel>
-                  <FormControl>
-                    <Input placeholder='例如：biz_20260322_001' {...field} />
-                  </FormControl>
-                  <FormDescription>可选，不填也能发起流程。</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className='space-y-4 rounded-2xl border p-4'>
-              <div className='space-y-1'>
-                <p className='text-sm font-medium'>流程默认表单</p>
-                <p className='text-sm text-muted-foreground'>
-                  发起页始终渲染流程默认表单的代码组件，没有注册时会提示当前流程未接入。
-                </p>
-              </div>
-              {processForm ? (
-                <ProcessFormRenderer
-                  processFormKey={processForm.formKey}
-                  processFormVersion={processForm.formVersion}
-                  value={processFormData}
-                  onChange={setProcessFormData}
-                />
-              ) : (
-                <Alert variant='destructive'>
-                  <AlertTitle>流程默认表单未注册</AlertTitle>
-                  <AlertDescription>
-                    流程标识 {processKey?.trim() || '--'} 还没有绑定可用的流程默认表单代码组件。
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-
-            <div className='flex items-center gap-3'>
-              <Button type='submit' disabled={isPending || !processForm}>
-                {isPending ? (
-                  <>
-                    <Loader2 className='animate-spin' />
-                    发起中
-                  </>
-                ) : (
-                  <>
-                    <Play />
-                    发起并进入待办
-                  </>
-                )}
-              </Button>
-              <Button asChild type='button' variant='outline'>
-                <Link to='/workbench/todos/list'>先看待办列表</Link>
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
-  )
 }
 
 function TaskRuntimeFormCard({
@@ -468,13 +335,6 @@ const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
   },
 ]
 
-const startProcessSchema = z.object({
-  processKey: z.string().min(1, '请输入流程标识'),
-  businessKey: z.string().optional(),
-})
-
-type StartProcessFormValues = z.infer<typeof startProcessSchema>
-
 const taskActionSchema = z.object({
   action: z.enum(['APPROVE', 'REJECT']),
   comment: z.string().max(500, '审批意见最多 500 个字符').default(''),
@@ -664,34 +524,10 @@ export function WorkbenchTodoListPage() {
 }
 
 export function WorkbenchStartPage() {
-  const navigate = useNavigate()
-
-  const startMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof startWorkbenchProcess>[0]) =>
-      startWorkbenchProcess(payload),
-    onSuccess: (response) => {
-      const firstTask = response.activeTasks[0]
-      if (firstTask) {
-        startTransition(() => {
-          navigate({
-            to: '/workbench/todos/$taskId',
-            params: { taskId: firstTask.taskId },
-          })
-        })
-        return
-      }
-
-      startTransition(() => {
-        navigate({ to: '/workbench/todos/list' })
-      })
-    },
-    onError: handleServerError,
-  })
-
   return (
     <PageShell
       title='发起流程'
-      description='流程中心发起页直接渲染代码表单组件，提交后会返回首个待处理任务。'
+      description='先选择业务入口，再进入对应的 OA 发起页。'
       actions={
         <Button asChild variant='outline'>
           <Link to='/workbench/todos/list'>
@@ -702,20 +538,38 @@ export function WorkbenchStartPage() {
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
-        <StartProcessRuntimeFormCard
-          onSubmit={(payload) => startMutation.mutate(payload)}
-          isPending={startMutation.isPending}
-        />
+        <Card>
+          <CardHeader>
+            <CardTitle>业务入口选择</CardTitle>
+            <CardDescription>
+              流程中心发起不再直接输入流程标识，而是先选业务入口。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='grid gap-3 sm:grid-cols-2'>
+            {[
+              ['请假申请', '/oa/leave/create'],
+              ['报销申请', '/oa/expense/create'],
+              ['通用申请', '/oa/common/create'],
+              ['OA 流程查询', '/oa/query'],
+            ].map(([label, href]) => (
+              <Button key={href} asChild variant='outline' className='justify-start'>
+                <Link to={href as '/oa/leave/create' | '/oa/expense/create' | '/oa/common/create' | '/oa/query'}>
+                  {label}
+                </Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>闭环说明</CardTitle>
-            <CardDescription>这是当前最小可运行的流程中心发起闭环。</CardDescription>
+            <CardTitle>流程中心说明</CardTitle>
+            <CardDescription>统一待办、发起和查询入口，避免拆成多套流程中心。</CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
-            <p>1. 先在流程设计器发布一个流程版本，例如 `oa_leave`。</p>
-            <p>2. 这里会自动渲染流程默认表单代码组件，而不是 JSON 文本框。</p>
-            <p>3. 系统会自动跳转到首个待办任务处理页，完成后返回工作台待办。</p>
+            <p>1. OA 业务入口先保存业务单据，再自动匹配流程绑定。</p>
+            <p>2. 成功后直接跳转首个待办任务；没有待办时回到待办列表。</p>
+            <p>3. 流程中心待办列表仍然保留在工作台中，方便统一处理。</p>
           </CardContent>
         </Card>
       </div>

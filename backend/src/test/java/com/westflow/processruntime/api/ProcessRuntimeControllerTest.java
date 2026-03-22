@@ -66,6 +66,7 @@ class ProcessRuntimeControllerTest {
                                 {
                                   "processKey": "oa_leave",
                                   "businessKey": "biz_001",
+                                  "businessType": "OA_LEAVE",
                                   "formData": {
                                     "amount": 500
                                   }
@@ -116,6 +117,7 @@ class ProcessRuntimeControllerTest {
         assertThat(pageBody.path("data").path("records").size()).isEqualTo(1);
         assertThat(pageBody.path("data").path("records").get(0).path("taskId").asText()).isEqualTo(taskId);
         assertThat(pageBody.path("data").path("records").get(0).path("processName").asText()).isEqualTo("请假审批");
+        assertThat(pageBody.path("data").path("records").get(0).path("businessType").asText()).isEqualTo("OA_LEAVE");
 
         String detailResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
                         .header("Authorization", "Bearer " + token))
@@ -128,6 +130,7 @@ class ProcessRuntimeControllerTest {
         assertThat(detailBody.path("code").asText()).isEqualTo("OK");
         assertThat(detailBody.path("data").path("taskId").asText()).isEqualTo(taskId);
         assertThat(detailBody.path("data").path("processName").asText()).isEqualTo("请假审批");
+        assertThat(detailBody.path("data").path("businessType").asText()).isEqualTo("OA_LEAVE");
         assertThat(detailBody.path("data").path("instanceStatus").asText()).isEqualTo("RUNNING");
         assertThat(detailBody.path("data").path("activeTaskIds").size()).isEqualTo(1);
 
@@ -165,6 +168,7 @@ class ProcessRuntimeControllerTest {
 
         JsonNode completedDetailBody = objectMapper.readTree(completedDetailResponse);
         assertThat(completedDetailBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(completedDetailBody.path("data").path("businessType").asText()).isEqualTo("OA_LEAVE");
         assertThat(completedDetailBody.path("data").path("completedAt").isNull()).isFalse();
         assertThat(completedDetailBody.path("data").path("taskFormData").path("approvedDays").asInt()).isEqualTo(2);
         assertThat(completedDetailBody.path("data").path("taskFormData").path("opinionTag").asText()).isEqualTo("同意");
@@ -187,6 +191,7 @@ class ProcessRuntimeControllerTest {
                                 {
                                   "processKey": "oa_leave",
                                   "businessKey": "biz_002",
+                                  "businessType": "OA_LEAVE",
                                   "formData": {
                                     "days": 3,
                                     "reason": "事假"

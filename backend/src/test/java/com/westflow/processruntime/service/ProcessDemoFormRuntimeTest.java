@@ -52,6 +52,7 @@ class ProcessDemoFormRuntimeTest {
         StartProcessResponse startResponse = processDemoService.start(new com.westflow.processruntime.api.StartProcessRequest(
                 "oa_leave",
                 "biz_003",
+                "OA_LEAVE",
                 Map.of(
                         "days", 3,
                         "reason", "事假"
@@ -79,6 +80,7 @@ class ProcessDemoFormRuntimeTest {
         StartProcessResponse startResponse = processDemoService.start(new com.westflow.processruntime.api.StartProcessRequest(
                 "oa_leave",
                 "biz_004",
+                "OA_LEAVE",
                 Map.of(
                         "days", 2,
                         "reason", "事假"

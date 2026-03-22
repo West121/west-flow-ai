@@ -7,6 +7,7 @@ public record StartProcessRequest(
         @NotBlank(message = "processKey 不能为空")
         String processKey,
         String businessKey,
+        String businessType,
         Map<String, Object> formData
 ) {
 }

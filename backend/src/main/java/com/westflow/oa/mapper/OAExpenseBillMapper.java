@@ -1,0 +1,67 @@
+package com.westflow.oa.mapper;
+
+import com.westflow.oa.api.OAExpenseBillDetailResponse;
+import com.westflow.oa.model.OAExpenseBillRecord;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
+
+@Mapper
+public interface OAExpenseBillMapper {
+
+    @Insert("""
+            INSERT INTO oa_expense_bill (
+              id,
+              bill_no,
+              scene_code,
+              amount,
+              reason,
+              process_instance_id,
+              status,
+              creator_user_id,
+              created_at,
+              updated_at
+            ) VALUES (
+              #{id},
+              #{billNo},
+              #{sceneCode},
+              #{amount},
+              #{reason},
+              #{processInstanceId},
+              #{status},
+              #{creatorUserId},
+              CURRENT_TIMESTAMP,
+              CURRENT_TIMESTAMP
+            )
+            """)
+    int insert(OAExpenseBillRecord record);
+
+    @Update("""
+            UPDATE oa_expense_bill
+            SET process_instance_id = #{processInstanceId},
+                status = #{status},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{billId}
+            """)
+    int updateProcessLink(
+            @Param("billId") String billId,
+            @Param("processInstanceId") String processInstanceId,
+            @Param("status") String status
+    );
+
+    @Select("""
+            SELECT
+              id AS billId,
+              bill_no AS billNo,
+              scene_code AS sceneCode,
+              amount,
+              reason,
+              process_instance_id AS processInstanceId,
+              status
+            FROM oa_expense_bill
+            WHERE id = #{billId}
+            """)
+    OAExpenseBillDetailResponse selectDetail(@Param("billId") String billId);
+}

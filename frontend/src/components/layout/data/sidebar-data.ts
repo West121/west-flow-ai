@@ -2,11 +2,15 @@ import {
   Building2,
   CircleUserRound,
   Command,
+  FileText,
   FolderKanban,
   ListTodo,
   Network,
+  NotebookText,
   ShieldCheck,
+  ReceiptText,
   SquareMenu,
+  Search,
   Users,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -25,6 +29,31 @@ export const sidebarData: SidebarData = {
     },
   ],
   navGroups: [
+    {
+      title: 'OA',
+      items: [
+        {
+          title: '请假申请',
+          url: '/oa/leave/create',
+          icon: FileText,
+        },
+        {
+          title: '报销申请',
+          url: '/oa/expense/create',
+          icon: ReceiptText,
+        },
+        {
+          title: '通用申请',
+          url: '/oa/common/create',
+          icon: NotebookText,
+        },
+        {
+          title: 'OA 流程查询',
+          url: '/oa/query',
+          icon: Search,
+        },
+      ],
+    },
     {
       title: '工作台',
       items: [
@@ -130,8 +159,22 @@ export const sidebarData: SidebarData = {
       ],
     },
     {
-      title: '流程平台',
+      title: '流程管理',
       items: [
+        {
+          title: '流程中心',
+          icon: ListTodo,
+          items: [
+            {
+              title: '待办列表',
+              url: '/workbench/todos/list',
+            },
+            {
+              title: '发起流程',
+              url: '/workbench/start',
+            },
+          ],
+        },
         {
           title: '流程定义',
           url: '/workflow/definitions/list',

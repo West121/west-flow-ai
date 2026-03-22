@@ -89,6 +89,7 @@ public class ProcessDemoService {
                 definition.processKey(),
                 definition.processName(),
                 request.businessKey(),
+                request.businessType(),
                 StpUtil.getLoginIdAsString(),
                 request.formData(),
                 now
@@ -619,6 +620,7 @@ public class ProcessDemoService {
                 instance.processKey,
                 instance.processName,
                 instance.businessKey,
+                instance.businessType,
                 instance.initiatorUserId,
                 task.nodeId,
                 task.nodeName,
@@ -652,6 +654,7 @@ public class ProcessDemoService {
                 instance.processKey,
                 instance.processName,
                 instance.businessKey,
+                instance.businessType,
                 instance.initiatorUserId,
                 task.nodeId,
                 task.nodeName,
@@ -957,6 +960,7 @@ public class ProcessDemoService {
         private final String processKey;
         private final String processName;
         private final String businessKey;
+        private final String businessType;
         private final String initiatorUserId;
         private final Map<String, Object> formData;
         private final OffsetDateTime createdAt;
@@ -972,6 +976,7 @@ public class ProcessDemoService {
                 String processKey,
                 String processName,
                 String businessKey,
+                String businessType,
                 String initiatorUserId,
                 Map<String, Object> formData,
                 OffsetDateTime createdAt
@@ -981,6 +986,7 @@ public class ProcessDemoService {
             this.processKey = processKey;
             this.processName = processName;
             this.businessKey = businessKey;
+            this.businessType = businessType;
             this.initiatorUserId = initiatorUserId;
             this.formData = formData == null ? Map.of() : new HashMap<>(formData);
             this.createdAt = createdAt;
