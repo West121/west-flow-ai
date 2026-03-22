@@ -33,10 +33,13 @@ import {
   type WorkflowCcTargetMode,
   type WorkflowEdge,
   type WorkflowNode,
+  type WorkflowReapprovePolicy,
   type WorkflowReminderChannel,
   type WorkflowTimeoutApprovalAction,
+  type WorkflowVoteWeight,
 } from './types'
 
+// 节点配置面板里的枚举选项集中放在这里。
 const assignmentModes = [
   { value: 'USER', label: '指定人员' },
   { value: 'ROLE', label: '角色' },
@@ -46,10 +49,17 @@ const assignmentModes = [
 ] satisfies Array<{ value: WorkflowApproverAssignmentMode; label: string }>
 
 const approvalPolicyTypes = [
+  { value: 'SINGLE', label: '单人审批' },
   { value: 'SEQUENTIAL', label: '顺序会签' },
   { value: 'PARALLEL', label: '并行会签' },
+  { value: 'OR_SIGN', label: '或签' },
   { value: 'VOTE', label: '票签' },
 ] satisfies Array<{ value: WorkflowApproverApprovalPolicyType; label: string }>
+
+const reapprovePolicies = [
+  { value: 'RESTART_ALL', label: '重新走完整个会签' },
+  { value: 'CONTINUE_PROGRESS', label: '从当前进度继续' },
+] satisfies Array<{ value: WorkflowReapprovePolicy; label: string }>
 
 const ccTargetModes = [
   { value: 'USER', label: '指定人员' },
@@ -94,6 +104,7 @@ const branchSchema = z.object({
   conditionExpression: z.string(),
 })
 
+// 节点配置表单使用一个大 schema 统一兜住校验。
 const nodeConfigFormSchema = z
   .object({
     kind: z.enum([
@@ -126,8 +137,11 @@ const nodeConfigFormSchema = z
       nodeFormKey: z.string(),
       nodeFormVersion: z.string(),
       fieldBindingsJson: z.string(),
-      approvalPolicyType: z.enum(['SEQUENTIAL', 'PARALLEL', 'VOTE']),
+      approvalPolicyType: z.enum(['SINGLE', 'SEQUENTIAL', 'PARALLEL', 'OR_SIGN', 'VOTE']),
       voteThreshold: z.string(),
+      voteWeightsJson: z.string(),
+      reapprovePolicy: z.enum(['RESTART_ALL', 'CONTINUE_PROGRESS']),
+      autoFinishRemaining: z.boolean(),
       timeoutPolicy: z.object({
         enabled: z.boolean(),
         durationMinutes: z.string(),
@@ -270,6 +284,24 @@ const nodeConfigFormSchema = z
       }
 
       if (
+        ['SEQUENTIAL', 'PARALLEL', 'OR_SIGN', 'VOTE'].includes(values.approver.approvalPolicyType)
+      ) {
+        if (values.approver.assignmentMode !== 'USER') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '当前阶段会签模式仅支持指定人员',
+            path: ['approver', 'assignmentMode'],
+          })
+        } else if (parseListValue(values.approver.userIds).length < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '会签模式至少需要 2 名处理人',
+            path: ['approver', 'userIds'],
+          })
+        }
+      }
+
+      if (
         values.approver.approvalPolicyType === 'VOTE' &&
         !values.approver.voteThreshold.trim()
       ) {
@@ -287,6 +319,48 @@ const nodeConfigFormSchema = z
             path: ['approver', 'voteThreshold'],
           })
         }
+        try {
+          const parsedWeights = JSON.parse(values.approver.voteWeightsJson)
+          if (!Array.isArray(parsedWeights)) {
+            throw new Error('not array')
+          }
+          const weights = parsedWeights
+            .map((item) => item as Partial<WorkflowVoteWeight>)
+            .filter(
+              (item): item is Partial<WorkflowVoteWeight> =>
+                Boolean(item?.userId) && Number(item.weight) > 0
+            )
+          if (weights.length !== parseListValue(values.approver.userIds).length) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '票签权重必须覆盖所有处理人',
+              path: ['approver', 'voteWeightsJson'],
+            })
+          }
+        } catch {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '票签权重必须是合法的 JSON 数组',
+            path: ['approver', 'voteWeightsJson'],
+          })
+        }
+      } else if (values.approver.voteWeightsJson.trim() !== '[]') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '非票签模式不允许配置票签权重',
+          path: ['approver', 'voteWeightsJson'],
+        })
+      }
+
+      if (
+        values.approver.approvalPolicyType === 'OR_SIGN' &&
+        !values.approver.autoFinishRemaining
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '或签必须启用自动结束剩余任务',
+          path: ['approver', 'autoFinishRemaining'],
+        })
       }
 
       if (values.approver.timeoutPolicy.enabled) {
@@ -512,6 +586,7 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
   const outgoingEdges = edges.filter((edge) => edge.source === node.id)
   const config = node.data.config as Record<string, unknown>
   const approvalPolicy = (config.approvalPolicy ?? {}) as Record<string, unknown>
+  const voteRule = (config.voteRule ?? {}) as Record<string, unknown>
   const timeoutPolicy = (config.timeoutPolicy ?? {}) as Record<string, unknown>
   const reminderPolicy = (config.reminderPolicy ?? {}) as Record<string, unknown>
   const assignment = (config.assignment ?? {}) as Record<string, unknown>
@@ -554,11 +629,23 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
         2
       ),
       approvalPolicyType:
-        (approvalPolicy.type as WorkflowApproverApprovalPolicyType) ?? 'SEQUENTIAL',
+        (config.approvalMode as WorkflowApproverApprovalPolicyType) ?? 'SINGLE',
       voteThreshold:
-        approvalPolicy.voteThreshold === null || approvalPolicy.voteThreshold === undefined
-          ? ''
-          : String(approvalPolicy.voteThreshold),
+        voteRule.thresholdPercent === null || voteRule.thresholdPercent === undefined
+          ? approvalPolicy.voteThreshold === null || approvalPolicy.voteThreshold === undefined
+            ? ''
+            : String(approvalPolicy.voteThreshold)
+          : String(voteRule.thresholdPercent),
+      voteWeightsJson: JSON.stringify(
+        Array.isArray(voteRule.weights) ? voteRule.weights : [],
+        null,
+        2
+      ),
+      reapprovePolicy:
+        config.reapprovePolicy === 'CONTINUE_PROGRESS'
+          ? 'CONTINUE_PROGRESS'
+          : 'RESTART_ALL',
+      autoFinishRemaining: Boolean(config.autoFinishRemaining ?? false),
       operations: {
         APPROVE: Array.isArray(config.operations)
           ? config.operations.includes('APPROVE')
@@ -695,6 +782,25 @@ function buildNodePatch(values: NodeConfigFormValues) {
     }
   }
 
+  function parseVoteWeights(json: string): WorkflowVoteWeight[] {
+    try {
+      const parsed = JSON.parse(json)
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+      return parsed
+        .map((item) => item as Partial<WorkflowVoteWeight>)
+        .filter((item): item is Partial<WorkflowVoteWeight> => Boolean(item))
+        .map<WorkflowVoteWeight>((item) => ({
+          userId: item.userId?.trim() ?? '',
+          weight: Number(item.weight),
+        }))
+        .filter((item) => item.userId && Number.isFinite(item.weight) && item.weight > 0)
+    } catch {
+      return []
+    }
+  }
+
   switch (values.kind) {
     case 'start':
       return {
@@ -715,8 +821,26 @@ function buildNodePatch(values: NodeConfigFormValues) {
           nodeFormKey: values.approver.nodeFormKey.trim(),
           nodeFormVersion: values.approver.nodeFormVersion.trim(),
           fieldBindings: parseBindings(values.approver.fieldBindingsJson),
+          approvalMode: values.approver.approvalPolicyType,
+          voteRule: {
+            thresholdPercent:
+              values.approver.approvalPolicyType === 'VOTE'
+                ? parseNumber(values.approver.voteThreshold)
+                : null,
+            passCondition: 'THRESHOLD_REACHED',
+            rejectCondition: 'REJECT_THRESHOLD',
+            weights:
+              values.approver.approvalPolicyType === 'VOTE'
+                ? parseVoteWeights(values.approver.voteWeightsJson)
+                : [],
+          },
+          reapprovePolicy: values.approver.reapprovePolicy,
+          autoFinishRemaining: values.approver.autoFinishRemaining,
           approvalPolicy: {
-            type: values.approver.approvalPolicyType,
+            type:
+              values.approver.approvalPolicyType === 'SINGLE'
+                ? 'SEQUENTIAL'
+                : values.approver.approvalPolicyType,
             voteThreshold:
               values.approver.approvalPolicyType === 'VOTE'
                 ? parseNumber(values.approver.voteThreshold)
@@ -853,8 +977,11 @@ export function NodeConfigPanel({
             nodeFormKey: '',
             nodeFormVersion: '',
             fieldBindingsJson: '[]',
-            approvalPolicyType: 'SEQUENTIAL',
+            approvalPolicyType: 'SINGLE',
             voteThreshold: '',
+            voteWeightsJson: '[]',
+            reapprovePolicy: 'RESTART_ALL',
+            autoFinishRemaining: false,
             timeoutPolicy: {
               enabled: false,
               durationMinutes: '',
@@ -1263,17 +1390,88 @@ export function NodeConfigPanel({
               )}
             />
 
-            {selectedApproverPolicy === 'VOTE' ? (
+            {selectedApproverPolicy !== 'SINGLE' ? (
               <FormField
                 control={form.control}
-                name='approver.voteThreshold'
+                name='approver.reapprovePolicy'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>票签阈值</FormLabel>
+                    <FormLabel>重新审批策略</FormLabel>
                     <FormControl>
-                      <Input {...field} inputMode='numeric' placeholder='50' />
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择重新审批策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {reapprovePolicies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+
+            {selectedApproverPolicy === 'VOTE' ? (
+              <>
+                <FormField
+                  control={form.control}
+                  name='approver.voteThreshold'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>票签阈值</FormLabel>
+                      <FormControl>
+                        <Input {...field} inputMode='numeric' placeholder='50' />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='approver.voteWeightsJson'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>票签权重 JSON</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          rows={4}
+                          className='font-mono text-xs'
+                          placeholder='[
+  {"userId":"usr_002","weight":40},
+  {"userId":"usr_003","weight":60}
+]'
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </>
+            ) : null}
+
+            {selectedApproverPolicy === 'OR_SIGN' ? (
+              <FormField
+                control={form.control}
+                name='approver.autoFinishRemaining'
+                render={({ field }) => (
+                  <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
+                    <div className='space-y-1'>
+                      <FormLabel>自动结束剩余任务</FormLabel>
+                      <p className='text-xs text-muted-foreground'>
+                        任意一人处理完成后，自动结束同组其他未处理任务。
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
                   </FormItem>
                 )}
               />

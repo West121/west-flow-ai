@@ -4,6 +4,8 @@ import {
   type WorkflowConditionNodeConfig,
   type WorkflowEdgeConditionType,
   type WorkflowFieldBinding,
+  type WorkflowReapprovePolicy,
+  type WorkflowVoteWeight,
   type WorkflowNodeConfigMap,
   type WorkflowNodeKind,
   type WorkflowNodeTone,
@@ -40,6 +42,15 @@ const defaultApproverConfig: WorkflowApproverNodeConfig = {
   nodeFormKey: '',
   nodeFormVersion: '',
   fieldBindings: [],
+  approvalMode: 'SINGLE',
+  voteRule: {
+    thresholdPercent: null,
+    passCondition: 'THRESHOLD_REACHED',
+    rejectCondition: 'REJECT_THRESHOLD',
+    weights: [],
+  },
+  reapprovePolicy: 'RESTART_ALL',
+  autoFinishRemaining: false,
   approvalPolicy: {
     type: 'SEQUENTIAL',
     voteThreshold: null,
@@ -100,6 +111,7 @@ const defaultStartConfig: WorkflowStartNodeConfig = {
 
 const emptyConfig = {}
 
+// 字段绑定在持久化前统一清洗成可用结构。
 function normalizeFieldBindings(value: unknown): WorkflowFieldBinding[] {
   if (!Array.isArray(value)) {
     return []
@@ -116,6 +128,7 @@ function normalizeFieldBindings(value: unknown): WorkflowFieldBinding[] {
     .filter((item) => item.sourceFieldKey && item.targetFieldKey)
 }
 
+// 数值字段统一做空值兜底。
 function normalizeNumber(value: unknown, fallback: number | null) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
@@ -124,6 +137,31 @@ function normalizeNumber(value: unknown, fallback: number | null) {
   return fallback
 }
 
+// 票签权重只保留正整数配置。
+function normalizeVoteWeights(value: unknown): WorkflowVoteWeight[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value
+    .map((item) => item as Partial<WorkflowVoteWeight> | null | undefined)
+    .filter((item): item is Partial<WorkflowVoteWeight> => Boolean(item))
+    .map<WorkflowVoteWeight>((item) => ({
+      userId: item.userId ? String(item.userId) : '',
+      weight:
+        typeof item.weight === 'number' && Number.isFinite(item.weight)
+          ? item.weight
+          : Number.NaN,
+    }))
+    .filter((item) => item.userId && Number.isFinite(item.weight) && item.weight > 0)
+}
+
+// 重审策略只接受约定好的两种枚举值。
+function normalizeReapprovePolicy(value: unknown): WorkflowReapprovePolicy {
+  return value === 'CONTINUE_PROGRESS' ? 'CONTINUE_PROGRESS' : 'RESTART_ALL'
+}
+
+// 提醒渠道只保留支持的枚举值。
 function normalizeReminderChannels(value: unknown): WorkflowReminderChannel[] {
   if (!Array.isArray(value)) {
     return [...defaultApproverConfig.reminderPolicy.channels]
@@ -144,6 +182,7 @@ function normalizeReminderChannels(value: unknown): WorkflowReminderChannel[] {
   return channels.length > 0 ? channels : [...defaultApproverConfig.reminderPolicy.channels]
 }
 
+// 根据节点类型返回默认配置，设计器初始化会用到。
 export function defaultNodeConfig<K extends WorkflowNodeKind>(
   kind: K
 ): WorkflowNodeConfigMap[K] {
@@ -166,6 +205,7 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
   }
 }
 
+// 节点语气决定画布里的视觉颜色。
 export function toneForKind(kind: WorkflowNodeKind): WorkflowNodeTone {
   switch (kind) {
     case 'start':
@@ -183,6 +223,7 @@ export function toneForKind(kind: WorkflowNodeKind): WorkflowNodeTone {
   }
 }
 
+// 节点描述文案用于画布和表单提示。
 export function descriptionForKind(kind: WorkflowNodeKind) {
   switch (kind) {
     case 'start':
@@ -204,6 +245,7 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
   }
 }
 
+// 节点标题优先用固定中文名，实在没有再回退原值。
 export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
   switch (kind) {
     case 'start':
@@ -227,6 +269,7 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
   }
 }
 
+// 保存前把节点配置清洗成统一结构。
 export function normalizeNodeConfig<K extends WorkflowNodeKind>(
   kind: K,
   config: unknown
@@ -262,6 +305,30 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
       nodeFormKey: value?.nodeFormKey ? String(value.nodeFormKey) : '',
       nodeFormVersion: value?.nodeFormVersion ? String(value.nodeFormVersion) : '',
       fieldBindings: normalizeFieldBindings(value?.fieldBindings),
+      approvalMode:
+        value?.approvalMode === 'SEQUENTIAL' ||
+        value?.approvalMode === 'PARALLEL' ||
+        value?.approvalMode === 'OR_SIGN' ||
+        value?.approvalMode === 'VOTE'
+          ? value.approvalMode
+          : defaultApproverConfig.approvalMode,
+      voteRule: {
+        thresholdPercent: normalizeNumber(
+          value?.voteRule?.thresholdPercent,
+          defaultApproverConfig.voteRule.thresholdPercent
+        ),
+        passCondition: value?.voteRule?.passCondition
+          ? String(value.voteRule.passCondition)
+          : defaultApproverConfig.voteRule.passCondition,
+        rejectCondition: value?.voteRule?.rejectCondition
+          ? String(value.voteRule.rejectCondition)
+          : defaultApproverConfig.voteRule.rejectCondition,
+        weights: normalizeVoteWeights(value?.voteRule?.weights),
+      },
+      reapprovePolicy: normalizeReapprovePolicy(value?.reapprovePolicy),
+      autoFinishRemaining: Boolean(
+        value?.autoFinishRemaining ?? defaultApproverConfig.autoFinishRemaining
+      ),
       approvalPolicy: {
         type: value?.approvalPolicy?.type ?? defaultApproverConfig.approvalPolicy.type,
         voteThreshold:

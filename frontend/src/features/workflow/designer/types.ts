@@ -1,5 +1,6 @@
 import { type Edge, type Node } from '@xyflow/react'
 
+// 工作流设计器只使用这几种基础节点。
 export type WorkflowNodeKind =
   | 'start'
   | 'approver'
@@ -10,6 +11,7 @@ export type WorkflowNodeKind =
   | 'parallel'
   | 'end'
 
+// 节点 tone 只控制视觉语气，不承载业务语义。
 export type WorkflowNodeTone = 'brand' | 'success' | 'warning' | 'neutral'
 
 export type WorkflowApproverAssignmentMode =
@@ -20,9 +22,25 @@ export type WorkflowApproverAssignmentMode =
   | 'FORM_FIELD'
 
 export type WorkflowApproverApprovalPolicyType =
+  | 'SINGLE'
   | 'SEQUENTIAL'
   | 'PARALLEL'
+  | 'OR_SIGN'
   | 'VOTE'
+
+export type WorkflowReapprovePolicy = 'RESTART_ALL' | 'CONTINUE_PROGRESS'
+
+export type WorkflowVoteWeight = {
+  userId: string
+  weight: number
+}
+
+export type WorkflowVoteRule = {
+  thresholdPercent: number | null
+  passCondition: string
+  rejectCondition: string
+  weights: WorkflowVoteWeight[]
+}
 
 export type WorkflowTimeoutApprovalAction = 'APPROVE' | 'REJECT'
 export type WorkflowReminderChannel =
@@ -46,6 +64,7 @@ export type WorkflowFormFieldValueType =
 
 export type WorkflowFieldBindingSource = 'PROCESS_FORM' | 'NODE_FORM'
 
+// 字段绑定描述流程表单和节点表单之间的映射。
 export type WorkflowFieldBinding = {
   source: WorkflowFieldBindingSource
   sourceFieldKey: string
@@ -75,6 +94,10 @@ export type WorkflowApproverNodeConfig = {
   nodeFormKey?: string
   nodeFormVersion?: string
   fieldBindings?: WorkflowFieldBinding[]
+  approvalMode?: WorkflowApproverApprovalPolicyType
+  voteRule?: WorkflowVoteRule
+  reapprovePolicy?: WorkflowReapprovePolicy
+  autoFinishRemaining?: boolean
   approvalPolicy: {
     type: WorkflowApproverApprovalPolicyType
     voteThreshold: number | null
@@ -129,6 +152,7 @@ export type WorkflowCcNodeConfig = {
   readRequired: boolean
 }
 
+// 每种节点类型都对应一套独立配置结构。
 export type WorkflowNodeConfigMap = {
   start: WorkflowStartNodeConfig
   approver: WorkflowApproverNodeConfig
@@ -158,12 +182,14 @@ export type WorkflowEdgeData = {
 
 export type WorkflowEdge = Edge<WorkflowEdgeData>
 
+// 画布快照是设计器历史、保存和发布的基础数据。
 export type WorkflowSnapshot = {
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   selectedNodeId: string | null
 }
 
+// 辅助线状态只保存横竖两条对齐线的位置。
 export type WorkflowHelperLines = {
   vertical: number | null
   horizontal: number | null

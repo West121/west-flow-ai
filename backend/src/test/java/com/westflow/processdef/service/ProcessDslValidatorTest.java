@@ -302,6 +302,155 @@ class ProcessDslValidatorTest {
         assertValidationFailure(dsl, "trigger 节点 triggerKey 不能为空");
     }
 
+    @Test
+    void shouldRejectCountersignModeWithoutAtLeastTwoAssignees() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "SEQUENTIAL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "至少配置 2 名处理人");
+    }
+
+    @Test
+    void shouldRejectVoteModeWithoutThresholdPercent() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002", "usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "VOTE",
+                                "voteRule", Map.of(
+                                        "weights", List.of(
+                                                Map.of("userId", "usr_002", "weight", 40),
+                                                Map.of("userId", "usr_003", "weight", 60)
+                                        )
+                                )
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "票签阈值必须在 1-100 之间");
+    }
+
+    @Test
+    void shouldRejectVoteModeWithoutWeightsForAllAssignees() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002", "usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "VOTE",
+                                "voteRule", Map.of(
+                                        "thresholdPercent", 60,
+                                        "weights", List.of(
+                                                Map.of("userId", "usr_002", "weight", 100)
+                                        )
+                                )
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "票签权重必须覆盖所有处理人");
+    }
+
+    @Test
+    void shouldRejectOrSignModeWithoutAutoFinishRemaining() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002", "usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "OR_SIGN",
+                                "autoFinishRemaining", false
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "或签必须启用自动结束剩余任务");
+    }
+
+    @Test
+    void shouldAcceptValidCountersignDsl() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002", "usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "PARALLEL",
+                                "reapprovePolicy", "RESTART_ALL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
     private void assertValidationFailure(ProcessDslPayload dsl, String messagePart) {
         assertThatThrownBy(() -> validator.validate(dsl))
                 .isInstanceOf(ContractException.class)
@@ -373,18 +522,23 @@ class ProcessDslValidatorTest {
     }
 
     private ProcessDslPayload.Node approverNode(String id) {
-        return node(id, "approver", Map.of(
-                "assignment", Map.of(
-                        "mode", "USER",
-                        "userIds", List.of("usr_002"),
-                        "roleCodes", List.of(),
-                        "departmentRef", "",
-                        "formFieldKey", ""
-                ),
-                "approvalPolicy", approvalPolicy(),
-                "operations", List.of("APPROVE", "REJECT", "RETURN"),
-                "commentRequired", false
+        return approverNodeWithConfig(id, Map.of());
+    }
+
+    private ProcessDslPayload.Node approverNodeWithConfig(String id, Map<String, Object> overrides) {
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("assignment", Map.of(
+                "mode", "USER",
+                "userIds", List.of("usr_002"),
+                "roleCodes", List.of(),
+                "departmentRef", "",
+                "formFieldKey", ""
         ));
+        config.put("approvalPolicy", approvalPolicy());
+        config.put("operations", List.of("APPROVE", "REJECT", "RETURN"));
+        config.put("commentRequired", false);
+        config.putAll(overrides);
+        return node(id, "approver", config);
     }
 
     private Map<String, Object> approvalPolicy() {

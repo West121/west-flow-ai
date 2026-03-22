@@ -172,6 +172,68 @@ describe('workflow designer dsl mapping', () => {
     })
   })
 
+  it('persists countersign fields in the DSL config', () => {
+    const snapshotWithCountersign = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1'
+          ? ({
+              ...node,
+              data: {
+                ...node.data,
+                config: {
+                  ...(node.data.config as object),
+                  approvalMode: 'VOTE',
+                  voteRule: {
+                    thresholdPercent: 60,
+                    passCondition: 'THRESHOLD_REACHED',
+                    rejectCondition: 'REJECT_THRESHOLD',
+                    weights: [
+                      { userId: 'usr_002', weight: 40 },
+                      { userId: 'usr_003', weight: 60 },
+                    ],
+                  },
+                  reapprovePolicy: 'CONTINUE_PROGRESS',
+                  autoFinishRemaining: true,
+                  assignment: {
+                    mode: 'USER',
+                    userIds: ['usr_002', 'usr_003'],
+                    roleCodes: [],
+                    departmentRef: '',
+                    formFieldKey: '',
+                  },
+                },
+              },
+            } as WorkflowNode)
+          : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithCountersign, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      approvalMode: 'VOTE',
+      voteRule: {
+        thresholdPercent: 60,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [
+          { userId: 'usr_002', weight: 40 },
+          { userId: 'usr_003', weight: 60 },
+        ],
+      },
+      reapprovePolicy: 'CONTINUE_PROGRESS',
+      autoFinishRemaining: true,
+    })
+  })
+
   it('hydrates the designer snapshot from the persisted process definition detail', () => {
     const hydrated = processDefinitionDetailToWorkflowSnapshot({
       processDefinitionId: 'oa_leave:1',

@@ -31,6 +31,17 @@ public class ProcessDslValidator {
     );
     private static final List<String> SUPPORTED_SCHEDULE_TYPES = List.of("ABSOLUTE_TIME", "RELATIVE_TO_ARRIVAL");
     private static final List<String> SUPPORTED_TRIGGER_MODES = List.of("IMMEDIATE", "SCHEDULED");
+    private static final List<String> SUPPORTED_APPROVAL_MODES = List.of(
+            "SINGLE",
+            "SEQUENTIAL",
+            "PARALLEL",
+            "OR_SIGN",
+            "VOTE"
+    );
+    private static final List<String> SUPPORTED_REAPPROVE_POLICIES = List.of(
+            "RESTART_ALL",
+            "CONTINUE_PROGRESS"
+    );
 
     // 对整份 DSL 做一致性校验，失败时直接抛出请求异常。
     public void validate(ProcessDslPayload payload) {
@@ -149,20 +160,18 @@ public class ProcessDslValidator {
             }
 
             Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
-            String approvalType = asString(approvalPolicy.get("type"));
-            if (approvalType == null) {
-                throw invalid("approver 节点 approvalPolicy.type 不能为空", Map.of("nodeId", node.id()));
+            String approvalMode = asString(config.get("approvalMode"));
+            if (approvalMode == null) {
+                approvalMode = asString(approvalPolicy.get("type"));
             }
-            switch (approvalType) {
-                case "SEQUENTIAL", "PARALLEL" -> {
-                }
-                case "VOTE" -> {
-                    Integer threshold = integerValue(approvalPolicy.get("voteThreshold"));
-                    if (threshold == null || threshold < 1 || threshold > 100) {
-                        throw invalid("approver 节点票签阈值必须在 1-100 之间", Map.of("nodeId", node.id()));
-                    }
-                }
-                default -> throw invalid("approver 节点 approvalPolicy.type 不合法", Map.of("nodeId", node.id(), "type", approvalType));
+            if (approvalMode == null || !SUPPORTED_APPROVAL_MODES.contains(approvalMode)) {
+                throw invalid("approver 节点 approvalMode 不合法", Map.of("nodeId", node.id(), "approvalMode", approvalMode));
+            }
+            validateApproverApprovalMode(node, assignment, config, approvalPolicy, approvalMode);
+
+            String reapprovePolicy = asString(config.get("reapprovePolicy"));
+            if (reapprovePolicy != null && !SUPPORTED_REAPPROVE_POLICIES.contains(reapprovePolicy)) {
+                throw invalid("approver 节点 reapprovePolicy 不合法", Map.of("nodeId", node.id(), "reapprovePolicy", reapprovePolicy));
             }
 
             if (stringList(config.get("operations")).isEmpty()) {
@@ -171,6 +180,74 @@ public class ProcessDslValidator {
 
             validateTimeoutPolicy(node);
             validateReminderPolicy(node);
+        }
+    }
+
+    // 校验审批节点的会签模式、票签规则和自动结束配置。
+    private void validateApproverApprovalMode(
+            ProcessDslPayload.Node node,
+            Map<String, Object> assignment,
+            Map<String, Object> config,
+            Map<String, Object> approvalPolicy,
+            String approvalMode
+    ) {
+        List<String> userIds = stringList(assignment.get("userIds"));
+        boolean isCountersignMode = List.of("SEQUENTIAL", "PARALLEL", "OR_SIGN", "VOTE").contains(approvalMode)
+                && config.containsKey("approvalMode");
+        if (isCountersignMode) {
+            if (!"USER".equals(asString(assignment.get("mode"))) || userIds.size() < 2) {
+                throw invalid("approver 节点会签模式至少配置 2 名处理人", Map.of("nodeId", node.id(), "approvalMode", approvalMode));
+            }
+        }
+
+        Map<String, Object> voteRule = mapValue(config.get("voteRule"));
+        if ("VOTE".equals(approvalMode)) {
+            Integer threshold = integerValue(voteRule.get("thresholdPercent"));
+            if (threshold == null) {
+                threshold = integerValue(approvalPolicy.get("voteThreshold"));
+            }
+            if (threshold == null || threshold < 1 || threshold > 100) {
+                throw invalid("approver 节点票签阈值必须在 1-100 之间", Map.of("nodeId", node.id()));
+            }
+            validateVoteWeights(node, userIds, voteRule);
+            return;
+        }
+
+        if ("OR_SIGN".equals(approvalMode) && !Boolean.TRUE.equals(config.get("autoFinishRemaining"))) {
+            throw invalid("approver 节点或签必须启用自动结束剩余任务", Map.of("nodeId", node.id()));
+        }
+
+        if (!voteRule.isEmpty() && !listMapValue(voteRule.get("weights")).isEmpty()) {
+            throw invalid("approver 节点非票签模式不允许配置票签权重", Map.of("nodeId", node.id(), "approvalMode", approvalMode));
+        }
+    }
+
+    // 票签必须为每位处理人提供正数权重，且总权重大于 0。
+    private void validateVoteWeights(
+            ProcessDslPayload.Node node,
+            List<String> userIds,
+            Map<String, Object> voteRule
+    ) {
+        List<Map<String, Object>> weights = listMapValue(voteRule.get("weights"));
+        if (weights.isEmpty()) {
+            throw invalid("approver 节点票签权重必须覆盖所有处理人", Map.of("nodeId", node.id()));
+        }
+        Map<String, Integer> weightByUserId = new HashMap<>();
+        int totalWeight = 0;
+        for (Map<String, Object> item : weights) {
+            String userId = asString(item.get("userId"));
+            Integer weight = integerValue(item.get("weight"));
+            if (userId == null || weight == null || weight <= 0) {
+                throw invalid("approver 节点票签权重必须是大于 0 的整数", Map.of("nodeId", node.id()));
+            }
+            weightByUserId.put(userId, weight);
+            totalWeight += weight;
+        }
+        if (userIds.stream().anyMatch(userId -> !weightByUserId.containsKey(userId))) {
+            throw invalid("approver 节点票签权重必须覆盖所有处理人", Map.of("nodeId", node.id(), "userIds", userIds));
+        }
+        if (totalWeight <= 0) {
+            throw invalid("approver 节点票签权重总和必须大于 0", Map.of("nodeId", node.id()));
         }
     }
 
@@ -513,6 +590,17 @@ public class ProcessDslValidator {
         return values.stream()
                 .map(String::valueOf)
                 .filter(item -> !item.isBlank())
+                .toList();
+    }
+
+    // 把数组里的每一项都安全转换成 Map，供复杂配置校验复用。
+    private List<Map<String, Object>> listMapValue(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream()
+                .map(this::mapValue)
+                .filter(item -> !item.isEmpty())
                 .toList();
     }
 

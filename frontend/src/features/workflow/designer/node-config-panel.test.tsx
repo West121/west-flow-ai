@@ -36,7 +36,7 @@ function buildApproverNode(): WorkflowNode {
       config: {
         assignment: {
           mode: 'USER',
-          userIds: ['usr_002'],
+          userIds: ['usr_002', 'usr_003'],
           roleCodes: [],
           departmentRef: '',
           formFieldKey: '',
@@ -45,6 +45,18 @@ function buildApproverNode(): WorkflowNode {
           type: 'SEQUENTIAL',
           voteThreshold: null,
         },
+        approvalMode: 'VOTE',
+        voteRule: {
+          thresholdPercent: 60,
+          passCondition: 'THRESHOLD_REACHED',
+          rejectCondition: 'REJECT_THRESHOLD',
+          weights: [
+            { userId: 'usr_002', weight: 40 },
+            { userId: 'usr_003', weight: 60 },
+          ],
+        },
+        reapprovePolicy: 'CONTINUE_PROGRESS',
+        autoFinishRemaining: true,
         operations: ['APPROVE', 'REJECT', 'RETURN'],
         commentRequired: false,
         timeoutPolicy: {
@@ -105,9 +117,39 @@ describe('workflow designer node config panel', () => {
 
     expect(screen.getByText('超时审批')).toBeInTheDocument()
     expect(screen.getByText('自动提醒')).toBeInTheDocument()
+    expect(screen.getByText('重新审批策略')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('60')).toBeInTheDocument()
     expect(screen.getByDisplayValue('45')).toBeInTheDocument()
     expect(screen.getByDisplayValue('10')).toBeInTheDocument()
     expect(screen.getByDisplayValue('15')).toBeInTheDocument()
     expect(screen.getByDisplayValue('3')).toBeInTheDocument()
+  })
+
+  it('submits countersign fields back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(<NodeConfigPanel node={buildApproverNode()} edges={edges} onApply={onApply} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          approvalMode: 'VOTE',
+          voteRule: expect.objectContaining({
+            thresholdPercent: 60,
+            weights: [
+              { userId: 'usr_002', weight: 40 },
+              { userId: 'usr_003', weight: 60 },
+            ],
+          }),
+          reapprovePolicy: 'CONTINUE_PROGRESS',
+          autoFinishRemaining: true,
+        }),
+      }),
+      undefined
+    )
   })
 })
