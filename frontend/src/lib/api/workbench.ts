@@ -106,12 +106,45 @@ export type ApprovalSheetBusinessLocator = {
   businessId: string
 }
 
+export type ApprovalSheetListView = 'TODO' | 'DONE' | 'INITIATED' | 'CC'
+
+export type ApprovalSheetListItem = {
+  instanceId: string
+  processDefinitionId: string
+  processKey: string
+  processName: string
+  businessId: string | null
+  businessType: string | null
+  billNo: string | null
+  businessTitle: string | null
+  initiatorUserId: string
+  currentNodeName: string | null
+  currentTaskId: string | null
+  currentTaskStatus: string | null
+  currentAssigneeUserId: string | null
+  instanceStatus: string
+  latestAction: string | null
+  latestOperatorUserId: string | null
+  createdAt: string
+  updatedAt: string
+  completedAt: string | null
+}
+
 export type WorkbenchTaskActionAvailability = {
   canClaim: boolean
   canApprove: boolean
   canReject: boolean
   canTransfer: boolean
   canReturn: boolean
+}
+
+export type ApprovalSheetPageResponse = {
+  page: number
+  pageSize: number
+  total: number
+  pages: number
+  records: ApprovalSheetListItem[]
+  groups: Array<{ field: string; value: string }>
 }
 
 export type ClaimWorkbenchTaskPayload = {
@@ -195,6 +228,26 @@ export async function listWorkbenchTasks(
     data: WorkbenchTaskPageResponse
     requestId: string
   }>('/process-runtime/demo/tasks/page', toPaginationRequest(search))
+
+  return unwrapResponse(response)
+}
+
+export async function listApprovalSheets(
+  search: ListQuerySearch & {
+    view: ApprovalSheetListView
+    businessTypes?: string[]
+  }
+): Promise<ApprovalSheetPageResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: ApprovalSheetPageResponse
+    requestId: string
+  }>('/process-runtime/demo/approval-sheets/page', {
+    ...toPaginationRequest(search),
+    view: search.view,
+    businessTypes: search.businessTypes ?? [],
+  })
 
   return unwrapResponse(response)
 }

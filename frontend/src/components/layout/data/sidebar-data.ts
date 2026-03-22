@@ -1,10 +1,12 @@
 import {
   Building2,
+  CheckCircle2,
   CircleUserRound,
   Command,
   FileText,
   FolderKanban,
   ListTodo,
+  Mail,
   Network,
   NotebookText,
   ShieldCheck,
@@ -168,6 +170,21 @@ export const sidebarData: SidebarData = {
             {
               title: '待办列表',
               url: '/workbench/todos/list',
+            },
+            {
+              title: '已办列表',
+              url: '/workbench/done/list',
+              icon: CheckCircle2,
+            },
+            {
+              title: '我发起',
+              url: '/workbench/initiated/list',
+              icon: FileText,
+            },
+            {
+              title: '抄送我',
+              url: '/workbench/copied/list',
+              icon: Mail,
             },
             {
               title: '发起流程',

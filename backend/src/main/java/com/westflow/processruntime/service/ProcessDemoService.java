@@ -10,6 +10,9 @@ import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.approval.service.ApprovalSheetQueryService;
+import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
+import com.westflow.processruntime.api.ApprovalSheetListView;
+import com.westflow.processruntime.api.ApprovalSheetPageRequest;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
 import com.westflow.processruntime.api.ClaimTaskRequest;
@@ -64,6 +67,25 @@ public class ProcessDemoService {
             "status",
             "businessKey",
             "applicantUserId"
+    );
+    private static final List<String> SUPPORTED_APPROVAL_SHEET_FILTER_FIELDS = List.of(
+            "businessType",
+            "processName",
+            "currentNodeName",
+            "instanceStatus",
+            "initiatorUserId"
+    );
+    private static final List<String> SUPPORTED_APPROVAL_SHEET_SORT_FIELDS = List.of(
+            "createdAt",
+            "updatedAt",
+            "completedAt",
+            "processName",
+            "businessType",
+            "billNo",
+            "businessTitle",
+            "currentNodeName",
+            "instanceStatus",
+            "initiatorUserId"
     );
 
     private final ProcessDefinitionService processDefinitionService;
@@ -144,6 +166,32 @@ public class ProcessDemoService {
                         .toList();
 
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
+    }
+
+    public synchronized PageResponse<ApprovalSheetListItemResponse> pageApprovalSheets(ApprovalSheetPageRequest request) {
+        PageRequest pageRequest = request.toPageRequest();
+        String userId = currentUserId();
+        List<ApprovalSheetProjection> filtered = instancesById.values().stream()
+                .map(instance -> buildApprovalSheetProjection(instance, request.view(), userId))
+                .filter(projection -> projection != null)
+                .filter(projection -> matchesApprovalSheet(projection, request, pageRequest))
+                .sorted(resolveApprovalSheetComparator(pageRequest.sorts()))
+                .toList();
+
+        long total = filtered.size();
+        long pageSize = pageRequest.pageSize();
+        long pages = total == 0 ? 0 : (total + pageSize - 1) / pageSize;
+        long offset = (long) (pageRequest.page() - 1) * pageSize;
+
+        List<ApprovalSheetListItemResponse> records = total == 0
+                ? List.of()
+                : filtered.stream()
+                        .skip(offset)
+                        .limit(pageSize)
+                        .map(this::toApprovalSheetListItem)
+                        .toList();
+
+        return new PageResponse<>(pageRequest.page(), pageSize, total, pages, records, List.of());
     }
 
     public synchronized ProcessTaskDetailResponse detail(String taskId) {
@@ -659,6 +707,293 @@ public class ProcessDemoService {
         return actual != null && actual.equalsIgnoreCase(expected);
     }
 
+    private ApprovalSheetProjection buildApprovalSheetProjection(
+            DemoProcessInstance instance,
+            ApprovalSheetListView view,
+            String userId
+    ) {
+        if (view == ApprovalSheetListView.CC) {
+            return null;
+        }
+
+        List<DemoTask> instanceTasks = tasksForInstance(instance.instanceId);
+        if (instanceTasks.isEmpty()) {
+            return null;
+        }
+
+        DemoTask latestTask = latestTask(instanceTasks);
+        DemoTask currentTask = switch (view) {
+            case TODO -> currentVisibleTask(instance, userId);
+            case DONE, INITIATED -> currentOrLatestTask(instance, latestTask);
+            case CC -> null;
+        };
+        DemoTask latestHandledTask = latestHandledTask(instanceTasks, userId);
+
+        boolean visible = switch (view) {
+            case TODO -> currentTask != null;
+            case DONE -> latestHandledTask != null;
+            case INITIATED -> userId.equals(instance.initiatorUserId);
+            case CC -> false;
+        };
+        if (!visible) {
+            return null;
+        }
+
+        Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(instance.businessType, instance.businessKey);
+        return new ApprovalSheetProjection(
+                instance,
+                currentTask == null ? latestTask : currentTask,
+                latestTask,
+                latestHandledTask,
+                businessData,
+                stringValue(businessData.get("billNo")),
+                resolveBusinessTitle(instance.businessType, instance.businessKey, businessData)
+        );
+    }
+
+    private List<DemoTask> tasksForInstance(String instanceId) {
+        return tasksById.values().stream()
+                .filter(task -> instanceId.equals(task.instanceId))
+                .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
+                .toList();
+    }
+
+    private DemoTask currentVisibleTask(DemoProcessInstance instance, String userId) {
+        return instance.activeTaskIds.stream()
+                .map(tasksById::get)
+                .filter(task -> task != null)
+                .filter(task -> isTaskVisibleToUser(task, userId))
+                .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean isTaskVisibleToUser(DemoTask task, String userId) {
+        if (task == null) {
+            return false;
+        }
+        if ("PENDING".equals(task.status) && userId.equals(task.assigneeUserId)) {
+            return true;
+        }
+        return "PENDING_CLAIM".equals(task.status) && task.candidateUserIds.contains(userId);
+    }
+
+    private DemoTask currentOrLatestTask(DemoProcessInstance instance, DemoTask latestTask) {
+        if (!instance.activeTaskIds.isEmpty()) {
+            return resolveDetailTask(instance);
+        }
+        return latestTask;
+    }
+
+    private DemoTask latestTask(List<DemoTask> tasks) {
+        return tasks.stream()
+                .max(Comparator.comparing(DemoTask::updatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(DemoTask::createdAt)
+                        .thenComparing(DemoTask::taskId))
+                .orElse(null);
+    }
+
+    private DemoTask latestHandledTask(List<DemoTask> tasks, String userId) {
+        return tasks.stream()
+                .filter(task -> userId.equals(task.operatorUserId))
+                .filter(task -> task.action != null && !"CLAIM".equals(task.action))
+                .max(Comparator.comparing(DemoTask::completedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(DemoTask::updatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(DemoTask::taskId))
+                .orElse(null);
+    }
+
+    private boolean matchesApprovalSheet(
+            ApprovalSheetProjection projection,
+            ApprovalSheetPageRequest request,
+            PageRequest pageRequest
+    ) {
+        if (!request.businessTypes().isEmpty()
+                && (projection.instance.businessType == null || !request.businessTypes().contains(projection.instance.businessType))) {
+            return false;
+        }
+
+        String keyword = pageRequest.keyword();
+        if (keyword != null && !keyword.isBlank() && !containsApprovalSheetKeyword(projection, keyword)) {
+            return false;
+        }
+
+        for (FilterItem filter : pageRequest.filters()) {
+            if (!SUPPORTED_APPROVAL_SHEET_FILTER_FIELDS.contains(filter.field())) {
+                throw new ContractException(
+                        "VALIDATION.REQUEST_INVALID",
+                        HttpStatus.BAD_REQUEST,
+                        "不支持的审批单筛选字段",
+                        Map.of(
+                                "field",
+                                filter.field(),
+                                "supportedFields",
+                                SUPPORTED_APPROVAL_SHEET_FILTER_FIELDS
+                        )
+                );
+            }
+            if (!"eq".equalsIgnoreCase(filter.operator())) {
+                throw new ContractException(
+                        "VALIDATION.REQUEST_INVALID",
+                        HttpStatus.BAD_REQUEST,
+                        "审批单列表目前仅支持等值筛选",
+                        Map.of("operator", filter.operator())
+                );
+            }
+
+            String value = filter.value() == null ? null : filter.value().asText();
+            if (!matchesApprovalSheetFilter(projection, filter.field(), value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean containsApprovalSheetKeyword(ApprovalSheetProjection projection, String keyword) {
+        String normalized = keyword.trim().toLowerCase();
+        return contains(projection.instance.instanceId, normalized)
+                || contains(projection.instance.processKey, normalized)
+                || contains(projection.instance.processName, normalized)
+                || contains(projection.instance.businessKey, normalized)
+                || contains(projection.instance.businessType, normalized)
+                || contains(projection.billNo, normalized)
+                || contains(projection.businessTitle, normalized)
+                || contains(projection.currentTask == null ? null : projection.currentTask.nodeName, normalized)
+                || contains(projection.instance.initiatorUserId, normalized);
+    }
+
+    private boolean matchesApprovalSheetFilter(
+            ApprovalSheetProjection projection,
+            String field,
+            String value
+    ) {
+        return switch (field) {
+            case "businessType" -> equalsValue(projection.instance.businessType, value);
+            case "processName" -> equalsValue(projection.instance.processName, value);
+            case "currentNodeName" -> equalsValue(projection.currentTask == null ? null : projection.currentTask.nodeName, value);
+            case "instanceStatus" -> equalsValue(projection.instance.status, value);
+            case "initiatorUserId" -> equalsValue(projection.instance.initiatorUserId, value);
+            default -> throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "不支持的审批单筛选字段",
+                    Map.of("field", field)
+            );
+        };
+    }
+
+    private Comparator<ApprovalSheetProjection> resolveApprovalSheetComparator(List<SortItem> sorts) {
+        if (sorts == null || sorts.isEmpty()) {
+            return Comparator.comparing(
+                            (ApprovalSheetProjection projection) -> projection.instance.updatedAt,
+                            Comparator.nullsLast(Comparator.naturalOrder())
+                    )
+                    .reversed()
+                    .thenComparing(projection -> projection.instance.instanceId);
+        }
+
+        Comparator<ApprovalSheetProjection> comparator = null;
+        for (SortItem sort : sorts) {
+            Comparator<ApprovalSheetProjection> next = switch (sort.field()) {
+                case "createdAt" -> Comparator.comparing(
+                        (ApprovalSheetProjection projection) -> projection.instance.createdAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                );
+                case "updatedAt" -> Comparator.comparing(
+                        (ApprovalSheetProjection projection) -> projection.instance.updatedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                );
+                case "completedAt" -> Comparator.comparing(
+                        ApprovalSheetProjection::completedAt,
+                        Comparator.nullsLast(Comparator.naturalOrder())
+                );
+                case "processName" -> approvalSheetStringComparator(projection -> projection.instance.processName);
+                case "businessType" -> approvalSheetStringComparator(projection -> projection.instance.businessType);
+                case "billNo" -> approvalSheetStringComparator(ApprovalSheetProjection::billNo);
+                case "businessTitle" -> approvalSheetStringComparator(ApprovalSheetProjection::businessTitle);
+                case "currentNodeName" -> approvalSheetStringComparator(
+                        projection -> projection.currentTask == null ? null : projection.currentTask.nodeName
+                );
+                case "instanceStatus" -> approvalSheetStringComparator(projection -> projection.instance.status);
+                case "initiatorUserId" -> approvalSheetStringComparator(projection -> projection.instance.initiatorUserId);
+                default -> throw new ContractException(
+                        "VALIDATION.REQUEST_INVALID",
+                        HttpStatus.BAD_REQUEST,
+                        "不支持的审批单排序字段",
+                        Map.of(
+                                "field",
+                                sort.field(),
+                                "supportedFields",
+                                SUPPORTED_APPROVAL_SHEET_SORT_FIELDS
+                        )
+                );
+            };
+            if ("desc".equalsIgnoreCase(sort.direction())) {
+                next = next.reversed();
+            }
+            comparator = comparator == null ? next : comparator.thenComparing(next);
+        }
+
+        if (comparator == null) {
+            comparator = Comparator.comparing(
+                    (ApprovalSheetProjection projection) -> projection.instance.updatedAt,
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+        }
+        return comparator.thenComparing(projection -> projection.instance.instanceId);
+    }
+
+    private Comparator<ApprovalSheetProjection> approvalSheetStringComparator(
+            Function<ApprovalSheetProjection, String> extractor
+    ) {
+        return Comparator.comparing(extractor, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER));
+    }
+
+    private ApprovalSheetListItemResponse toApprovalSheetListItem(ApprovalSheetProjection projection) {
+        DemoTask currentTask = projection.currentTask;
+        DemoTask latestHandledTask = projection.latestHandledTask;
+        return new ApprovalSheetListItemResponse(
+                projection.instance.instanceId,
+                projection.instance.processDefinitionId,
+                projection.instance.processKey,
+                projection.instance.processName,
+                projection.instance.businessKey,
+                projection.instance.businessType,
+                projection.billNo,
+                projection.businessTitle,
+                projection.instance.initiatorUserId,
+                currentTask == null ? null : currentTask.nodeName,
+                currentTask == null ? null : currentTask.taskId,
+                currentTask == null ? null : currentTask.status,
+                currentTask == null ? null : currentTask.assigneeUserId,
+                projection.instance.status,
+                latestHandledTask != null ? latestHandledTask.action : projection.latestTask.action,
+                latestHandledTask != null ? latestHandledTask.operatorUserId : projection.latestTask.operatorUserId,
+                projection.instance.createdAt,
+                projection.instance.updatedAt,
+                projection.completedAt()
+        );
+    }
+
+    private String resolveBusinessTitle(String businessType, String businessKey, Map<String, Object> businessData) {
+        return switch (businessType == null ? "" : businessType) {
+            case "OA_LEAVE" -> titleWithSuffix("请假申请", stringValue(businessData.get("reason")));
+            case "OA_EXPENSE" -> titleWithSuffix("报销申请", stringValue(businessData.get("reason")));
+            case "OA_COMMON" -> titleWithSuffix("通用申请", stringValue(businessData.get("title")));
+            default -> stringValue(businessData.get("title")) != null
+                    ? stringValue(businessData.get("title"))
+                    : businessKey;
+        };
+    }
+
+    private String titleWithSuffix(String prefix, String suffix) {
+        if (suffix == null || suffix.isBlank()) {
+            return prefix;
+        }
+        return prefix + " · " + suffix;
+    }
+
     private Comparator<DemoTask> resolveComparator(List<SortItem> sorts) {
         if (sorts == null || sorts.isEmpty()) {
             return Comparator.comparing(
@@ -1095,6 +1430,20 @@ public class ProcessDemoService {
                             "流程定义缺少 start 节点",
                             Map.of()
                     ));
+        }
+    }
+
+    private record ApprovalSheetProjection(
+            DemoProcessInstance instance,
+            DemoTask currentTask,
+            DemoTask latestTask,
+            DemoTask latestHandledTask,
+            Map<String, Object> businessData,
+            String billNo,
+            String businessTitle
+    ) {
+        private OffsetDateTime completedAt() {
+            return "COMPLETED".equals(instance.status) ? instance.updatedAt : latestTask.completedAt;
         }
     }
 

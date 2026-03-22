@@ -36,6 +36,14 @@ public class ProcessRuntimeController {
         return ApiResponse.success(processDemoService.page(request));
     }
 
+    @PostMapping("/approval-sheets/page")
+    @SaCheckLogin
+    public ApiResponse<PageResponse<ApprovalSheetListItemResponse>> approvalSheetPage(
+            @Valid @RequestBody ApprovalSheetPageRequest request
+    ) {
+        return ApiResponse.success(processDemoService.pageApprovalSheets(request));
+    }
+
     @GetMapping("/tasks/{taskId}")
     @SaCheckLogin
     public ApiResponse<ProcessTaskDetailResponse> detail(@PathVariable String taskId) {

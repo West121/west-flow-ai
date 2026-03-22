@@ -55,16 +55,23 @@ import {
 import { PageShell } from '@/features/shared/page-shell'
 import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
+import {
+  createApprovalSheetColumns,
+  summarizeApprovalSheets,
+} from '@/features/workbench/approval-sheet-list'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import { type NavigateFn } from '@/hooks/use-table-url-state'
 import { handleServerError } from '@/lib/handle-server-error'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
+import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
   completeWorkbenchTask,
   getWorkbenchTaskActions,
   getWorkbenchTaskDetail,
+  listApprovalSheets,
   listWorkbenchTasks,
   returnWorkbenchTask,
   transferWorkbenchTask,
@@ -74,6 +81,9 @@ import {
 } from '@/lib/api/workbench'
 
 const workbenchTodoListRoute = getRouteApi('/_authenticated/workbench/todos/list')
+const workbenchDoneListRoute = getRouteApi('/_authenticated/workbench/done/list')
+const workbenchInitiatedListRoute = getRouteApi('/_authenticated/workbench/initiated/list')
+const workbenchCopiedListRoute = getRouteApi('/_authenticated/workbench/copied/list')
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
@@ -126,6 +136,90 @@ function summarizeTasks(records: WorkbenchTaskListItem[]) {
     ).length,
     completed: records.filter((record) => record.status === 'COMPLETED').length,
   }
+}
+
+function buildEmptyApprovalSheetPage(search: { page: number; pageSize: number }) {
+  return {
+    page: search.page,
+    pageSize: search.pageSize,
+    total: 0,
+    pages: 0,
+    records: [],
+    groups: [],
+  }
+}
+
+function ApprovalSheetListPageSection({
+  title,
+  description,
+  view,
+  search,
+  navigate,
+}: {
+  title: string
+  description: string
+  view: 'DONE' | 'INITIATED' | 'CC'
+  search: ListQuerySearch
+  navigate: NavigateFn
+}) {
+  const approvalSheetsQuery = useQuery({
+    queryKey: ['workbench', 'approval-sheet-page', view, search],
+    queryFn: () =>
+      listApprovalSheets({
+        ...search,
+        view,
+      }),
+  })
+
+  const pageData = approvalSheetsQuery.data ?? buildEmptyApprovalSheetPage(search)
+  const summary = summarizeApprovalSheets(pageData.records)
+
+  return (
+    <>
+      {approvalSheetsQuery.isError ? (
+        <Alert variant='destructive' className='mb-4'>
+          <AlertTitle>{title}加载失败</AlertTitle>
+          <AlertDescription>
+            {approvalSheetsQuery.error instanceof Error
+              ? approvalSheetsQuery.error.message
+              : '请稍后重试'}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <ResourceListPage
+        title={title}
+        description={description}
+        endpoint='/api/v1/process-runtime/demo/approval-sheets/page'
+        searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
+        search={search}
+        navigate={navigate}
+        columns={createApprovalSheetColumns('workbench')}
+        data={pageData.records}
+        total={pageData.total}
+        summaries={[
+          {
+            label: '审批单总量',
+            value: String(pageData.total),
+            hint: '实例维度聚合后的审批单数量。',
+          },
+          {
+            label: '进行中',
+            value: String(summary.running),
+            hint: '当前页里仍在流转中的审批单。',
+          },
+          {
+            label: '已完成',
+            value: String(summary.completed),
+            hint: '当前页已完成的审批单数量。',
+          },
+        ]}
+        createAction={{
+          label: '发起流程',
+          href: '/workbench/start',
+        }}
+      />
+    </>
+  )
 }
 
 function TaskRuntimeFormCard({
@@ -577,6 +671,51 @@ export function WorkbenchStartPage() {
         </Card>
       </div>
     </PageShell>
+  )
+}
+
+export function WorkbenchDoneListPage() {
+  const search = workbenchDoneListRoute.useSearch()
+  const navigate = workbenchDoneListRoute.useNavigate()
+
+  return (
+    <ApprovalSheetListPageSection
+      title='流程中心已办'
+      description='统一按审批单维度查看我已处理的流程，进入详情后仍然展示业务正文和流程轨迹。'
+      view='DONE'
+      search={search}
+      navigate={navigate}
+    />
+  )
+}
+
+export function WorkbenchInitiatedListPage() {
+  const search = workbenchInitiatedListRoute.useSearch()
+  const navigate = workbenchInitiatedListRoute.useNavigate()
+
+  return (
+    <ApprovalSheetListPageSection
+      title='流程中心我发起'
+      description='查看当前登录人发起的审批单，支持模糊搜索、分页和回查审批单详情。'
+      view='INITIATED'
+      search={search}
+      navigate={navigate}
+    />
+  )
+}
+
+export function WorkbenchCopiedListPage() {
+  const search = workbenchCopiedListRoute.useSearch()
+  const navigate = workbenchCopiedListRoute.useNavigate()
+
+  return (
+    <ApprovalSheetListPageSection
+      title='流程中心抄送我'
+      description='本期先提供统一入口和空数据闭环，后续补真实抄送模型后直接接入同一列表页。'
+      view='CC'
+      search={search}
+      navigate={navigate}
+    />
   )
 }
 

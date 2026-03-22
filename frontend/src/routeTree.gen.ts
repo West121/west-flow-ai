@@ -35,6 +35,9 @@ import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenti
 import { Route as AuthenticatedWorkflowDefinitionsListRouteImport } from './routes/_authenticated/workflow/definitions/list'
 import { Route as AuthenticatedWorkbenchTodosListRouteImport } from './routes/_authenticated/workbench/todos/list'
 import { Route as AuthenticatedWorkbenchTodosTaskIdRouteImport } from './routes/_authenticated/workbench/todos/$taskId'
+import { Route as AuthenticatedWorkbenchInitiatedListRouteImport } from './routes/_authenticated/workbench/initiated/list'
+import { Route as AuthenticatedWorkbenchDoneListRouteImport } from './routes/_authenticated/workbench/done/list'
+import { Route as AuthenticatedWorkbenchCopiedListRouteImport } from './routes/_authenticated/workbench/copied/list'
 import { Route as AuthenticatedSystemUsersListRouteImport } from './routes/_authenticated/system/users/list'
 import { Route as AuthenticatedSystemUsersCreateRouteImport } from './routes/_authenticated/system/users/create'
 import { Route as AuthenticatedSystemRolesListRouteImport } from './routes/_authenticated/system/roles/list'
@@ -206,6 +209,24 @@ const AuthenticatedWorkbenchTodosTaskIdRoute =
   AuthenticatedWorkbenchTodosTaskIdRouteImport.update({
     id: '/workbench/todos/$taskId',
     path: '/workbench/todos/$taskId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkbenchInitiatedListRoute =
+  AuthenticatedWorkbenchInitiatedListRouteImport.update({
+    id: '/workbench/initiated/list',
+    path: '/workbench/initiated/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkbenchDoneListRoute =
+  AuthenticatedWorkbenchDoneListRouteImport.update({
+    id: '/workbench/done/list',
+    path: '/workbench/done/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkbenchCopiedListRoute =
+  AuthenticatedWorkbenchCopiedListRouteImport.update({
+    id: '/workbench/copied/list',
+    path: '/workbench/copied/list',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemUsersListRoute =
@@ -430,6 +451,9 @@ export interface FileRoutesByFullPath {
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
+  '/workbench/copied/list': typeof AuthenticatedWorkbenchCopiedListRoute
+  '/workbench/done/list': typeof AuthenticatedWorkbenchDoneListRoute
+  '/workbench/initiated/list': typeof AuthenticatedWorkbenchInitiatedListRoute
   '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
@@ -486,6 +510,9 @@ export interface FileRoutesByTo {
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
+  '/workbench/copied/list': typeof AuthenticatedWorkbenchCopiedListRoute
+  '/workbench/done/list': typeof AuthenticatedWorkbenchDoneListRoute
+  '/workbench/initiated/list': typeof AuthenticatedWorkbenchInitiatedListRoute
   '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
@@ -545,6 +572,9 @@ export interface FileRoutesById {
   '/_authenticated/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/_authenticated/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/_authenticated/system/users/list': typeof AuthenticatedSystemUsersListRoute
+  '/_authenticated/workbench/copied/list': typeof AuthenticatedWorkbenchCopiedListRoute
+  '/_authenticated/workbench/done/list': typeof AuthenticatedWorkbenchDoneListRoute
+  '/_authenticated/workbench/initiated/list': typeof AuthenticatedWorkbenchInitiatedListRoute
   '/_authenticated/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/_authenticated/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/_authenticated/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
@@ -604,6 +634,9 @@ export interface FileRouteTypes {
     | '/system/roles/list'
     | '/system/users/create'
     | '/system/users/list'
+    | '/workbench/copied/list'
+    | '/workbench/done/list'
+    | '/workbench/initiated/list'
     | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
     | '/workflow/definitions/list'
@@ -660,6 +693,9 @@ export interface FileRouteTypes {
     | '/system/roles/list'
     | '/system/users/create'
     | '/system/users/list'
+    | '/workbench/copied/list'
+    | '/workbench/done/list'
+    | '/workbench/initiated/list'
     | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
     | '/workflow/definitions/list'
@@ -718,6 +754,9 @@ export interface FileRouteTypes {
     | '/_authenticated/system/roles/list'
     | '/_authenticated/system/users/create'
     | '/_authenticated/system/users/list'
+    | '/_authenticated/workbench/copied/list'
+    | '/_authenticated/workbench/done/list'
+    | '/_authenticated/workbench/initiated/list'
     | '/_authenticated/workbench/todos/$taskId'
     | '/_authenticated/workbench/todos/list'
     | '/_authenticated/workflow/definitions/list'
@@ -927,6 +966,27 @@ declare module '@tanstack/react-router' {
       path: '/workbench/todos/$taskId'
       fullPath: '/workbench/todos/$taskId'
       preLoaderRoute: typeof AuthenticatedWorkbenchTodosTaskIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workbench/initiated/list': {
+      id: '/_authenticated/workbench/initiated/list'
+      path: '/workbench/initiated/list'
+      fullPath: '/workbench/initiated/list'
+      preLoaderRoute: typeof AuthenticatedWorkbenchInitiatedListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workbench/done/list': {
+      id: '/_authenticated/workbench/done/list'
+      path: '/workbench/done/list'
+      fullPath: '/workbench/done/list'
+      preLoaderRoute: typeof AuthenticatedWorkbenchDoneListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workbench/copied/list': {
+      id: '/_authenticated/workbench/copied/list'
+      path: '/workbench/copied/list'
+      fullPath: '/workbench/copied/list'
+      preLoaderRoute: typeof AuthenticatedWorkbenchCopiedListRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/users/list': {
@@ -1195,6 +1255,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemRolesListRoute: typeof AuthenticatedSystemRolesListRoute
   AuthenticatedSystemUsersCreateRoute: typeof AuthenticatedSystemUsersCreateRoute
   AuthenticatedSystemUsersListRoute: typeof AuthenticatedSystemUsersListRoute
+  AuthenticatedWorkbenchCopiedListRoute: typeof AuthenticatedWorkbenchCopiedListRoute
+  AuthenticatedWorkbenchDoneListRoute: typeof AuthenticatedWorkbenchDoneListRoute
+  AuthenticatedWorkbenchInitiatedListRoute: typeof AuthenticatedWorkbenchInitiatedListRoute
   AuthenticatedWorkbenchTodosTaskIdRoute: typeof AuthenticatedWorkbenchTodosTaskIdRoute
   AuthenticatedWorkbenchTodosListRoute: typeof AuthenticatedWorkbenchTodosListRoute
   AuthenticatedWorkflowDefinitionsListRoute: typeof AuthenticatedWorkflowDefinitionsListRoute
@@ -1245,6 +1308,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemRolesListRoute: AuthenticatedSystemRolesListRoute,
   AuthenticatedSystemUsersCreateRoute: AuthenticatedSystemUsersCreateRoute,
   AuthenticatedSystemUsersListRoute: AuthenticatedSystemUsersListRoute,
+  AuthenticatedWorkbenchCopiedListRoute: AuthenticatedWorkbenchCopiedListRoute,
+  AuthenticatedWorkbenchDoneListRoute: AuthenticatedWorkbenchDoneListRoute,
+  AuthenticatedWorkbenchInitiatedListRoute:
+    AuthenticatedWorkbenchInitiatedListRoute,
   AuthenticatedWorkbenchTodosTaskIdRoute:
     AuthenticatedWorkbenchTodosTaskIdRoute,
   AuthenticatedWorkbenchTodosListRoute: AuthenticatedWorkbenchTodosListRoute,

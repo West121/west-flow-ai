@@ -2,6 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  WorkbenchCopiedListPage,
+  WorkbenchDoneListPage,
+  WorkbenchInitiatedListPage,
   WorkbenchStartPage,
   WorkbenchTodoDetailPage,
   WorkbenchTodoListPage,
@@ -18,6 +21,7 @@ const {
   routeNavigateMock: vi.fn(),
   workbenchApiMocks: {
     listWorkbenchTasks: vi.fn(),
+    listApprovalSheets: vi.fn(),
     getWorkbenchTaskDetail: vi.fn(),
     getApprovalSheetDetailByBusiness: vi.fn(),
     getWorkbenchTaskActions: vi.fn(),
@@ -66,20 +70,39 @@ vi.mock('@/features/shared/page-shell', () => ({
 
 vi.mock('@/features/shared/crud/resource-list-page', () => ({
   ResourceListPage: ({
+    title,
+    createAction,
     data,
+    total,
   }: {
-    data: Array<{ taskId: string; status: string; processName?: string }>
+    title: string
+    total?: number
+    createAction?: { label: string; href: string }
+    data: Array<{
+      taskId?: string
+      instanceId?: string
+      status?: string
+      processName?: string
+      businessTitle?: string
+      billNo?: string
+      instanceStatus?: string
+    }>
   }) => (
     <div>
+      <h2>{title}</h2>
+      {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
+      <span>total:{total ?? data.length}</span>
       {data.map((item) => (
-        <div key={item.taskId}>
+        <div key={item.taskId ?? item.instanceId}>
           <span>{item.processName}</span>
+          <span>{item.businessTitle ?? item.billNo}</span>
           <span>
-            {item.status === 'PENDING_CLAIM'
-              ? '待认领'
-              : item.status === 'PENDING'
-                ? '待处理'
-                : item.status}
+            {item.instanceStatus ??
+              (item.status === 'PENDING_CLAIM'
+                ? '待认领'
+                : item.status === 'PENDING'
+                  ? '待处理'
+                  : item.status)}
           </span>
         </div>
       ))}
@@ -248,6 +271,40 @@ function createWorkbenchTaskDetail(
   }
 }
 
+function createApprovalSheetPage(overrides: Record<string, unknown> = {}) {
+  return {
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    pages: 1,
+    groups: [],
+    records: [
+      {
+        instanceId: 'pi_sheet_001',
+        processDefinitionId: 'pd_001',
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        businessId: 'leave_001',
+        businessType: 'OA_LEAVE',
+        billNo: 'LEAVE-001',
+        businessTitle: '请假申请 · 外出处理事务',
+        initiatorUserId: 'usr_001',
+        currentNodeName: '部门负责人审批',
+        currentTaskId: 'task_approval_001',
+        currentTaskStatus: 'COMPLETED',
+        currentAssigneeUserId: 'usr_002',
+        instanceStatus: 'COMPLETED',
+        latestAction: 'APPROVE',
+        latestOperatorUserId: 'usr_002',
+        createdAt: '2026-03-22T09:00:00+08:00',
+        updatedAt: '2026-03-22T09:20:00+08:00',
+        completedAt: '2026-03-22T09:20:00+08:00',
+        ...overrides,
+      },
+    ],
+  }
+}
+
 describe('workbench pages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -286,6 +343,9 @@ describe('workbench pages', () => {
         },
       ],
     })
+    workbenchApiMocks.listApprovalSheets.mockResolvedValue(
+      createApprovalSheetPage()
+    )
   })
 
   afterEach(() => {
@@ -316,6 +376,83 @@ describe('workbench pages', () => {
     expect(
       screen.getByRole('link', { name: 'OA 流程查询' })
     ).toHaveAttribute('href', '/oa/query')
+  })
+
+  it('loads the done list through approval-sheet paging', async () => {
+    renderWithQuery(<WorkbenchDoneListPage />)
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.listApprovalSheets).toHaveBeenCalledWith({
+        page: 1,
+        pageSize: 20,
+        keyword: '',
+        filters: [],
+        sorts: [],
+        groups: [],
+        view: 'DONE',
+      })
+    })
+
+    expect(await screen.findByText('流程中心已办')).toBeInTheDocument()
+    expect(screen.getByText('请假申请 · 外出处理事务')).toBeInTheDocument()
+  })
+
+  it('loads the initiated list through approval-sheet paging', async () => {
+    workbenchApiMocks.listApprovalSheets.mockResolvedValue(
+      createApprovalSheetPage({
+        instanceId: 'pi_sheet_002',
+        billNo: 'EXPENSE-001',
+        businessTitle: '报销申请 · 客户接待',
+        businessType: 'OA_EXPENSE',
+        processName: '报销审批',
+        instanceStatus: 'RUNNING',
+      })
+    )
+
+    renderWithQuery(<WorkbenchInitiatedListPage />)
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.listApprovalSheets).toHaveBeenCalledWith({
+        page: 1,
+        pageSize: 20,
+        keyword: '',
+        filters: [],
+        sorts: [],
+        groups: [],
+        view: 'INITIATED',
+      })
+    })
+
+    expect(await screen.findByText('流程中心我发起')).toBeInTheDocument()
+    expect(screen.getByText('报销申请 · 客户接待')).toBeInTheDocument()
+  })
+
+  it('loads the copied list with the cc view', async () => {
+    workbenchApiMocks.listApprovalSheets.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      pages: 0,
+      groups: [],
+      records: [],
+    })
+
+    renderWithQuery(<WorkbenchCopiedListPage />)
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.listApprovalSheets).toHaveBeenCalledWith({
+        page: 1,
+        pageSize: 20,
+        keyword: '',
+        filters: [],
+        sorts: [],
+        groups: [],
+        view: 'CC',
+      })
+    })
+
+    expect(await screen.findByText('流程中心抄送我')).toBeInTheDocument()
+    expect(screen.getByText('total:0')).toBeInTheDocument()
   })
 
   it('shows claim and return actions conditionally in the task detail page', async () => {

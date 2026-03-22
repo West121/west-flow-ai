@@ -1,0 +1,26 @@
+package com.westflow.processruntime.api;
+
+import java.time.OffsetDateTime;
+
+public record ApprovalSheetListItemResponse(
+        String instanceId,
+        String processDefinitionId,
+        String processKey,
+        String processName,
+        String businessId,
+        String businessType,
+        String billNo,
+        String businessTitle,
+        String initiatorUserId,
+        String currentNodeName,
+        String currentTaskId,
+        String currentTaskStatus,
+        String currentAssigneeUserId,
+        String instanceStatus,
+        String latestAction,
+        String latestOperatorUserId,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt,
+        OffsetDateTime completedAt
+) {
+}

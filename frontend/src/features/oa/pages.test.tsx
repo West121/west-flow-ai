@@ -16,6 +16,7 @@ const { navigateMock, oaApiMocks } = vi.hoisted(() => ({
     createOALeaveBill: vi.fn(),
     createOAExpenseBill: vi.fn(),
     createOACommonRequestBill: vi.fn(),
+    listApprovalSheets: vi.fn(),
     getApprovalSheetDetailByBusiness: vi.fn(),
     getWorkbenchTaskDetail: vi.fn(),
     getWorkbenchTaskActions: vi.fn(),
@@ -67,6 +68,26 @@ vi.mock('@/features/shared/page-shell', () => ({
       <p>{description}</p>
       {actions}
       {children}
+    </div>
+  ),
+}))
+
+vi.mock('@/features/shared/crud/resource-list-page', () => ({
+  ResourceListPage: ({
+    title,
+    createAction,
+    data,
+  }: {
+    title: string
+    createAction?: { label: string; href: string }
+    data: Array<{ instanceId: string; businessTitle?: string; billNo?: string }>
+  }) => (
+    <div>
+      <h2>{title}</h2>
+      {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
+      {data.map((item) => (
+        <div key={item.instanceId}>{item.businessTitle ?? item.billNo}</div>
+      ))}
     </div>
   ),
 }))
@@ -161,6 +182,39 @@ function mockApprovalSheetDetail() {
     flowEdges: [],
     instanceEvents: [],
     taskTrace: [],
+  }
+}
+
+function mockApprovalSheetPage() {
+  return {
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    pages: 1,
+    groups: [],
+    records: [
+      {
+        instanceId: 'pi_001',
+        processDefinitionId: 'pd_001',
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        businessId: 'leave_001',
+        businessType: 'OA_LEAVE',
+        billNo: 'LEAVE-001',
+        businessTitle: '请假申请 · 外出处理事务',
+        initiatorUserId: 'usr_001',
+        currentNodeName: '部门负责人审批',
+        currentTaskId: 'task_001',
+        currentTaskStatus: 'RUNNING',
+        currentAssigneeUserId: 'usr_002',
+        instanceStatus: 'RUNNING',
+        latestAction: 'START',
+        latestOperatorUserId: 'usr_001',
+        createdAt: '2026-03-22T09:00:00+08:00',
+        updatedAt: '2026-03-22T09:10:00+08:00',
+        completedAt: null,
+      },
+    ],
   }
 }
 
@@ -274,15 +328,28 @@ describe('oa pages', () => {
     })
   })
 
-  it('renders OA query entry links to the process center', () => {
+  it('loads OA query through the approval-sheet paging endpoint', async () => {
+    oaApiMocks.listApprovalSheets.mockResolvedValue(mockApprovalSheetPage())
+
     renderWithQuery(<OAQueryPage />)
 
-    expect(screen.getByText('OA 流程查询')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(oaApiMocks.listApprovalSheets).toHaveBeenCalledWith({
+        page: 1,
+        pageSize: 20,
+        keyword: '',
+        filters: [],
+        sorts: [],
+        groups: [],
+        view: 'INITIATED',
+        businessTypes: ['OA_LEAVE', 'OA_EXPENSE', 'OA_COMMON'],
+      })
+    })
+
+    expect(await screen.findByText('OA 流程查询')).toBeInTheDocument()
+    expect(screen.getByText('请假申请 · 外出处理事务')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '前往待办列表' })
-    ).toHaveAttribute('href', '/workbench/todos/list')
-    expect(
-      screen.getByRole('link', { name: '进入流程中心发起流程' })
+      screen.getByRole('link', { name: '发起 OA 申请' })
     ).toHaveAttribute('href', '/workbench/start')
   })
 
@@ -333,6 +400,9 @@ describe('oa pages', () => {
     ])
     expect(processCenter?.items?.map((item) => item.title)).toEqual([
       '待办列表',
+      '已办列表',
+      '我发起',
+      '抄送我',
       '发起流程',
     ])
   })

@@ -401,6 +401,161 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldPageApprovalSheetsForInitiatedDoneAndCcViews() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        seedLeaveBill("leave_page_001");
+        seedExpenseBill("expense_page_001");
+
+        String leaveStartResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_page_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "外出处理事务"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String expenseStartResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "expense_page_001",
+                                  "businessType": "OA_EXPENSE",
+                                  "formData": {
+                                    "amount": 128.50,
+                                    "reason": "客户接待"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String leaveTaskId = objectMapper.readTree(leaveStartResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", leaveTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "同意"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        String initiatedResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/approval-sheets/page")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "view": "INITIATED",
+                                  "businessTypes": ["OA_LEAVE"],
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [
+                                    {
+                                      "field": "createdAt",
+                                      "direction": "desc"
+                                    }
+                                  ],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode initiatedBody = objectMapper.readTree(initiatedResponse);
+        assertThat(initiatedBody.path("code").asText()).isEqualTo("OK");
+        assertThat(initiatedBody.path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(initiatedBody.path("data").path("records").get(0).path("businessType").asText()).isEqualTo("OA_LEAVE");
+        assertThat(initiatedBody.path("data").path("records").get(0).path("billNo").asText()).isEqualTo("LEAVE-20260322-001");
+        assertThat(initiatedBody.path("data").path("records").get(0).path("businessTitle").asText()).contains("请假申请");
+
+        String doneResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/approval-sheets/page")
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "view": "DONE",
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode doneBody = objectMapper.readTree(doneResponse);
+        assertThat(doneBody.path("code").asText()).isEqualTo("OK");
+        assertThat(doneBody.path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(doneBody.path("data").path("records").get(0).path("instanceStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(doneBody.path("data").path("records").get(0).path("currentTaskStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(doneBody.path("data").path("records").get(0).path("latestAction").asText()).isEqualTo("APPROVE");
+        assertThat(doneBody.path("data").path("records").get(0).path("latestOperatorUserId").asText()).isEqualTo("usr_002");
+
+        String copiedResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/approval-sheets/page")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "view": "CC",
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode copiedBody = objectMapper.readTree(copiedResponse);
+        assertThat(copiedBody.path("code").asText()).isEqualTo("OK");
+        assertThat(copiedBody.path("data").path("total").asInt()).isEqualTo(0);
+        assertThat(copiedBody.path("data").path("records").size()).isEqualTo(0);
+
+        assertThat(objectMapper.readTree(expenseStartResponse).path("data").path("activeTasks").size()).isEqualTo(1);
+    }
+
+    @Test
     void shouldRejectInvalidDslPublishRequests() throws Exception {
         String token = login();
 
@@ -896,6 +1051,31 @@ class ProcessRuntimeControllerTest {
                 "default",
                 3,
                 "年假",
+                null,
+                "DRAFT",
+                "usr_001"
+        );
+    }
+
+    private void seedExpenseBill(String billId) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO oa_expense_bill (
+                    id,
+                    bill_no,
+                    scene_code,
+                    amount,
+                    reason,
+                    process_instance_id,
+                    status,
+                    creator_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                billId,
+                "EXPENSE-20260322-001",
+                "default",
+                128.50,
+                "客户接待",
                 null,
                 "DRAFT",
                 "usr_001"

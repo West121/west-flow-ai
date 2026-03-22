@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { listQuerySearchSchema } from '@/features/shared/table/query-contract'
-import { OAQueryPage } from '@/features/oa/pages'
+import { WorkbenchDoneListPage } from '@/features/workbench/pages'
 
-export const Route = createFileRoute('/_authenticated/oa/query')({
+export const Route = createFileRoute('/_authenticated/workbench/done/list')({
   validateSearch: listQuerySearchSchema,
-  component: OAQueryPage,
+  component: WorkbenchDoneListPage,
 })

@@ -1,9 +1,9 @@
-import { startTransition, type ElementType } from 'react'
+import { startTransition } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
-import { Loader2, NotebookText, ReceiptText, Search, Send } from 'lucide-react'
+import { Loader2, Send } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { PageShell } from '@/features/shared/page-shell'
+import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import {
+  createApprovalSheetColumns,
+  summarizeApprovalSheets,
+} from '@/features/workbench/approval-sheet-list'
 import { WorkbenchTodoDetailPage } from '@/features/workbench/pages'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
@@ -34,6 +39,7 @@ import {
   createOALeaveBill,
   type OALaunchResponse,
 } from '@/lib/api/oa'
+import { listApprovalSheets } from '@/lib/api/workbench'
 
 const leaveFormSchema = z.object({
   days: z
@@ -70,6 +76,7 @@ type OABusinessType = 'OA_LEAVE' | 'OA_EXPENSE' | 'OA_COMMON'
 const leaveDetailRoute = getRouteApi('/_authenticated/oa/leave/$billId')
 const expenseDetailRoute = getRouteApi('/_authenticated/oa/expense/$billId')
 const commonDetailRoute = getRouteApi('/_authenticated/oa/common/$billId')
+const oaQueryRoute = getRouteApi('/_authenticated/oa/query')
 
 function navigateToFirstTask(
   navigate: ReturnType<typeof useNavigate>,
@@ -464,60 +471,73 @@ export function OACommonCreatePage() {
 }
 
 export function OAQueryPage() {
-  const entryCards: Array<{
-    label: string
-    href: '/oa/leave/create' | '/oa/expense/create' | '/oa/common/create' | '/workbench/start'
-    icon: ElementType
-  }> = [
-    { label: '请假申请', href: '/oa/leave/create', icon: NotebookText },
-    { label: '报销申请', href: '/oa/expense/create', icon: ReceiptText },
-    { label: '通用申请', href: '/oa/common/create', icon: Send },
-    { label: '进入流程中心发起流程', href: '/workbench/start', icon: Search },
-  ]
+  const search = oaQueryRoute.useSearch()
+  const navigate = oaQueryRoute.useNavigate()
+  const approvalSheetsQuery = useQuery({
+    queryKey: ['oa', 'query-page', search],
+    queryFn: () =>
+      listApprovalSheets({
+        ...search,
+        view: 'INITIATED',
+        businessTypes: ['OA_LEAVE', 'OA_EXPENSE', 'OA_COMMON'],
+      }),
+  })
+
+  const pageData = approvalSheetsQuery.data ?? {
+    page: search.page,
+    pageSize: search.pageSize,
+    total: 0,
+    pages: 0,
+    records: [],
+    groups: [],
+  }
+  const summary = summarizeApprovalSheets(pageData.records)
 
   return (
-    <PageShell
-      title='OA 流程查询'
-      description='OA 流程查询入口复用统一流程中心页面，默认筛选 OA 业务域。'
-      actions={
-        <Button asChild variant='outline'>
-          <Link to='/workbench/todos/list'>前往待办列表</Link>
-        </Button>
-      }
-    >
-      <div className='grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]'>
-        <Card>
-          <CardHeader>
-            <CardTitle>业务入口</CardTitle>
-            <CardDescription>
-              先选业务入口，再进入对应的发起页，不再直接输入流程标识。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='grid gap-3 sm:grid-cols-2'>
-            {entryCards.map(({ label, href, icon: Icon }) => (
-              <Button key={href} asChild variant='outline' className='justify-start'>
-                <Link to={href}>
-                  <Icon />
-                  {label}
-                </Link>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>统一查询入口</CardTitle>
-            <CardDescription>OA 菜单和流程管理都收口到同一套运行态。</CardDescription>
-          </CardHeader>
-          <CardContent className='space-y-3 text-sm text-muted-foreground'>
-            <p>1. OA 下的流程查询入口与流程中心共享待办列表和详情页。</p>
-            <p>2. 发起成功后优先进入业务审批单详情页，流程图和业务正文都在同一页查看。</p>
-            <p>3. 即使当前没有待办任务，也可以继续查看实例轨迹和办理记录。</p>
-          </CardContent>
-        </Card>
-      </div>
-    </PageShell>
+    <>
+      {approvalSheetsQuery.isError ? (
+        <Alert variant='destructive' className='mb-4'>
+          <AlertTitle>OA 流程查询加载失败</AlertTitle>
+          <AlertDescription>
+            {approvalSheetsQuery.error instanceof Error
+              ? approvalSheetsQuery.error.message
+              : '请稍后重试'}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <ResourceListPage
+        title='OA 流程查询'
+        description='按审批单维度查看我发起的 OA 业务，详情页直接展示业务表单、流程轨迹和流程图回顾。'
+        endpoint='/api/v1/process-runtime/demo/approval-sheets/page'
+        searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
+        search={search}
+        navigate={navigate}
+        columns={createApprovalSheetColumns('oa')}
+        data={pageData.records}
+        total={pageData.total}
+        summaries={[
+          {
+            label: 'OA 审批单总量',
+            value: String(pageData.total),
+            hint: '当前登录人发起的 OA 审批单总量。',
+          },
+          {
+            label: '进行中',
+            value: String(summary.running),
+            hint: '仍在审批中的 OA 单据数量。',
+          },
+          {
+            label: '已完成',
+            value: String(summary.completed),
+            hint: '已经结束的 OA 单据数量。',
+          },
+        ]}
+        createAction={{
+          label: '发起 OA 申请',
+          href: '/workbench/start',
+        }}
+      />
+    </>
   )
 }
 
