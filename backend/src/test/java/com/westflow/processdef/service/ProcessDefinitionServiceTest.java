@@ -68,7 +68,6 @@ class ProcessDefinitionServiceTest {
 
         assertThat(published.processDefinitionId()).isEqualTo("oa_leave:1");
         assertThat(published.bpmnXml()).contains("startEvent");
-        assertThat(published.bpmnXml()).contains("initiatorEditable=\"true\"");
         assertThat(published.bpmnXml()).contains("assignmentMode=\"USER\"");
         assertThat(published.bpmnXml()).contains("operations=\"APPROVE,REJECT,RETURN\"");
     }

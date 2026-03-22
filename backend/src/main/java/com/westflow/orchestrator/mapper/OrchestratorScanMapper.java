@@ -11,9 +11,9 @@ import org.apache.ibatis.annotations.Mapper;
 // 编排器扫描目标和执行记录的演示映射接口。
 public interface OrchestratorScanMapper {
 
+    // 预研阶段保留固定返回，真实流程下应替换为数据库/快照表查询。
     default List<OrchestratorScanTargetRecord> selectDemoScanTargets() {
-        // demo 阶段先返回固定扫描目标，后续再切换成数据库查询。
-        Instant now = Instant.now();
+        Instant now = Instant.now().minusSeconds(1);
         return List.of(
                 new OrchestratorScanTargetRecord(
                         "orc_target_timeout_001",
@@ -39,7 +39,7 @@ public interface OrchestratorScanMapper {
                         "定时节点演示任务",
                         "timer_wait_node",
                         "biz_leave_002",
-                        now.plusSeconds(600),
+                        now.minusSeconds(60),
                         "节点到达后等待到点推进"
                 ),
                 new OrchestratorScanTargetRecord(
@@ -48,13 +48,13 @@ public interface OrchestratorScanMapper {
                         "触发节点演示任务",
                         "trigger_callback_node",
                         "biz_leave_003",
-                        now,
+                        now.minusSeconds(10),
                         "到点或立即执行业务触发器"
                 )
         );
     }
 
+    // 预研阶段先做执行记录写入契约，接入日志表前保持空实现。
     default void insertExecutionRecord(OrchestratorScanExecutionRecord record) {
-        // 目前不落库，先保留执行记录写入契约。
     }
 }

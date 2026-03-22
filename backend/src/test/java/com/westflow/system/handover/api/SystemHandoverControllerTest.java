@@ -2,7 +2,7 @@ package com.westflow.system.handover.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.westflow.processruntime.service.ProcessDemoService;
+import org.flowable.engine.RepositoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,14 +31,15 @@ class SystemHandoverControllerTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private ProcessDemoService processDemoService;
+    private RepositoryService repositoryService;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void resetRuntimeState() {
-        processDemoService.reset();
+        repositoryService.createDeploymentQuery().list()
+                .forEach(deployment -> repositoryService.deleteDeployment(deployment.getId(), true));
         jdbcTemplate.update("DELETE FROM wf_business_process_link");
         jdbcTemplate.update("DELETE FROM oa_leave_bill");
         jdbcTemplate.update("DELETE FROM oa_expense_bill");
@@ -57,7 +58,7 @@ class SystemHandoverControllerTest {
 
         seedLeaveBill("leave_system_handover_001");
 
-        mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+        mockMvc.perform(post("/api/v1/process-runtime/start")
                         .header("Authorization", "Bearer " + login("zhangsan"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

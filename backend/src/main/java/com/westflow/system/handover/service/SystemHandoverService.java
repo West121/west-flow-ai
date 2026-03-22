@@ -3,7 +3,7 @@ package com.westflow.system.handover.service;
 import com.westflow.processruntime.api.HandoverExecutionResponse;
 import com.westflow.processruntime.api.HandoverPreviewResponse;
 import com.westflow.processruntime.api.HandoverTaskRequest;
-import com.westflow.processruntime.service.ProcessDemoService;
+import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.system.handover.api.SystemHandoverRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,14 +15,14 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class SystemHandoverService {
 
-    private final ProcessDemoService processDemoService;
+    private final FlowableProcessRuntimeService flowableProcessRuntimeService;
 
     /**
      * 预览交接范围。
      */
     public HandoverPreviewResponse preview(SystemHandoverRequest request) {
         // 系统管理页先预览，确认任务范围后再执行真正转办。
-        return processDemoService.previewHandover(
+        return flowableProcessRuntimeService.previewHandover(
                 request.sourceUserId(),
                 new HandoverTaskRequest(request.targetUserId(), request.comment())
         );
@@ -32,7 +32,7 @@ public class SystemHandoverService {
      * 执行交接。
      */
     public HandoverExecutionResponse execute(SystemHandoverRequest request) {
-        return processDemoService.executeHandover(
+        return flowableProcessRuntimeService.executeHandover(
                 request.sourceUserId(),
                 new HandoverTaskRequest(request.targetUserId(), request.comment())
         );

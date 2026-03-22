@@ -3,7 +3,7 @@ package com.westflow.oa.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.processdef.service.ProcessDefinitionService;
-import com.westflow.processruntime.service.ProcessDemoService;
+import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,14 +46,15 @@ class OAControllerTest {
     private ProcessDefinitionService processDefinitionService;
 
     @Autowired
-    private ProcessDemoService processDemoService;
+    private RepositoryService repositoryService;
 
     @Autowired
     private RuntimeService runtimeService;
 
     @BeforeEach
     void resetRuntime() {
-        processDemoService.reset();
+        repositoryService.createDeploymentQuery().list()
+                .forEach(deployment -> repositoryService.deleteDeployment(deployment.getId(), true));
     }
 
     @Test

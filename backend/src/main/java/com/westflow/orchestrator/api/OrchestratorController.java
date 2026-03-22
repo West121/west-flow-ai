@@ -19,7 +19,7 @@ public class OrchestratorController {
 
     @PostMapping("/scans/manual")
     public ApiResponse<OrchestratorManualScanResponse> manualScan() {
-        // 手动扫描入口先跑通 demo 闭环，后续再挂定时调度。
+        // 手动扫描入口用于验证当前编排运行时，后续再挂定时调度。
         return ApiResponse.success(orchestratorService.manualScan());
     }
 }

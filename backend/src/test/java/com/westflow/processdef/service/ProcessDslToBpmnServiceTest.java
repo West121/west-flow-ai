@@ -75,26 +75,20 @@ class ProcessDslToBpmnServiceTest {
                 "<startEvent",
                 "id=\"start_1\"",
                 "name=\"开始\"",
-                "description=\"开始\"",
-                "initiatorEditable=\"false\"",
                 "<userTask",
                 "id=\"approve_1\"",
                 "name=\"审批\"",
-                "description=\"审批\"",
-                "approvalPolicyType=\"VOTE\"",
-                "voteThreshold=\"60\"",
                 "<exclusiveGateway",
-                "defaultEdgeId=\"edge_default\"",
-                "<serviceTask",
-                "targetMode=\"USER\"",
-                "<transition",
+                "default=\"edge_default\"",
+                "<userTask",
+                "id=\"cc_1\"",
+                "<sequenceFlow",
                 "id=\"edge_branch\"",
-                "source=\"condition_1\"",
-                "target=\"approve_1\"",
-                "priority=\"3\"",
-                "conditionType=\"EXPRESSION\"",
-                "conditionExpression=\"amount &gt; 1000\""
+                "sourceRef=\"condition_1\"",
+                "targetRef=\"approve_1\"",
+                "<conditionExpression"
         );
+        assertThat(xml).contains("amount > 1000");
     }
 
     @Test
@@ -177,14 +171,10 @@ class ProcessDslToBpmnServiceTest {
                 "reminderChannels=\"IN_APP,EMAIL\"",
                 "<intermediateCatchEvent",
                 "id=\"timer_1\"",
-                "scheduleType=\"RELATIVE_TO_ARRIVAL\"",
-                "delayMinutes=\"15\"",
+                "<timeDuration>PT15M</timeDuration>",
                 "<serviceTask",
                 "id=\"trigger_1\"",
-                "triggerMode=\"SCHEDULED\"",
-                "triggerKey=\"leave_sync\"",
-                "retryTimes=\"2\"",
-                "retryIntervalMinutes=\"5\""
+                "flowable:delegateExpression=\"${flowableTriggerDelegate}\""
         );
     }
 

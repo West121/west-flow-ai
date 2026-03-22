@@ -42,8 +42,8 @@ describe('workbench api', () => {
     expect(resolveWorkbenchRuntimePath('tasks', 'page')).toBe(
       '/process-runtime/tasks/page'
     )
-    expect(resolveWorkbenchRuntimePath('demo', 'tasks', 'page')).toBe(
-      '/process-runtime/demo/tasks/page'
+    expect(resolveWorkbenchRuntimePath('v2', 'tasks', 'page')).toBe(
+      '/process-runtime/v2/tasks/page'
     )
     expect(WORKBENCH_RUNTIME_ENDPOINTS.tasksPage).toBe('/process-runtime/tasks/page')
   })

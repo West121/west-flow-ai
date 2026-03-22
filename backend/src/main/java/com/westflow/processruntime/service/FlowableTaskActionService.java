@@ -2,11 +2,14 @@ package com.westflow.processruntime.service;
 
 import com.westflow.common.error.ContractException;
 import com.westflow.flowable.FlowableEngineFacade;
+import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.TaskQuery;
+import org.flowable.task.service.impl.persistence.entity.TaskEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -44,8 +47,12 @@ public class FlowableTaskActionService {
 
     // 委派时沿用 Flowable 原生委派语义。
     public void delegate(String taskId, String targetUserId) {
-        requireTask(taskId);
-        taskService.delegateTask(taskId, targetUserId);
+        Task task = requireTask(taskId);
+        String ownerUserId = task.getAssignee() == null || task.getAssignee().isBlank()
+                ? targetUserId
+                : task.getAssignee();
+        taskService.setOwner(taskId, ownerUserId);
+        taskService.setAssignee(taskId, targetUserId);
     }
 
     // 把当前执行流切到指定节点，用于跳转/退回/驳回。
@@ -58,6 +65,59 @@ public class FlowableTaskActionService {
             builder.processVariables(variables);
         }
         builder.moveExecutionToActivityId(task.getExecutionId(), targetNodeId).changeState();
+    }
+
+    // 撤销时直接终止整个流程实例。
+    public void revokeProcessInstance(String processInstanceId, String deleteReason) {
+        flowableEngineFacade.runtimeService().deleteProcessInstance(processInstanceId, deleteReason);
+    }
+
+    // 创建挂在流程实例上的临时扩展任务，用于抄送与加签等平台动作。
+    public Task createAdhocTask(
+            String processInstanceId,
+            String processDefinitionId,
+            String nodeId,
+            String nodeName,
+            String taskKind,
+            String assigneeUserId,
+            List<String> candidateUserIds,
+            String parentTaskId,
+            Map<String, Object> localVariables
+    ) {
+        Task task = taskService.newTask();
+        if (!(task instanceof TaskEntity taskEntity)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前引擎不支持创建扩展任务"
+            );
+        }
+        taskEntity.setCreateTime(new Date());
+        taskEntity.setProcessInstanceId(processInstanceId);
+        taskEntity.setProcessDefinitionId(processDefinitionId);
+        taskEntity.setTaskDefinitionKey(nodeId);
+        taskEntity.setTaskDefinitionId(nodeId);
+        taskEntity.setName(nodeName);
+        taskEntity.setParentTaskId(parentTaskId);
+        taskEntity.setCategory(taskKind);
+        taskEntity.setAssignee(assigneeUserId);
+        taskService.saveTask(taskEntity);
+        if (candidateUserIds != null) {
+            candidateUserIds.stream()
+                    .filter(userId -> userId != null && !userId.isBlank())
+                    .distinct()
+                    .forEach(userId -> taskService.addCandidateUser(taskEntity.getId(), userId));
+        }
+        if (localVariables != null && !localVariables.isEmpty()) {
+            taskService.setVariablesLocal(taskEntity.getId(), localVariables);
+        }
+        return requireTask(taskEntity.getId());
+    }
+
+    // 删除扩展任务，并保留删除原因用于历史轨迹显示。
+    public void deleteTask(String taskId, String deleteReason) {
+        requireTask(taskId);
+        taskService.deleteTask(taskId, deleteReason);
     }
 
     // 用查询确认任务仍然存在。

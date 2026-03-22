@@ -19,6 +19,11 @@ import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
 import com.westflow.processruntime.api.DelegateTaskRequest;
 import com.westflow.processruntime.api.DemoTaskView;
+import com.westflow.processruntime.api.HandoverExecutionResponse;
+import com.westflow.processruntime.api.HandoverExecutionTaskItemResponse;
+import com.westflow.processruntime.api.HandoverPreviewResponse;
+import com.westflow.processruntime.api.HandoverPreviewTaskItemResponse;
+import com.westflow.processruntime.api.HandoverTaskRequest;
 import com.westflow.processruntime.api.JumpTaskRequest;
 import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
@@ -27,12 +32,16 @@ import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
 import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
 import com.westflow.processruntime.api.RejectTaskRequest;
+import com.westflow.processruntime.api.RevokeTaskRequest;
 import com.westflow.processruntime.api.RemoveSignTaskRequest;
 import com.westflow.processruntime.api.ReturnTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.api.TakeBackTaskRequest;
 import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
+import com.westflow.processruntime.api.UrgeTaskRequest;
 import com.westflow.processruntime.api.TransferTaskRequest;
+import com.westflow.processruntime.api.WakeUpInstanceRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -54,16 +63,18 @@ import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 基于真实 Flowable 的最小运行态服务。
- * 当前先承接真实发起、待办、审批单详情、认领和完成动作。
+ * 当前承接真实发起、待办、审批单详情和已迁移到 Flowable 的任务动作。
  */
 @Service
 @RequiredArgsConstructor
@@ -98,6 +109,7 @@ public class FlowableProcessRuntimeService {
                 .active()
                 .list()
                 .stream()
+                .filter(task -> !"CC".equals(resolveTaskKind(task)))
                 .map(this::toTaskListItem)
                 .filter(Objects::nonNull)
                 .filter(item -> matchesTaskKeyword(item, request.keyword()))
@@ -115,7 +127,7 @@ public class FlowableProcessRuntimeService {
             case TODO -> buildTodoApprovalSheets(currentUserId);
             case INITIATED -> buildInitiatedApprovalSheets(currentUserId, request.businessTypes());
             case DONE -> buildDoneApprovalSheets(currentUserId, request.businessTypes());
-            case CC -> List.of();
+            case CC -> buildCopiedApprovalSheets(currentUserId, request.businessTypes());
         };
         List<ApprovalSheetListItemResponse> filtered = records.stream()
                 .filter(item -> matchesApprovalKeyword(item, request.keyword()))
@@ -184,29 +196,176 @@ public class FlowableProcessRuntimeService {
      */
     public TaskActionAvailabilityResponse actions(String taskId) {
         Task task = requireActiveTask(taskId);
+        String taskKind = resolveTaskKind(task);
         List<String> candidateUserIds = candidateUsers(task.getId());
-        boolean isCandidate = candidateUserIds.contains(currentUserId());
+        boolean isCandidate = task.getAssignee() == null && candidateUserIds.contains(currentUserId());
         boolean isAssignee = currentUserId().equals(task.getAssignee());
-        boolean canHandle = isAssignee || (task.getAssignee() == null && isCandidate);
-        String taskKind = resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+        boolean canHandle = isAssignee || isCandidate;
+        boolean blockedByAddSign = "NORMAL".equals(taskKind) && hasActiveAddSignChild(task.getId());
+        boolean canTakeBack = "NORMAL".equals(taskKind) && canTakeBack(task);
+        boolean canAddSign = "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign;
+        boolean canRemoveSign = "NORMAL".equals(taskKind) && canHandle && blockedByAddSign;
+        boolean canRead = "CC".equals(taskKind) && canHandle && "CC_PENDING".equals(resolveTaskStatus(task));
         return new TaskActionAvailabilityResponse(
-                task.getAssignee() == null && isCandidate,
-                canHandle,
-                canHandle,
-                canHandle,
-                canHandle,
+                "NORMAL".equals(taskKind) && task.getAssignee() == null && isCandidate,
+                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
+                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
+                "NORMAL".equals(taskKind) && canHandle,
+                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
+                canAddSign,
+                canRemoveSign,
+                canRevoke(task),
+                canUrge(task),
+                canRead,
+                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
+                "NORMAL".equals(taskKind) && canHandle,
+                canTakeBack,
                 false,
-                false,
-                false,
-                false,
-                "CC".equals(taskKind) && canHandle,
-                canHandle,
-                canHandle,
-                false,
-                false,
-                false,
+                "NORMAL".equals(taskKind) && canHandle,
                 false
         );
+    }
+
+    /**
+     * 给当前人工任务增加一个临时加签子任务。
+     */
+    public CompleteTaskResponse addSign(String taskId, AddSignTaskRequest request) {
+        Task task = requireTaskForAction(taskId, "加签");
+        if (!"NORMAL".equals(resolveTaskKind(task))) {
+            throw actionNotAllowed("当前任务不支持加签", Map.of("taskId", taskId));
+        }
+        if (hasActiveAddSignChild(taskId)) {
+            throw actionNotAllowed("当前任务存在未完成的加签任务", Map.of("taskId", taskId));
+        }
+
+        String targetUserId = requireTargetUserId(request.targetUserId(), taskId);
+        appendComment(task, request.comment());
+        Task addSignTask = flowableTaskActionService.createAdhocTask(
+                task.getProcessInstanceId(),
+                task.getProcessDefinitionId(),
+                task.getTaskDefinitionKey(),
+                task.getName(),
+                "ADD_SIGN",
+                targetUserId,
+                List.of(targetUserId),
+                task.getId(),
+                eventDetails(
+                        "westflowTaskKind", "ADD_SIGN",
+                        "westflowSourceTaskId", task.getId(),
+                        "westflowTargetUserId", targetUserId
+                )
+        );
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                addSignTask.getId(),
+                addSignTask.getTaskDefinitionKey(),
+                "TASK_ADD_SIGN",
+                "任务已加签",
+                "TASK",
+                task.getId(),
+                addSignTask.getId(),
+                targetUserId,
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", addSignTask.getId(),
+                        "targetUserId", targetUserId
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return new CompleteTaskResponse(task.getProcessInstanceId(), taskId, "RUNNING", List.of(toTaskView(addSignTask)));
+    }
+
+    /**
+     * 移除尚未处理的加签任务。
+     */
+    public CompleteTaskResponse removeSign(String taskId, RemoveSignTaskRequest request) {
+        Task sourceTask = requireTaskForAction(taskId, "减签");
+        Task addSignTask = requireActiveTask(request.targetTaskId());
+        if (!"ADD_SIGN".equals(resolveTaskKind(addSignTask)) || !taskId.equals(addSignTask.getParentTaskId())) {
+            throw actionNotAllowed("目标任务不是当前节点的加签任务", Map.of("taskId", taskId, "targetTaskId", request.targetTaskId()));
+        }
+
+        appendComment(sourceTask, request.comment());
+        flowableTaskActionService.deleteTask(addSignTask.getId(), "WESTFLOW_REMOVE_SIGN");
+        appendInstanceEvent(
+                sourceTask.getProcessInstanceId(),
+                addSignTask.getId(),
+                addSignTask.getTaskDefinitionKey(),
+                "TASK_REMOVE_SIGN",
+                "加签任务已移除",
+                "TASK",
+                taskId,
+                addSignTask.getId(),
+                addSignTask.getAssignee(),
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", taskId,
+                        "targetTaskId", addSignTask.getId(),
+                        "targetUserId", addSignTask.getAssignee()
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return nextTaskResponse(sourceTask.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 将抄送任务标记为已阅。
+     */
+    public CompleteTaskResponse read(String taskId) {
+        Task task = requireActiveTask(taskId);
+        if (!"CC".equals(resolveTaskKind(task))) {
+            throw actionNotAllowed("当前任务不支持已阅", Map.of("taskId", taskId));
+        }
+        List<String> candidateUserIds = candidateUsers(taskId);
+        boolean canRead = currentUserId().equals(task.getAssignee())
+                || (task.getAssignee() == null && candidateUserIds.contains(currentUserId()));
+        if (!canRead) {
+            throw actionNotAllowed("当前用户不能操作该抄送任务", Map.of("taskId", taskId, "userId", currentUserId()));
+        }
+
+        Task activeTask = claimTaskIfNeeded(task, currentUserId());
+        flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowTaskKind", "CC");
+        flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowReadTime", Timestamp.from(Instant.now()));
+        flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowAction", "READ");
+        flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowTargetUserId", currentUserId());
+        flowableTaskActionService.complete(activeTask.getId(), Map.of());
+        appendInstanceEvent(
+                activeTask.getProcessInstanceId(),
+                activeTask.getId(),
+                activeTask.getTaskDefinitionKey(),
+                "TASK_READ",
+                "抄送已阅",
+                "CC",
+                activeTask.getParentTaskId(),
+                activeTask.getId(),
+                currentUserId(),
+                eventDetails(
+                        "sourceTaskId", activeTask.getParentTaskId(),
+                        "targetTaskId", activeTask.getId(),
+                        "targetUserId", currentUserId()
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return nextTaskResponse(activeTask.getProcessInstanceId(), taskId);
     }
 
     /**
@@ -228,8 +387,15 @@ public class FlowableProcessRuntimeService {
      */
     public CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
         Task task = requireActiveTask(taskId);
+        String taskKind = resolveTaskKind(task);
         String operatorUserId = normalizeUserId(request.operatorUserId());
         task = claimTaskIfNeeded(task, operatorUserId);
+        if ("CC".equals(taskKind)) {
+            throw actionNotAllowed("当前抄送任务不支持办理", Map.of("taskId", taskId));
+        }
+        if ("NORMAL".equals(taskKind) && hasActiveAddSignChild(taskId)) {
+            throw actionNotAllowed("当前任务存在未处理的加签任务", Map.of("taskId", taskId));
+        }
         Map<String, Object> variables = actionVariables(
                 request.action(),
                 operatorUserId,
@@ -240,6 +406,7 @@ public class FlowableProcessRuntimeService {
             variables.putAll(request.taskFormData());
         }
         appendComment(task, request.comment());
+        flowableEngineFacade.taskService().setVariableLocal(taskId, "westflowTaskKind", taskKind);
         flowableTaskActionService.complete(taskId, variables);
         List<DemoTaskView> nextTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
@@ -249,12 +416,14 @@ public class FlowableProcessRuntimeService {
                 .asc()
                 .list()
                 .stream()
+                .filter(this::isVisibleTask)
                 .map(this::toTaskView)
                 .toList();
+        String status = blockingTaskViews(nextTasks).isEmpty() ? "COMPLETED" : "RUNNING";
         return new CompleteTaskResponse(
                 task.getProcessInstanceId(),
                 taskId,
-                nextTasks.isEmpty() ? "COMPLETED" : "RUNNING",
+                status,
                 nextTasks
         );
     }
@@ -288,6 +457,10 @@ public class FlowableProcessRuntimeService {
                 ),
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
                 null
         );
         Task updatedTask = requireActiveTask(taskId);
@@ -296,6 +469,427 @@ public class FlowableProcessRuntimeService {
                 taskId,
                 "RUNNING",
                 List.of(toTaskView(updatedTask))
+        );
+    }
+
+    /**
+     * 委派任务给其他处理人。
+     */
+    public CompleteTaskResponse delegate(String taskId, DelegateTaskRequest request) {
+        Task task = requireTaskForAction(taskId, "委派");
+        String targetUserId = requireTargetUserId(request == null ? null : request.targetUserId(), taskId);
+        String comment = request == null ? null : request.comment();
+
+        appendComment(task, comment);
+        flowableEngineFacade.runtimeService().setVariables(
+                task.getProcessInstanceId(),
+                actionVariables("DELEGATE", currentUserId(), comment, Map.of("targetUserId", targetUserId))
+        );
+        flowableTaskActionService.delegate(taskId, targetUserId);
+
+        Task delegatedTask = requireActiveTask(taskId);
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_DELEGATED",
+                "任务已委派",
+                "TASK",
+                task.getId(),
+                delegatedTask.getId(),
+                targetUserId,
+                eventDetails(
+                        "comment", comment,
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", delegatedTask.getId(),
+                        "targetUserId", targetUserId,
+                        "actingMode", "DELEGATE",
+                        "actingForUserId", currentUserId(),
+                        "delegatedByUserId", currentUserId()
+                ),
+                null,
+                null,
+                null,
+                "DELEGATE",
+                currentUserId(),
+                currentUserId(),
+                null
+        );
+
+        return new CompleteTaskResponse(
+                delegatedTask.getProcessInstanceId(),
+                task.getId(),
+                "RUNNING",
+                List.of(toTaskView(delegatedTask))
+        );
+    }
+
+    /**
+     * 将当前节点拿回到上一位办理人手里。
+     */
+    public CompleteTaskResponse takeBack(String taskId, TakeBackTaskRequest request) {
+        Task task = requireActiveTask(taskId);
+        if (!canTakeBack(task)) {
+            throw actionNotAllowed(
+                    "当前任务不满足拿回条件",
+                    Map.of("taskId", taskId, "userId", currentUserId())
+            );
+        }
+        HistoricTaskInstance previousTask = requirePreviousUserTask(task);
+        String comment = request == null ? null : request.comment();
+        appendComment(task, comment);
+        flowableEngineFacade.taskService().setVariableLocal(taskId, "westflowAction", "TAKE_BACK");
+        flowableTaskActionService.moveToActivity(
+                taskId,
+                previousTask.getTaskDefinitionKey(),
+                actionVariables(
+                        "TAKE_BACK",
+                        currentUserId(),
+                        comment,
+                        Map.of(
+                                "targetNodeId", previousTask.getTaskDefinitionKey(),
+                                "sourceTaskId", taskId,
+                                "targetUserId", previousTask.getAssignee()
+                        )
+                )
+        );
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_TAKEN_BACK",
+                "任务已拿回",
+                "TASK",
+                task.getId(),
+                task.getId(),
+                previousTask.getAssignee(),
+                eventDetails(
+                        "comment", comment,
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId(),
+                        "targetNodeId", previousTask.getTaskDefinitionKey(),
+                        "targetUserId", previousTask.getAssignee()
+                ),
+                "PREVIOUS_USER_TASK",
+                previousTask.getTaskDefinitionKey(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return nextTaskResponse(task.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 由发起人撤销流程实例。
+     */
+    public CompleteTaskResponse revoke(String taskId, RevokeTaskRequest request) {
+        Task task = requireActiveTask(taskId);
+        String comment = request == null ? null : request.comment();
+        String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
+
+        if (initiatorUserId == null || !initiatorUserId.equals(currentUserId())) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "仅发起人可以撤销流程",
+                    Map.of("taskId", taskId, "userId", currentUserId())
+            );
+        }
+
+        appendComment(task, comment);
+        flowableEngineFacade.runtimeService().setVariables(
+                task.getProcessInstanceId(),
+                actionVariables("REVOKE", currentUserId(), comment, Map.of())
+        );
+        flowableEngineFacade.runtimeService().deleteProcessInstance(
+                task.getProcessInstanceId(),
+                comment == null || comment.isBlank() ? "流程已撤销" : comment
+        );
+
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_REVOKED",
+                "流程已撤销",
+                "INSTANCE",
+                task.getId(),
+                task.getId(),
+                null,
+                eventDetails(
+                        "comment", comment,
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId()
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        return new CompleteTaskResponse(
+                task.getProcessInstanceId(),
+                task.getId(),
+                "REVOKED",
+                List.of()
+        );
+    }
+
+    /**
+     * 通过重新启动实例并定位到来源节点，实现历史实例唤醒。
+     */
+    @Transactional
+    public CompleteTaskResponse wakeUp(String instanceId, WakeUpInstanceRequest request) {
+        HistoricProcessInstance historicInstance = requireHistoricProcessInstance(instanceId);
+        if (historicInstance.getEndTime() == null && historicInstance.getDeleteReason() == null) {
+            throw actionNotAllowed("仅已结束的流程实例支持唤醒", Map.of("instanceId", instanceId));
+        }
+
+        HistoricTaskInstance sourceTask = flowableEngineFacade.historyService()
+                .createHistoricTaskInstanceQuery()
+                .taskId(request.sourceTaskId())
+                .singleResult();
+        if (sourceTask == null || !instanceId.equals(sourceTask.getProcessInstanceId())) {
+            throw actionNotAllowed(
+                    "唤醒来源任务不存在",
+                    Map.of("instanceId", instanceId, "sourceTaskId", request.sourceTaskId())
+            );
+        }
+
+        Map<String, Object> variables = new LinkedHashMap<>(historicVariables(instanceId));
+        String processKey = stringValue(variables.get("westflowProcessKey"));
+        String platformProcessDefinitionId = stringValue(variables.get("westflowProcessDefinitionId"));
+        if (processKey == null || processKey.isBlank()) {
+            throw resourceNotFound("流程定义不存在", Map.of("instanceId", instanceId));
+        }
+        String businessKey = historicInstance.getBusinessKey();
+        ProcessInstance newInstance = flowableEngineFacade.runtimeService()
+                .startProcessInstanceByKey(processKey, businessKey, variables);
+
+        Task firstActiveTask = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(newInstance.getProcessInstanceId())
+                .active()
+                .orderByTaskCreateTime()
+                .asc()
+                .list()
+                .stream()
+                .findFirst()
+                .orElse(null);
+        if (firstActiveTask != null && !Objects.equals(firstActiveTask.getTaskDefinitionKey(), sourceTask.getTaskDefinitionKey())) {
+            flowableTaskActionService.moveToActivity(firstActiveTask.getId(), sourceTask.getTaskDefinitionKey(), Map.of());
+        }
+
+        List<Task> awakenedTasks = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(newInstance.getProcessInstanceId())
+                .active()
+                .orderByTaskCreateTime()
+                .asc()
+                .list();
+        awakenedTasks.stream()
+                .filter(task -> sourceTask.getTaskDefinitionKey().equals(task.getTaskDefinitionKey()))
+                .filter(task -> sourceTask.getAssignee() != null && !sourceTask.getAssignee().isBlank())
+                .forEach(task -> flowableTaskActionService.transfer(task.getId(), sourceTask.getAssignee()));
+
+        findBusinessLinkByInstanceId(instanceId).ifPresent(link -> {
+            insertBusinessLink(
+                    link.businessType(),
+                    link.businessId(),
+                    newInstance.getProcessInstanceId(),
+                    platformProcessDefinitionId == null ? link.processDefinitionId() : platformProcessDefinitionId,
+                    link.startUserId(),
+                    "RUNNING"
+            );
+            updateBusinessProcessLink(link.businessType(), link.businessId(), newInstance.getProcessInstanceId(), "RUNNING");
+        });
+
+        appendInstanceEvent(
+                newInstance.getProcessInstanceId(),
+                null,
+                sourceTask.getTaskDefinitionKey(),
+                "INSTANCE_WOKEN_UP",
+                "流程实例已唤醒",
+                "INSTANCE",
+                request.sourceTaskId(),
+                null,
+                sourceTask.getAssignee(),
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceInstanceId", instanceId,
+                        "sourceTaskId", request.sourceTaskId(),
+                        "targetNodeId", sourceTask.getTaskDefinitionKey(),
+                        "targetUserId", sourceTask.getAssignee()
+                ),
+                null,
+                sourceTask.getTaskDefinitionKey(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return nextTaskResponse(newInstance.getProcessInstanceId(), request.sourceTaskId());
+    }
+
+    /**
+     * 发起人催办当前任务。
+     */
+    public CompleteTaskResponse urge(String taskId, UrgeTaskRequest request) {
+        Task task = requireActiveTask(taskId);
+        String comment = request == null ? null : request.comment();
+        String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
+
+        if (initiatorUserId == null || !initiatorUserId.equals(currentUserId())) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "仅发起人可以催办",
+                    Map.of("taskId", taskId, "userId", currentUserId())
+            );
+        }
+
+        appendComment(task, comment);
+        flowableEngineFacade.runtimeService().setVariables(
+                task.getProcessInstanceId(),
+                actionVariables("URGE", currentUserId(), comment, Map.of())
+        );
+
+        String targetUserId = resolveCurrentTaskOwner(task);
+        appendInstanceEvent(
+                task.getProcessInstanceId(),
+                task.getId(),
+                task.getTaskDefinitionKey(),
+                "TASK_URGED",
+                "任务已催办",
+                "TASK",
+                task.getId(),
+                task.getId(),
+                targetUserId,
+                eventDetails(
+                        "comment", comment,
+                        "sourceTaskId", task.getId(),
+                        "targetTaskId", task.getId(),
+                        "targetUserId", targetUserId
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        return new CompleteTaskResponse(
+                task.getProcessInstanceId(),
+                task.getId(),
+                "RUNNING",
+                List.of(toTaskView(task))
+        );
+    }
+
+    /**
+     * 直接执行离职转办，并返回平台侧摘要。
+     */
+    @Transactional
+    public CompleteTaskResponse handover(String sourceUserId, HandoverTaskRequest request) {
+        HandoverExecutionResponse execution = executeHandover(sourceUserId, request);
+        return new CompleteTaskResponse(
+                execution.instanceId(),
+                execution.completedTaskId(),
+                execution.status(),
+                execution.nextTasks()
+        );
+    }
+
+    /**
+     * 预览离职转办会影响的在办任务。
+     */
+    public HandoverPreviewResponse previewHandover(String sourceUserId, HandoverTaskRequest request) {
+        String normalizedSourceUserId = normalizeTargetUserId(sourceUserId, "sourceUserId");
+        String targetUserId = requireTargetUserId(request.targetUserId(), normalizedSourceUserId);
+        List<HandoverPreviewTaskItemResponse> previewTasks = activeTasksAssignedTo(normalizedSourceUserId).stream()
+                .map(task -> toHandoverPreviewTask(task, normalizedSourceUserId))
+                .toList();
+        return new HandoverPreviewResponse(
+                normalizedSourceUserId,
+                resolveUserDisplayName(normalizedSourceUserId),
+                targetUserId,
+                resolveUserDisplayName(targetUserId),
+                previewTasks.size(),
+                previewTasks
+        );
+    }
+
+    /**
+     * 执行离职转办，把来源人的在办任务整体改派给目标人。
+     */
+    @Transactional
+    public HandoverExecutionResponse executeHandover(String sourceUserId, HandoverTaskRequest request) {
+        String normalizedSourceUserId = normalizeTargetUserId(sourceUserId, "sourceUserId");
+        String targetUserId = requireTargetUserId(request.targetUserId(), normalizedSourceUserId);
+        String comment = request.comment();
+        List<Task> sourceTasks = activeTasksAssignedTo(normalizedSourceUserId);
+
+        List<HandoverExecutionTaskItemResponse> executionTasks = new ArrayList<>();
+        List<DemoTaskView> nextTasks = new ArrayList<>();
+        for (Task task : sourceTasks) {
+            appendComment(task, comment);
+            flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowAction", "HANDOVER");
+            flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowActingMode", "HANDOVER");
+            flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowActingForUserId", normalizedSourceUserId);
+            flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowHandoverFromUserId", normalizedSourceUserId);
+            flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowTargetUserId", targetUserId);
+            flowableTaskActionService.transfer(task.getId(), targetUserId);
+
+            Task updatedTask = requireActiveTask(task.getId());
+            appendInstanceEvent(
+                    updatedTask.getProcessInstanceId(),
+                    updatedTask.getId(),
+                    updatedTask.getTaskDefinitionKey(),
+                    "TASK_HANDOVERED",
+                    "任务已离职转办",
+                    "TASK",
+                    task.getId(),
+                    updatedTask.getId(),
+                    targetUserId,
+                    eventDetails(
+                            "comment", comment,
+                            "sourceTaskId", task.getId(),
+                            "targetTaskId", updatedTask.getId(),
+                            "targetUserId", targetUserId
+                    ),
+                    null,
+                    null,
+                    null,
+                    "HANDOVER",
+                    normalizedSourceUserId,
+                    null,
+                    normalizedSourceUserId
+            );
+
+            nextTasks.add(toTaskView(updatedTask));
+            executionTasks.add(toHandoverExecutionTask(task, updatedTask, normalizedSourceUserId, targetUserId, comment));
+        }
+
+        Task firstTask = sourceTasks.stream().findFirst().orElse(null);
+        return new HandoverExecutionResponse(
+                normalizedSourceUserId,
+                resolveUserDisplayName(normalizedSourceUserId),
+                targetUserId,
+                resolveUserDisplayName(targetUserId),
+                executionTasks.size(),
+                firstTask == null ? null : firstTask.getProcessInstanceId(),
+                firstTask == null ? null : firstTask.getId(),
+                executionTasks.isEmpty() ? "COMPLETED" : "RUNNING",
+                nextTasks,
+                executionTasks
         );
     }
 
@@ -331,6 +925,10 @@ public class FlowableProcessRuntimeService {
                 ),
                 "JUMP",
                 targetNodeId,
+                null,
+                null,
+                null,
+                null,
                 null
         );
         return nextTaskResponse(task.getProcessInstanceId(), taskId);
@@ -373,6 +971,10 @@ public class FlowableProcessRuntimeService {
                 ),
                 targetStrategy,
                 previousTask.getTaskDefinitionKey(),
+                null,
+                null,
+                null,
+                null,
                 null
         );
         return nextTaskResponse(task.getProcessInstanceId(), taskId);
@@ -425,7 +1027,11 @@ public class FlowableProcessRuntimeService {
                 ),
                 targetStrategy,
                 target.nodeId(),
-                normalizeReapproveStrategy(request.reapproveStrategy())
+                normalizeReapproveStrategy(request.reapproveStrategy()),
+                null,
+                null,
+                null,
+                null
         );
         return nextTaskResponse(task.getProcessInstanceId(), taskId);
     }
@@ -458,6 +1064,9 @@ public class FlowableProcessRuntimeService {
                 .orderByTaskCreateTime()
                 .asc()
                 .list();
+        List<Task> blockingActiveTasks = activeTasks.stream()
+                .filter(this::isBlockingTask)
+                .toList();
         List<HistoricTaskInstance> historicTasks = flowableEngineFacade.historyService()
                 .createHistoricTaskInstanceQuery()
                 .processInstanceId(processInstanceId)
@@ -466,7 +1075,7 @@ public class FlowableProcessRuntimeService {
                 .list();
         Task referenceActiveTask = activeTask != null
                 ? activeTask
-                : activeTasks.stream().findFirst().orElse(null);
+                : blockingActiveTasks.stream().findFirst().orElse(activeTasks.stream().findFirst().orElse(null));
         HistoricTaskInstance referenceHistoricTask = fallbackHistoricTask != null
                 ? fallbackHistoricTask
                 : historicTasks.stream().max(Comparator.comparing(HistoricTaskInstance::getCreateTime, Comparator.nullsLast(Comparator.naturalOrder()))).orElse(null);
@@ -487,14 +1096,14 @@ public class FlowableProcessRuntimeService {
         }
         List<ProcessAutomationTraceItemResponse> automationTrace = traceStore.queryAutomationTraces(
                 processInstanceId,
-                activeTasks.isEmpty() ? "SUCCESS" : "PENDING",
+                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
                 stringValue(variables.get("westflowInitiatorUserId")),
                 payload,
                 toOffsetDateTime(historicProcessInstance.getStartTime())
         );
         List<ProcessNotificationSendRecordResponse> notificationRecords = traceStore.queryNotificationSendRecords(
                 processInstanceId,
-                activeTasks.isEmpty() ? "SUCCESS" : "PENDING",
+                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
                 stringValue(variables.get("westflowInitiatorUserId")),
                 payload,
                 toOffsetDateTime(historicProcessInstance.getStartTime())
@@ -504,7 +1113,7 @@ public class FlowableProcessRuntimeService {
                 : referenceHistoricTask == null ? toOffsetDateTime(historicProcessInstance.getStartTime()) : toOffsetDateTime(referenceHistoricTask.getCreateTime());
         OffsetDateTime completedAt = referenceHistoricTask == null ? null : toOffsetDateTime(referenceHistoricTask.getEndTime());
         Long handleDurationSeconds = durationSeconds(createdAt, completedAt);
-        List<String> activeTaskIds = activeTasks.stream().map(Task::getId).toList();
+        String instanceStatus = resolveInstanceStatus(historicProcessInstance, activeTasks);
         return new ProcessTaskDetailResponse(
                 referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),
                 processInstanceId,
@@ -515,7 +1124,7 @@ public class FlowableProcessRuntimeService {
                 businessType,
                 stringValue(variables.get("westflowInitiatorUserId")),
                 businessData,
-                activeTasks.isEmpty() ? "SUCCESS" : "PENDING",
+                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
                 payload.nodes(),
                 payload.edges(),
                 instanceEvents,
@@ -525,7 +1134,7 @@ public class FlowableProcessRuntimeService {
                 nodeId,
                 nodeName,
                 resolveTaskKind(referenceActiveTask != null ? referenceActiveTask.getProcessDefinitionId() : historicProcessInstance.getProcessDefinitionId(), nodeId),
-                activeTasks.isEmpty() ? "COMPLETED" : resolveTaskStatus(referenceActiveTask),
+                activeTasks.isEmpty() ? resolveHistoricTaskStatus(referenceHistoricTask, historicProcessInstance) : resolveTaskStatus(referenceActiveTask),
                 "USER",
                 referenceActiveTask != null ? candidateUsers(referenceActiveTask.getId()) : List.of(),
                 referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee(),
@@ -541,14 +1150,14 @@ public class FlowableProcessRuntimeService {
                 null,
                 null,
                 null,
-                null,
-                null,
-                null,
+                resolveActingMode(referenceActiveTask, referenceHistoricTask),
+                resolveActingForUserId(referenceActiveTask, referenceHistoricTask),
+                resolveDelegatedByUserId(referenceActiveTask, referenceHistoricTask),
                 null,
                 createdAt,
                 completedAt == null ? createdAt : completedAt,
                 completedAt,
-                activeTasks.isEmpty() ? "COMPLETED" : "RUNNING",
+                instanceStatus,
                 payload.processFormKey(),
                 payload.processFormVersion(),
                 nodeFormKey,
@@ -558,7 +1167,7 @@ public class FlowableProcessRuntimeService {
                 fieldBindings,
                 mapValue(variables.get("westflowFormData")),
                 mapValue(variables.get("westflowTaskFormData")),
-                activeTaskIds
+                blockingActiveTasks.stream().map(Task::getId).toList()
         );
     }
 
@@ -569,38 +1178,40 @@ public class FlowableProcessRuntimeService {
             knownTaskIds.add(task.getId());
             OffsetDateTime createdAt = toOffsetDateTime(task.getCreateTime());
             OffsetDateTime endedAt = toOffsetDateTime(task.getEndTime());
+            String taskKind = resolveHistoricTaskKind(task);
+            Map<String, Object> localVariables = historicTaskLocalVariables(task.getId());
             items.add(new ProcessTaskTraceItemResponse(
                     task.getId(),
                     task.getTaskDefinitionKey(),
                     task.getName(),
-                    "NORMAL",
-                    "COMPLETED",
+                    taskKind,
+                    resolveHistoricTaskStatus(task, null),
                     task.getAssignee(),
                     List.of(),
-                    null,
+                    stringValue(localVariables.get("westflowAction")),
                     null,
                     null,
                     createdAt,
-                    createdAt,
+                    readTimeValue(localVariables),
                     createdAt,
                     endedAt,
                     durationSeconds(createdAt, endedAt),
+                    stringValue(localVariables.get("westflowSourceTaskId")),
                     null,
-                    null,
-                    null,
+                    stringValue(localVariables.get("westflowTargetUserId")),
+                    "CC".equals(taskKind),
+                    "ADD_SIGN".equals(taskKind),
+                    isHistoricTaskRevoked(task),
                     false,
                     false,
-                    false,
-                    false,
-                    false,
-                    false,
+                    "WESTFLOW_TAKEN_BACK".equals(task.getDeleteReason()),
                     null,
                     null,
                     null,
-                    null,
-                    null,
-                    null,
-                    null
+                    resolveActingMode(null, task),
+                    resolveActingForUserId(null, task),
+                    resolveDelegatedByUserId(null, task),
+                    stringValue(localVariables.get("westflowHandoverFromUserId"))
             ));
         }
         for (Task task : activeTasks) {
@@ -608,38 +1219,40 @@ public class FlowableProcessRuntimeService {
                 continue;
             }
             OffsetDateTime createdAt = toOffsetDateTime(task.getCreateTime());
+            String taskKind = resolveTaskKind(task);
+            Map<String, Object> localVariables = taskLocalVariables(task.getId());
             items.add(new ProcessTaskTraceItemResponse(
                     task.getId(),
                     task.getTaskDefinitionKey(),
                     task.getName(),
-                    resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey()),
-                    resolveTaskStatus(task),
+                    taskKind,
+                    resolveTraceTaskStatus(task, localVariables),
                     task.getAssignee(),
                     candidateUsers(task.getId()),
                     null,
                     null,
                     null,
                     createdAt,
+                    readTimeValue(localVariables),
                     createdAt,
-                    createdAt,
                     null,
                     null,
+                    stringValue(localVariables.get("westflowSourceTaskId")),
                     null,
-                    null,
-                    null,
+                    stringValue(localVariables.get("westflowTargetUserId")),
+                    "CC".equals(taskKind),
+                    "ADD_SIGN".equals(taskKind),
                     false,
                     false,
                     false,
                     false,
-                    false,
-                    false,
                     null,
                     null,
                     null,
-                    null,
-                    null,
-                    null,
-                    null
+                    resolveActingMode(task, null),
+                    resolveActingForUserId(task, null),
+                    resolveDelegatedByUserId(task, null),
+                    stringValue(localVariables.get("westflowHandoverFromUserId"))
             ));
         }
         return items;
@@ -735,6 +1348,29 @@ public class FlowableProcessRuntimeService {
         return items;
     }
 
+    private List<ApprovalSheetListItemResponse> buildCopiedApprovalSheets(String currentUserId, List<String> businessTypes) {
+        Map<String, ApprovalSheetListItemResponse> items = new LinkedHashMap<>();
+        flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .taskCandidateOrAssigned(currentUserId)
+                .active()
+                .list()
+                .stream()
+                .filter(task -> "CC".equals(resolveTaskKind(task)))
+                .filter(task -> businessTypes.isEmpty() || businessTypes.contains(stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowBusinessType"))))
+                .forEach(task -> items.putIfAbsent(task.getProcessInstanceId(), toApprovalSheetFromCopiedTask(task)));
+        flowableEngineFacade.historyService()
+                .createHistoricTaskInstanceQuery()
+                .taskAssignee(currentUserId)
+                .finished()
+                .list()
+                .stream()
+                .filter(task -> "CC".equals(resolveHistoricTaskKind(task)))
+                .filter(task -> businessTypes.isEmpty() || businessTypes.contains(stringValue(historicVariables(task.getProcessInstanceId()).get("westflowBusinessType"))))
+                .forEach(task -> items.putIfAbsent(task.getProcessInstanceId(), toApprovalSheetFromCopiedHistoricTask(task)));
+        return List.copyOf(items.values());
+    }
+
     private ApprovalSheetListItemResponse toApprovalSheetFromTask(ProcessTaskListItemResponse task) {
         Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(task.businessType(), task.businessKey());
         return new ApprovalSheetListItemResponse(
@@ -758,6 +1394,78 @@ public class FlowableProcessRuntimeService {
                 task.createdAt(),
                 task.updatedAt(),
                 task.completedAt()
+        );
+    }
+
+    private ApprovalSheetListItemResponse toApprovalSheetFromCopiedTask(Task task) {
+        Map<String, Object> variables = runtimeVariables(task.getProcessInstanceId());
+        String processKey = stringValue(variables.get("westflowProcessKey"));
+        PublishedProcessDefinition definition = resolvePublishedDefinition(
+                stringValue(variables.get("westflowProcessDefinitionId")),
+                stringValue(variables.get("westflowProcessDefinitionId")),
+                processKey,
+                task.getProcessInstanceId()
+        );
+        String businessType = stringValue(variables.get("westflowBusinessType"));
+        String businessKey = stringValue(variables.get("westflowBusinessKey"));
+        Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(businessType, businessKey);
+        return new ApprovalSheetListItemResponse(
+                task.getProcessInstanceId(),
+                definition.processDefinitionId(),
+                definition.processKey(),
+                definition.processName(),
+                businessKey,
+                businessType,
+                stringValue(businessData.get("billNo")),
+                resolveBusinessTitle(businessType, businessData),
+                stringValue(variables.get("westflowInitiatorUserId")),
+                task.getName(),
+                task.getId(),
+                resolveTaskStatus(task),
+                task.getAssignee(),
+                "COMPLETED",
+                stringValue(variables.get("westflowLastAction")),
+                stringValue(variables.get("westflowLastOperatorUserId")),
+                "READ".equals(resolveTaskStatus(task)) || "CC_READ".equals(resolveTaskStatus(task)) ? "READ" : "UNREAD",
+                toOffsetDateTime(task.getCreateTime()),
+                toOffsetDateTime(task.getCreateTime()),
+                null
+        );
+    }
+
+    private ApprovalSheetListItemResponse toApprovalSheetFromCopiedHistoricTask(HistoricTaskInstance task) {
+        Map<String, Object> variables = historicVariables(task.getProcessInstanceId());
+        String processKey = stringValue(variables.get("westflowProcessKey"));
+        PublishedProcessDefinition definition = resolvePublishedDefinition(
+                stringValue(variables.get("westflowProcessDefinitionId")),
+                stringValue(variables.get("westflowProcessDefinitionId")),
+                processKey,
+                task.getProcessInstanceId()
+        );
+        String businessType = stringValue(variables.get("westflowBusinessType"));
+        String businessKey = stringValue(variables.get("westflowBusinessKey"));
+        Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(businessType, businessKey);
+        return new ApprovalSheetListItemResponse(
+                task.getProcessInstanceId(),
+                definition.processDefinitionId(),
+                definition.processKey(),
+                definition.processName(),
+                businessKey,
+                businessType,
+                stringValue(businessData.get("billNo")),
+                resolveBusinessTitle(businessType, businessData),
+                stringValue(variables.get("westflowInitiatorUserId")),
+                task.getName(),
+                task.getId(),
+                resolveHistoricTaskStatus(task, requireHistoricProcessInstance(task.getProcessInstanceId())),
+                task.getAssignee(),
+                "COMPLETED",
+                stringValue(variables.get("westflowLastAction")),
+                stringValue(variables.get("westflowLastOperatorUserId")),
+                "CC_READ",
+                toOffsetDateTime(task.getCreateTime()),
+                toOffsetDateTime(task.getEndTime()),
+                toOffsetDateTime(task.getEndTime())
         );
     }
 
@@ -835,12 +1543,72 @@ public class FlowableProcessRuntimeService {
         return claimTaskIfNeeded(task, currentUserId());
     }
 
+    // 在委派、催办场景下校验目标用户。
+    private String requireTargetUserId(String targetUserId, String taskId) {
+        if (targetUserId == null || targetUserId.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "targetUserId 不能为空",
+                    Map.of("taskId", taskId)
+            );
+        }
+        return targetUserId.trim();
+    }
+
+    private String normalizeTargetUserId(String userId, String fieldName) {
+        if (userId == null || userId.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    fieldName + " 不能为空",
+                    Map.of("field", fieldName)
+            );
+        }
+        return userId.trim();
+    }
+
+    // 获取当前任务当前处理人；无处理人时回退到候选人。
+    private String resolveCurrentTaskOwner(Task task) {
+        if (task.getAssignee() != null && !task.getAssignee().isBlank()) {
+            return task.getAssignee();
+        }
+        List<String> candidates = candidateUsers(task.getId());
+        return candidates.isEmpty() ? null : candidates.get(0);
+    }
+
+
+    private boolean hasInitiatorPermission(Task task) {
+        if (task == null) {
+            return false;
+        }
+        String processInstanceId = task.getProcessInstanceId();
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return false;
+        }
+        String initiatorUserId = stringValue(runtimeVariables(processInstanceId).get("westflowInitiatorUserId"));
+        return currentUserId().equals(initiatorUserId);
+    }
+
     private Task claimTaskIfNeeded(Task task, String assigneeUserId) {
         if (task.getAssignee() == null) {
             flowableTaskActionService.claim(task.getId(), assigneeUserId);
             return requireActiveTask(task.getId());
         }
         return task;
+    }
+
+    private List<Task> activeTasksAssignedTo(String assigneeUserId) {
+        return flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .taskAssignee(assigneeUserId)
+                .active()
+                .orderByTaskCreateTime()
+                .asc()
+                .list()
+                .stream()
+                .filter(task -> "NORMAL".equals(resolveTaskKind(task)))
+                .toList();
     }
 
     private Map<String, Object> actionVariables(
@@ -950,12 +1718,13 @@ public class FlowableProcessRuntimeService {
                 .asc()
                 .list()
                 .stream()
+                .filter(this::isVisibleTask)
                 .map(this::toTaskView)
                 .toList();
         return new CompleteTaskResponse(
                 processInstanceId,
                 completedTaskId,
-                nextTasks.isEmpty() ? "COMPLETED" : "RUNNING",
+                blockingTaskViews(nextTasks).isEmpty() ? "COMPLETED" : "RUNNING",
                 nextTasks
         );
     }
@@ -973,7 +1742,11 @@ public class FlowableProcessRuntimeService {
             Map<String, Object> details,
             String targetStrategy,
             String targetNodeId,
-            String reapproveStrategy
+            String reapproveStrategy,
+            String actingMode,
+            String actingForUserId,
+            String delegatedByUserId,
+            String handoverFromUserId
     ) {
         traceStore.appendInstanceEvent(new ProcessInstanceEventResponse(
                 instanceId + "::" + eventType + "::" + UUID.randomUUID(),
@@ -992,10 +1765,10 @@ public class FlowableProcessRuntimeService {
                 targetStrategy,
                 targetNodeId,
                 reapproveStrategy,
-                null,
-                null,
-                null,
-                null
+                actingMode,
+                actingForUserId,
+                delegatedByUserId,
+                handoverFromUserId
         ));
     }
 
@@ -1031,7 +1804,7 @@ public class FlowableProcessRuntimeService {
                 stringValue(variables.get("westflowInitiatorUserId")),
                 task.getTaskDefinitionKey(),
                 task.getName(),
-                resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey()),
+                resolveTaskKind(task),
                 resolveTaskStatus(task),
                 "USER",
                 candidateUsers(task.getId()),
@@ -1047,14 +1820,14 @@ public class FlowableProcessRuntimeService {
                 task.getId(),
                 task.getTaskDefinitionKey(),
                 task.getName(),
-                resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey()),
+                resolveTaskKind(task),
                 resolveTaskStatus(task),
                 "USER",
                 candidateUsers(task.getId()),
                 task.getAssignee(),
-                null,
-                null,
-                null,
+                resolveActingMode(task, null),
+                resolveActingForUserId(task, null),
+                resolveDelegatedByUserId(task, null),
                 null
         );
     }
@@ -1107,6 +1880,37 @@ public class FlowableProcessRuntimeService {
                 .toList();
     }
 
+    private Map<String, Object> taskLocalVariables(String taskId) {
+        Map<String, Object> variables = flowableEngineFacade.taskService().getVariablesLocal(taskId);
+        return variables == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(variables));
+    }
+
+    private Map<String, Object> historicTaskLocalVariables(String taskId) {
+        Map<String, Object> variables = new LinkedHashMap<>();
+        flowableEngineFacade.historyService()
+                .createHistoricVariableInstanceQuery()
+                .taskId(taskId)
+                .list()
+                .forEach(variable -> variables.put(variable.getVariableName(), variable.getValue()));
+        return variables;
+    }
+
+    private String resolveTaskKind(Task task) {
+        String runtimeTaskKind = stringValue(taskLocalVariables(task.getId()).get("westflowTaskKind"));
+        if (runtimeTaskKind != null) {
+            return runtimeTaskKind;
+        }
+        return resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+    }
+
+    private String resolveHistoricTaskKind(HistoricTaskInstance task) {
+        String historicTaskKind = stringValue(historicTaskLocalVariables(task.getId()).get("westflowTaskKind"));
+        if (historicTaskKind != null) {
+            return historicTaskKind;
+        }
+        return resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+    }
+
     private String resolveTaskKind(String engineProcessDefinitionId, String nodeId) {
         if (nodeId == null || nodeId.isBlank()) {
             return "NORMAL";
@@ -1127,7 +1931,169 @@ public class FlowableProcessRuntimeService {
     }
 
     private String resolveTaskStatus(Task task) {
+        String taskKind = resolveTaskKind(task);
+        if ("CC".equals(taskKind)) {
+            return readTimeValue(taskLocalVariables(task.getId())) == null ? "CC_PENDING" : "CC_READ";
+        }
+        if ("DELEGATED".equals(resolveActingMode(task, null))) {
+            return "DELEGATED";
+        }
+        if ("ADD_SIGN".equals(taskKind)) {
+            return "PENDING";
+        }
+        if (task.getOwner() != null && task.getAssignee() != null && !task.getOwner().equals(task.getAssignee())) {
+            return "DELEGATED";
+        }
         return task.getAssignee() == null && !candidateUsers(task.getId()).isEmpty() ? "PENDING_CLAIM" : "PENDING";
+    }
+
+    private String resolveTraceTaskStatus(Task task, Map<String, Object> localVariables) {
+        String action = stringValue(localVariables.get("westflowAction"));
+        if ("HANDOVER".equals(action)) {
+            return "HANDOVERED";
+        }
+        return resolveTaskStatus(task);
+    }
+
+    private boolean canRevoke(Task task) {
+        return hasInitiatorPermission(task);
+    }
+
+    private boolean canUrge(Task task) {
+        return hasInitiatorPermission(task);
+    }
+
+    private boolean canTakeBack(Task task) {
+        if (task == null || !"NORMAL".equals(resolveTaskKind(task)) || hasActiveAddSignChild(task.getId())) {
+            return false;
+        }
+        HistoricTaskInstance previousTask;
+        try {
+            previousTask = requirePreviousUserTask(task);
+        } catch (ContractException exception) {
+            return false;
+        }
+        if (!currentUserId().equals(previousTask.getAssignee())) {
+            return false;
+        }
+        Map<String, Object> localVariables = taskLocalVariables(task.getId());
+        if (stringValue(localVariables.get("westflowAction")) != null || readTimeValue(localVariables) != null) {
+            return false;
+        }
+        return flowableEngineFacade.taskService().getTaskComments(task.getId()).isEmpty();
+    }
+
+    private String resolveInstanceStatus(HistoricProcessInstance processInstance, List<Task> activeTasks) {
+        if (processInstance.getDeleteReason() != null) {
+            return "WESTFLOW_REVOKED".equals(processInstance.getDeleteReason()) ? "REVOKED" : "COMPLETED";
+        }
+        return activeTasks.stream().anyMatch(this::isBlockingTask) ? "RUNNING" : "COMPLETED";
+    }
+
+    private boolean hasActiveAddSignChild(String taskId) {
+        return flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .active()
+                .list()
+                .stream()
+                .anyMatch(task -> taskId.equals(task.getParentTaskId()) && "ADD_SIGN".equals(resolveTaskKind(task)));
+    }
+
+    private boolean isBlockingTask(Task task) {
+        return !"CC".equals(resolveTaskKind(task));
+    }
+
+    private boolean isVisibleTask(Task task) {
+        return true;
+    }
+
+    private List<DemoTaskView> blockingTaskViews(List<DemoTaskView> nextTasks) {
+        return nextTasks.stream()
+                .filter(task -> !"CC".equals(task.taskKind()))
+                .toList();
+    }
+
+    private OffsetDateTime readTimeValue(Map<String, Object> localVariables) {
+        if (localVariables == null || localVariables.isEmpty()) {
+            return null;
+        }
+        Object value = localVariables.get("westflowReadTime");
+        if (value instanceof Timestamp timestamp) {
+            return OffsetDateTime.ofInstant(timestamp.toInstant(), TIME_ZONE);
+        }
+        if (value instanceof java.util.Date date) {
+            return OffsetDateTime.ofInstant(date.toInstant(), TIME_ZONE);
+        }
+        return null;
+    }
+
+    private String resolveHistoricTaskStatus(HistoricTaskInstance task, HistoricProcessInstance processInstance) {
+        String taskKind = task == null ? null : resolveHistoricTaskKind(task);
+        if (task != null) {
+            Map<String, Object> localVariables = historicTaskLocalVariables(task.getId());
+            String action = stringValue(localVariables.get("westflowAction"));
+            if ("TAKE_BACK".equals(action)) {
+                return "TAKEN_BACK";
+            }
+            if ("HANDOVER".equals(action)) {
+                return "HANDOVERED";
+            }
+            if ("CC".equals(taskKind)) {
+                return readTimeValue(localVariables) == null ? "CC_PENDING" : "CC_READ";
+            }
+            return isHistoricTaskRevoked(task) ? "REVOKED" : "COMPLETED";
+        }
+        if (processInstance != null && "WESTFLOW_REVOKED".equals(processInstance.getDeleteReason())) {
+            return "REVOKED";
+        }
+        return "COMPLETED";
+    }
+
+    private boolean isHistoricTaskRevoked(HistoricTaskInstance task) {
+        return task.getDeleteReason() != null && !task.getDeleteReason().isBlank();
+    }
+
+    private String resolveActingMode(Task activeTask, HistoricTaskInstance historicTask) {
+        Map<String, Object> localVariables = activeTask != null
+                ? taskLocalVariables(activeTask.getId())
+                : historicTask == null ? Map.of() : historicTaskLocalVariables(historicTask.getId());
+        String explicitMode = stringValue(localVariables.get("westflowActingMode"));
+        if (explicitMode != null) {
+            return explicitMode;
+        }
+        String ownerUserId = activeTask != null ? activeTask.getOwner() : historicTask == null ? null : historicTask.getOwner();
+        String assigneeUserId = activeTask != null ? activeTask.getAssignee() : historicTask == null ? null : historicTask.getAssignee();
+        if (ownerUserId != null && assigneeUserId != null && !ownerUserId.equals(assigneeUserId)) {
+            return "DELEGATE";
+        }
+        return null;
+    }
+
+    private String resolveActingForUserId(Task activeTask, HistoricTaskInstance historicTask) {
+        Map<String, Object> localVariables = activeTask != null
+                ? taskLocalVariables(activeTask.getId())
+                : historicTask == null ? Map.of() : historicTaskLocalVariables(historicTask.getId());
+        String explicitUserId = stringValue(localVariables.get("westflowActingForUserId"));
+        if (explicitUserId != null) {
+            return explicitUserId;
+        }
+        String ownerUserId = activeTask != null ? activeTask.getOwner() : historicTask == null ? null : historicTask.getOwner();
+        String assigneeUserId = activeTask != null ? activeTask.getAssignee() : historicTask == null ? null : historicTask.getAssignee();
+        if (ownerUserId != null && assigneeUserId != null && !ownerUserId.equals(assigneeUserId)) {
+            return ownerUserId;
+        }
+        return null;
+    }
+
+    private String resolveDelegatedByUserId(Task activeTask, HistoricTaskInstance historicTask) {
+        Map<String, Object> localVariables = activeTask != null
+                ? taskLocalVariables(activeTask.getId())
+                : historicTask == null ? Map.of() : historicTaskLocalVariables(historicTask.getId());
+        String explicitUserId = stringValue(localVariables.get("westflowDelegatedByUserId"));
+        if (explicitUserId != null) {
+            return explicitUserId;
+        }
+        return resolveActingForUserId(activeTask, historicTask);
     }
 
     private Map<String, Object> runtimeVariables(String processInstanceId) {
@@ -1333,6 +2299,139 @@ public class FlowableProcessRuntimeService {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private HandoverPreviewTaskItemResponse toHandoverPreviewTask(Task task, String sourceUserId) {
+        Optional<BusinessLinkSnapshot> link = findBusinessLinkByInstanceId(task.getProcessInstanceId());
+        String businessType = link.map(BusinessLinkSnapshot::businessType)
+                .orElseGet(() -> stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowBusinessType")));
+        String businessKey = link.map(BusinessLinkSnapshot::businessId)
+                .orElseGet(() -> stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowBusinessKey")));
+        Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(businessType, businessKey);
+        return new HandoverPreviewTaskItemResponse(
+                task.getId(),
+                task.getProcessInstanceId(),
+                link.map(BusinessLinkSnapshot::processDefinitionId).orElse(task.getProcessDefinitionId()),
+                stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowProcessKey")),
+                stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowProcessName")),
+                businessKey,
+                businessType,
+                resolveBusinessTitle(businessType, businessData),
+                stringValue(businessData.get("billNo")),
+                task.getTaskDefinitionKey(),
+                task.getName(),
+                sourceUserId,
+                toOffsetDateTime(task.getCreateTime()),
+                toOffsetDateTime(task.getCreateTime()),
+                true,
+                null
+        );
+    }
+
+    private HandoverExecutionTaskItemResponse toHandoverExecutionTask(
+            Task sourceTask,
+            Task updatedTask,
+            String sourceUserId,
+            String targetUserId,
+            String comment
+    ) {
+        Optional<BusinessLinkSnapshot> link = findBusinessLinkByInstanceId(updatedTask.getProcessInstanceId());
+        String businessType = link.map(BusinessLinkSnapshot::businessType)
+                .orElseGet(() -> stringValue(runtimeVariables(updatedTask.getProcessInstanceId()).get("westflowBusinessType")));
+        String businessKey = link.map(BusinessLinkSnapshot::businessId)
+                .orElseGet(() -> stringValue(runtimeVariables(updatedTask.getProcessInstanceId()).get("westflowBusinessKey")));
+        Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(businessType, businessKey);
+        return new HandoverExecutionTaskItemResponse(
+                sourceTask.getId(),
+                updatedTask.getId(),
+                updatedTask.getProcessInstanceId(),
+                link.map(BusinessLinkSnapshot::processDefinitionId).orElse(updatedTask.getProcessDefinitionId()),
+                stringValue(runtimeVariables(updatedTask.getProcessInstanceId()).get("westflowProcessKey")),
+                stringValue(runtimeVariables(updatedTask.getProcessInstanceId()).get("westflowProcessName")),
+                businessKey,
+                businessType,
+                resolveBusinessTitle(businessType, businessData),
+                stringValue(businessData.get("billNo")),
+                updatedTask.getTaskDefinitionKey(),
+                updatedTask.getName(),
+                targetUserId,
+                "HANDOVERED",
+                updatedTask.getAssignee(),
+                sourceUserId,
+                comment,
+                OffsetDateTime.now(TIME_ZONE),
+                true,
+                null
+        );
+    }
+
+    private String resolveUserDisplayName(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return userId;
+        }
+        List<String> results = jdbcTemplate.query(
+                "SELECT display_name FROM wf_user WHERE id = ?",
+                (rs, rowNum) -> rs.getString("display_name"),
+                userId
+        );
+        return results.isEmpty() || results.get(0) == null || results.get(0).isBlank() ? userId : results.get(0);
+    }
+
+    private void insertBusinessLink(
+            String businessType,
+            String businessId,
+            String processInstanceId,
+            String processDefinitionId,
+            String startUserId,
+            String status
+    ) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO wf_business_process_link (
+                    id,
+                    business_type,
+                    business_id,
+                    process_instance_id,
+                    process_definition_id,
+                    start_user_id,
+                    status,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                "bpl_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12),
+                businessType,
+                businessId,
+                processInstanceId,
+                processDefinitionId,
+                startUserId,
+                status
+        );
+    }
+
+    private void updateBusinessProcessLink(String businessType, String businessId, String processInstanceId, String status) {
+        switch (businessType) {
+            case "OA_LEAVE" -> jdbcTemplate.update(
+                    "UPDATE oa_leave_bill SET process_instance_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    processInstanceId,
+                    status,
+                    businessId
+            );
+            case "OA_EXPENSE" -> jdbcTemplate.update(
+                    "UPDATE oa_expense_bill SET process_instance_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    processInstanceId,
+                    status,
+                    businessId
+            );
+            case "OA_COMMON" -> jdbcTemplate.update(
+                    "UPDATE oa_common_request_bill SET process_instance_id = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    processInstanceId,
+                    status,
+                    businessId
+            );
+            default -> {
+                // 其他业务类型后续再按业务表扩展更新逻辑。
+            }
+        }
     }
 
     private ContractException taskNotFound(String taskId) {
