@@ -6,7 +6,7 @@
 
 ## 目标
 
-定义当前运行时 demo 的审批任务动作、状态流转、表单载荷和审计留痕规范。
+定义当前运行时 demo 的审批任务动作、状态流转、表单载荷、审批单详情时间字段和审计留痕规范。
 
 ## 当前覆盖范围
 
@@ -101,10 +101,19 @@
 
 任务详情返回补充：
 
+- `processFormKey`
+- `processFormVersion`
 - `nodeFormKey`
 - `nodeFormVersion`
+- `effectiveFormKey`
+- `effectiveFormVersion`
 - `fieldBindings`
 - `taskFormData`
+
+生效规则：
+
+- 若节点配置了 `nodeFormKey/nodeFormVersion`，则 `effectiveFormKey/effectiveFormVersion` 取节点表单
+- 否则回退到流程默认表单 `processFormKey/processFormVersion`
 
 ## 审计字段
 
@@ -115,4 +124,9 @@
 - `action`
 - `operatorUserId`
 - `comment`
+- `receiveTime`
+- `readTime`
+- `handleStartTime`
+- `handleEndTime`
+- `handleDuration`
 - `createdAt`

@@ -1,6 +1,8 @@
 # M0 Foundation Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Status note (2026-03-22):** M0 基线仍然有效；流程管理后续建设顺序与模块边界请以 `docs/superpowers/specs/2026-03-22-workflow-management-replan.md` 和 `docs/superpowers/plans/2026-03-22-workflow-management-replan-plan.md` 为准，不再执行独立表单管理方向。
 
 **Goal:** Build the M0 engineering baseline for `west-flow-ai`: import the `shadcn-admin` frontend foundation, scaffold the single-app Spring Boot backend, freeze the shared M0 contracts in code, and deliver a minimal approval demo that can start parallel M1 work.
 
