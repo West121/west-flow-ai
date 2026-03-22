@@ -6,6 +6,7 @@ import {
   ListTodo,
   Network,
   ShieldCheck,
+  SquareMenu,
   Users,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
@@ -74,6 +75,20 @@ export const sidebarData: SidebarData = {
           title: '角色管理',
           url: '/system/roles/list',
           icon: ShieldCheck,
+        },
+        {
+          title: '菜单管理',
+          icon: SquareMenu,
+          items: [
+            {
+              title: '菜单列表',
+              url: '/system/menus/list',
+            },
+            {
+              title: '新建菜单',
+              url: '/system/menus/create',
+            },
+          ],
         },
         {
           title: '部门管理',

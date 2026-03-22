@@ -40,6 +40,22 @@ CREATE TABLE IF NOT EXISTS wf_post (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS wf_menu (
+    id VARCHAR(64) PRIMARY KEY,
+    parent_menu_id VARCHAR(64),
+    menu_name VARCHAR(128) NOT NULL,
+    menu_type VARCHAR(32) NOT NULL,
+    route_path VARCHAR(255),
+    component_path VARCHAR(255),
+    permission_code VARCHAR(255),
+    icon_name VARCHAR(64),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    visible BOOLEAN NOT NULL DEFAULT TRUE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS wf_user_post (
     id VARCHAR(64) PRIMARY KEY,
     user_id VARCHAR(64) NOT NULL,
@@ -107,6 +123,409 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_post WHERE id = 'post_002');
 INSERT INTO wf_post (id, department_id, post_name, created_at)
 SELECT 'post_003', 'dept_003', '流程管理员', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_post WHERE id = 'post_003');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workbench',
+    NULL,
+    '工作台',
+    'DIRECTORY',
+    '/workbench',
+    NULL,
+    NULL,
+    'FolderKanban',
+    10,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workbench');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workbench_dashboard',
+    'menu_workbench',
+    '平台总览',
+    'MENU',
+    '/',
+    'dashboard/overview',
+    'dashboard:overview:view',
+    'FolderKanban',
+    10,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workbench_dashboard');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workbench_todo',
+    'menu_workbench',
+    '待办列表',
+    'MENU',
+    '/workbench/todos/list',
+    'workbench/todos/list',
+    'todo:list:view',
+    'ListTodo',
+    20,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workbench_todo');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system',
+    NULL,
+    '系统管理',
+    'DIRECTORY',
+    '/system',
+    NULL,
+    NULL,
+    'ShieldCheck',
+    20,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_user',
+    'menu_system',
+    '用户管理',
+    'MENU',
+    '/system/users/list',
+    'system/users/list',
+    'system:user:view',
+    'Users',
+    10,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_user');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_company',
+    'menu_system',
+    '公司管理',
+    'MENU',
+    '/system/companies/list',
+    'system/companies/list',
+    'system:company:view',
+    'Building2',
+    20,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_company');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_role',
+    'menu_system',
+    '角色管理',
+    'MENU',
+    '/system/roles/list',
+    'system/roles/list',
+    'system:role:view',
+    'ShieldCheck',
+    30,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_role');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_department',
+    'menu_system',
+    '部门管理',
+    'MENU',
+    '/system/departments/list',
+    'system/departments/list',
+    'system:department:view',
+    'Building2',
+    40,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_department');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_post',
+    'menu_system',
+    '岗位管理',
+    'MENU',
+    '/system/posts/list',
+    'system/posts/list',
+    'system:post:view',
+    'CircleUserRound',
+    50,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_post');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_system_menu',
+    'menu_system',
+    '菜单管理',
+    'MENU',
+    '/system/menus/list',
+    'system/menus/list',
+    'system:menu:view',
+    'SquareMenu',
+    60,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_menu');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow',
+    NULL,
+    '流程平台',
+    'DIRECTORY',
+    '/workflow',
+    NULL,
+    NULL,
+    'Network',
+    30,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_definition',
+    'menu_workflow',
+    '流程定义',
+    'MENU',
+    '/workflow/definitions/list',
+    'workflow/definitions/list',
+    'workflow:definition:view',
+    'Network',
+    10,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_definition');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_designer',
+    'menu_workflow',
+    '流程设计器',
+    'MENU',
+    '/workflow/designer',
+    'workflow/designer',
+    'workflow:designer:view',
+    'FolderKanban',
+    20,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_designer');
 
 INSERT INTO wf_user (
     id,
