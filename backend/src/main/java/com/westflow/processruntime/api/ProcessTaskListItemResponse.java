@@ -1,0 +1,23 @@
+package com.westflow.processruntime.api;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+
+public record ProcessTaskListItemResponse(
+        String taskId,
+        String instanceId,
+        String processDefinitionId,
+        String processKey,
+        String processName,
+        String businessKey,
+        String applicantUserId,
+        String nodeId,
+        String nodeName,
+        String status,
+        String assignmentMode,
+        List<String> candidateUserIds,
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt,
+        OffsetDateTime completedAt
+) {
+}

@@ -22,6 +22,10 @@ import {
   type WorkflowNodeTemplate,
 } from './palette'
 import {
+  normalizeEdgeCondition,
+  normalizeNodeConfig,
+} from './config'
+import {
   type WorkflowEdge,
   type WorkflowHelperLines,
   type WorkflowNode,
@@ -112,6 +116,23 @@ type WorkflowDesignerState = {
   resetDesigner: () => void
   hydrateSnapshot: (snapshot: WorkflowSnapshot) => void
   setSelectedNodeId: (selectedNodeId: string | null) => void
+  updateNodeData: (
+    nodeId: string,
+    updater: (data: WorkflowNode['data']) => WorkflowNode['data']
+  ) => void
+  updateNodeDraft: (
+    nodeId: string,
+    patch: {
+      label?: string
+      description?: string
+      config?: unknown
+    },
+    edgePatches?: Array<{
+      edgeId: string
+      label?: string
+      condition?: unknown
+    }>
+  ) => void
   setHelperLines: (helperLines: WorkflowHelperLines) => void
   applyNodeChanges: (changes: NodeChange<WorkflowNode>[]) => void
   applyEdgeChanges: (changes: EdgeChange<WorkflowEdge>[]) => void
@@ -149,6 +170,67 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
         history: replaceWorkflowSnapshot(state.history, {
           ...state.history.present,
           selectedNodeId,
+        }),
+      })),
+    updateNodeData: (nodeId, updater) =>
+      set((state) => ({
+        history: commitWorkflowSnapshot(state.history, {
+          ...state.history.present,
+          nodes: state.history.present.nodes.map((node) =>
+            node.id === nodeId
+              ? {
+                  ...node,
+                  data: updater(node.data),
+                }
+              : node
+          ),
+        }),
+      })),
+    updateNodeDraft: (nodeId, patch, edgePatches = []) =>
+      set((state) => ({
+        history: commitWorkflowSnapshot(state.history, {
+          ...state.history.present,
+          nodes: state.history.present.nodes.map((node) => {
+            if (node.id !== nodeId) {
+              return node
+            }
+
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                label: patch.label ?? node.data.label,
+                description: patch.description ?? node.data.description,
+                config: normalizeNodeConfig(
+                  node.data.kind,
+                  patch.config ?? node.data.config
+                ),
+              },
+            }
+          }),
+          edges: state.history.present.edges.map((edge) => {
+            const edgePatch = edgePatches.find((item) => item.edgeId === edge.id)
+            if (!edgePatch) {
+              return edge
+            }
+
+            const hasConditionPatch = Object.prototype.hasOwnProperty.call(
+              edgePatch,
+              'condition'
+            )
+
+            return {
+              ...edge,
+              label: edgePatch.label ?? edge.label,
+              data: {
+                ...edge.data,
+                condition: normalizeEdgeCondition(
+                  hasConditionPatch ? edgePatch.condition : edge.data?.condition
+                ),
+              },
+            }
+          }),
+          selectedNodeId: nodeId,
         }),
       })),
     setHelperLines: (helperLines) => set({ helperLines }),

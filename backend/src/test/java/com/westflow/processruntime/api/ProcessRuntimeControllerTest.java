@@ -2,6 +2,8 @@ package com.westflow.processruntime.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.processruntime.service.ProcessDemoService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -12,6 +14,7 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -26,6 +29,14 @@ class ProcessRuntimeControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ProcessDemoService processDemoService;
+
+    @BeforeEach
+    void resetRuntimeState() {
+        processDemoService.reset();
+    }
 
     @Test
     void shouldPublishStartAndCompleteDemoProcess() throws Exception {
@@ -75,6 +86,50 @@ class ProcessRuntimeControllerTest {
         assertThat(activeTask.path("status").asText()).isEqualTo("PENDING");
         String taskId = activeTask.path("taskId").asText();
 
+        String pageResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "请假",
+                                  "filters": [],
+                                  "sorts": [
+                                    {
+                                      "field": "createdAt",
+                                      "direction": "desc"
+                                    }
+                                  ],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode pageBody = objectMapper.readTree(pageResponse);
+        assertThat(pageBody.path("code").asText()).isEqualTo("OK");
+        assertThat(pageBody.path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(pageBody.path("data").path("records").size()).isEqualTo(1);
+        assertThat(pageBody.path("data").path("records").get(0).path("taskId").asText()).isEqualTo(taskId);
+        assertThat(pageBody.path("data").path("records").get(0).path("processName").asText()).isEqualTo("请假审批");
+
+        String detailResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode detailBody = objectMapper.readTree(detailResponse);
+        assertThat(detailBody.path("code").asText()).isEqualTo("OK");
+        assertThat(detailBody.path("data").path("taskId").asText()).isEqualTo(taskId);
+        assertThat(detailBody.path("data").path("processName").asText()).isEqualTo("请假审批");
+        assertThat(detailBody.path("data").path("instanceStatus").asText()).isEqualTo("RUNNING");
+        assertThat(detailBody.path("data").path("activeTaskIds").size()).isEqualTo(1);
+
         String completeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", taskId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -95,6 +150,17 @@ class ProcessRuntimeControllerTest {
         assertThat(completeBody.path("data").path("completedTaskId").asText()).isEqualTo(taskId);
         assertThat(completeBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
         assertThat(completeBody.path("data").path("nextTasks").size()).isEqualTo(0);
+
+        String completedDetailResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode completedDetailBody = objectMapper.readTree(completedDetailResponse);
+        assertThat(completedDetailBody.path("data").path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(completedDetailBody.path("data").path("completedAt").isNull()).isFalse();
     }
 
     @Test

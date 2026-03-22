@@ -2,9 +2,12 @@ package com.westflow.processruntime.api;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
+import com.westflow.common.query.PageRequest;
+import com.westflow.common.query.PageResponse;
 import com.westflow.processruntime.service.ProcessDemoService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +27,18 @@ public class ProcessRuntimeController {
     @SaCheckLogin
     public ApiResponse<StartProcessResponse> start(@Valid @RequestBody StartProcessRequest request) {
         return ApiResponse.success(processDemoService.start(request));
+    }
+
+    @PostMapping("/tasks/page")
+    @SaCheckLogin
+    public ApiResponse<PageResponse<ProcessTaskListItemResponse>> page(@Valid @RequestBody PageRequest request) {
+        return ApiResponse.success(processDemoService.page(request));
+    }
+
+    @GetMapping("/tasks/{taskId}")
+    @SaCheckLogin
+    public ApiResponse<ProcessTaskDetailResponse> detail(@PathVariable String taskId) {
+        return ApiResponse.success(processDemoService.detail(taskId));
     }
 
     @PostMapping("/tasks/{taskId}/complete")

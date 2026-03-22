@@ -151,6 +151,81 @@ class ProcessDslValidatorTest {
         assertValidationFailure(dsl, "approver 节点必须配置 assignment");
     }
 
+    @Test
+    void shouldRejectStartWithoutInitiatorEditable() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of()),
+                        approverNode("approve_1"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "start 节点必须配置 initiatorEditable");
+    }
+
+    @Test
+    void shouldRejectCcWithoutTargets() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNode("approve_1"),
+                        node("cc_1", "cc", Map.of("readRequired", false)),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "cc_1"),
+                        edge("edge_3", "cc_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "cc 节点必须配置 targets");
+    }
+
+    @Test
+    void shouldRejectStartNodeWithoutInitiatorEditable() {
+        ProcessDslPayload dsl = withNodes(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of()),
+                        approverNode("approve_1"),
+                        node("end_1", "end", Map.of())
+                )
+        );
+
+        assertValidationFailure(dsl, "start 节点必须配置 initiatorEditable");
+    }
+
+    @Test
+    void shouldRejectCcNodeWithoutUserTargets() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNode("approve_1"),
+                        node("cc_1", "cc", Map.of(
+                                "targets", Map.of("mode", "USER", "userIds", List.of()),
+                                "readRequired", false
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "cc_1"),
+                        edge("edge_3", "cc_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "cc 节点 USER 目标不能为空");
+    }
+
     private void assertValidationFailure(ProcessDslPayload dsl, String messagePart) {
         assertThatThrownBy(() -> validator.validate(dsl))
                 .isInstanceOf(ContractException.class)
@@ -245,6 +320,7 @@ class ProcessDslValidatorTest {
                 id,
                 type,
                 id,
+                String.valueOf(config.getOrDefault("description", id)),
                 Map.of("x", 120, "y", 80),
                 config,
                 Map.of("width", 240, "height", 88)

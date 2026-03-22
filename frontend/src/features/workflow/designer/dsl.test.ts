@@ -16,6 +16,9 @@ const snapshot: WorkflowSnapshot = {
         label: '开始',
         description: '发起流程',
         tone: 'success',
+        config: {
+          initiatorEditable: true,
+        },
       },
     },
     {
@@ -27,6 +30,21 @@ const snapshot: WorkflowSnapshot = {
         label: '审批',
         description: '部门负责人审批',
         tone: 'brand',
+        config: {
+          assignment: {
+            mode: 'USER',
+            userIds: ['usr_002'],
+            roleCodes: [],
+            departmentRef: '',
+            formFieldKey: '',
+          },
+          approvalPolicy: {
+            type: 'SEQUENTIAL',
+            voteThreshold: null,
+          },
+          operations: ['APPROVE', 'REJECT', 'RETURN'],
+          commentRequired: false,
+        },
       },
     },
     {
@@ -38,6 +56,7 @@ const snapshot: WorkflowSnapshot = {
         label: '结束',
         description: '流程结束',
         tone: 'neutral',
+        config: {},
       },
     },
   ],
@@ -72,6 +91,8 @@ describe('workflow designer dsl mapping', () => {
     expect(dsl.processName).toBe('请假审批')
     expect(dsl.category).toBe('OA')
     expect(dsl.nodes).toHaveLength(3)
+    expect(dsl.nodes[1]?.name).toBe('审批')
+    expect(dsl.nodes[1]?.description).toBe('部门负责人审批')
     expect(dsl.nodes[1]?.config).toMatchObject({
       assignment: expect.any(Object),
     })
@@ -110,5 +131,221 @@ describe('workflow designer dsl mapping', () => {
     expect(hydrated.selectedNodeId).toBeNull()
     expect(hydrated.nodes).toHaveLength(0)
     expect(hydrated.edges).toHaveLength(0)
+  })
+
+  it('keeps persisted node names and config when hydrating the designer snapshot', () => {
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:2',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 2,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl: {
+        dslVersion: '1.0.0',
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        category: 'OA',
+        formKey: 'oa-leave-form',
+        formVersion: '1.0.0',
+        settings: {
+          allowWithdraw: true,
+          allowUrge: true,
+          allowTransfer: true,
+        },
+        nodes: [
+          {
+            id: 'approve_manager',
+            type: 'approver',
+            name: '部门负责人审批',
+            description: '审批金额超过 1000 的请假单',
+            position: { x: 320, y: 100 },
+            config: {
+              assignment: {
+                mode: 'ROLE',
+                roleCodes: ['role_dept_manager'],
+                userIds: [],
+                departmentRef: '',
+                formFieldKey: '',
+              },
+              approvalPolicy: {
+                type: 'SEQUENTIAL',
+                voteThreshold: null,
+              },
+              operations: ['APPROVE', 'REJECT', 'RETURN'],
+              commentRequired: true,
+            },
+            ui: { width: 240, height: 88 },
+          },
+        ],
+        edges: [],
+      },
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.nodes[0]?.data.label).toBe('部门负责人审批')
+    expect(hydrated.nodes[0]?.data.description).toBe(
+      '审批金额超过 1000 的请假单'
+    )
+    expect(hydrated.nodes[0]?.data.config).toMatchObject({
+      commentRequired: true,
+      assignment: {
+        mode: 'ROLE',
+        roleCodes: ['role_dept_manager'],
+      },
+    })
+  })
+
+  it('round-trips condition branch expressions and default edges', () => {
+    const conditionSnapshot: WorkflowSnapshot = {
+      nodes: [
+        {
+          id: 'start_1',
+          type: 'workflow',
+          position: { x: 100, y: 100 },
+          data: {
+            kind: 'start',
+            label: '开始',
+            description: '发起流程',
+            tone: 'success',
+            config: { initiatorEditable: true },
+          },
+        },
+        {
+          id: 'condition_1',
+          type: 'workflow',
+          position: { x: 320, y: 100 },
+          data: {
+            kind: 'condition',
+            label: '条件',
+            description: '条件分支',
+            tone: 'warning',
+            config: { defaultEdgeId: 'edge_default' },
+          },
+        },
+        {
+          id: 'approve_1',
+          type: 'workflow',
+          position: { x: 540, y: 60 },
+          data: {
+            kind: 'approver',
+            label: '通过审批',
+            description: '条件通过审批',
+            tone: 'brand',
+            config: {
+              assignment: {
+                mode: 'USER',
+                userIds: ['usr_002'],
+                roleCodes: [],
+                departmentRef: '',
+                formFieldKey: '',
+              },
+              approvalPolicy: {
+                type: 'SEQUENTIAL',
+                voteThreshold: null,
+              },
+              operations: ['APPROVE', 'REJECT', 'RETURN'],
+              commentRequired: false,
+            },
+          },
+        },
+        {
+          id: 'approve_2',
+          type: 'workflow',
+          position: { x: 540, y: 180 },
+          data: {
+            kind: 'approver',
+            label: '驳回处理',
+            description: '条件不通过审批',
+            tone: 'brand',
+            config: {
+              assignment: {
+                mode: 'USER',
+                userIds: ['usr_003'],
+                roleCodes: [],
+                departmentRef: '',
+                formFieldKey: '',
+              },
+              approvalPolicy: {
+                type: 'SEQUENTIAL',
+                voteThreshold: null,
+              },
+              operations: ['APPROVE', 'REJECT', 'RETURN'],
+              commentRequired: false,
+            },
+          },
+        },
+        {
+          id: 'end_1',
+          type: 'workflow',
+          position: { x: 760, y: 120 },
+          data: {
+            kind: 'end',
+            label: '结束',
+            description: '流程结束',
+            tone: 'neutral',
+            config: {},
+          },
+        },
+      ],
+      edges: [
+        { id: 'edge_start', source: 'start_1', target: 'condition_1', type: 'smoothstep' },
+        { id: 'edge_default', source: 'condition_1', target: 'approve_1', type: 'smoothstep' },
+        {
+          id: 'edge_branch',
+          source: 'condition_1',
+          target: 'approve_2',
+          type: 'smoothstep',
+          data: {
+            condition: {
+              type: 'EXPRESSION',
+              expression: 'amount > 1000',
+            },
+          },
+        },
+        { id: 'edge_end_1', source: 'approve_1', target: 'end_1', type: 'smoothstep' },
+        { id: 'edge_end_2', source: 'approve_2', target: 'end_1', type: 'smoothstep' },
+      ],
+      selectedNodeId: 'condition_1',
+    }
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(conditionSnapshot, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      formKey: 'oa-leave-form',
+      formVersion: '1.0.0',
+    })
+
+    expect(dsl.nodes.find((node) => node.id === 'condition_1')?.config).toMatchObject({
+      defaultEdgeId: 'edge_default',
+    })
+    expect(dsl.edges.find((edge) => edge.id === 'edge_branch')).toMatchObject({
+      condition: {
+        type: 'EXPRESSION',
+        expression: 'amount > 1000',
+      },
+    })
+
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:3',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 3,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl,
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.edges.find((edge) => edge.id === 'edge_branch')?.data?.condition)
+      .toMatchObject({
+        type: 'EXPRESSION',
+        expression: 'amount > 1000',
+      })
   })
 })

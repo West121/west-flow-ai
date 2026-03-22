@@ -1,0 +1,173 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { getMock, postMock } = vi.hoisted(() => ({
+  getMock: vi.fn(),
+  postMock: vi.fn(),
+}))
+
+vi.mock('@/lib/api/client', () => ({
+  apiClient: {
+    get: getMock,
+    post: postMock,
+  },
+  unwrapResponse: <T>(response: { data: { data: T } }) => response.data.data,
+}))
+
+function okResponse<T>(data: T) {
+  return {
+    data: {
+      code: 'OK',
+      message: 'success',
+      data,
+      requestId: 'req_001',
+    },
+  }
+}
+
+describe('workbench api', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    getMock.mockReset()
+    postMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('loads workbench tasks with pagination payload', async () => {
+    const pageResponse = {
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          taskId: 'task_001',
+          instanceId: 'pi_001',
+          processDefinitionId: 'pd_001',
+          processKey: 'oa_leave',
+          processName: '请假审批',
+          businessKey: 'biz_001',
+          applicantUserId: 'zhangsan',
+          nodeId: 'approve_manager',
+          nodeName: '部门负责人审批',
+          status: 'PENDING',
+          assignmentMode: 'USER',
+          candidateUserIds: ['usr_002'],
+          createdAt: '2026-03-22T09:00:00+08:00',
+          updatedAt: '2026-03-22T09:00:00+08:00',
+          completedAt: null,
+        },
+      ],
+    }
+
+    postMock.mockResolvedValue(okResponse(pageResponse))
+
+    const { listWorkbenchTasks } = await import('./workbench')
+
+    await expect(
+      listWorkbenchTasks({
+        page: 1,
+        pageSize: 20,
+        keyword: '请假',
+        filters: [],
+        sorts: [{ field: 'createdAt', direction: 'desc' }],
+        groups: [],
+      })
+    ).resolves.toEqual(pageResponse)
+
+    expect(postMock).toHaveBeenCalledWith('/process-runtime/demo/tasks/page', {
+      page: 1,
+      pageSize: 20,
+      keyword: '请假',
+      filters: [],
+      sorts: [{ field: 'createdAt', direction: 'desc' }],
+      groups: [],
+    })
+  })
+
+  it('loads task detail and starts/completes runtime tasks', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        taskId: 'task_001',
+        instanceId: 'pi_001',
+        processDefinitionId: 'pd_001',
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        businessKey: 'biz_001',
+        applicantUserId: 'zhangsan',
+        nodeId: 'approve_manager',
+        nodeName: '部门负责人审批',
+        status: 'PENDING',
+        assignmentMode: 'USER',
+        candidateUserIds: ['usr_002'],
+        action: null,
+        operatorUserId: null,
+        comment: null,
+        createdAt: '2026-03-22T09:00:00+08:00',
+        updatedAt: '2026-03-22T09:00:00+08:00',
+        completedAt: null,
+        instanceStatus: 'RUNNING',
+        formData: { days: 3 },
+        activeTaskIds: ['task_001'],
+      })
+    )
+    postMock
+      .mockResolvedValueOnce(
+        okResponse({
+          processDefinitionId: 'pd_001',
+          instanceId: 'pi_001',
+          status: 'RUNNING',
+          activeTasks: [
+            {
+              taskId: 'task_001',
+              nodeId: 'approve_manager',
+              nodeName: '部门负责人审批',
+              status: 'PENDING',
+              assignmentMode: 'USER',
+              candidateUserIds: ['usr_002'],
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          instanceId: 'pi_001',
+          completedTaskId: 'task_001',
+          status: 'COMPLETED',
+          nextTasks: [],
+        })
+      )
+
+    const {
+      completeWorkbenchTask,
+      getWorkbenchTaskDetail,
+      startWorkbenchProcess,
+    } = await import('./workbench')
+
+    await expect(getWorkbenchTaskDetail('task_001')).resolves.toMatchObject({
+      taskId: 'task_001',
+      processName: '请假审批',
+    })
+    await expect(
+      startWorkbenchProcess({
+        processKey: 'oa_leave',
+        businessKey: 'biz_001',
+        formData: { days: 3 },
+      })
+    ).resolves.toMatchObject({
+      instanceId: 'pi_001',
+    })
+    await expect(
+      completeWorkbenchTask('task_001', {
+        action: 'APPROVE',
+        comment: '同意',
+      })
+    ).resolves.toMatchObject({
+      completedTaskId: 'task_001',
+      status: 'COMPLETED',
+    })
+  })
+})

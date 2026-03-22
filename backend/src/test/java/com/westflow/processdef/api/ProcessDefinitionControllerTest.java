@@ -201,7 +201,13 @@ class ProcessDefinitionControllerTest {
                           "roleCodes": [],
                           "departmentRef": "",
                           "formFieldKey": ""
-                        }
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
                       },
                       "ui": {"width": 240, "height": 88}
                     },

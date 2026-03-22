@@ -7,7 +7,12 @@ import {
   UserRoundCheck,
 } from 'lucide-react'
 import { Position } from '@xyflow/react'
-import { type WorkflowNode, type WorkflowNodeKind, type WorkflowNodeTone } from './types'
+import { defaultNodeConfig } from './config'
+import {
+  type WorkflowNode,
+  type WorkflowNodeKind,
+  type WorkflowNodeTone,
+} from './types'
 
 export type WorkflowNodeTemplate = {
   kind: WorkflowNodeKind
@@ -91,6 +96,7 @@ export function createWorkflowNode(
       label: template.label,
       description: template.description,
       tone: template.tone,
+      config: defaultNodeConfig(template.kind),
     },
     width: 220,
     height: 96,

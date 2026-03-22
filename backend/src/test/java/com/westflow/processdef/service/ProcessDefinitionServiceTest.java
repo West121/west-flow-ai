@@ -53,6 +53,19 @@ class ProcessDefinitionServiceTest {
     }
 
     @Test
+    void shouldPublishDefinitionWithNodeConfigurationInBpmn() throws Exception {
+        ProcessDefinitionDetailResponse published = processDefinitionService.publish(
+                payload("oa_leave", "请假审批", "OA")
+        );
+
+        assertThat(published.processDefinitionId()).isEqualTo("oa_leave:1");
+        assertThat(published.bpmnXml()).contains("startEvent");
+        assertThat(published.bpmnXml()).contains("initiatorEditable=\"true\"");
+        assertThat(published.bpmnXml()).contains("assignmentMode=\"USER\"");
+        assertThat(published.bpmnXml()).contains("operations=\"APPROVE,REJECT,RETURN\"");
+    }
+
+    @Test
     void shouldFilterDefinitionsByKeywordStatusAndCategory() throws Exception {
         publish("oa_leave_1", "请假审批一", "OA");
         publish("oa_leave_2", "请假审批二", "OA");
@@ -247,7 +260,12 @@ class ProcessDefinitionServiceTest {
                           "roleCodes": [],
                           "departmentRef": "",
                           "formFieldKey": ""
-                        }
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
                       },
                       "ui": {"width": 240, "height": 88}
                     },

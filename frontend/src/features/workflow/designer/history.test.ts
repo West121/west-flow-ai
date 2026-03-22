@@ -18,6 +18,9 @@ const initialSnapshot: WorkflowSnapshot = {
         description: '发起人提交申请',
         kind: 'start' as const,
         tone: 'success' as const,
+        config: {
+          initiatorEditable: true,
+        },
       },
     },
   ],

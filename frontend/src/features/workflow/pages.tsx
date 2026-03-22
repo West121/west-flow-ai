@@ -58,6 +58,7 @@ import {
   workflowNodeTemplates,
   type WorkflowNodeTemplate,
 } from './designer/palette'
+import { NodeConfigPanel } from './designer/node-config-panel'
 import { useWorkflowDesignerStore } from './designer/store'
 import {
   type WorkflowHelperLines,
@@ -352,6 +353,9 @@ function WorkflowDesignerWorkspace({
   )
   const setSelectedNodeId = useWorkflowDesignerStore(
     (state) => state.setSelectedNodeId
+  )
+  const updateNodeDraft = useWorkflowDesignerStore(
+    (state) => state.updateNodeDraft
   )
   const setHelperLines = useWorkflowDesignerStore(
     (state) => state.setHelperLines
@@ -758,60 +762,37 @@ function WorkflowDesignerWorkspace({
             <CardHeader>
               <CardTitle>节点配置</CardTitle>
               <CardDescription>
-                当前先展示选中节点概览，后续再接代码表单与规则表达式。
+                右侧表单会实时写回画布节点与 DSL，保存草稿后即可落库。
               </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-4 text-sm'>
+              <NodeConfigPanel node={selectedNode} edges={edges} onApply={updateNodeDraft} />
               {selectedNode ? (
-                <>
-                  <div className='rounded-2xl border p-4'>
-                    <div className='flex items-center justify-between gap-3'>
-                      <div>
-                        <p className='font-semibold'>
-                          {selectedNode.data.label}
-                        </p>
-                        <p className='text-xs text-muted-foreground'>
-                          节点编码：{selectedNode.id}
-                        </p>
-                      </div>
-                      <Badge variant='secondary'>
-                        {selectedNode.data.kind}
-                      </Badge>
-                    </div>
-                    <p className='mt-3 text-muted-foreground'>
-                      {selectedNode.data.description}
-                    </p>
-                  </div>
-                  <div className='rounded-2xl border p-4'>
-                    <p className='text-xs text-muted-foreground'>画布坐标</p>
-                    <p className='mt-2 font-medium'>
-                      X {Math.round(selectedNode.position.x)} / Y{' '}
-                      {Math.round(selectedNode.position.y)}
-                    </p>
-                  </div>
-                  <Button
-                    variant='outline'
-                  onClick={() => {
-                      const flowJson = reactFlow.toObject()
-                      void navigator.clipboard
-                        .writeText(JSON.stringify(flowJson, null, 2))
-                        .then(() => {
-                          toast.success('当前流程 JSON 已复制到剪贴板。')
-                        })
-                        .catch(() => {
-                          toast.error('复制失败，请稍后重试。')
-                        })
-                    }}
-                  >
-                    <Sparkles data-icon='inline-start' />
-                    复制当前 JSON
-                  </Button>
-                </>
-              ) : (
-                <div className='rounded-2xl border border-dashed p-4 text-muted-foreground'>
-                  请选择画布中的节点，右侧会展示节点概览、位置与后续表单入口。
+                <div className='rounded-2xl border p-4'>
+                  <p className='text-xs text-muted-foreground'>画布坐标</p>
+                  <p className='mt-2 font-medium'>
+                    X {Math.round(selectedNode.position.x)} / Y{' '}
+                    {Math.round(selectedNode.position.y)}
+                  </p>
                 </div>
-              )}
+              ) : null}
+              <Button
+                variant='outline'
+                onClick={() => {
+                  const flowJson = reactFlow.toObject()
+                  void navigator.clipboard
+                    .writeText(JSON.stringify(flowJson, null, 2))
+                    .then(() => {
+                      toast.success('当前流程 JSON 已复制到剪贴板。')
+                    })
+                    .catch(() => {
+                      toast.error('复制失败，请稍后重试。')
+                    })
+                }}
+              >
+                <Sparkles data-icon='inline-start' />
+                复制当前 JSON
+              </Button>
             </CardContent>
           </Card>
         </div>

@@ -26,13 +26,14 @@ public record ProcessDslPayload(
     public record Node(
             @NotBlank(message = "node.id 不能为空")
             String id,
-            @NotBlank(message = "node.type 不能为空")
-            String type,
-            @NotBlank(message = "node.name 不能为空")
-            String name,
-            Map<String, Object> position,
-            Map<String, Object> config,
-            Map<String, Object> ui
+        @NotBlank(message = "node.type 不能为空")
+        String type,
+        @NotBlank(message = "node.name 不能为空")
+        String name,
+        String description,
+        Map<String, Object> position,
+        Map<String, Object> config,
+        Map<String, Object> ui
     ) {
     }
 

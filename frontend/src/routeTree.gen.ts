@@ -25,6 +25,7 @@ import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedChatsIndexRouteImport } from './routes/_authenticated/chats/index'
 import { Route as AuthenticatedAppsIndexRouteImport } from './routes/_authenticated/apps/index'
 import { Route as AuthenticatedWorkflowDesignerRouteImport } from './routes/_authenticated/workflow/designer'
+import { Route as AuthenticatedWorkbenchStartRouteImport } from './routes/_authenticated/workbench/start'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
@@ -32,6 +33,7 @@ import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_auth
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedWorkflowDefinitionsListRouteImport } from './routes/_authenticated/workflow/definitions/list'
 import { Route as AuthenticatedWorkbenchTodosListRouteImport } from './routes/_authenticated/workbench/todos/list'
+import { Route as AuthenticatedWorkbenchTodosTaskIdRouteImport } from './routes/_authenticated/workbench/todos/$taskId'
 import { Route as AuthenticatedSystemUsersListRouteImport } from './routes/_authenticated/system/users/list'
 import { Route as AuthenticatedSystemUsersCreateRouteImport } from './routes/_authenticated/system/users/create'
 import { Route as AuthenticatedSystemRolesListRouteImport } from './routes/_authenticated/system/roles/list'
@@ -140,6 +142,12 @@ const AuthenticatedWorkflowDesignerRoute =
     path: '/workflow/designer',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedWorkbenchStartRoute =
+  AuthenticatedWorkbenchStartRouteImport.update({
+    id: '/workbench/start',
+    path: '/workbench/start',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsNotificationsRoute =
   AuthenticatedSettingsNotificationsRouteImport.update({
     id: '/notifications',
@@ -180,6 +188,12 @@ const AuthenticatedWorkbenchTodosListRoute =
   AuthenticatedWorkbenchTodosListRouteImport.update({
     id: '/workbench/todos/list',
     path: '/workbench/todos/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedWorkbenchTodosTaskIdRoute =
+  AuthenticatedWorkbenchTodosTaskIdRouteImport.update({
+    id: '/workbench/todos/$taskId',
+    path: '/workbench/todos/$taskId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemUsersListRoute =
@@ -341,6 +355,7 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
@@ -360,6 +375,7 @@ export interface FileRoutesByFullPath {
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
+  '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
@@ -388,6 +404,7 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
   '/apps': typeof AuthenticatedAppsIndexRoute
   '/chats': typeof AuthenticatedChatsIndexRoute
@@ -407,6 +424,7 @@ export interface FileRoutesByTo {
   '/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/system/users/list': typeof AuthenticatedSystemUsersListRoute
+  '/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
@@ -438,6 +456,7 @@ export interface FileRoutesById {
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
+  '/_authenticated/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/_authenticated/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
   '/_authenticated/apps/': typeof AuthenticatedAppsIndexRoute
   '/_authenticated/chats/': typeof AuthenticatedChatsIndexRoute
@@ -457,6 +476,7 @@ export interface FileRoutesById {
   '/_authenticated/system/roles/list': typeof AuthenticatedSystemRolesListRoute
   '/_authenticated/system/users/create': typeof AuthenticatedSystemUsersCreateRoute
   '/_authenticated/system/users/list': typeof AuthenticatedSystemUsersListRoute
+  '/_authenticated/workbench/todos/$taskId': typeof AuthenticatedWorkbenchTodosTaskIdRoute
   '/_authenticated/workbench/todos/list': typeof AuthenticatedWorkbenchTodosListRoute
   '/_authenticated/workflow/definitions/list': typeof AuthenticatedWorkflowDefinitionsListRoute
   '/_authenticated/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
@@ -488,6 +508,7 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/workbench/start'
     | '/workflow/designer'
     | '/apps'
     | '/chats'
@@ -507,6 +528,7 @@ export interface FileRouteTypes {
     | '/system/roles/list'
     | '/system/users/create'
     | '/system/users/list'
+    | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
     | '/workflow/definitions/list'
     | '/system/companies/$companyId/edit'
@@ -535,6 +557,7 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/settings/display'
     | '/settings/notifications'
+    | '/workbench/start'
     | '/workflow/designer'
     | '/apps'
     | '/chats'
@@ -554,6 +577,7 @@ export interface FileRouteTypes {
     | '/system/roles/list'
     | '/system/users/create'
     | '/system/users/list'
+    | '/workbench/todos/$taskId'
     | '/workbench/todos/list'
     | '/workflow/definitions/list'
     | '/system/companies/$companyId/edit'
@@ -584,6 +608,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
+    | '/_authenticated/workbench/start'
     | '/_authenticated/workflow/designer'
     | '/_authenticated/apps/'
     | '/_authenticated/chats/'
@@ -603,6 +628,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system/roles/list'
     | '/_authenticated/system/users/create'
     | '/_authenticated/system/users/list'
+    | '/_authenticated/workbench/todos/$taskId'
     | '/_authenticated/workbench/todos/list'
     | '/_authenticated/workflow/definitions/list'
     | '/_authenticated/system/companies/$companyId/edit'
@@ -743,6 +769,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedWorkflowDesignerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/workbench/start': {
+      id: '/_authenticated/workbench/start'
+      path: '/workbench/start'
+      fullPath: '/workbench/start'
+      preLoaderRoute: typeof AuthenticatedWorkbenchStartRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings/notifications': {
       id: '/_authenticated/settings/notifications'
       path: '/notifications'
@@ -790,6 +823,13 @@ declare module '@tanstack/react-router' {
       path: '/workbench/todos/list'
       fullPath: '/workbench/todos/list'
       preLoaderRoute: typeof AuthenticatedWorkbenchTodosListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/workbench/todos/$taskId': {
+      id: '/_authenticated/workbench/todos/$taskId'
+      path: '/workbench/todos/$taskId'
+      fullPath: '/workbench/todos/$taskId'
+      preLoaderRoute: typeof AuthenticatedWorkbenchTodosTaskIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/users/list': {
@@ -990,6 +1030,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
+  AuthenticatedWorkbenchStartRoute: typeof AuthenticatedWorkbenchStartRoute
   AuthenticatedWorkflowDesignerRoute: typeof AuthenticatedWorkflowDesignerRoute
   AuthenticatedAppsIndexRoute: typeof AuthenticatedAppsIndexRoute
   AuthenticatedChatsIndexRoute: typeof AuthenticatedChatsIndexRoute
@@ -1008,6 +1049,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemRolesListRoute: typeof AuthenticatedSystemRolesListRoute
   AuthenticatedSystemUsersCreateRoute: typeof AuthenticatedSystemUsersCreateRoute
   AuthenticatedSystemUsersListRoute: typeof AuthenticatedSystemUsersListRoute
+  AuthenticatedWorkbenchTodosTaskIdRoute: typeof AuthenticatedWorkbenchTodosTaskIdRoute
   AuthenticatedWorkbenchTodosListRoute: typeof AuthenticatedWorkbenchTodosListRoute
   AuthenticatedWorkflowDefinitionsListRoute: typeof AuthenticatedWorkflowDefinitionsListRoute
   AuthenticatedSystemCompaniesCompanyIdEditRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
@@ -1028,6 +1070,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
+  AuthenticatedWorkbenchStartRoute: AuthenticatedWorkbenchStartRoute,
   AuthenticatedWorkflowDesignerRoute: AuthenticatedWorkflowDesignerRoute,
   AuthenticatedAppsIndexRoute: AuthenticatedAppsIndexRoute,
   AuthenticatedChatsIndexRoute: AuthenticatedChatsIndexRoute,
@@ -1049,6 +1092,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemRolesListRoute: AuthenticatedSystemRolesListRoute,
   AuthenticatedSystemUsersCreateRoute: AuthenticatedSystemUsersCreateRoute,
   AuthenticatedSystemUsersListRoute: AuthenticatedSystemUsersListRoute,
+  AuthenticatedWorkbenchTodosTaskIdRoute:
+    AuthenticatedWorkbenchTodosTaskIdRoute,
   AuthenticatedWorkbenchTodosListRoute: AuthenticatedWorkbenchTodosListRoute,
   AuthenticatedWorkflowDefinitionsListRoute:
     AuthenticatedWorkflowDefinitionsListRoute,

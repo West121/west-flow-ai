@@ -27,7 +27,9 @@ public class ProcessDslValidator {
         validateEdgeReferences(payload.edges(), nodeById);
         validateSingleStart(nodeById.values());
         validateAtLeastOneEnd(nodeById.values());
+        validateStartConfig(nodeById.values());
         validateApproverAssignments(nodeById.values());
+        validateCcTargets(nodeById.values());
         validateIsolatedNodes(nodeById.values(), outgoingEdges, incomingEdges);
         validateReachability(nodeById.values(), outgoingEdges);
         validateConditionFanout(nodeById.values(), outgoingEdges);
@@ -91,9 +93,104 @@ public class ProcessDslValidator {
             if (!"approver".equals(node.type())) {
                 continue;
             }
-            Object assignment = safeConfig(node).get("assignment");
-            if (!(assignment instanceof Map<?, ?> assignmentMap) || assignmentMap.isEmpty()) {
+            Map<String, Object> config = safeConfig(node);
+            Map<String, Object> assignment = mapValue(config.get("assignment"));
+            if (assignment.isEmpty()) {
                 throw invalid("approver 节点必须配置 assignment", Map.of("nodeId", node.id()));
+            }
+            String mode = asString(assignment.get("mode"));
+            if (mode == null) {
+                throw invalid("approver 节点 assignment.mode 不能为空", Map.of("nodeId", node.id()));
+            }
+            switch (mode) {
+                case "USER" -> {
+                    if (stringList(assignment.get("userIds")).isEmpty()) {
+                        throw invalid("approver 节点 USER 处理人不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                case "ROLE" -> {
+                    if (stringList(assignment.get("roleCodes")).isEmpty()) {
+                        throw invalid("approver 节点 ROLE 不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                case "DEPARTMENT", "DEPARTMENT_AND_CHILDREN" -> {
+                    if (asString(assignment.get("departmentRef")) == null) {
+                        throw invalid("approver 节点部门引用不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                case "FORM_FIELD" -> {
+                    if (asString(assignment.get("formFieldKey")) == null) {
+                        throw invalid("approver 节点表单字段不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                default -> throw invalid("approver 节点 assignment.mode 不合法", Map.of("nodeId", node.id(), "mode", mode));
+            }
+
+            Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
+            String approvalType = asString(approvalPolicy.get("type"));
+            if (approvalType == null) {
+                throw invalid("approver 节点 approvalPolicy.type 不能为空", Map.of("nodeId", node.id()));
+            }
+            switch (approvalType) {
+                case "SEQUENTIAL", "PARALLEL" -> {
+                }
+                case "VOTE" -> {
+                    Integer threshold = integerValue(approvalPolicy.get("voteThreshold"));
+                    if (threshold == null || threshold < 1 || threshold > 100) {
+                        throw invalid("approver 节点票签阈值必须在 1-100 之间", Map.of("nodeId", node.id()));
+                    }
+                }
+                default -> throw invalid("approver 节点 approvalPolicy.type 不合法", Map.of("nodeId", node.id(), "type", approvalType));
+            }
+
+            if (stringList(config.get("operations")).isEmpty()) {
+                throw invalid("approver 节点 operations 不能为空", Map.of("nodeId", node.id()));
+            }
+        }
+    }
+
+    private void validateStartConfig(Collection<ProcessDslPayload.Node> nodes) {
+        for (ProcessDslPayload.Node node : nodes) {
+            if (!"start".equals(node.type())) {
+                continue;
+            }
+            Object initiatorEditable = safeConfig(node).get("initiatorEditable");
+            if (!(initiatorEditable instanceof Boolean)) {
+                throw invalid("start 节点必须配置 initiatorEditable", Map.of("nodeId", node.id()));
+            }
+        }
+    }
+
+    private void validateCcTargets(Collection<ProcessDslPayload.Node> nodes) {
+        for (ProcessDslPayload.Node node : nodes) {
+            if (!"cc".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> targets = mapValue(safeConfig(node).get("targets"));
+            if (targets.isEmpty()) {
+                throw invalid("cc 节点必须配置 targets", Map.of("nodeId", node.id()));
+            }
+            String mode = asString(targets.get("mode"));
+            if (mode == null) {
+                throw invalid("cc 节点 targets.mode 不能为空", Map.of("nodeId", node.id()));
+            }
+            switch (mode) {
+                case "USER" -> {
+                    if (stringList(targets.get("userIds")).isEmpty()) {
+                        throw invalid("cc 节点 USER 目标不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                case "ROLE" -> {
+                    if (stringList(targets.get("roleCodes")).isEmpty()) {
+                        throw invalid("cc 节点 ROLE 目标不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                case "DEPARTMENT" -> {
+                    if (asString(targets.get("departmentRef")) == null) {
+                        throw invalid("cc 节点部门引用不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                default -> throw invalid("cc 节点 targets.mode 不合法", Map.of("nodeId", node.id(), "mode", mode));
             }
         }
     }
@@ -161,8 +258,29 @@ public class ProcessDslValidator {
             }
 
             String defaultEdgeId = asString(safeConfig(node).get("defaultEdgeId"));
-            if (defaultEdgeId != null && edges.stream().noneMatch(edge -> edge.id().equals(defaultEdgeId))) {
+            if (defaultEdgeId == null) {
+                throw invalid("condition 节点必须配置 defaultEdgeId", Map.of("nodeId", node.id()));
+            }
+            if (edges.stream().noneMatch(edge -> edge.id().equals(defaultEdgeId))) {
                 throw invalid("condition 节点 defaultEdgeId 必须指向出边", Map.of("nodeId", node.id(), "defaultEdgeId", defaultEdgeId));
+            }
+
+            List<ProcessDslPayload.Edge> nonDefaultEdges = edges.stream()
+                    .filter(edge -> !edge.id().equals(defaultEdgeId))
+                    .toList();
+            for (ProcessDslPayload.Edge edge : nonDefaultEdges) {
+                Map<String, Object> condition = mapValue(edge.condition());
+                String expression = asString(condition.get("expression"));
+                String type = asString(condition.get("type"));
+                if (type == null) {
+                    throw invalid("condition 分支必须配置 condition.type", Map.of("nodeId", node.id(), "edgeId", edge.id()));
+                }
+                if (!"EXPRESSION".equals(type)) {
+                    throw invalid("condition 分支 condition.type 不合法", Map.of("nodeId", node.id(), "edgeId", edge.id(), "type", type));
+                }
+                if (expression == null) {
+                    throw invalid("condition 分支必须配置 expression", Map.of("nodeId", node.id(), "edgeId", edge.id()));
+                }
             }
         }
     }
@@ -235,6 +353,39 @@ public class ProcessDslValidator {
 
     private Map<String, Object> safeConfig(ProcessDslPayload.Node node) {
         return node.config() == null ? Map.of() : node.config();
+    }
+
+    private Map<String, Object> mapValue(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            return Map.of();
+        }
+        Map<String, Object> result = new HashMap<>();
+        map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
+        return result;
+    }
+
+    private List<String> stringList(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream()
+                .map(String::valueOf)
+                .filter(item -> !item.isBlank())
+                .toList();
+    }
+
+    private Integer integerValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String asString(Object value) {
