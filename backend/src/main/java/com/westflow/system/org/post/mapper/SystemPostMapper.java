@@ -43,6 +43,29 @@ public interface SystemPostMapper {
             "  <if test='departmentId != null and departmentId != \"\"'>",
             "    AND p.department_id = #{departmentId}",
             "  </if>",
+            "  <if test='!allAccess'>",
+            "    <choose>",
+            "      <when test='(companyIds != null and companyIds.size() &gt; 0) or (departmentIds != null and departmentIds.size() &gt; 0)'>",
+            "        <trim prefix='AND (' suffix=')' prefixOverrides='OR '>",
+            "          <if test='companyIds != null and companyIds.size() &gt; 0'>",
+            "            c.id IN",
+            "            <foreach collection='companyIds' item='companyId' open='(' separator=',' close=')'>",
+            "              #{companyId}",
+            "            </foreach>",
+            "          </if>",
+            "          <if test='departmentIds != null and departmentIds.size() &gt; 0'>",
+            "            OR d.id IN",
+            "            <foreach collection='departmentIds' item='departmentId' open='(' separator=',' close=')'>",
+            "              #{departmentId}",
+            "            </foreach>",
+            "          </if>",
+            "        </trim>",
+            "      </when>",
+            "      <otherwise>",
+            "        AND 1 = 0",
+            "      </otherwise>",
+            "    </choose>",
+            "  </if>",
             "</where>",
             "ORDER BY ${orderBy} ${orderDirection}",
             "LIMIT #{limit} OFFSET #{offset}",
@@ -53,11 +76,39 @@ public interface SystemPostMapper {
             @Param("enabled") Boolean enabled,
             @Param("companyId") String companyId,
             @Param("departmentId") String departmentId,
+            @Param("allAccess") boolean allAccess,
+            @Param("companyIds") List<String> companyIds,
+            @Param("departmentIds") List<String> departmentIds,
             @Param("orderBy") String orderBy,
             @Param("orderDirection") String orderDirection,
             @Param("limit") long limit,
             @Param("offset") long offset
     );
+
+    default List<SystemPostListItemResponse> selectPage(
+            String keyword,
+            Boolean enabled,
+            String companyId,
+            String departmentId,
+            String orderBy,
+            String orderDirection,
+            long limit,
+            long offset
+    ) {
+        return selectPage(
+                keyword,
+                enabled,
+                companyId,
+                departmentId,
+                true,
+                List.of(),
+                List.of(),
+                orderBy,
+                orderDirection,
+                limit,
+                offset
+        );
+    }
 
     @Select({
             "<script>",
@@ -82,6 +133,29 @@ public interface SystemPostMapper {
             "  <if test='departmentId != null and departmentId != \"\"'>",
             "    AND p.department_id = #{departmentId}",
             "  </if>",
+            "  <if test='!allAccess'>",
+            "    <choose>",
+            "      <when test='(companyIds != null and companyIds.size() &gt; 0) or (departmentIds != null and departmentIds.size() &gt; 0)'>",
+            "        <trim prefix='AND (' suffix=')' prefixOverrides='OR '>",
+            "          <if test='companyIds != null and companyIds.size() &gt; 0'>",
+            "            c.id IN",
+            "            <foreach collection='companyIds' item='companyId' open='(' separator=',' close=')'>",
+            "              #{companyId}",
+            "            </foreach>",
+            "          </if>",
+            "          <if test='departmentIds != null and departmentIds.size() &gt; 0'>",
+            "            OR d.id IN",
+            "            <foreach collection='departmentIds' item='departmentId' open='(' separator=',' close=')'>",
+            "              #{departmentId}",
+            "            </foreach>",
+            "          </if>",
+            "        </trim>",
+            "      </when>",
+            "      <otherwise>",
+            "        AND 1 = 0",
+            "      </otherwise>",
+            "    </choose>",
+            "  </if>",
             "</where>",
             "</script>"
     })
@@ -89,8 +163,20 @@ public interface SystemPostMapper {
             @Param("keyword") String keyword,
             @Param("enabled") Boolean enabled,
             @Param("companyId") String companyId,
-            @Param("departmentId") String departmentId
+            @Param("departmentId") String departmentId,
+            @Param("allAccess") boolean allAccess,
+            @Param("companyIds") List<String> companyIds,
+            @Param("departmentIds") List<String> departmentIds
     );
+
+    default long countPage(
+            String keyword,
+            Boolean enabled,
+            String companyId,
+            String departmentId
+    ) {
+        return countPage(keyword, enabled, companyId, departmentId, true, List.of(), List.of());
+    }
 
     @Select("""
             SELECT

@@ -1,5 +1,7 @@
 package com.westflow.system.user.api;
 
+import java.util.List;
+
 public record SystemUserDetailResponse(
         String userId,
         String displayName,
@@ -12,6 +14,7 @@ public record SystemUserDetailResponse(
         String departmentName,
         String postId,
         String postName,
+        List<String> roleIds,
         boolean enabled
 ) {
 }

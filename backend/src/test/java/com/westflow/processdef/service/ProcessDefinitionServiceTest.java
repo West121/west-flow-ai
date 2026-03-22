@@ -6,25 +6,50 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.processdef.api.ProcessDefinitionDetailResponse;
 import com.westflow.processdef.api.ProcessDefinitionListItemResponse;
 import com.westflow.processdef.model.ProcessDslPayload;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SpringBootTest
+@ActiveProfiles("test")
 class ProcessDefinitionServiceTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    @Autowired
     private ProcessDefinitionService processDefinitionService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        processDefinitionService = new ProcessDefinitionService(
-                new ProcessDslValidator(),
-                new ProcessDslToBpmnService()
+        jdbcTemplate.update("DELETE FROM wf_process_definition");
+    }
+
+    @Test
+    void shouldSaveDraftAndLoadDetailFromDatabase() throws Exception {
+        ProcessDefinitionDetailResponse saved = processDefinitionService.saveDraft(
+                payload("oa_leave", "请假审批", "OA")
         );
+
+        assertThat(saved.processDefinitionId()).isEqualTo("oa_leave:draft");
+        assertThat(saved.version()).isEqualTo(0);
+        assertThat(saved.status()).isEqualTo("DRAFT");
+        assertThat(saved.bpmnXml()).isBlank();
+
+        ProcessDefinitionDetailResponse detail = processDefinitionService.detail("oa_leave:draft");
+        assertThat(detail.processKey()).isEqualTo("oa_leave");
+        assertThat(detail.dsl().processName()).isEqualTo("请假审批");
     }
 
     @Test

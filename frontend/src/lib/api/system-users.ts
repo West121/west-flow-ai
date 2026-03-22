@@ -42,6 +42,7 @@ export type SystemUserDetail = {
   departmentName: string
   postId: string
   postName: string
+  roleIds: string[]
   enabled: boolean
 }
 
@@ -56,6 +57,12 @@ export type SystemUserFormOptions = {
     departmentId: string
     departmentName: string
   }>
+  roles: Array<{
+    id: string
+    name: string
+    roleCode: string
+    roleCategory: 'SYSTEM' | 'BUSINESS'
+  }>
 }
 
 export type SaveSystemUserPayload = {
@@ -65,6 +72,7 @@ export type SaveSystemUserPayload = {
   email: string
   companyId: string
   primaryPostId: string
+  roleIds: string[]
   enabled: boolean
 }
 

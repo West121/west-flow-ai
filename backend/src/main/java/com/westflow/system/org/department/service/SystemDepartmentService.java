@@ -5,6 +5,8 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.identity.service.CurrentUserAccessService;
+import com.westflow.identity.service.CurrentUserAccessService.AccessPolicy;
 import com.westflow.system.org.company.mapper.SystemCompanyMapper;
 import com.westflow.system.org.department.api.SaveSystemDepartmentRequest;
 import com.westflow.system.org.department.api.SystemDepartmentDetailResponse;
@@ -27,24 +29,34 @@ public class SystemDepartmentService {
 
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final SystemCompanyMapper systemCompanyMapper;
+    private final CurrentUserAccessService currentUserAccessService;
 
     public SystemDepartmentService(
             SystemDepartmentMapper systemDepartmentMapper,
-            SystemCompanyMapper systemCompanyMapper
+            SystemCompanyMapper systemCompanyMapper,
+            CurrentUserAccessService currentUserAccessService
     ) {
         this.systemDepartmentMapper = systemDepartmentMapper;
         this.systemCompanyMapper = systemCompanyMapper;
+        this.currentUserAccessService = currentUserAccessService;
     }
 
     public PageResponse<SystemDepartmentListItemResponse> page(PageRequest request) {
+        AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
         String orderDirection = resolveOrderDirection(request.sorts());
+        if (accessPolicy.restricted() && accessPolicy.isEmpty()) {
+            return new PageResponse<>(request.page(), request.pageSize(), 0, 0, List.of(), List.of());
+        }
         long total = systemDepartmentMapper.countPage(
                 request.keyword(),
                 filters.enabled(),
                 filters.companyId(),
-                filters.parentDepartmentId()
+                filters.parentDepartmentId(),
+                accessPolicy.allAccess(),
+                accessPolicy.companyIds(),
+                accessPolicy.departmentIds()
         );
         long pageSize = request.pageSize();
         long pages = total == 0 ? 0 : (total + pageSize - 1) / pageSize;
@@ -57,6 +69,9 @@ public class SystemDepartmentService {
                         filters.enabled(),
                         filters.companyId(),
                         filters.parentDepartmentId(),
+                        accessPolicy.allAccess(),
+                        accessPolicy.companyIds(),
+                        accessPolicy.departmentIds(),
                         orderBy,
                         orderDirection,
                         pageSize,
@@ -76,6 +91,7 @@ public class SystemDepartmentService {
                     Map.of("departmentId", departmentId)
             );
         }
+        assertAccessible(detail.companyId(), detail.departmentId());
         return detail;
     }
 
@@ -105,7 +121,7 @@ public class SystemDepartmentService {
 
     @Transactional
     public SystemDepartmentMutationResponse update(String departmentId, SaveSystemDepartmentRequest request) {
-        detail(departmentId);
+        ensureExists(departmentId);
         validateCompanyExists(request.companyId());
         validateParentDepartment(request.companyId(), request.parentDepartmentId(), departmentId);
         validateDepartmentName(request.companyId(), request.parentDepartmentId(), request.departmentName(), departmentId);
@@ -127,6 +143,17 @@ public class SystemDepartmentService {
                     HttpStatus.NOT_FOUND,
                     "公司不存在",
                     Map.of("companyId", companyId)
+            );
+        }
+    }
+
+    private void ensureExists(String departmentId) {
+        if (systemDepartmentMapper.selectDetail(departmentId) == null) {
+            throw new ContractException(
+                    "BIZ.RESOURCE_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "部门不存在",
+                    Map.of("departmentId", departmentId)
             );
         }
     }
@@ -253,6 +280,21 @@ public class SystemDepartmentService {
 
     private String buildId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private void assertAccessible(String companyId, String departmentId) {
+        AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
+        if (accessPolicy.allAccess()
+                || accessPolicy.companyIds().contains(companyId)
+                || accessPolicy.departmentIds().contains(departmentId)) {
+            return;
+        }
+        throw new ContractException(
+                "AUTH.FORBIDDEN",
+                HttpStatus.FORBIDDEN,
+                "无权访问当前数据",
+                Map.of("companyId", companyId, "departmentId", departmentId)
+        );
     }
 
     public record Filters(

@@ -4,7 +4,8 @@ import java.util.List;
 
 public record SystemUserFormOptionsResponse(
         List<CompanyOption> companies,
-        List<PostOption> posts
+        List<PostOption> posts,
+        List<RoleOption> roles
 ) {
 
     public record CompanyOption(
@@ -18,6 +19,14 @@ public record SystemUserFormOptionsResponse(
             String name,
             String departmentId,
             String departmentName
+    ) {
+    }
+
+    public record RoleOption(
+            String id,
+            String name,
+            String roleCode,
+            String roleCategory
     ) {
     }
 }

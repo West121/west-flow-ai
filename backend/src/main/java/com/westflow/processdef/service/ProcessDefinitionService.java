@@ -1,31 +1,34 @@
 package com.westflow.processdef.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.processdef.api.ProcessDefinitionDetailResponse;
 import com.westflow.processdef.api.ProcessDefinitionListItemResponse;
-import com.westflow.processdef.api.PublishProcessDefinitionResponse;
+import com.westflow.processdef.mapper.ProcessDefinitionMapper;
+import com.westflow.processdef.model.ProcessDefinitionRecord;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.StreamSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProcessDefinitionService {
 
+    private static final String STATUS_DRAFT = "DRAFT";
     private static final String STATUS_PUBLISHED = "PUBLISHED";
+    private static final String DRAFT_PROCESS_DEFINITION_ID_SUFFIX = ":draft";
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "category");
     private static final List<String> SUPPORTED_SORT_FIELDS = List.of(
             "createdAt",
@@ -35,239 +38,278 @@ public class ProcessDefinitionService {
             "category"
     );
 
+    private final ProcessDefinitionMapper processDefinitionMapper;
     private final ProcessDslValidator processDslValidator;
     private final ProcessDslToBpmnService processDslToBpmnService;
-    private final Map<String, AtomicInteger> versionsByProcessKey = new ConcurrentHashMap<>();
-    private final Map<String, PublishedProcessDefinition> definitionsById = new ConcurrentHashMap<>();
-    private final Map<String, PublishedProcessDefinition> latestDefinitionsByKey = new ConcurrentHashMap<>();
-    private final AtomicLong publicationSequence = new AtomicLong();
+    private final ObjectMapper objectMapper;
 
     public ProcessDefinitionService(
+            ProcessDefinitionMapper processDefinitionMapper,
             ProcessDslValidator processDslValidator,
-            ProcessDslToBpmnService processDslToBpmnService
+            ProcessDslToBpmnService processDslToBpmnService,
+            ObjectMapper objectMapper
     ) {
+        this.processDefinitionMapper = processDefinitionMapper;
         this.processDslValidator = processDslValidator;
         this.processDslToBpmnService = processDslToBpmnService;
+        this.objectMapper = objectMapper;
     }
 
-    public synchronized PublishProcessDefinitionResponse publish(ProcessDslPayload payload) {
-        processDslValidator.validate(payload);
+    @Transactional
+    public synchronized ProcessDefinitionDetailResponse saveDraft(ProcessDslPayload payload) {
+        String processDefinitionId = draftProcessDefinitionId(payload.processKey());
+        LocalDateTime now = now();
+        ProcessDefinitionRecord existingDraft = processDefinitionMapper.selectDraftByProcessKey(payload.processKey());
 
-        int version = versionsByProcessKey
-                .computeIfAbsent(payload.processKey(), ignored -> new AtomicInteger())
-                .incrementAndGet();
-        String processDefinitionId = payload.processKey() + ":" + version;
-        String bpmnXml = processDslToBpmnService.convert(payload, processDefinitionId, version);
-        OffsetDateTime createdAt = OffsetDateTime.now(ZoneId.of("Asia/Shanghai"))
-                .plusNanos(publicationSequence.getAndIncrement());
-
-        PublishedProcessDefinition published = new PublishedProcessDefinition(
+        ProcessDefinitionRecord draftRecord = new ProcessDefinitionRecord(
                 processDefinitionId,
                 payload.processKey(),
                 payload.processName(),
-                payload.category(),
-                version,
-                STATUS_PUBLISHED,
-                createdAt,
-                payload,
-                bpmnXml
+                normalizeCategory(payload.category()),
+                draftVersion(),
+                STATUS_DRAFT,
+                serializeDsl(payload),
+                "",
+                existingDraft == null ? now : existingDraft.createdAt(),
+                now
         );
 
-        definitionsById.put(processDefinitionId, published);
-        latestDefinitionsByKey.put(payload.processKey(), published);
+        if (existingDraft == null) {
+            processDefinitionMapper.insertDefinition(draftRecord);
+        } else {
+            processDefinitionMapper.updateDefinition(draftRecord);
+        }
 
-        return new PublishProcessDefinitionResponse(processDefinitionId, payload.processKey(), version, bpmnXml);
+        return toDetailResponse(draftRecord, payload);
+    }
+
+    @Transactional
+    public synchronized ProcessDefinitionDetailResponse publish(ProcessDslPayload payload) {
+        processDslValidator.validate(payload);
+
+        int version = nextPublishedVersion(payload.processKey());
+        String processDefinitionId = publishProcessDefinitionId(payload.processKey(), version);
+        String bpmnXml = processDslToBpmnService.convert(payload, processDefinitionId, version);
+        LocalDateTime now = now();
+
+        ProcessDefinitionRecord publishedRecord = new ProcessDefinitionRecord(
+                processDefinitionId,
+                payload.processKey(),
+                payload.processName(),
+                normalizeCategory(payload.category()),
+                version,
+                STATUS_PUBLISHED,
+                serializeDsl(payload),
+                bpmnXml,
+                now,
+                now
+        );
+
+        processDefinitionMapper.insertDefinition(publishedRecord);
+        return toDetailResponse(publishedRecord, payload);
+    }
+
+    public ProcessDefinitionDetailResponse detail(String processDefinitionId) {
+        return toDetailResponse(getRecordById(processDefinitionId));
     }
 
     public PublishedProcessDefinition getLatestByProcessKey(String processKey) {
-        PublishedProcessDefinition definition = latestDefinitionsByKey.get(processKey);
-        if (definition == null) {
-            throw new ContractException(
-                    "BIZ.RESOURCE_NOT_FOUND",
-                    HttpStatus.NOT_FOUND,
-                    "流程定义不存在",
-                    Map.of("processKey", processKey)
-            );
+        ProcessDefinitionRecord record = processDefinitionMapper.selectLatestPublishedByProcessKey(processKey);
+        if (record == null) {
+            throw resourceNotFound("processKey", processKey);
         }
-        return definition;
+        return toPublishedProcessDefinition(record);
     }
 
     public PublishedProcessDefinition getById(String processDefinitionId) {
-        PublishedProcessDefinition definition = definitionsById.get(processDefinitionId);
-        if (definition == null) {
-            throw new ContractException(
-                    "BIZ.RESOURCE_NOT_FOUND",
-                    HttpStatus.NOT_FOUND,
-                    "流程定义不存在",
-                    Map.of("processDefinitionId", processDefinitionId)
-            );
-        }
-        return definition;
+        return toPublishedProcessDefinition(getRecordById(processDefinitionId));
     }
 
     public PageResponse<ProcessDefinitionListItemResponse> page(PageRequest request) {
-        List<PublishedProcessDefinition> filtered = definitionsById.values().stream()
-                .filter(definition -> matchesKeyword(definition, request.keyword()))
-                .filter(definition -> matchesFilters(definition, request.filters()))
-                .sorted(buildComparator(request.sorts()))
-                .toList();
-
-        long total = filtered.size();
+        QueryCriteria criteria = resolveCriteria(request.filters());
+        String orderBy = resolveOrderBy(request.sorts());
+        String orderDirection = resolveOrderDirection(request.sorts());
+        long total = processDefinitionMapper.countPage(request.keyword(), criteria.status(), criteria.category());
         long pageSize = request.pageSize();
         long pages = total == 0 ? 0 : (total + pageSize - 1) / pageSize;
-        long start = (long) (request.page() - 1) * pageSize;
-        if (start >= total) {
-            return new PageResponse<>(request.page(), pageSize, total, pages, List.of(), List.of());
-        }
+        long offset = (long) (request.page() - 1) * pageSize;
 
-        int fromIndex = Math.toIntExact(start);
-        int toIndex = (int) Math.min(total, start + pageSize);
-        List<ProcessDefinitionListItemResponse> records = filtered.subList(fromIndex, toIndex).stream()
-                .map(this::toListItem)
-                .toList();
+        List<ProcessDefinitionListItemResponse> records = total == 0
+                ? List.of()
+                : processDefinitionMapper.selectPage(
+                        request.keyword(),
+                        criteria.status(),
+                        criteria.category(),
+                        orderBy,
+                        orderDirection,
+                        pageSize,
+                        offset
+                ).stream().map(this::toListItem).toList();
 
         return new PageResponse<>(request.page(), pageSize, total, pages, records, List.of());
     }
 
-    private boolean matchesKeyword(PublishedProcessDefinition definition, String keyword) {
-        if (keyword == null || keyword.isBlank()) {
-            return true;
+    private ProcessDefinitionRecord getRecordById(String processDefinitionId) {
+        ProcessDefinitionRecord record = processDefinitionMapper.selectById(processDefinitionId);
+        if (record == null) {
+            throw resourceNotFound("processDefinitionId", processDefinitionId);
         }
-
-        String normalizedKeyword = keyword.trim().toLowerCase();
-        return containsIgnoreCase(definition.processDefinitionId(), normalizedKeyword)
-                || containsIgnoreCase(definition.processKey(), normalizedKeyword)
-                || containsIgnoreCase(definition.processName(), normalizedKeyword)
-                || containsIgnoreCase(definition.category(), normalizedKeyword);
+        return record;
     }
 
-    private boolean containsIgnoreCase(String value, String normalizedKeyword) {
-        return value != null && value.toLowerCase().contains(normalizedKeyword);
+    private ProcessDefinitionDetailResponse toDetailResponse(ProcessDefinitionRecord record) {
+        return toDetailResponse(record, deserializeDsl(record.dslJson()));
     }
 
-    private boolean matchesFilters(PublishedProcessDefinition definition, List<FilterItem> filters) {
+    private ProcessDefinitionDetailResponse toDetailResponse(
+            ProcessDefinitionRecord record,
+            ProcessDslPayload payload
+    ) {
+        return new ProcessDefinitionDetailResponse(
+                record.processDefinitionId(),
+                record.processKey(),
+                record.processName(),
+                record.category(),
+                record.version(),
+                record.status(),
+                toOffsetDateTime(record.createdAt()),
+                toOffsetDateTime(record.updatedAt()),
+                payload,
+                record.bpmnXml()
+        );
+    }
+
+    private PublishedProcessDefinition toPublishedProcessDefinition(ProcessDefinitionRecord record) {
+        return new PublishedProcessDefinition(
+                record.processDefinitionId(),
+                record.processKey(),
+                record.processName(),
+                record.category(),
+                record.version(),
+                record.status(),
+                toOffsetDateTime(record.createdAt()),
+                deserializeDsl(record.dslJson()),
+                record.bpmnXml()
+        );
+    }
+
+    private ProcessDefinitionListItemResponse toListItem(ProcessDefinitionRecord record) {
+        return new ProcessDefinitionListItemResponse(
+                record.processDefinitionId(),
+                record.processKey(),
+                record.processName(),
+                record.category(),
+                record.version(),
+                record.status(),
+                toOffsetDateTime(record.createdAt())
+        );
+    }
+
+    private QueryCriteria resolveCriteria(List<FilterItem> filters) {
+        String status = null;
+        String category = null;
+
         for (FilterItem filter : filters) {
             if (!SUPPORTED_FILTER_FIELDS.contains(filter.field())) {
                 throw unsupportedField("不支持的筛选字段", filter.field(), SUPPORTED_FILTER_FIELDS);
             }
-
-            if ("status".equals(filter.field()) && !matchesStringFilter(definition.status(), filter)) {
-                return false;
+            if (!List.of("eq").contains(filter.operator())) {
+                throw unsupportedField("不支持的筛选操作符", filter.operator(), List.of("eq"));
             }
 
-            if ("category".equals(filter.field()) && !matchesStringFilter(definition.category(), filter)) {
-                return false;
+            String value = filter.value() == null ? null : filter.value().asText();
+            if ("status".equals(filter.field())) {
+                status = normalizeNullable(value);
+            } else if ("category".equals(filter.field())) {
+                category = normalizeNullable(value);
             }
         }
-        return true;
+
+        return new QueryCriteria(status, category);
     }
 
-    private boolean matchesStringFilter(String actualValue, FilterItem filter) {
-        String operator = filter.operator() == null ? "eq" : filter.operator().trim().toLowerCase();
-        List<String> values = extractFilterValues(filter.value());
-
-        return switch (operator) {
-            case "eq" -> values.stream().anyMatch(value -> equalsIgnoreCase(actualValue, value));
-            case "ne" -> values.isEmpty() || values.stream().noneMatch(value -> equalsIgnoreCase(actualValue, value));
-            case "in" -> values.stream().anyMatch(value -> equalsIgnoreCase(actualValue, value));
-            case "not_in" -> values.stream().noneMatch(value -> equalsIgnoreCase(actualValue, value));
-            case "like" -> values.stream().anyMatch(value -> containsIgnoreCase(actualValue, normalizeKeyword(value)));
-            case "prefix_like" -> values.stream().anyMatch(value -> startsWithIgnoreCase(actualValue, normalizeKeyword(value)));
-            case "suffix_like" -> values.stream().anyMatch(value -> endsWithIgnoreCase(actualValue, normalizeKeyword(value)));
-            case "is_null" -> actualValue == null || actualValue.isBlank();
-            case "is_not_null" -> actualValue != null && !actualValue.isBlank();
-            default -> throw unsupportedField("不支持的筛选操作符", operator, List.of("eq", "ne", "in", "not_in", "like", "prefix_like", "suffix_like", "is_null", "is_not_null"));
-        };
-    }
-
-    private List<String> extractFilterValues(JsonNode value) {
-        if (value == null || value.isNull()) {
-            return List.of();
-        }
-        if (value.isArray()) {
-            return StreamSupport.stream(value.spliterator(), false)
-                    .map(JsonNode::asText)
-                    .toList();
-        }
-        return List.of(value.asText());
-    }
-
-    private boolean equalsIgnoreCase(String left, String right) {
-        return left != null && right != null && left.equalsIgnoreCase(right);
-    }
-
-    private boolean startsWithIgnoreCase(String value, String prefix) {
-        return value != null && prefix != null && value.toLowerCase().startsWith(prefix.toLowerCase());
-    }
-
-    private boolean endsWithIgnoreCase(String value, String suffix) {
-        return value != null && suffix != null && value.toLowerCase().endsWith(suffix.toLowerCase());
-    }
-
-    private String normalizeKeyword(String value) {
-        return value == null ? null : value.trim();
-    }
-
-    private Comparator<PublishedProcessDefinition> buildComparator(List<SortItem> sorts) {
-        Comparator<PublishedProcessDefinition> comparator;
+    private String resolveOrderBy(List<SortItem> sorts) {
         if (sorts == null || sorts.isEmpty()) {
-            comparator = Comparator.comparing(PublishedProcessDefinition::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                    .thenComparing(PublishedProcessDefinition::version, Comparator.reverseOrder())
-                    .thenComparing(PublishedProcessDefinition::processDefinitionId, Comparator.reverseOrder());
-            return comparator;
+            return "created_at";
         }
 
-        comparator = null;
-        for (SortItem sort : sorts) {
-            if (!SUPPORTED_SORT_FIELDS.contains(sort.field())) {
-                throw unsupportedField("不支持的排序字段", sort.field(), SUPPORTED_SORT_FIELDS);
-            }
-            Comparator<PublishedProcessDefinition> fieldComparator = comparatorFor(sort.field(), sort.direction());
-            comparator = comparator == null ? fieldComparator : comparator.thenComparing(fieldComparator);
+        SortItem sort = sorts.get(0);
+        if (!SUPPORTED_SORT_FIELDS.contains(sort.field())) {
+            throw unsupportedField("不支持的排序字段", sort.field(), SUPPORTED_SORT_FIELDS);
         }
 
-        Comparator<PublishedProcessDefinition> fallback = Comparator
-                .comparing(PublishedProcessDefinition::createdAt, Comparator.nullsLast(Comparator.reverseOrder()))
-                .thenComparing(PublishedProcessDefinition::version, Comparator.reverseOrder())
-                .thenComparing(PublishedProcessDefinition::processDefinitionId, Comparator.reverseOrder());
-
-        return comparator.thenComparing(fallback);
-    }
-
-    private Comparator<PublishedProcessDefinition> comparatorFor(String field, String direction) {
-        boolean desc = direction == null || direction.isBlank() || "desc".equalsIgnoreCase(direction);
-        Comparator<PublishedProcessDefinition> comparator = switch (field) {
-            case "createdAt" -> Comparator.comparing(
-                    PublishedProcessDefinition::createdAt,
-                    Comparator.nullsLast(Comparator.naturalOrder())
-            );
-            case "version" -> Comparator.comparingInt(PublishedProcessDefinition::version);
-            case "processName" -> Comparator.comparing(
-                    PublishedProcessDefinition::processName,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
-            );
-            case "processKey" -> Comparator.comparing(
-                    PublishedProcessDefinition::processKey,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
-            );
-            case "category" -> Comparator.comparing(
-                    PublishedProcessDefinition::category,
-                    Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)
-            );
-            default -> throw unsupportedField("不支持的排序字段", field, SUPPORTED_SORT_FIELDS);
+        return switch (sort.field()) {
+            case "createdAt" -> "created_at";
+            case "version" -> "version";
+            case "processName" -> "process_name";
+            case "processKey" -> "process_key";
+            case "category" -> "category";
+            default -> throw unsupportedField("不支持的排序字段", sort.field(), SUPPORTED_SORT_FIELDS);
         };
-        return desc ? comparator.reversed() : comparator;
     }
 
-    private ProcessDefinitionListItemResponse toListItem(PublishedProcessDefinition definition) {
-        return new ProcessDefinitionListItemResponse(
-                definition.processDefinitionId(),
-                definition.processKey(),
-                definition.processName(),
-                definition.category(),
-                definition.version(),
-                definition.status(),
-                definition.createdAt()
+    private String resolveOrderDirection(List<SortItem> sorts) {
+        if (sorts == null || sorts.isEmpty()) {
+            return "DESC";
+        }
+        return "asc".equalsIgnoreCase(sorts.get(0).direction()) ? "ASC" : "DESC";
+    }
+
+    private int nextPublishedVersion(String processKey) {
+        Integer currentMaxVersion = processDefinitionMapper.selectMaxVersionByProcessKey(processKey);
+        return (currentMaxVersion == null ? 0 : currentMaxVersion) + 1;
+    }
+
+    private String serializeDsl(ProcessDslPayload payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法序列化流程 DSL", exception);
+        }
+    }
+
+    private ProcessDslPayload deserializeDsl(String dslJson) {
+        try {
+            return objectMapper.readValue(dslJson, ProcessDslPayload.class);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法反序列化流程 DSL", exception);
+        }
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.now(ZoneId.of("Asia/Shanghai"));
+    }
+
+    private OffsetDateTime toOffsetDateTime(LocalDateTime dateTime) {
+        return dateTime == null ? null : dateTime.atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime();
+    }
+
+    private String normalizeCategory(String category) {
+        return normalizeNullable(category);
+    }
+
+    private String normalizeNullable(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String draftProcessDefinitionId(String processKey) {
+        return processKey + DRAFT_PROCESS_DEFINITION_ID_SUFFIX;
+    }
+
+    private String publishProcessDefinitionId(String processKey, int version) {
+        return processKey + ":" + version;
+    }
+
+    private int draftVersion() {
+        return 0;
+    }
+
+    private ContractException resourceNotFound(String field, String value) {
+        return new ContractException(
+                "BIZ.RESOURCE_NOT_FOUND",
+                HttpStatus.NOT_FOUND,
+                "流程定义不存在",
+                Map.of(field, value)
         );
     }
 
@@ -278,5 +320,11 @@ public class ProcessDefinitionService {
                 message,
                 Map.of("field", field, "allowedFields", allowedFields)
         );
+    }
+
+    private record QueryCriteria(
+            String status,
+            String category
+    ) {
     }
 }

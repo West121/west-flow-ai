@@ -5,6 +5,8 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.identity.service.CurrentUserAccessService;
+import com.westflow.identity.service.CurrentUserAccessService.AccessPolicy;
 import com.westflow.system.org.department.api.SystemDepartmentDetailResponse;
 import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
 import com.westflow.system.org.post.api.SaveSystemPostRequest;
@@ -28,21 +30,34 @@ public class SystemPostService {
 
     private final SystemPostMapper systemPostMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
+    private final CurrentUserAccessService currentUserAccessService;
 
-    public SystemPostService(SystemPostMapper systemPostMapper, SystemDepartmentMapper systemDepartmentMapper) {
+    public SystemPostService(
+            SystemPostMapper systemPostMapper,
+            SystemDepartmentMapper systemDepartmentMapper,
+            CurrentUserAccessService currentUserAccessService
+    ) {
         this.systemPostMapper = systemPostMapper;
         this.systemDepartmentMapper = systemDepartmentMapper;
+        this.currentUserAccessService = currentUserAccessService;
     }
 
     public PageResponse<SystemPostListItemResponse> page(PageRequest request) {
+        AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
         String orderDirection = resolveOrderDirection(request.sorts());
+        if (accessPolicy.restricted() && accessPolicy.isEmpty()) {
+            return new PageResponse<>(request.page(), request.pageSize(), 0, 0, List.of(), List.of());
+        }
         long total = systemPostMapper.countPage(
                 request.keyword(),
                 filters.enabled(),
                 filters.companyId(),
-                filters.departmentId()
+                filters.departmentId(),
+                accessPolicy.allAccess(),
+                accessPolicy.companyIds(),
+                accessPolicy.departmentIds()
         );
         long pageSize = request.pageSize();
         long pages = total == 0 ? 0 : (total + pageSize - 1) / pageSize;
@@ -55,6 +70,9 @@ public class SystemPostService {
                         filters.enabled(),
                         filters.companyId(),
                         filters.departmentId(),
+                        accessPolicy.allAccess(),
+                        accessPolicy.companyIds(),
+                        accessPolicy.departmentIds(),
                         orderBy,
                         orderDirection,
                         pageSize,
@@ -74,6 +92,7 @@ public class SystemPostService {
                     Map.of("postId", postId)
             );
         }
+        assertAccessible(detail.companyId(), detail.departmentId());
         return detail;
     }
 
@@ -97,7 +116,7 @@ public class SystemPostService {
 
     @Transactional
     public SystemPostMutationResponse update(String postId, SaveSystemPostRequest request) {
-        detail(postId);
+        ensureExists(postId);
         validateDepartmentExists(request.departmentId());
         validatePostName(request.departmentId(), request.postName(), postId);
         systemPostMapper.updatePost(new SystemPostEntity(
@@ -120,6 +139,17 @@ public class SystemPostService {
             );
         }
         return department;
+    }
+
+    private void ensureExists(String postId) {
+        if (systemPostMapper.selectDetail(postId) == null) {
+            throw new ContractException(
+                    "BIZ.RESOURCE_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "岗位不存在",
+                    Map.of("postId", postId)
+            );
+        }
     }
 
     private void validatePostName(String departmentId, String postName, String excludePostId) {
@@ -205,6 +235,21 @@ public class SystemPostService {
 
     private String buildId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private void assertAccessible(String companyId, String departmentId) {
+        AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
+        if (accessPolicy.allAccess()
+                || accessPolicy.companyIds().contains(companyId)
+                || accessPolicy.departmentIds().contains(departmentId)) {
+            return;
+        }
+        throw new ContractException(
+                "AUTH.FORBIDDEN",
+                HttpStatus.FORBIDDEN,
+                "无权访问当前数据",
+                Map.of("companyId", companyId, "departmentId", departmentId)
+        );
     }
 
     public record Filters(

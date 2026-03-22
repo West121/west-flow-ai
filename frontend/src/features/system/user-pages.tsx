@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Card,
   CardContent,
@@ -84,6 +85,7 @@ const systemUserFormSchema = z.object({
   email: z.email('请输入正确的邮箱地址'),
   companyId: z.string().min(1, '请选择所属公司'),
   primaryPostId: z.string().min(1, '请选择主岗位'),
+  roleIds: z.array(z.string()).min(1, '请至少选择一个角色'),
   enabled: z.boolean(),
 })
 
@@ -123,6 +125,10 @@ function resolveStatusLabel(status: SystemUserRecord['status']) {
   return status === 'ENABLED' ? '启用' : '停用'
 }
 
+function resolveRoleCategoryLabel(roleCategory: 'SYSTEM' | 'BUSINESS') {
+  return roleCategory === 'SYSTEM' ? '系统角色' : '业务角色'
+}
+
 function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
   return {
     displayName: detail?.displayName ?? '',
@@ -131,6 +137,7 @@ function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
     email: detail?.email ?? '',
     companyId: detail?.companyId ?? '',
     primaryPostId: detail?.postId ?? '',
+    roleIds: detail?.roleIds ?? [],
     enabled: detail?.enabled ?? true,
   }
 }
@@ -145,6 +152,7 @@ function isSystemUserField(
     field === 'email' ||
     field === 'companyId' ||
     field === 'primaryPostId' ||
+    field === 'roleIds' ||
     field === 'enabled'
   )
 }
@@ -166,6 +174,13 @@ function applySystemUserFieldErrors(
 
   if (apiError?.code === 'BIZ.USERNAME_DUPLICATED') {
     form.setError('username', {
+      type: 'server',
+      message: apiError.message,
+    })
+  }
+
+  if (apiError?.code === 'VALIDATION.REQUEST_INVALID' && apiError.message.includes('角色')) {
+    form.setError('roleIds', {
       type: 'server',
       message: apiError.message,
     })
@@ -403,6 +418,10 @@ function SystemUserFormPage({
     control: form.control,
     name: 'primaryPostId',
   })
+  const selectedRoleIds = useWatch({
+    control: form.control,
+    name: 'roleIds',
+  })
   const enabled = useWatch({
     control: form.control,
     name: 'enabled',
@@ -417,6 +436,10 @@ function SystemUserFormPage({
   const selectedPost = optionsQuery.data?.posts.find(
     (post) => post.id === selectedPostId
   )
+  const selectedRoleIdList = selectedRoleIds ?? []
+  const selectedRoles =
+    optionsQuery.data?.roles.filter((role) => selectedRoleIdList.includes(role.id)) ??
+    []
   const isSubmitting = createMutation.isPending || updateMutation.isPending
   const isInitialLoading =
     optionsQuery.isLoading || (isEdit && detailQuery.isLoading)
@@ -695,6 +718,61 @@ function SystemUserFormPage({
                 />
                 <FormField
                   control={form.control}
+                  name='roleIds'
+                  render={() => (
+                    <FormItem className='md:col-span-2'>
+                      <FormLabel>角色分配</FormLabel>
+                      <FormDescription>
+                        用户可同时分配多个角色，后端会据此聚合菜单权限和数据权限。
+                      </FormDescription>
+                      <div className='grid gap-3 md:grid-cols-2'>
+                        {optionsQuery.data?.roles.map((role) => {
+                          const checked = selectedRoleIdList.includes(role.id)
+                          return (
+                            <label
+                              key={role.id}
+                              className='flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50'
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(value) => {
+                                  form.setValue(
+                                    'roleIds',
+                                    value
+                                      ? [...selectedRoleIdList, role.id]
+                                      : selectedRoleIdList.filter((id) => id !== role.id),
+                                    { shouldValidate: true }
+                                  )
+                                }}
+                              />
+                              <div className='grid gap-1'>
+                                <div className='flex flex-wrap items-center gap-2'>
+                                  <span className='text-sm font-medium'>
+                                    {role.name}
+                                  </span>
+                                  <Badge variant='secondary'>
+                                    {resolveRoleCategoryLabel(role.roleCategory)}
+                                  </Badge>
+                                </div>
+                                <p className='text-xs text-muted-foreground'>
+                                  {role.roleCode}
+                                </p>
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
+                      {optionsQuery.data?.roles.length ? null : (
+                        <p className='text-sm text-muted-foreground'>
+                          当前没有可分配的角色。
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name='enabled'
                   render={({ field }) => (
                     <FormItem className='rounded-lg border p-4 md:col-span-2'>
@@ -750,6 +828,15 @@ function SystemUserFormPage({
                     : '待选择'
                 }
               />
+              <UserDetailMetric
+                icon={ShieldCheck}
+                label='已选角色'
+                  value={
+                    selectedRoles.length > 0
+                      ? selectedRoles.map((role) => role.name).join('、')
+                      : '待选择'
+                  }
+                />
               <UserDetailMetric
                 icon={BadgeCheck}
                 label='状态'
@@ -867,6 +954,10 @@ export function UserDetailPage({ userId }: { userId: string }) {
     queryKey: ['system-user', userId],
     queryFn: () => getSystemUserDetail(userId),
   })
+  const optionsQuery = useQuery({
+    queryKey: ['system-user-form-options'],
+    queryFn: getSystemUserFormOptions,
+  })
 
   if (query.isLoading) {
     return (
@@ -902,6 +993,9 @@ export function UserDetailPage({ userId }: { userId: string }) {
   }
 
   const detail = query.data
+  const roleNameById = new Map(
+    (optionsQuery.data?.roles ?? []).map((role) => [role.id, role.name] as const)
+  )
 
   return (
     <PageShell
@@ -931,6 +1025,15 @@ export function UserDetailPage({ userId }: { userId: string }) {
         <Badge variant='secondary'>{detail.companyName}</Badge>
         <Badge variant='secondary'>{detail.departmentName}</Badge>
         <Badge variant='secondary'>{detail.postName}</Badge>
+        {detail.roleIds.length > 0 ? (
+          detail.roleIds.map((roleId) => (
+            <Badge key={roleId} variant='outline'>
+              {roleNameById.get(roleId) ?? roleId}
+            </Badge>
+          ))
+        ) : (
+          <Badge variant='outline'>未分配角色</Badge>
+        )}
       </div>
 
       <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>

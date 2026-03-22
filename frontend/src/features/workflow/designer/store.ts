@@ -90,10 +90,27 @@ function resolveSelectedNodeId(
   return nextNodes[nextNodes.length - 1]?.id ?? null
 }
 
+function resolveNextNodeSequence(nodes: WorkflowNode[]) {
+  let nextSequence = nodes.length
+
+  for (const node of nodes) {
+    const match = /-(\d+)$/.exec(node.id)
+    if (!match) {
+      continue
+    }
+
+    nextSequence = Math.max(nextSequence, Number(match[1]))
+  }
+
+  return nextSequence + 1
+}
+
 type WorkflowDesignerState = {
   history: WorkflowHistoryState
   helperLines: WorkflowHelperLines
   nextNodeSequence: number
+  resetDesigner: () => void
+  hydrateSnapshot: (snapshot: WorkflowSnapshot) => void
   setSelectedNodeId: (selectedNodeId: string | null) => void
   setHelperLines: (helperLines: WorkflowHelperLines) => void
   applyNodeChanges: (changes: NodeChange<WorkflowNode>[]) => void
@@ -115,6 +132,18 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
     history: createWorkflowHistoryState(initialSnapshot),
     helperLines: { vertical: null, horizontal: null },
     nextNodeSequence: 1,
+    resetDesigner: () =>
+      set({
+        history: createWorkflowHistoryState(initialSnapshot),
+        helperLines: { vertical: null, horizontal: null },
+        nextNodeSequence: 1,
+      }),
+    hydrateSnapshot: (snapshot) =>
+      set({
+        history: createWorkflowHistoryState(snapshot),
+        helperLines: { vertical: null, horizontal: null },
+        nextNodeSequence: resolveNextNodeSequence(snapshot.nodes),
+      }),
     setSelectedNodeId: (selectedNodeId) =>
       set((state) => ({
         history: replaceWorkflowSnapshot(state.history, {

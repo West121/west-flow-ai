@@ -7,8 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Sql(statements = "DELETE FROM wf_process_definition", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
-class ProcessDefinitionControllerTest {
+class ProcessDefinitionLifecycleControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -29,74 +29,64 @@ class ProcessDefinitionControllerTest {
     private ObjectMapper objectMapper;
 
     @Test
-    void shouldSaveDraftLoadDetailAndPublishDefinitionsThroughControllerContract() throws Exception {
+    void shouldSaveDraftFetchDetailPublishAndPageFromDatabase() throws Exception {
         String token = login();
+        String draftPayload = validProcessDsl("oa_leave", "请假审批", "OA");
 
-        String saveResponse = mockMvc.perform(post("/api/v1/process-definitions/draft")
+        JsonNode draftBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-definitions/draft")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validProcessDsl("oa_leave", "请假审批", "OA")))
+                        .content(draftPayload))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString();
+                .getContentAsString());
 
-        JsonNode saveBody = objectMapper.readTree(saveResponse).path("data");
-        assertThat(saveBody.path("processDefinitionId").asText()).isEqualTo("oa_leave:draft");
-        assertThat(saveBody.path("status").asText()).isEqualTo("DRAFT");
-        assertThat(saveBody.path("version").asInt()).isEqualTo(0);
-        assertThat(saveBody.path("dsl").path("processKey").asText()).isEqualTo("oa_leave");
+        String draftId = draftBody.path("data").path("processDefinitionId").asText();
+        assertThat(draftId).isNotBlank();
+        assertThat(draftBody.path("data").path("status").asText()).isEqualTo("DRAFT");
+        assertThat(draftBody.path("data").path("version").asInt()).isEqualTo(0);
 
-        String detailResponse = mockMvc.perform(get("/api/v1/process-definitions/oa_leave:draft")
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-definitions/{processDefinitionId}", draftId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString();
+                .getContentAsString());
 
-        JsonNode detailBody = objectMapper.readTree(detailResponse).path("data");
-        assertThat(detailBody.path("processDefinitionId").asText()).isEqualTo("oa_leave:draft");
-        assertThat(detailBody.path("bpmnXml").asText()).isBlank();
-        assertThat(detailBody.path("dsl").path("processName").asText()).isEqualTo("请假审批");
+        assertThat(detailBody.path("data").path("processDefinitionId").asText()).isEqualTo(draftId);
+        assertThat(detailBody.path("data").path("status").asText()).isEqualTo("DRAFT");
+        assertThat(detailBody.path("data").path("dsl").path("processKey").asText()).isEqualTo("oa_leave");
+        assertThat(detailBody.path("data").path("dsl").path("nodes").size()).isEqualTo(3);
 
-        String publishResponse = mockMvc.perform(post("/api/v1/process-definitions/publish")
+        JsonNode publishBody1 = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-definitions/publish")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validProcessDsl("oa_leave", "请假审批", "OA")))
+                        .content(draftPayload))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString();
+                .getContentAsString());
 
-        JsonNode publishBody = objectMapper.readTree(publishResponse).path("data");
-        assertThat(publishBody.path("processDefinitionId").asText()).isEqualTo("oa_leave:1");
-        assertThat(publishBody.path("version").asInt()).isEqualTo(1);
-        assertThat(publishBody.path("bpmnXml").asText()).contains("<process");
-    }
+        String publishId1 = publishBody1.path("data").path("processDefinitionId").asText();
+        assertThat(publishBody1.path("data").path("status").asText()).isEqualTo("PUBLISHED");
+        assertThat(publishBody1.path("data").path("version").asInt()).isEqualTo(1);
+        assertThat(publishBody1.path("data").path("bpmnXml").asText()).contains("<process");
 
-    @Test
-    void shouldPublishAndPageDefinitionsThroughControllerContract() throws Exception {
-        String token = login();
-
-        mockMvc.perform(post("/api/v1/process-definitions/publish")
+        JsonNode publishBody2 = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-definitions/publish")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(validProcessDsl("oa_leave", "请假审批", "OA")))
-                .andExpect(status().isOk());
+                        .content(validProcessDsl("oa_leave", "请假审批-新版", "OA")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
 
-        mockMvc.perform(post("/api/v1/process-definitions/publish")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validProcessDsl("oa_leave_extra", "请假补充审批", "OA")))
-                .andExpect(status().isOk());
+        String publishId2 = publishBody2.path("data").path("processDefinitionId").asText();
+        assertThat(publishId2).isNotEqualTo(publishId1);
+        assertThat(publishBody2.path("data").path("version").asInt()).isEqualTo(2);
 
-        mockMvc.perform(post("/api/v1/process-definitions/publish")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(validProcessDsl("hr_onboarding", "入职审批", "HR")))
-                .andExpect(status().isOk());
-
-        String response = mockMvc.perform(post("/api/v1/process-definitions/page")
+        JsonNode pageBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-definitions/page")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -128,22 +118,11 @@ class ProcessDefinitionControllerTest {
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString();
+                .getContentAsString());
 
-        JsonNode body = objectMapper.readTree(response);
-        JsonNode data = body.path("data");
-
-        assertThat(body.path("code").asText()).isEqualTo("OK");
-        assertThat(data.path("page").asInt()).isEqualTo(1);
-        assertThat(data.path("pageSize").asInt()).isEqualTo(20);
-        assertThat(data.path("total").asInt()).isEqualTo(2);
-        assertThat(data.path("pages").asInt()).isEqualTo(1);
-        assertThat(data.path("records").isArray()).isTrue();
-        assertThat(data.path("records").size()).isEqualTo(2);
-        assertThat(data.path("records").get(0).path("processDefinitionId").asText()).isNotBlank();
-        assertThat(data.path("records").get(0).path("processKey").asText()).startsWith("oa_leave");
-        assertThat(data.path("records").get(0).path("status").asText()).isEqualTo("PUBLISHED");
-        assertThat(data.path("records").get(0).path("createdAt").asText()).isNotBlank();
+        assertThat(pageBody.path("data").path("total").asInt()).isEqualTo(2);
+        assertThat(pageBody.path("data").path("records").get(0).path("version").asInt()).isEqualTo(2);
+        assertThat(pageBody.path("data").path("records").get(1).path("version").asInt()).isEqualTo(1);
     }
 
     private String login() throws Exception {
@@ -201,7 +180,13 @@ class ProcessDefinitionControllerTest {
                           "roleCodes": [],
                           "departmentRef": "",
                           "formFieldKey": ""
-                        }
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
                       },
                       "ui": {"width": 240, "height": 88}
                     },

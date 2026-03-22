@@ -29,6 +29,19 @@ public interface SystemCompanyMapper {
             "  <if test='enabled != null'>",
             "    AND c.enabled = #{enabled}",
             "  </if>",
+            "  <if test='!allAccess'>",
+            "    <choose>",
+            "      <when test='companyIds != null and companyIds.size() &gt; 0'>",
+            "        AND c.id IN",
+            "        <foreach collection='companyIds' item='companyId' open='(' separator=',' close=')'>",
+            "          #{companyId}",
+            "        </foreach>",
+            "      </when>",
+            "      <otherwise>",
+            "        AND 1 = 0",
+            "      </otherwise>",
+            "    </choose>",
+            "  </if>",
             "</where>",
             "ORDER BY ${orderBy} ${orderDirection}",
             "LIMIT #{limit} OFFSET #{offset}",
@@ -37,6 +50,8 @@ public interface SystemCompanyMapper {
     List<SystemCompanyListItemResponse> selectPage(
             @Param("keyword") String keyword,
             @Param("enabled") Boolean enabled,
+            @Param("allAccess") boolean allAccess,
+            @Param("companyIds") List<String> companyIds,
             @Param("orderBy") String orderBy,
             @Param("orderDirection") String orderDirection,
             @Param("limit") long limit,
@@ -54,10 +69,28 @@ public interface SystemCompanyMapper {
             "  <if test='enabled != null'>",
             "    AND c.enabled = #{enabled}",
             "  </if>",
+            "  <if test='!allAccess'>",
+            "    <choose>",
+            "      <when test='companyIds != null and companyIds.size() &gt; 0'>",
+            "        AND c.id IN",
+            "        <foreach collection='companyIds' item='companyId' open='(' separator=',' close=')'>",
+            "          #{companyId}",
+            "        </foreach>",
+            "      </when>",
+            "      <otherwise>",
+            "        AND 1 = 0",
+            "      </otherwise>",
+            "    </choose>",
+            "  </if>",
             "</where>",
             "</script>"
     })
-    long countPage(@Param("keyword") String keyword, @Param("enabled") Boolean enabled);
+    long countPage(
+            @Param("keyword") String keyword,
+            @Param("enabled") Boolean enabled,
+            @Param("allAccess") boolean allAccess,
+            @Param("companyIds") List<String> companyIds
+    );
 
     @Select("""
             SELECT

@@ -14,7 +14,9 @@ import com.westflow.system.user.api.SystemUserFormOptionsResponse;
 import com.westflow.system.user.api.SystemUserListItemResponse;
 import com.westflow.system.user.api.SystemUserMutationResponse;
 import com.westflow.system.user.mapper.SystemUserMapper;
+import com.westflow.system.user.mapper.SystemUserMapper.SystemUserBaseDetailRecord;
 import com.westflow.system.user.mapper.SystemUserMapper.PostContext;
+import com.westflow.system.user.mapper.SystemUserMapper.SystemUserRoleBinding;
 import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -89,7 +91,7 @@ public class SystemUserService {
     }
 
     public SystemUserDetailResponse detail(String userId) {
-        SystemUserDetailResponse detail = systemUserMapper.selectDetail(userId);
+        SystemUserBaseDetailRecord detail = systemUserMapper.selectDetail(userId);
         if (detail == null) {
             throw new ContractException(
                     "BIZ.RESOURCE_NOT_FOUND",
@@ -99,13 +101,28 @@ public class SystemUserService {
             );
         }
         assertAccessible(detail.companyId(), detail.departmentId(), userId);
-        return detail;
+        return new SystemUserDetailResponse(
+                detail.userId(),
+                detail.displayName(),
+                detail.username(),
+                detail.mobile(),
+                detail.email(),
+                detail.companyId(),
+                detail.companyName(),
+                detail.departmentId(),
+                detail.departmentName(),
+                detail.postId(),
+                detail.postName(),
+                systemUserMapper.selectRoleIdsByUserId(userId),
+                detail.enabled()
+        );
     }
 
     public SystemUserFormOptionsResponse formOptions() {
         return new SystemUserFormOptionsResponse(
                 systemUserMapper.selectCompanyOptions(),
-                systemUserMapper.selectPostOptions()
+                systemUserMapper.selectPostOptions(),
+                systemUserMapper.selectRoleOptions()
         );
     }
 
@@ -135,6 +152,7 @@ public class SystemUserService {
                 request.primaryPostId(),
                 true
         ));
+        replaceUserRoles(userId, request.roleIds());
 
         return new SystemUserMutationResponse(userId);
     }
@@ -166,6 +184,7 @@ public class SystemUserService {
                 request.primaryPostId(),
                 true
         ));
+        replaceUserRoles(userId, request.roleIds());
 
         return new SystemUserMutationResponse(userId);
     }
@@ -180,6 +199,40 @@ public class SystemUserService {
                     Map.of("username", username)
             );
         }
+    }
+
+    private void replaceUserRoles(String userId, List<String> roleIds) {
+        List<String> normalizedRoleIds = normalizeRoleIds(roleIds);
+        if (normalizedRoleIds.isEmpty()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "请至少选择一个角色"
+            );
+        }
+        if (systemUserMapper.countExistingRoles(normalizedRoleIds) != normalizedRoleIds.size()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "存在无效的角色",
+                    Map.of("roleIds", normalizedRoleIds)
+            );
+        }
+        systemUserMapper.deleteUserRoles(userId);
+        for (String roleId : normalizedRoleIds) {
+            systemUserMapper.insertUserRole(new SystemUserRoleBinding(buildId("ur"), userId, roleId));
+        }
+    }
+
+    private List<String> normalizeRoleIds(List<String> roleIds) {
+        if (roleIds == null) {
+            return List.of();
+        }
+        return roleIds.stream()
+                .map(this::normalizeNullable)
+                .filter(value -> value != null)
+                .distinct()
+                .toList();
     }
 
     private PostContext resolvePostContext(String postId) {
@@ -354,6 +407,10 @@ public class SystemUserService {
 
     private String buildId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private String normalizeNullable(String value) {
+        return value == null ? null : value.trim();
     }
 
     private record Filters(

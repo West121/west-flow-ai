@@ -1,6 +1,6 @@
-import { startTransition, useEffect, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
+import { startTransition, useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { getRouteApi, Link } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
   Background,
@@ -37,10 +37,23 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { listProcessDefinitions } from '@/lib/api/workflow'
+import {
+  getProcessDefinitionDetail,
+  listProcessDefinitions,
+  publishProcessDefinition,
+  saveProcessDefinition,
+} from '@/lib/api/workflow'
+import { getApiErrorMessage } from '@/lib/api/client'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
+import {
+  type ProcessDefinitionMeta,
+  processDefinitionDetailToWorkflowSnapshot,
+  workflowSnapshotToProcessDefinitionDsl,
+} from './designer/dsl'
 import {
   workflowNodeTemplates,
   type WorkflowNodeTemplate,
@@ -55,6 +68,7 @@ import { WorkflowNodeCard } from './designer/workflow-node'
 import '@xyflow/react/dist/style.css'
 
 const definitionsRoute = getRouteApi('/_authenticated/workflow/definitions/list')
+const designerRoute = getRouteApi('/_authenticated/workflow/designer')
 
 type DefinitionRow = {
   processDefinitionId: string
@@ -71,6 +85,13 @@ const workflowNodeTypes = {
 }
 
 const helperLineThreshold = 16
+const defaultDefinitionMeta: ProcessDefinitionMeta = {
+  processKey: 'oa_leave',
+  processName: '请假审批',
+  category: 'OA',
+  formKey: 'oa-leave-form',
+  formVersion: '1.0.0',
+}
 
 function resolveStatusLabel(status: string): DefinitionRow['status'] {
   return status === 'PUBLISHED' ? '已发布' : '草稿'
@@ -82,7 +103,13 @@ const definitionColumns: ColumnDef<DefinitionRow>[] = [
     header: '流程名称',
     cell: ({ row }) => (
       <div className='flex flex-col gap-1'>
-        <span className='font-medium'>{row.original.processName}</span>
+        <Link
+          to='/workflow/designer'
+          search={{ processDefinitionId: row.original.processDefinitionId }}
+          className='font-medium text-primary hover:underline'
+        >
+          {row.original.processName}
+        </Link>
         <span className='text-xs text-muted-foreground'>
           {row.original.processDefinitionId}
         </span>
@@ -304,12 +331,18 @@ function DesignerPalette({
   )
 }
 
-function WorkflowDesignerWorkspace() {
+function WorkflowDesignerWorkspace({
+  processDefinitionId,
+}: {
+  processDefinitionId?: string
+}) {
+  const navigate = designerRoute.useNavigate()
   const nodes = useWorkflowDesignerStore((state) => state.history.present.nodes)
   const edges = useWorkflowDesignerStore((state) => state.history.present.edges)
   const selectedNodeId = useWorkflowDesignerStore(
     (state) => state.history.present.selectedNodeId
   )
+  const snapshot = useWorkflowDesignerStore((state) => state.history.present)
   const helperLines = useWorkflowDesignerStore((state) => state.helperLines)
   const canUndo = useWorkflowDesignerStore(
     (state) => state.history.past.length > 0
@@ -334,14 +367,100 @@ function WorkflowDesignerWorkspace() {
     (state) => state.addNodeFromTemplate
   )
   const autoLayout = useWorkflowDesignerStore((state) => state.autoLayout)
+  const hydrateSnapshot = useWorkflowDesignerStore(
+    (state) => state.hydrateSnapshot
+  )
+  const resetDesigner = useWorkflowDesignerStore((state) => state.resetDesigner)
   const undo = useWorkflowDesignerStore((state) => state.undo)
   const redo = useWorkflowDesignerStore((state) => state.redo)
   const reactFlow = useReactFlow<WorkflowNode>()
+  const [definitionMetaOverrides, setDefinitionMetaOverrides] = useState<
+    Partial<ProcessDefinitionMeta>
+  >({})
+
+  const detailQuery = useQuery({
+    queryKey: ['process-definition-detail', processDefinitionId],
+    queryFn: () => getProcessDefinitionDetail(processDefinitionId ?? ''),
+    enabled: Boolean(processDefinitionId),
+  })
+
+  const definitionMeta = useMemo<ProcessDefinitionMeta>(() => {
+    const baseMeta =
+      detailQuery.data === undefined
+        ? defaultDefinitionMeta
+        : {
+            processKey: detailQuery.data.processKey,
+            processName: detailQuery.data.processName,
+            category: detailQuery.data.category,
+            formKey: detailQuery.data.dsl.formKey,
+            formVersion: detailQuery.data.dsl.formVersion,
+          }
+
+    return {
+      ...baseMeta,
+      ...definitionMetaOverrides,
+    }
+  }, [definitionMetaOverrides, detailQuery.data])
+
+  const saveMutation = useMutation({
+    mutationFn: async () =>
+      saveProcessDefinition(
+        workflowSnapshotToProcessDefinitionDsl(snapshot, definitionMeta)
+      ),
+    onSuccess: (response) => {
+      hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(response))
+      setDefinitionMetaOverrides({})
+      void navigate({
+        search: (previous) => ({
+          ...previous,
+          processDefinitionId: response.processDefinitionId,
+        }),
+      })
+      toast.success('流程草稿已保存到数据库。')
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, '保存草稿失败，请稍后重试。'))
+    },
+  })
+
+  const publishMutation = useMutation({
+    mutationFn: async () =>
+      publishProcessDefinition(
+        workflowSnapshotToProcessDefinitionDsl(snapshot, definitionMeta)
+      ),
+    onSuccess: (response) => {
+      hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(response))
+      setDefinitionMetaOverrides({})
+      void navigate({
+        search: (previous) => ({
+          ...previous,
+          processDefinitionId: response.processDefinitionId,
+        }),
+      })
+      toast.success(`流程已发布为 ${response.processDefinitionId}。`)
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, '发布流程失败，请稍后重试。'))
+    },
+  })
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   )
+
+  useEffect(() => {
+    if (!processDefinitionId) {
+      resetDesigner()
+      return
+    }
+
+    if (!detailQuery.data) {
+      return
+    }
+
+    hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(detailQuery.data))
+  }, [detailQuery.data, hydrateSnapshot, processDefinitionId, resetDesigner])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -429,12 +548,22 @@ function WorkflowDesignerWorkspace() {
             自动整理
           </Button>
           <Button
+            disabled={saveMutation.isPending}
             onClick={() => {
-              toast.success('流程草稿已保存到本地设计状态。')
+              saveMutation.mutate()
             }}
           >
             <Save data-icon='inline-start' />
-            保存草稿
+            {saveMutation.isPending ? '保存中...' : '保存草稿'}
+          </Button>
+          <Button
+            disabled={publishMutation.isPending}
+            onClick={() => {
+              publishMutation.mutate()
+            }}
+          >
+            <Sparkles data-icon='inline-start' />
+            {publishMutation.isPending ? '发布中...' : '发布流程'}
           </Button>
         </>
       }
@@ -533,6 +662,75 @@ function WorkflowDesignerWorkspace() {
               </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-4'>
+              <div className='grid gap-3'>
+                <div className='grid gap-2'>
+                  <Label htmlFor='processKey'>流程编码</Label>
+                  <Input
+                    id='processKey'
+                    value={definitionMeta.processKey}
+                    onChange={(event) =>
+                      setDefinitionMetaOverrides((previous) => ({
+                        ...previous,
+                        processKey: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className='grid gap-2'>
+                  <Label htmlFor='processName'>流程名称</Label>
+                  <Input
+                    id='processName'
+                    value={definitionMeta.processName}
+                    onChange={(event) =>
+                      setDefinitionMetaOverrides((previous) => ({
+                        ...previous,
+                        processName: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className='grid gap-2'>
+                  <Label htmlFor='category'>业务域</Label>
+                  <Input
+                    id='category'
+                    value={definitionMeta.category}
+                    onChange={(event) =>
+                      setDefinitionMetaOverrides((previous) => ({
+                        ...previous,
+                        category: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className='grid gap-2 sm:grid-cols-2'>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='formKey'>表单编码</Label>
+                    <Input
+                      id='formKey'
+                      value={definitionMeta.formKey}
+                      onChange={(event) =>
+                        setDefinitionMetaOverrides((previous) => ({
+                          ...previous,
+                          formKey: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='formVersion'>表单版本</Label>
+                    <Input
+                      id='formVersion'
+                      value={definitionMeta.formVersion}
+                      onChange={(event) =>
+                        setDefinitionMetaOverrides((previous) => ({
+                          ...previous,
+                          formVersion: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
               <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-1'>
                 <div className='rounded-2xl border p-4'>
                   <p className='text-xs text-muted-foreground'>当前节点数</p>
@@ -550,7 +748,7 @@ function WorkflowDesignerWorkspace() {
                   M0 设计基线
                 </div>
                 <p className='text-muted-foreground'>
-                  已提供设计器画布、拖放、撤销重做、自动布局和流程定义列表联调。
+                  已提供设计器画布、拖放、撤销重做、自动布局、查库回填和流程定义列表联调。
                 </p>
               </div>
             </CardContent>
@@ -623,9 +821,14 @@ function WorkflowDesignerWorkspace() {
 }
 
 export function WorkflowDesignerPage() {
+  const search = designerRoute.useSearch()
+
   return (
     <ReactFlowProvider>
-      <WorkflowDesignerWorkspace />
+      <WorkflowDesignerWorkspace
+        key={search.processDefinitionId ?? 'new'}
+        processDefinitionId={search.processDefinitionId}
+      />
     </ReactFlowProvider>
   )
 }

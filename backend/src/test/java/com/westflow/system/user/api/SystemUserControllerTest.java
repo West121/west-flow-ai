@@ -67,6 +67,7 @@ class SystemUserControllerTest {
                 .getContentAsString();
 
         assertThat(objectMapper.readTree(detailResponse).path("data").path("departmentName").asText()).isEqualTo("财务部");
+        assertThat(objectMapper.readTree(detailResponse).path("data").path("roleIds").isArray()).isTrue();
 
         String createResponse = mockMvc.perform(post("/api/v1/system/users")
                         .header("Authorization", "Bearer " + token)
@@ -79,6 +80,7 @@ class SystemUserControllerTest {
                                   "email": "zhaoliu@example.com",
                                   "companyId": "cmp_001",
                                   "primaryPostId": "post_001",
+                                  "roleIds": ["role_oa_user", "role_dept_manager"],
                                   "enabled": true
                                 }
                                 """))
@@ -89,6 +91,14 @@ class SystemUserControllerTest {
 
         String userId = objectMapper.readTree(createResponse).path("data").path("userId").asText();
         assertThat(userId).startsWith("usr_");
+
+        String createdDetail = mockMvc.perform(get("/api/v1/system/users/" + userId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(createdDetail).path("data").path("roleIds").size()).isEqualTo(2);
 
         mockMvc.perform(put("/api/v1/system/users/" + userId)
                         .header("Authorization", "Bearer " + token)
@@ -101,6 +111,7 @@ class SystemUserControllerTest {
                                   "email": "zhaoliu-updated@example.com",
                                   "companyId": "cmp_001",
                                   "primaryPostId": "post_001",
+                                  "roleIds": ["role_process_admin"],
                                   "enabled": false
                                 }
                                 """))
@@ -117,6 +128,8 @@ class SystemUserControllerTest {
         assertThat(updatedBody.path("displayName").asText()).isEqualTo("赵六（已更新）");
         assertThat(updatedBody.path("postName").asText()).isEqualTo("报销审核岗");
         assertThat(updatedBody.path("enabled").asBoolean()).isFalse();
+        assertThat(updatedBody.path("roleIds").size()).isEqualTo(1);
+        assertThat(updatedBody.path("roleIds").get(0).asText()).isEqualTo("role_process_admin");
     }
 
     @Test
@@ -138,6 +151,7 @@ class SystemUserControllerTest {
                                   "email": "crossdept@example.com",
                                   "companyId": "cmp_001",
                                   "primaryPostId": "post_003",
+                                  "roleIds": ["role_oa_user"],
                                   "enabled": true
                                 }
                                 """))
@@ -160,6 +174,8 @@ class SystemUserControllerTest {
         assertThat(data.path("companies").size()).isGreaterThanOrEqualTo(1);
         assertThat(data.path("posts").isArray()).isTrue();
         assertThat(data.path("posts").size()).isGreaterThanOrEqualTo(3);
+        assertThat(data.path("roles").isArray()).isTrue();
+        assertThat(data.path("roles").size()).isGreaterThanOrEqualTo(1);
     }
 
     private String login() throws Exception {

@@ -1,6 +1,5 @@
 package com.westflow.system.user.mapper;
 
-import com.westflow.system.user.api.SystemUserDetailResponse;
 import com.westflow.system.user.api.SystemUserFormOptionsResponse;
 import com.westflow.system.user.api.SystemUserListItemResponse;
 import com.westflow.system.user.service.SystemUserService.SystemUserEntity;
@@ -175,7 +174,7 @@ public interface SystemUserMapper {
             LEFT JOIN wf_post p ON p.id = u.active_post_id
             WHERE u.id = #{userId}
             """)
-    SystemUserDetailResponse selectDetail(@Param("userId") String userId);
+    SystemUserBaseDetailRecord selectDetail(@Param("userId") String userId);
 
     @Select("""
             SELECT id, company_name AS name
@@ -198,6 +197,18 @@ public interface SystemUserMapper {
 
     @Select("""
             SELECT
+              r.id AS id,
+              r.role_name AS name,
+              r.role_code AS roleCode,
+              r.role_category AS roleCategory
+            FROM wf_role r
+            WHERE r.enabled = TRUE
+            ORDER BY r.role_name ASC
+            """)
+    List<SystemUserFormOptionsResponse.RoleOption> selectRoleOptions();
+
+    @Select("""
+            SELECT
               p.department_id,
               d.company_id
             FROM wf_post p
@@ -214,6 +225,14 @@ public interface SystemUserMapper {
             """)
     List<String> selectDepartmentIdsByParentId(@Param("departmentId") String departmentId);
 
+    @Select("""
+            SELECT role_id
+            FROM wf_user_role
+            WHERE user_id = #{userId}
+            ORDER BY created_at ASC
+            """)
+    List<String> selectRoleIdsByUserId(@Param("userId") String userId);
+
     @Select({
             "<script>",
             "SELECT COUNT(1)",
@@ -225,6 +244,19 @@ public interface SystemUserMapper {
             "</script>"
     })
     Long countByUsername(@Param("username") String username, @Param("excludeUserId") String excludeUserId);
+
+    @Select({
+            "<script>",
+            "SELECT COUNT(1)",
+            "FROM wf_role",
+            "WHERE id IN",
+            "  <foreach collection='roleIds' item='roleId' open='(' separator=',' close=')'>",
+            "    #{roleId}",
+            "  </foreach>",
+            "  AND enabled = TRUE",
+            "</script>"
+    })
+    long countExistingRoles(@Param("roleIds") List<String> roleIds);
 
     @Insert("""
             INSERT INTO wf_user (
@@ -275,6 +307,9 @@ public interface SystemUserMapper {
     @Delete("DELETE FROM wf_user_post WHERE user_id = #{userId}")
     int deleteUserPosts(@Param("userId") String userId);
 
+    @Delete("DELETE FROM wf_user_role WHERE user_id = #{userId}")
+    int deleteUserRoles(@Param("userId") String userId);
+
     @Insert("""
             INSERT INTO wf_user_post (
               id,
@@ -292,9 +327,47 @@ public interface SystemUserMapper {
             """)
     int insertUserPost(SystemUserPostBinding binding);
 
+    @Insert("""
+            INSERT INTO wf_user_role (
+              id,
+              user_id,
+              role_id,
+              created_at
+            ) VALUES (
+              #{id},
+              #{userId},
+              #{roleId},
+              CURRENT_TIMESTAMP
+            )
+            """)
+    int insertUserRole(SystemUserRoleBinding binding);
+
     record PostContext(
             String departmentId,
             String companyId
+    ) {
+    }
+
+    record SystemUserBaseDetailRecord(
+            String userId,
+            String displayName,
+            String username,
+            String mobile,
+            String email,
+            String companyId,
+            String companyName,
+            String departmentId,
+            String departmentName,
+            String postId,
+            String postName,
+            boolean enabled
+    ) {
+    }
+
+    record SystemUserRoleBinding(
+            String id,
+            String userId,
+            String roleId
     ) {
     }
 }

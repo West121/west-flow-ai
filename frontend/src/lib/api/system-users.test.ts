@@ -100,6 +100,7 @@ describe('system users api', () => {
           departmentName: '财务部',
           postId: 'post_001',
           postName: '报销审核岗',
+          roleIds: ['role_oa_user', 'role_dept_manager'],
           enabled: true,
         })
       )
@@ -112,6 +113,14 @@ describe('system users api', () => {
               name: '报销审核岗',
               departmentId: 'dept_001',
               departmentName: '财务部',
+            },
+          ],
+          roles: [
+            {
+              id: 'role_oa_user',
+              name: 'OA 普通用户',
+              roleCode: 'OA_USER',
+              roleCategory: 'SYSTEM',
             },
           ],
         })
@@ -145,6 +154,7 @@ describe('system users api', () => {
       email: 'zhaoliu@westflow.cn',
       companyId: 'cmp_001',
       primaryPostId: 'post_001',
+      roleIds: ['role_oa_user'],
       enabled: true,
     }
 

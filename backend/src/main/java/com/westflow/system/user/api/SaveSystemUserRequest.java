@@ -1,8 +1,10 @@
 package com.westflow.system.user.api;
 
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.util.List;
 
 public record SaveSystemUserRequest(
         @NotBlank(message = "请输入用户姓名")
@@ -18,6 +20,8 @@ public record SaveSystemUserRequest(
         String companyId,
         @NotBlank(message = "请选择主岗位")
         String primaryPostId,
+        @NotEmpty(message = "请至少选择一个角色")
+        List<String> roleIds,
         @NotNull(message = "请选择启用状态")
         Boolean enabled
 ) {

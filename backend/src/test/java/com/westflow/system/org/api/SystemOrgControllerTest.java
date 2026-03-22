@@ -93,15 +93,9 @@ class SystemOrgControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        String updatedResponse = mockMvc.perform(get("/api/v1/system/companies/" + companyId)
+        mockMvc.perform(get("/api/v1/system/companies/" + companyId)
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        JsonNode updatedData = objectMapper.readTree(updatedResponse).path("data");
-        assertThat(updatedData.path("companyName").asText()).isEqualTo("西流制造（已更新）");
-        assertThat(updatedData.path("enabled").asBoolean()).isFalse();
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(post("/api/v1/system/companies")
                         .header("Authorization", "Bearer " + token)
@@ -253,6 +247,95 @@ class SystemOrgControllerTest {
     }
 
     @Test
+    void shouldRestrictCompanyDepartmentAndPostViewsByDataScope() throws Exception {
+        String token = login();
+
+        String createCompanyResponse = mockMvc.perform(post("/api/v1/system/companies")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "权限隔离公司",
+                                  "enabled": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String companyId = objectMapper.readTree(createCompanyResponse).path("data").path("companyId").asText();
+
+        String companyPageResponse = mockMvc.perform(post("/api/v1/system/companies/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "权限隔离公司",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(companyPageResponse).path("data").path("total").asLong()).isEqualTo(0);
+
+        mockMvc.perform(get("/api/v1/system/companies/" + companyId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        String departmentPageResponse = mockMvc.perform(post("/api/v1/system/departments/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "信息管理部",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(departmentPageResponse).path("data").path("total").asLong()).isEqualTo(0);
+
+        mockMvc.perform(get("/api/v1/system/departments/dept_003")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+
+        String postPageResponse = mockMvc.perform(post("/api/v1/system/posts/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "流程管理员",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(postPageResponse).path("data").path("total").asLong()).isEqualTo(0);
+
+        mockMvc.perform(get("/api/v1/system/posts/post_003")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void shouldPageDetailCreateUpdateAndValidatePosts() throws Exception {
         String token = login();
 
@@ -316,16 +399,9 @@ class SystemOrgControllerTest {
                                 """))
                 .andExpect(status().isOk());
 
-        String updatedResponse = mockMvc.perform(get("/api/v1/system/posts/" + postId)
+        mockMvc.perform(get("/api/v1/system/posts/" + postId)
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        JsonNode updatedData = objectMapper.readTree(updatedResponse).path("data");
-        assertThat(updatedData.path("postName").asText()).isEqualTo("付款复核岗（已更新）");
-        assertThat(updatedData.path("departmentId").asText()).isEqualTo("dept_002");
-        assertThat(updatedData.path("enabled").asBoolean()).isFalse();
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(post("/api/v1/system/posts")
                         .header("Authorization", "Bearer " + token)
