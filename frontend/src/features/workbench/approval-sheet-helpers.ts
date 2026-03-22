@@ -126,6 +126,9 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   if (item.action === 'REJECT') {
     return '拒绝'
   }
+  if (item.action === 'READ') {
+    return '已阅'
+  }
   if (item.action === 'RETURN') {
     return '退回'
   }
@@ -134,6 +137,18 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   }
   if (item.action === 'CLAIM') {
     return '已认领'
+  }
+  if (item.action === 'ADD_SIGN') {
+    return '加签'
+  }
+  if (item.action === 'REMOVE_SIGN') {
+    return '减签'
+  }
+  if (item.action === 'WITHDRAW' || item.action === 'REVOKE') {
+    return '撤销'
+  }
+  if (item.action === 'URGE') {
+    return '催办'
   }
 
   switch (item.status) {

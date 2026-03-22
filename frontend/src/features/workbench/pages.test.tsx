@@ -20,16 +20,21 @@ const {
   useSearchMock: vi.fn(),
   routeNavigateMock: vi.fn(),
   workbenchApiMocks: {
-    listWorkbenchTasks: vi.fn(),
-    listApprovalSheets: vi.fn(),
-    getWorkbenchTaskDetail: vi.fn(),
+    addSignWorkbenchTask: vi.fn(),
+    claimWorkbenchTask: vi.fn(),
+    completeWorkbenchTask: vi.fn(),
     getApprovalSheetDetailByBusiness: vi.fn(),
     getWorkbenchTaskActions: vi.fn(),
-    startWorkbenchProcess: vi.fn(),
-    completeWorkbenchTask: vi.fn(),
-    claimWorkbenchTask: vi.fn(),
-    transferWorkbenchTask: vi.fn(),
+    getWorkbenchTaskDetail: vi.fn(),
+    listWorkbenchTasks: vi.fn(),
+    listApprovalSheets: vi.fn(),
+    readWorkbenchTask: vi.fn(),
+    removeSignWorkbenchTask: vi.fn(),
+    revokeWorkbenchTask: vi.fn(),
     returnWorkbenchTask: vi.fn(),
+    startWorkbenchProcess: vi.fn(),
+    transferWorkbenchTask: vi.fn(),
+    urgeWorkbenchTask: vi.fn(),
   },
 }))
 
@@ -346,6 +351,48 @@ describe('workbench pages', () => {
     workbenchApiMocks.listApprovalSheets.mockResolvedValue(
       createApprovalSheetPage()
     )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canTransfer: true,
+      canReturn: true,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+    })
+    workbenchApiMocks.addSignWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_001',
+      status: 'RUNNING',
+      nextTasks: [],
+    })
+    workbenchApiMocks.readWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_001',
+      status: 'RUNNING',
+      nextTasks: [],
+    })
+    workbenchApiMocks.removeSignWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_001',
+      status: 'RUNNING',
+      nextTasks: [],
+    })
+    workbenchApiMocks.revokeWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_001',
+      status: 'REVOKED',
+      nextTasks: [],
+    })
+    workbenchApiMocks.urgeWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_001',
+      status: 'RUNNING',
+      nextTasks: [],
+    })
   })
 
   afterEach(() => {
@@ -431,10 +478,74 @@ describe('workbench pages', () => {
     workbenchApiMocks.listApprovalSheets.mockResolvedValue({
       page: 1,
       pageSize: 20,
-      total: 0,
+      total: 3,
       pages: 0,
       groups: [],
-      records: [],
+      records: [
+        {
+          instanceId: 'pi_cc_001',
+          processDefinitionId: 'pd_001',
+          processKey: 'oa_leave',
+          processName: '请假审批',
+          businessId: 'leave_001',
+          businessType: 'OA_LEAVE',
+          billNo: 'LEAVE-001',
+          businessTitle: '请假申请 · 外出处理事务',
+          initiatorUserId: 'usr_001',
+          currentNodeName: '部门负责人审批',
+          currentTaskId: 'task_cc_001',
+          currentTaskStatus: 'RUNNING',
+          currentAssigneeUserId: 'usr_002',
+          instanceStatus: 'RUNNING',
+          latestAction: 'CC',
+          latestOperatorUserId: 'usr_001',
+          createdAt: '2026-03-22T09:00:00+08:00',
+          updatedAt: '2026-03-22T09:10:00+08:00',
+          completedAt: null,
+        },
+        {
+          instanceId: 'pi_cc_002',
+          processDefinitionId: 'pd_002',
+          processKey: 'oa_expense',
+          processName: '报销审批',
+          businessId: 'expense_001',
+          businessType: 'OA_EXPENSE',
+          billNo: 'EXPENSE-001',
+          businessTitle: '报销申请 · 客户接待',
+          initiatorUserId: 'usr_002',
+          currentNodeName: '财务复核',
+          currentTaskId: 'task_cc_002',
+          currentTaskStatus: 'RUNNING',
+          currentAssigneeUserId: 'usr_003',
+          instanceStatus: 'RUNNING',
+          latestAction: 'READ',
+          latestOperatorUserId: 'usr_002',
+          createdAt: '2026-03-22T10:00:00+08:00',
+          updatedAt: '2026-03-22T10:20:00+08:00',
+          completedAt: null,
+        },
+        {
+          instanceId: 'pi_cc_003',
+          processDefinitionId: 'pd_003',
+          processKey: 'oa_common',
+          processName: '通用申请',
+          businessId: 'common_001',
+          businessType: 'OA_COMMON',
+          billNo: 'COMMON-001',
+          businessTitle: '通用申请 · 资产借用',
+          initiatorUserId: 'usr_003',
+          currentNodeName: '流程结束',
+          currentTaskId: null,
+          currentTaskStatus: 'COMPLETED',
+          currentAssigneeUserId: null,
+          instanceStatus: 'COMPLETED',
+          latestAction: 'COMPLETED',
+          latestOperatorUserId: 'usr_003',
+          createdAt: '2026-03-22T11:00:00+08:00',
+          updatedAt: '2026-03-22T11:20:00+08:00',
+          completedAt: '2026-03-22T11:20:00+08:00',
+        },
+      ],
     })
 
     renderWithQuery(<WorkbenchCopiedListPage />)
@@ -452,7 +563,45 @@ describe('workbench pages', () => {
     })
 
     expect(await screen.findByText('流程中心抄送我')).toBeInTheDocument()
-    expect(screen.getByText('total:0')).toBeInTheDocument()
+    expect(screen.getByText('抄送中')).toBeInTheDocument()
+    expect(screen.getByText('已阅')).toBeInTheDocument()
+    expect(screen.getAllByText('已完成').length).toBeGreaterThan(1)
+    expect(screen.getByText('total:3')).toBeInTheDocument()
+  })
+
+  it('updates process-center advanced filters from the workbench list wrapper', async () => {
+    renderWithQuery(<WorkbenchDoneListPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '已完成' }))
+
+    await waitFor(() => {
+      expect(routeNavigateMock).toHaveBeenCalled()
+    })
+
+    const latestCall =
+      routeNavigateMock.mock.calls[routeNavigateMock.mock.calls.length - 1] ?? []
+    const [navArg] = latestCall
+    expect(typeof navArg?.search).toBe('function')
+
+    expect(
+      navArg.search({
+        page: 1,
+        pageSize: 20,
+        keyword: '',
+        filters: [],
+        sorts: [],
+        groups: [],
+      })
+    ).toMatchObject({
+      page: undefined,
+      filters: [
+        {
+          field: 'instanceStatus',
+          operator: 'eq',
+          value: 'COMPLETED',
+        },
+      ],
+    })
   })
 
   it('shows claim and return actions conditionally in the task detail page', async () => {
@@ -590,6 +739,51 @@ describe('workbench pages', () => {
     expect(
       screen.getByRole('link', { name: '返回 OA 流程查询' })
     ).toHaveAttribute('href', '/oa/query')
+  })
+
+  it('shows quick task actions and an action timeline in the detail page', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_pending_005',
+        activeTaskIds: ['task_pending_005'],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canTransfer: true,
+      canReturn: true,
+      canAddSign: true,
+      canRemoveSign: true,
+      canRevoke: true,
+      canUrge: true,
+      canRead: true,
+    })
+    workbenchApiMocks.readWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_pending_005',
+      status: 'RUNNING',
+      nextTasks: [],
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_005' />)
+
+    expect(await screen.findByText('动作轨迹')).toBeInTheDocument()
+    expect(screen.getAllByText('部门负责人审批').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '加签' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '减签' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '撤销' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '催办' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '已阅' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '已阅' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.readWorkbenchTask).toHaveBeenCalledWith(
+        'task_pending_005'
+      )
+    })
   })
 
   it('submits the transfer dialog with target user id', async () => {

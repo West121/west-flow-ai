@@ -6,6 +6,7 @@ public record DemoTaskView(
         String taskId,
         String nodeId,
         String nodeName,
+        String taskKind,
         String status,
         String assignmentMode,
         List<String> candidateUserIds,

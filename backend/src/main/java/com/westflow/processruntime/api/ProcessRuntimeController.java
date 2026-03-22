@@ -65,6 +65,48 @@ public class ProcessRuntimeController {
         return ApiResponse.success(processDemoService.actions(taskId));
     }
 
+    @PostMapping("/tasks/{taskId}/add-sign")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> addSign(
+            @PathVariable String taskId,
+            @Valid @RequestBody AddSignTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.addSign(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/remove-sign")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> removeSign(
+            @PathVariable String taskId,
+            @Valid @RequestBody RemoveSignTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.removeSign(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/revoke")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> revoke(
+            @PathVariable String taskId,
+            @Valid @RequestBody RevokeTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.revoke(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/urge")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> urge(
+            @PathVariable String taskId,
+            @Valid @RequestBody UrgeTaskRequest request
+    ) {
+        return ApiResponse.success(processDemoService.urge(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/read")
+    @SaCheckLogin
+    public ApiResponse<CompleteTaskResponse> read(@PathVariable String taskId) {
+        return ApiResponse.success(processDemoService.read(taskId));
+    }
+
     @PostMapping("/tasks/{taskId}/claim")
     @SaCheckLogin
     public ApiResponse<ClaimTaskResponse> claim(

@@ -52,6 +52,10 @@ export type WorkbenchProcessInstanceEvent = {
   nodeId?: string | null
   eventType: string
   eventName: string
+  actionCategory?: string | null
+  sourceTaskId?: string | null
+  targetTaskId?: string | null
+  targetUserId?: string | null
   operatorUserId?: string | null
   occurredAt: string
   details?: Record<string, unknown> | null
@@ -61,6 +65,7 @@ export type WorkbenchTaskTraceItem = {
   taskId: string
   nodeId: string
   nodeName: string
+  taskKind?: string | null
   status: string
   assigneeUserId?: string | null
   candidateUserIds: string[]
@@ -72,6 +77,12 @@ export type WorkbenchTaskTraceItem = {
   handleStartTime?: string | null
   handleEndTime?: string | null
   handleDurationSeconds?: number | null
+  sourceTaskId?: string | null
+  targetTaskId?: string | null
+  targetUserId?: string | null
+  isCcTask?: boolean
+  isAddSignTask?: boolean
+  isRevoked?: boolean
 }
 
 export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
@@ -85,6 +96,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   flowEdges?: WorkbenchFlowEdge[] | null
   instanceEvents?: WorkbenchProcessInstanceEvent[] | null
   taskTrace?: WorkbenchTaskTraceItem[] | null
+  taskKind?: string | null
   receiveTime?: string | null
   readTime?: string | null
   handleStartTime?: string | null
@@ -136,6 +148,11 @@ export type WorkbenchTaskActionAvailability = {
   canReject: boolean
   canTransfer: boolean
   canReturn: boolean
+  canAddSign: boolean
+  canRemoveSign: boolean
+  canRevoke: boolean
+  canUrge: boolean
+  canRead: boolean
 }
 
 export type ApprovalSheetPageResponse = {
@@ -164,6 +181,24 @@ export type TransferWorkbenchTaskPayload = {
 
 export type ReturnWorkbenchTaskPayload = {
   targetStrategy: 'PREVIOUS_USER_TASK'
+  comment?: string | null
+}
+
+export type AddSignWorkbenchTaskPayload = {
+  targetUserId: string
+  comment?: string | null
+}
+
+export type RemoveSignWorkbenchTaskPayload = {
+  targetTaskId: string
+  comment?: string | null
+}
+
+export type RevokeWorkbenchTaskPayload = {
+  comment?: string | null
+}
+
+export type UrgeWorkbenchTaskPayload = {
   comment?: string | null
 }
 
@@ -331,6 +366,75 @@ export async function returnWorkbenchTask(
     data: CompleteWorkbenchTaskResponse
     requestId: string
   }>(`/process-runtime/demo/tasks/${taskId}/return`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function addSignWorkbenchTask(
+  taskId: string,
+  payload: AddSignWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/add-sign`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function removeSignWorkbenchTask(
+  taskId: string,
+  payload: RemoveSignWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/remove-sign`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function revokeWorkbenchTask(
+  taskId: string,
+  payload: RevokeWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/revoke`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function urgeWorkbenchTask(
+  taskId: string,
+  payload: UrgeWorkbenchTaskPayload
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/urge`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function readWorkbenchTask(
+  taskId: string
+): Promise<CompleteWorkbenchTaskResponse> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: CompleteWorkbenchTaskResponse
+    requestId: string
+  }>(`/process-runtime/demo/tasks/${taskId}/read`)
 
   return unwrapResponse(response)
 }

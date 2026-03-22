@@ -12,6 +12,10 @@ public record ProcessInstanceEventResponse(
         String nodeId,
         String eventType,
         String eventName,
+        String actionCategory,
+        String sourceTaskId,
+        String targetTaskId,
+        String targetUserId,
         String operatorUserId,
         OffsetDateTime occurredAt,
         Map<String, Object> details

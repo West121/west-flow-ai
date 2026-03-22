@@ -5,6 +5,11 @@ public record TaskActionAvailabilityResponse(
         boolean canApprove,
         boolean canReject,
         boolean canTransfer,
-        boolean canReturn
+        boolean canReturn,
+        boolean canAddSign,
+        boolean canRemoveSign,
+        boolean canRevoke,
+        boolean canUrge,
+        boolean canRead
 ) {
 }

@@ -23,6 +23,7 @@ public record ProcessTaskDetailResponse(
         List<ProcessTaskTraceItemResponse> taskTrace,
         String nodeId,
         String nodeName,
+        String taskKind,
         String status,
         String assignmentMode,
         List<String> candidateUserIds,

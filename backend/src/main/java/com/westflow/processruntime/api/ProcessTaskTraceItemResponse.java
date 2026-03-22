@@ -9,6 +9,7 @@ public record ProcessTaskTraceItemResponse(
         String taskId,
         String nodeId,
         String nodeName,
+        String taskKind,
         String status,
         String assigneeUserId,
         List<String> candidateUserIds,
@@ -19,6 +20,12 @@ public record ProcessTaskTraceItemResponse(
         OffsetDateTime readTime,
         OffsetDateTime handleStartTime,
         OffsetDateTime handleEndTime,
-        Long handleDurationSeconds
+        Long handleDurationSeconds,
+        String sourceTaskId,
+        String targetTaskId,
+        String targetUserId,
+        boolean isCcTask,
+        boolean isAddSignTask,
+        boolean isRevoked
 ) {
 }

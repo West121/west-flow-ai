@@ -13,6 +13,9 @@ import com.westflow.approval.service.ApprovalSheetQueryService;
 import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
 import com.westflow.processruntime.api.ApprovalSheetListView;
 import com.westflow.processruntime.api.ApprovalSheetPageRequest;
+import com.westflow.processruntime.api.AddSignTaskRequest;
+import com.westflow.processruntime.api.RemoveSignTaskRequest;
+import com.westflow.processruntime.api.RevokeTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
 import com.westflow.processruntime.api.ClaimTaskRequest;
@@ -26,6 +29,7 @@ import com.westflow.processruntime.api.ReturnTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
+import com.westflow.processruntime.api.UrgeTaskRequest;
 import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
 import java.time.Duration;
@@ -73,7 +77,18 @@ public class ProcessDemoService {
             "processName",
             "currentNodeName",
             "instanceStatus",
-            "initiatorUserId"
+            "initiatorUserId",
+            "businessKey",
+            "instanceId",
+            "currentTaskId",
+            "currentTaskStatus",
+            "currentAssigneeUserId",
+            "latestAction",
+            "latestOperatorUserId",
+            "readStatus",
+            "createdAt",
+            "updatedAt",
+            "completedAt"
     );
     private static final List<String> SUPPORTED_APPROVAL_SHEET_SORT_FIELDS = List.of(
             "createdAt",
@@ -85,7 +100,16 @@ public class ProcessDemoService {
             "businessTitle",
             "currentNodeName",
             "instanceStatus",
-            "initiatorUserId"
+            "initiatorUserId",
+            "businessKey",
+            "businessId",
+            "instanceId",
+            "currentTaskId",
+            "currentTaskStatus",
+            "currentAssigneeUserId",
+            "latestAction",
+            "latestOperatorUserId",
+            "readStatus"
     );
 
     private final ProcessDefinitionService processDefinitionService;
@@ -93,6 +117,12 @@ public class ProcessDemoService {
     private final Map<String, DemoProcessInstance> instancesById = new ConcurrentHashMap<>();
     private final Map<String, DemoTask> tasksById = new ConcurrentHashMap<>();
     private final List<ProcessInstanceEventResponse> instanceEvents = new ArrayList<>();
+
+    private enum TaskKind {
+        NORMAL,
+        CC,
+        ADD_SIGN
+    }
 
     public ProcessDemoService(
             ProcessDefinitionService processDefinitionService,
@@ -133,6 +163,10 @@ public class ProcessDemoService {
                 "INSTANCE_STARTED",
                 "流程实例已发起",
                 StpUtil.getLoginIdAsString(),
+                "INSTANCE",
+                null,
+                null,
+                null,
                 eventDetails(
                         "processDefinitionId", instance.processDefinitionId,
                         "processKey", instance.processKey,
@@ -197,18 +231,7 @@ public class ProcessDemoService {
     public synchronized ProcessTaskDetailResponse detail(String taskId) {
         DemoTask task = requireTask(taskId);
         DemoProcessInstance instance = requireInstance(task.instanceId);
-        if (task.readTime == null) {
-            task.readTime = now();
-            recordInstanceEvent(
-                    instance.instanceId,
-                    task.taskId,
-                    task.nodeId,
-                    "TASK_READ",
-                    "任务已阅读",
-                    currentUserId(),
-                    eventDetails("status", task.status)
-            );
-        }
+        maybeAutoRead(task, instance);
         return toDetailResponse(task, instance);
     }
 
@@ -221,6 +244,227 @@ public class ProcessDemoService {
     public synchronized TaskActionAvailabilityResponse actions(String taskId) {
         DemoTask task = requireTask(taskId);
         return actionAvailability(task, currentUserId());
+    }
+
+    public synchronized CompleteTaskResponse addSign(String taskId, AddSignTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        String currentUserId = currentUserId();
+        if (task.taskKind != TaskKind.NORMAL) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不支持加签",
+                    Map.of("taskId", taskId, "taskKind", task.taskKind.name())
+            );
+        }
+        requireSourceAssignee(task, currentUserId, "加签");
+        if (hasActiveAddSignChild(task.taskId)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务已存在未处理的加签任务",
+                    Map.of("taskId", taskId)
+            );
+        }
+
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        DemoTask addSignTask = createAddSignTask(instance, task, request.targetUserId());
+        OffsetDateTime now = now();
+        task.updatedAt = now;
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_ADD_SIGN",
+                "任务已加签",
+                currentUserId,
+                "TASK",
+                task.taskId,
+                addSignTask.taskId,
+                request.targetUserId(),
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", addSignTask.taskId,
+                        "targetUserId", request.targetUserId()
+                )
+        );
+        refreshStatus(instance);
+        return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(addSignTask.toView()));
+    }
+
+    public synchronized CompleteTaskResponse removeSign(String taskId, RemoveSignTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        String currentUserId = currentUserId();
+        if (task.taskKind != TaskKind.NORMAL) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不支持减签",
+                    Map.of("taskId", taskId, "taskKind", task.taskKind.name())
+            );
+        }
+        requireSourceAssignee(task, currentUserId, "减签");
+        DemoTask addSignTask = requireTask(request.targetTaskId());
+        if (!task.taskId.equals(addSignTask.sourceTaskId)
+                || addSignTask.taskKind != TaskKind.ADD_SIGN
+                || !"PENDING".equals(addSignTask.status)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不是可减签的加签任务",
+                    Map.of(
+                            "taskId", taskId,
+                            "targetTaskId", request.targetTaskId()
+                    )
+            );
+        }
+
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        OffsetDateTime now = now();
+        addSignTask.status = "REVOKED";
+        addSignTask.action = "REMOVE_SIGN";
+        addSignTask.operatorUserId = currentUserId;
+        addSignTask.comment = request.comment();
+        addSignTask.completedAt = now;
+        addSignTask.handleStartTime = addSignTask.handleStartTime == null ? now : addSignTask.handleStartTime;
+        addSignTask.handleEndTime = now;
+        addSignTask.updatedAt = now;
+        instance.activeTaskIds.remove(addSignTask.taskId);
+        recordInstanceEvent(
+                instance.instanceId,
+                addSignTask.taskId,
+                addSignTask.nodeId,
+                "TASK_REMOVE_SIGN",
+                "任务已减签",
+                currentUserId,
+                "TASK",
+                task.taskId,
+                addSignTask.taskId,
+                addSignTask.targetUserId,
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", addSignTask.taskId,
+                        "targetUserId", addSignTask.targetUserId
+                )
+        );
+        refreshStatus(instance);
+        return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of());
+    }
+
+    public synchronized CompleteTaskResponse revoke(String taskId, RevokeTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        String currentUserId = currentUserId();
+        if (!currentUserId.equals(instance.initiatorUserId)) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "仅发起人可以撤销流程",
+                    Map.of("taskId", taskId, "userId", currentUserId)
+            );
+        }
+        if (!hasBlockingActiveTasks(instance)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前流程不存在可撤销的活动任务",
+                    Map.of("instanceId", instance.instanceId)
+            );
+        }
+
+        OffsetDateTime now = now();
+        for (DemoTask activeTask : tasksForInstance(instance.instanceId)) {
+            if (!isTerminal(activeTask)) {
+                activeTask.status = "REVOKED";
+                activeTask.action = "REVOKE";
+                activeTask.operatorUserId = currentUserId;
+                activeTask.comment = request.comment();
+                activeTask.completedAt = now;
+                activeTask.handleStartTime = activeTask.handleStartTime == null ? now : activeTask.handleStartTime;
+                activeTask.handleEndTime = now;
+                activeTask.updatedAt = now;
+                activeTask.revoked = true;
+            }
+        }
+        instance.activeTaskIds.clear();
+        instance.status = "REVOKED";
+        instance.updatedAt = now;
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_REVOKED",
+                "流程已撤销",
+                currentUserId,
+                "INSTANCE",
+                task.taskId,
+                task.taskId,
+                null,
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", task.taskId
+                )
+        );
+        return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
+    }
+
+    public synchronized CompleteTaskResponse urge(String taskId, UrgeTaskRequest request) {
+        DemoTask task = requireTask(taskId);
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        String currentUserId = currentUserId();
+        if (!currentUserId.equals(instance.initiatorUserId)) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "仅发起人可以催办",
+                    Map.of("taskId", taskId, "userId", currentUserId)
+            );
+        }
+
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_URGED",
+                "任务已催办",
+                currentUserId,
+                "TASK",
+                task.taskId,
+                task.taskId,
+                task.targetUserId != null ? task.targetUserId : task.assigneeUserId,
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", task.taskId,
+                        "targetUserId", task.targetUserId != null ? task.targetUserId : task.assigneeUserId
+                )
+        );
+        return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
+    }
+
+    public synchronized CompleteTaskResponse read(String taskId) {
+        DemoTask task = requireTask(taskId);
+        if (task.taskKind != TaskKind.CC) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不支持已阅",
+                    Map.of("taskId", taskId, "taskKind", task.taskKind.name())
+            );
+        }
+
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        String currentUserId = currentUserId();
+        requireCcRecipient(task, currentUserId);
+        if ("CC_READ".equals(task.status)) {
+            return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
+        }
+
+        markCcRead(task, instance, currentUserId);
+        return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, List.of());
     }
 
     public synchronized ClaimTaskResponse claim(String taskId, ClaimTaskRequest request) {
@@ -260,7 +504,16 @@ public class ProcessDemoService {
                 "TASK_CLAIMED",
                 "任务已认领",
                 currentUserId,
-                eventDetails("comment", request.comment())
+                "TASK",
+                task.taskId,
+                task.taskId,
+                currentUserId,
+                eventDetails(
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", task.taskId,
+                        "targetUserId", currentUserId
+                )
         );
 
         return new ClaimTaskResponse(task.taskId, task.instanceId, task.status, task.assigneeUserId);
@@ -272,6 +525,14 @@ public class ProcessDemoService {
                 ? currentUserId()
                 : request.operatorUserId();
 
+        if (task.taskKind == TaskKind.CC) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前抄送任务不支持办理",
+                    Map.of("taskId", taskId)
+            );
+        }
         if (!"PENDING".equals(task.status) || task.assigneeUserId == null || !task.assigneeUserId.equals(currentUserId)) {
             throw new ContractException(
                     "PROCESS.ACTION_NOT_ALLOWED",
@@ -291,6 +552,14 @@ public class ProcessDemoService {
         }
 
         DemoProcessInstance instance = requireInstance(task.instanceId);
+        if (task.taskKind == TaskKind.NORMAL && hasActiveAddSignChild(task.taskId)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务存在未处理的加签任务",
+                    Map.of("taskId", taskId)
+            );
+        }
 
         OffsetDateTime now = now();
         task.status = "COMPLETED";
@@ -315,12 +584,24 @@ public class ProcessDemoService {
                 "TASK_COMPLETED",
                 "任务已完成",
                 currentUserId,
-                eventDetails("action", request.action(), "comment", request.comment())
+                "TASK",
+                task.taskId,
+                task.taskId,
+                task.targetUserId != null ? task.targetUserId : task.assigneeUserId,
+                eventDetails(
+                        "action", request.action(),
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", task.taskId,
+                        "targetUserId", task.targetUserId != null ? task.targetUserId : task.assigneeUserId
+                )
         );
 
         PublishedProcessDefinition definition = processDefinitionService.getById(instance.processDefinitionId);
         Graph graph = Graph.from(definition.dsl());
-        List<DemoTaskView> nextTasks = continueAlongOutgoing(definition, graph, instance, task.nodeId, task.taskId, task.originTaskId);
+        List<DemoTaskView> nextTasks = task.taskKind == TaskKind.ADD_SIGN
+                ? List.of()
+                : continueAlongOutgoing(definition, graph, instance, task.nodeId, task.taskId, task.originTaskId);
         refreshStatus(instance);
 
         return new CompleteTaskResponse(instance.instanceId, taskId, instance.status, nextTasks);
@@ -354,7 +635,9 @@ public class ProcessDemoService {
                         "formFieldKey", ""
                 ),
                 task.taskId,
-                task.originTaskId
+                task.originTaskId,
+                TaskKind.NORMAL,
+                request.targetUserId()
         );
         recordInstanceEvent(
                 instance.instanceId,
@@ -363,7 +646,16 @@ public class ProcessDemoService {
                 "TASK_TRANSFERRED",
                 "任务已转办",
                 currentUserId,
-                eventDetails("targetUserId", request.targetUserId(), "comment", request.comment())
+                "TASK",
+                task.taskId,
+                task.taskId,
+                request.targetUserId(),
+                eventDetails(
+                        "targetUserId", request.targetUserId(),
+                        "comment", request.comment(),
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", task.taskId
+                )
         );
         refreshStatus(instance);
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
@@ -413,7 +705,9 @@ public class ProcessDemoService {
                 previousTask.nodeName,
                 resolveReturnAssignment(previousTask),
                 task.taskId,
-                previousTask.originTaskId
+                previousTask.originTaskId,
+                TaskKind.NORMAL,
+                previousTask.assigneeUserId
         );
         recordInstanceEvent(
                 instance.instanceId,
@@ -422,7 +716,17 @@ public class ProcessDemoService {
                 "TASK_RETURNED",
                 "任务已退回",
                 currentUserId,
-                eventDetails("comment", request.comment(), "targetStrategy", targetStrategy)
+                "TASK",
+                task.taskId,
+                task.taskId,
+                previousTask.assigneeUserId,
+                eventDetails(
+                        "comment", request.comment(),
+                        "targetStrategy", targetStrategy,
+                        "sourceTaskId", task.taskId,
+                        "targetTaskId", task.taskId,
+                        "targetUserId", previousTask.assigneeUserId
+                )
         );
         refreshStatus(instance);
         return new CompleteTaskResponse(instance.instanceId, task.taskId, instance.status, List.of(nextTask.toView()));
@@ -447,8 +751,12 @@ public class ProcessDemoService {
         }
 
         return switch (node.type()) {
-            case "start", "cc" -> continueAlongOutgoing(definition, graph, instance, node.id(), previousTaskId, originTaskId);
-            case "approver" -> List.of(createTask(instance, node, previousTaskId, originTaskId).toView());
+            case "start" -> continueAlongOutgoing(definition, graph, instance, node.id(), previousTaskId, originTaskId);
+            case "cc" -> {
+                createCcTasks(instance, node, previousTaskId, originTaskId);
+                yield continueAlongOutgoing(definition, graph, instance, node.id(), previousTaskId, originTaskId);
+            }
+            case "approver" -> List.of(createTask(instance, node, previousTaskId, originTaskId, TaskKind.NORMAL).toView());
             case "condition" -> advanceCondition(definition, graph, instance, node, previousTaskId, originTaskId);
             case "parallel_split" -> advanceParallelSplit(definition, graph, instance, node, previousTaskId, originTaskId);
             case "parallel_join" -> advanceParallelJoin(definition, graph, instance, node, previousTaskId, originTaskId);
@@ -545,7 +853,21 @@ public class ProcessDemoService {
             String previousTaskId,
             String originTaskId
     ) {
-        return createTask(instance, node.id(), node.name(), mapValue(safeConfig(node).get("assignment")), previousTaskId, originTaskId);
+        return createTask(instance, node, previousTaskId, originTaskId, TaskKind.NORMAL);
+    }
+
+    private DemoTask createTask(
+            DemoProcessInstance instance,
+            ProcessDslPayload.Node node,
+            String previousTaskId,
+            String originTaskId,
+            TaskKind taskKind
+    ) {
+        Map<String, Object> assignment = mapValue(safeConfig(node).get("assignment"));
+        if (taskKind == TaskKind.CC) {
+            assignment = mapValue(safeConfig(node).get("targets"));
+        }
+        return createTask(instance, node.id(), node.name(), assignment, previousTaskId, originTaskId, taskKind, null);
     }
 
     private DemoTask createTask(
@@ -554,13 +876,16 @@ public class ProcessDemoService {
             String nodeName,
             Map<String, Object> assignment,
             String previousTaskId,
-            String originTaskId
+            String originTaskId,
+            TaskKind taskKind,
+            String targetUserId
     ) {
         String taskId = newId("task");
         OffsetDateTime now = now();
-        List<String> candidateUserIds = stringListValue(assignment.get("userIds"));
-        String assigneeUserId = candidateUserIds.size() == 1 ? candidateUserIds.get(0) : null;
-        String status = candidateUserIds.size() > 1 ? "PENDING_CLAIM" : "PENDING";
+        List<String> candidateUserIds = resolveCandidateUserIds(assignment, taskKind, targetUserId);
+        String assigneeUserId = resolveAssigneeUserId(candidateUserIds, taskKind, targetUserId);
+        String status = resolveTaskStatus(candidateUserIds, taskKind);
+        String resolvedTargetUserId = targetUserId != null ? targetUserId : assigneeUserId;
         DemoTask task = new DemoTask(
                 taskId,
                 instance.instanceId,
@@ -573,13 +898,19 @@ public class ProcessDemoService {
                 originTaskId == null ? taskId : originTaskId,
                 now,
                 now,
-                status
+                status,
+                taskKind,
+                previousTaskId,
+                taskId,
+                resolvedTargetUserId
         );
-        if (assigneeUserId != null) {
+        if (assigneeUserId != null && taskKind != TaskKind.CC) {
             task.handleStartTime = now;
         }
         tasksById.put(taskId, task);
-        instance.activeTaskIds.add(taskId);
+        if (taskKind != TaskKind.CC) {
+            instance.activeTaskIds.add(taskId);
+        }
         recordInstanceEvent(
                 instance.instanceId,
                 taskId,
@@ -587,18 +918,138 @@ public class ProcessDemoService {
                 "TASK_CREATED",
                 "任务已创建",
                 instance.initiatorUserId,
+                taskKind == TaskKind.CC ? "CC" : "TASK",
+                previousTaskId,
+                taskId,
+                resolvedTargetUserId,
                 eventDetails(
                         "status", status,
                         "assigneeUserId", assigneeUserId,
-                        "candidateUserIds", candidateUserIds
+                        "candidateUserIds", candidateUserIds,
+                        "sourceTaskId", previousTaskId,
+                        "targetTaskId", taskId,
+                        "targetUserId", resolvedTargetUserId
                 )
         );
         refreshStatus(instance);
         return task;
     }
 
+    private List<DemoTask> createCcTasks(
+            DemoProcessInstance instance,
+            ProcessDslPayload.Node node,
+            String previousTaskId,
+            String originTaskId
+    ) {
+        Map<String, Object> targets = mapValue(safeConfig(node).get("targets"));
+        List<String> targetUserIds = stringListValue(targets.get("userIds"));
+        if (targetUserIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<DemoTask> ccTasks = new ArrayList<>();
+        for (String targetUserId : targetUserIds) {
+            ccTasks.add(createTask(
+                    instance,
+                    node.id(),
+                    node.name(),
+                    targets,
+                    previousTaskId,
+                    originTaskId,
+                    TaskKind.CC,
+                    targetUserId
+            ));
+        }
+        return ccTasks;
+    }
+
+    private DemoTask createAddSignTask(DemoProcessInstance instance, DemoTask sourceTask, String targetUserId) {
+        if (targetUserId == null || targetUserId.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "targetUserId 不能为空",
+                    Map.of("taskId", sourceTask.taskId)
+            );
+        }
+        return createTask(
+                instance,
+                sourceTask.nodeId,
+                sourceTask.nodeName,
+                Map.of(
+                        "mode", "USER",
+                        "userIds", List.of(targetUserId),
+                        "roleCodes", List.of(),
+                        "departmentRef", "",
+                        "formFieldKey", ""
+                ),
+                sourceTask.taskId,
+                sourceTask.originTaskId,
+                TaskKind.ADD_SIGN,
+                targetUserId
+        );
+    }
+
+    private List<String> resolveCandidateUserIds(Map<String, Object> assignment, TaskKind taskKind, String targetUserId) {
+        if (taskKind == TaskKind.ADD_SIGN || taskKind == TaskKind.CC) {
+            if (targetUserId != null && !targetUserId.isBlank()) {
+                return List.of(targetUserId);
+            }
+        }
+        return stringListValue(assignment.get("userIds"));
+    }
+
+    private String resolveAssigneeUserId(List<String> candidateUserIds, TaskKind taskKind, String targetUserId) {
+        if (taskKind == TaskKind.CC || taskKind == TaskKind.ADD_SIGN) {
+            return targetUserId;
+        }
+        return candidateUserIds.size() == 1 ? candidateUserIds.get(0) : null;
+    }
+
+    private String resolveTaskStatus(List<String> candidateUserIds, TaskKind taskKind) {
+        if (taskKind == TaskKind.CC) {
+            return "CC_PENDING";
+        }
+        if (taskKind == TaskKind.ADD_SIGN) {
+            return "PENDING";
+        }
+        return candidateUserIds.size() > 1 ? "PENDING_CLAIM" : "PENDING";
+    }
+
+    private void markCcRead(DemoTask task, DemoProcessInstance instance, String currentUserId) {
+        OffsetDateTime now = now();
+        task.status = "CC_READ";
+        task.action = "READ";
+        task.operatorUserId = currentUserId;
+        task.readTime = now;
+        task.handleStartTime = task.handleStartTime == null ? now : task.handleStartTime;
+        task.handleEndTime = now;
+        task.updatedAt = now;
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_READ",
+                "抄送已阅",
+                currentUserId,
+                "CC",
+                task.sourceTaskId,
+                task.taskId,
+                task.targetUserId,
+                eventDetails(
+                        "status", task.status,
+                        "sourceTaskId", task.sourceTaskId,
+                        "targetTaskId", task.taskId,
+                        "targetUserId", task.targetUserId
+                )
+        );
+    }
+
     private void refreshStatus(DemoProcessInstance instance) {
         instance.updatedAt = now();
+        if ("REVOKED".equals(instance.status)) {
+            return;
+        }
         if (instance.activeTaskIds.isEmpty() && instance.joinArrivals.isEmpty() && !instance.reachedEndNodeIds.isEmpty()) {
             if (!instance.completedLogged) {
                 instance.completedLogged = true;
@@ -712,10 +1163,6 @@ public class ProcessDemoService {
             ApprovalSheetListView view,
             String userId
     ) {
-        if (view == ApprovalSheetListView.CC) {
-            return null;
-        }
-
         List<DemoTask> instanceTasks = tasksForInstance(instance.instanceId);
         if (instanceTasks.isEmpty()) {
             return null;
@@ -725,7 +1172,7 @@ public class ProcessDemoService {
         DemoTask currentTask = switch (view) {
             case TODO -> currentVisibleTask(instance, userId);
             case DONE, INITIATED -> currentOrLatestTask(instance, latestTask);
-            case CC -> null;
+            case CC -> currentCcTask(instance, userId);
         };
         DemoTask latestHandledTask = latestHandledTask(instanceTasks, userId);
 
@@ -733,7 +1180,7 @@ public class ProcessDemoService {
             case TODO -> currentTask != null;
             case DONE -> latestHandledTask != null;
             case INITIATED -> userId.equals(instance.initiatorUserId);
-            case CC -> false;
+            case CC -> currentTask != null;
         };
         if (!visible) {
             return null;
@@ -768,9 +1215,23 @@ public class ProcessDemoService {
                 .orElse(null);
     }
 
+    private DemoTask currentCcTask(DemoProcessInstance instance, String userId) {
+        return tasksForInstance(instance.instanceId).stream()
+                .filter(task -> task.taskKind == TaskKind.CC)
+                .filter(task -> isTaskVisibleToUser(task, userId))
+                .sorted(Comparator.comparing(DemoTask::createdAt).thenComparing(DemoTask::taskId))
+                .findFirst()
+                .orElse(null);
+    }
+
     private boolean isTaskVisibleToUser(DemoTask task, String userId) {
         if (task == null) {
             return false;
+        }
+        if (task.taskKind == TaskKind.CC) {
+            return "CC_PENDING".equals(task.status) || "CC_READ".equals(task.status)
+                    ? userId.equals(task.assigneeUserId)
+                    : false;
         }
         if ("PENDING".equals(task.status) && userId.equals(task.assigneeUserId)) {
             return true;
@@ -829,14 +1290,20 @@ public class ProcessDemoService {
                                 filter.field(),
                                 "supportedFields",
                                 SUPPORTED_APPROVAL_SHEET_FILTER_FIELDS
-                        )
+                            )
                 );
+            }
+            if ("between".equalsIgnoreCase(filter.operator())) {
+                if (!matchesApprovalSheetBetweenFilter(projection, filter.field(), filter.value())) {
+                    return false;
+                }
+                continue;
             }
             if (!"eq".equalsIgnoreCase(filter.operator())) {
                 throw new ContractException(
                         "VALIDATION.REQUEST_INVALID",
                         HttpStatus.BAD_REQUEST,
-                        "审批单列表目前仅支持等值筛选",
+                        "审批单列表目前仅支持等值和区间筛选",
                         Map.of("operator", filter.operator())
                 );
             }
@@ -860,6 +1327,9 @@ public class ProcessDemoService {
                 || contains(projection.billNo, normalized)
                 || contains(projection.businessTitle, normalized)
                 || contains(projection.currentTask == null ? null : projection.currentTask.nodeName, normalized)
+                || contains(projection.currentTask == null ? null : projection.currentTask.status, normalized)
+                || contains(projection.latestAction(), normalized)
+                || contains(projection.latestOperatorUserId(), normalized)
                 || contains(projection.instance.initiatorUserId, normalized);
     }
 
@@ -874,12 +1344,91 @@ public class ProcessDemoService {
             case "currentNodeName" -> equalsValue(projection.currentTask == null ? null : projection.currentTask.nodeName, value);
             case "instanceStatus" -> equalsValue(projection.instance.status, value);
             case "initiatorUserId" -> equalsValue(projection.instance.initiatorUserId, value);
+            case "businessKey", "businessId" -> equalsValue(projection.instance.businessKey, value);
+            case "instanceId" -> equalsValue(projection.instance.instanceId, value);
+            case "currentTaskId" -> equalsValue(projection.currentTask == null ? null : projection.currentTask.taskId, value);
+            case "currentTaskStatus" -> equalsValue(projection.currentTask == null ? null : projection.currentTask.status, value);
+            case "currentAssigneeUserId" -> equalsValue(projection.currentTask == null ? null : projection.currentTask.assigneeUserId, value);
+            case "latestAction" -> equalsValue(projection.latestAction(), value);
+            case "latestOperatorUserId" -> equalsValue(projection.latestOperatorUserId(), value);
+            case "readStatus" -> matchesApprovalSheetReadStatus(projection, value);
+            case "createdAt" -> matchesDateFilter(projection.instance.createdAt, value);
+            case "updatedAt" -> matchesDateFilter(projection.instance.updatedAt, value);
+            case "completedAt" -> matchesDateFilter(projection.completedAt(), value);
             default -> throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
                     HttpStatus.BAD_REQUEST,
                     "不支持的审批单筛选字段",
                     Map.of("field", field)
             );
+        };
+    }
+
+    private boolean matchesApprovalSheetBetweenFilter(
+            ApprovalSheetProjection projection,
+            String field,
+            com.fasterxml.jackson.databind.JsonNode value
+    ) {
+        if (value == null || !value.isArray() || value.size() != 2) {
+            return false;
+        }
+        OffsetDateTime start = parseOffsetDateTime(value.get(0));
+        OffsetDateTime end = parseOffsetDateTime(value.get(1));
+        OffsetDateTime actual = switch (field) {
+            case "createdAt" -> projection.instance.createdAt;
+            case "updatedAt" -> projection.instance.updatedAt;
+            case "completedAt" -> projection.completedAt();
+            default -> throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "当前字段不支持区间筛选",
+                    Map.of("field", field)
+            );
+        };
+        if (actual == null) {
+            return false;
+        }
+        if (start != null && actual.isBefore(start)) {
+            return false;
+        }
+        if (end != null && actual.isAfter(end)) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean matchesDateFilter(OffsetDateTime actual, String value) {
+        return equalsValue(actual == null ? null : actual.toString(), value);
+    }
+
+    private OffsetDateTime parseOffsetDateTime(com.fasterxml.jackson.databind.JsonNode value) {
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        String text = value.asText();
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        return OffsetDateTime.parse(text);
+    }
+
+    private String resolveApprovalSheetReadStatus(ApprovalSheetProjection projection) {
+        if (projection.currentTask == null || projection.currentTask.taskKind != TaskKind.CC) {
+            return null;
+        }
+        return "CC_READ".equals(projection.currentTask.status) ? "READ" : "UNREAD";
+    }
+
+    private boolean matchesApprovalSheetReadStatus(ApprovalSheetProjection projection, String value) {
+        String actual = resolveApprovalSheetReadStatus(projection);
+        if (actual == null) {
+            return false;
+        }
+        String normalized = value == null ? null : value.trim().toUpperCase();
+        return switch (normalized == null ? "" : normalized) {
+            case "READ", "CC_READ" -> "READ".equals(actual);
+            case "UNREAD", "CC_PENDING" -> "UNREAD".equals(actual);
+            default -> equalsValue(actual, value);
         };
     }
 
@@ -917,6 +1466,14 @@ public class ProcessDemoService {
                 );
                 case "instanceStatus" -> approvalSheetStringComparator(projection -> projection.instance.status);
                 case "initiatorUserId" -> approvalSheetStringComparator(projection -> projection.instance.initiatorUserId);
+                case "businessKey", "businessId" -> approvalSheetStringComparator(projection -> projection.instance.businessKey);
+                case "instanceId" -> approvalSheetStringComparator(projection -> projection.instance.instanceId);
+                case "currentTaskId" -> approvalSheetStringComparator(projection -> projection.currentTask == null ? null : projection.currentTask.taskId);
+                case "currentTaskStatus" -> approvalSheetStringComparator(projection -> projection.currentTask == null ? null : projection.currentTask.status);
+                case "currentAssigneeUserId" -> approvalSheetStringComparator(projection -> projection.currentTask == null ? null : projection.currentTask.assigneeUserId);
+                case "latestAction" -> approvalSheetStringComparator(ApprovalSheetProjection::latestAction);
+                case "latestOperatorUserId" -> approvalSheetStringComparator(ApprovalSheetProjection::latestOperatorUserId);
+                case "readStatus" -> approvalSheetStringComparator(this::resolveApprovalSheetReadStatus);
                 default -> throw new ContractException(
                         "VALIDATION.REQUEST_INVALID",
                         HttpStatus.BAD_REQUEST,
@@ -953,6 +1510,7 @@ public class ProcessDemoService {
     private ApprovalSheetListItemResponse toApprovalSheetListItem(ApprovalSheetProjection projection) {
         DemoTask currentTask = projection.currentTask;
         DemoTask latestHandledTask = projection.latestHandledTask;
+        DemoTask latestRelevantTask = latestHandledTask != null ? latestHandledTask : projection.latestTask;
         return new ApprovalSheetListItemResponse(
                 projection.instance.instanceId,
                 projection.instance.processDefinitionId,
@@ -968,8 +1526,8 @@ public class ProcessDemoService {
                 currentTask == null ? null : currentTask.status,
                 currentTask == null ? null : currentTask.assigneeUserId,
                 projection.instance.status,
-                latestHandledTask != null ? latestHandledTask.action : projection.latestTask.action,
-                latestHandledTask != null ? latestHandledTask.operatorUserId : projection.latestTask.operatorUserId,
+                latestRelevantTask.action,
+                latestRelevantTask.operatorUserId,
                 projection.instance.createdAt,
                 projection.instance.updatedAt,
                 projection.completedAt()
@@ -1069,6 +1627,7 @@ public class ProcessDemoService {
                 instance.initiatorUserId,
                 task.nodeId,
                 task.nodeName,
+                task.taskKind.name(),
                 task.status,
                 stringValue(task.assignment.get("mode")),
                 task.candidateUserIds,
@@ -1109,6 +1668,7 @@ public class ProcessDemoService {
                 taskTraceFor(instance.instanceId),
                 task.nodeId,
                 task.nodeName,
+                task.taskKind.name(),
                 task.status,
                 stringValue(task.assignment.get("mode")),
                 task.candidateUserIds,
@@ -1157,6 +1717,7 @@ public class ProcessDemoService {
                 task.taskId,
                 task.nodeId,
                 task.nodeName,
+                task.taskKind.name(),
                 task.status,
                 task.assigneeUserId,
                 task.candidateUserIds,
@@ -1167,7 +1728,13 @@ public class ProcessDemoService {
                 task.readTime,
                 task.handleStartTime,
                 task.handleEndTime,
-                handleDurationSeconds(task.handleStartTime, task.handleEndTime)
+                handleDurationSeconds(task.handleStartTime, task.handleEndTime),
+                task.sourceTaskId,
+                task.targetTaskId,
+                task.targetUserId,
+                task.taskKind == TaskKind.CC,
+                task.taskKind == TaskKind.ADD_SIGN,
+                task.revoked
         );
     }
 
@@ -1179,14 +1746,118 @@ public class ProcessDemoService {
     }
 
     private TaskActionAvailabilityResponse actionAvailability(DemoTask task, String userId) {
-        boolean canClaim = "PENDING_CLAIM".equals(task.status) && task.candidateUserIds.contains(userId);
-        boolean canHandle = "PENDING".equals(task.status) && userId.equals(task.assigneeUserId);
+        boolean canClaim = task.taskKind == TaskKind.NORMAL
+                && "PENDING_CLAIM".equals(task.status)
+                && task.candidateUserIds.contains(userId);
+        boolean blockedByAddSign = task.taskKind == TaskKind.NORMAL && hasActiveAddSignChild(task.taskId);
+        boolean canSourceHandle = task.taskKind != TaskKind.CC
+                && "PENDING".equals(task.status)
+                && userId.equals(task.assigneeUserId);
+        boolean canHandle = canSourceHandle && !blockedByAddSign;
+        boolean hasActiveAddSign = hasActiveAddSignChild(task.taskId);
+        boolean canAddSign = task.taskKind == TaskKind.NORMAL && canSourceHandle && !hasActiveAddSign;
+        boolean canRemoveSign = task.taskKind == TaskKind.NORMAL && canSourceHandle && hasActiveAddSign;
+        boolean canRevoke = currentUserCanRevoke(task, userId);
+        boolean canUrge = currentUserCanUrge(task, userId);
+        boolean canRead = task.taskKind == TaskKind.CC && "CC_PENDING".equals(task.status) && userId.equals(task.assigneeUserId);
         return new TaskActionAvailabilityResponse(
                 canClaim,
                 canHandle,
                 canHandle,
-                canHandle,
-                canHandle && task.previousTaskId != null
+                canHandle && task.taskKind == TaskKind.NORMAL,
+                canHandle && task.taskKind == TaskKind.NORMAL && task.previousTaskId != null,
+                canAddSign,
+                canRemoveSign,
+                canRevoke,
+                canUrge,
+                canRead
+        );
+    }
+
+    private boolean currentUserCanRevoke(DemoTask task, String userId) {
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        return userId.equals(instance.initiatorUserId) && hasBlockingActiveTasks(instance);
+    }
+
+    private boolean currentUserCanUrge(DemoTask task, String userId) {
+        DemoProcessInstance instance = requireInstance(task.instanceId);
+        return userId.equals(instance.initiatorUserId) && hasBlockingActiveTasks(instance);
+    }
+
+    private boolean hasBlockingActiveTasks(DemoProcessInstance instance) {
+        return instance.activeTaskIds.stream()
+                .map(tasksById::get)
+                .anyMatch(task -> task != null && !isTerminal(task) && task.taskKind != TaskKind.CC);
+    }
+
+    private boolean hasActiveAddSignChild(String sourceTaskId) {
+        return tasksById.values().stream()
+                .filter(task -> task.taskKind == TaskKind.ADD_SIGN)
+                .filter(task -> sourceTaskId.equals(task.sourceTaskId))
+                .anyMatch(task -> !isTerminal(task));
+    }
+
+    private boolean isTerminal(DemoTask task) {
+        return switch (task.status) {
+            case "COMPLETED", "TRANSFERRED", "RETURNED", "REVOKED", "CC_READ" -> true;
+            default -> false;
+        };
+    }
+
+    private void requireSourceAssignee(DemoTask task, String userId, String actionLabel) {
+        if (!"PENDING".equals(task.status) || task.assigneeUserId == null || !task.assigneeUserId.equals(userId)) {
+            throw new ContractException(
+                    "PROCESS.ACTION_NOT_ALLOWED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前任务不允许执行" + actionLabel,
+                    Map.of("taskId", task.taskId, "status", task.status, "userId", userId)
+            );
+        }
+    }
+
+    private void requireCcRecipient(DemoTask task, String userId) {
+        if (task.taskKind != TaskKind.CC || task.assigneeUserId == null || !task.assigneeUserId.equals(userId)) {
+            throw new ContractException(
+                    "AUTH.FORBIDDEN",
+                    HttpStatus.FORBIDDEN,
+                    "当前用户不在抄送目标范围内",
+                    Map.of("taskId", task.taskId, "userId", userId)
+            );
+        }
+    }
+
+    private void maybeAutoRead(DemoTask task, DemoProcessInstance instance) {
+        if (task.taskKind == TaskKind.CC || task.readTime != null) {
+            return;
+        }
+        if ("PENDING".equals(task.status) || "PENDING_CLAIM".equals(task.status)) {
+            markDetailRead(task, instance, currentUserId());
+        }
+    }
+
+    private void markDetailRead(DemoTask task, DemoProcessInstance instance, String currentUserId) {
+        if (task.readTime == null) {
+            task.readTime = now();
+        }
+        task.handleStartTime = task.handleStartTime == null ? task.readTime : task.handleStartTime;
+        task.updatedAt = task.readTime;
+        recordInstanceEvent(
+                instance.instanceId,
+                task.taskId,
+                task.nodeId,
+                "TASK_READ",
+                "任务已阅读",
+                currentUserId,
+                "TASK",
+                task.sourceTaskId,
+                task.taskId,
+                task.targetUserId != null ? task.targetUserId : task.assigneeUserId,
+                eventDetails(
+                        "status", task.status,
+                        "sourceTaskId", task.sourceTaskId,
+                        "targetTaskId", task.taskId,
+                        "targetUserId", task.targetUserId != null ? task.targetUserId : task.assigneeUserId
+                )
         );
     }
 
@@ -1227,6 +1898,22 @@ public class ProcessDemoService {
             String operatorUserId,
             Map<String, Object> details
     ) {
+        recordInstanceEvent(instanceId, taskId, nodeId, eventType, eventName, operatorUserId, null, null, null, null, details);
+    }
+
+    private void recordInstanceEvent(
+            String instanceId,
+            String taskId,
+            String nodeId,
+            String eventType,
+            String eventName,
+            String operatorUserId,
+            String actionCategory,
+            String sourceTaskId,
+            String targetTaskId,
+            String targetUserId,
+            Map<String, Object> details
+    ) {
         instanceEvents.add(new ProcessInstanceEventResponse(
                 newId("evt"),
                 instanceId,
@@ -1234,6 +1921,10 @@ public class ProcessDemoService {
                 nodeId,
                 eventType,
                 eventName,
+                actionCategory,
+                sourceTaskId,
+                targetTaskId,
+                targetUserId,
                 operatorUserId,
                 now(),
                 details == null ? Map.of() : new HashMap<>(details)
@@ -1445,6 +2136,14 @@ public class ProcessDemoService {
         private OffsetDateTime completedAt() {
             return "COMPLETED".equals(instance.status) ? instance.updatedAt : latestTask.completedAt;
         }
+
+        private String latestAction() {
+            return latestHandledTask != null ? latestHandledTask.action : latestTask.action;
+        }
+
+        private String latestOperatorUserId() {
+            return latestHandledTask != null ? latestHandledTask.operatorUserId : latestTask.operatorUserId;
+        }
     }
 
     private final class DemoTask {
@@ -1457,6 +2156,10 @@ public class ProcessDemoService {
         private final String previousTaskId;
         private final String originTaskId;
         private final OffsetDateTime createdAt;
+        private final TaskKind taskKind;
+        private final String sourceTaskId;
+        private final String targetTaskId;
+        private final String targetUserId;
         private Map<String, Object> taskFormData = Map.of();
         private OffsetDateTime readTime;
         private OffsetDateTime handleStartTime;
@@ -1468,6 +2171,7 @@ public class ProcessDemoService {
         private String action;
         private String operatorUserId;
         private String comment;
+        private boolean revoked;
 
         private DemoTask(
                 String taskId,
@@ -1481,7 +2185,11 @@ public class ProcessDemoService {
                 String originTaskId,
                 OffsetDateTime createdAt,
                 OffsetDateTime updatedAt,
-                String status
+                String status,
+                TaskKind taskKind,
+                String sourceTaskId,
+                String targetTaskId,
+                String targetUserId
         ) {
             this.taskId = taskId;
             this.instanceId = instanceId;
@@ -1495,6 +2203,10 @@ public class ProcessDemoService {
             this.createdAt = createdAt;
             this.updatedAt = updatedAt;
             this.status = status;
+            this.taskKind = taskKind;
+            this.sourceTaskId = sourceTaskId;
+            this.targetTaskId = targetTaskId;
+            this.targetUserId = targetUserId;
         }
 
         private String taskId() {
@@ -1518,6 +2230,7 @@ public class ProcessDemoService {
                     taskId,
                     nodeId,
                     nodeName,
+                    taskKind.name(),
                     status,
                     stringValue(assignment.get("mode")),
                     candidateUserIds,

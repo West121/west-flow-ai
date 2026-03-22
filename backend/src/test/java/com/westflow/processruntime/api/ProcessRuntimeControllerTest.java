@@ -717,6 +717,366 @@ class ProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldSupportAddSignRemoveSignAndBlockCompletionUntilAddSignTaskResolves() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "biz_add_sign_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 3,
+                                    "reason": "加签测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String taskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode actionsBodyBefore = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + login("lisi")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(actionsBodyBefore.path("canAddSign").asBoolean()).isTrue();
+        assertThat(actionsBodyBefore.path("canRemoveSign").asBoolean()).isFalse();
+        assertThat(actionsBodyBefore.path("canRevoke").asBoolean()).isFalse();
+        assertThat(actionsBodyBefore.path("canUrge").asBoolean()).isFalse();
+        assertThat(actionsBodyBefore.path("canRead").asBoolean()).isFalse();
+
+        String addSignResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/add-sign", taskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "请王五一起复核"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode addSignBody = objectMapper.readTree(addSignResponse);
+        String addSignTaskId = addSignBody.path("data").path("nextTasks").get(0).path("taskId").asText();
+        assertThat(addSignBody.path("data").path("nextTasks").get(0).path("status").asText()).isEqualTo("PENDING");
+        assertThat(addSignBody.path("data").path("nextTasks").get(0).path("taskKind").asText()).isEqualTo("ADD_SIGN");
+
+        JsonNode actionsBodyAfter = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + login("lisi")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(actionsBodyAfter.path("canAddSign").asBoolean()).isFalse();
+        assertThat(actionsBodyAfter.path("canRemoveSign").asBoolean()).isTrue();
+        assertThat(actionsBodyAfter.path("canApprove").asBoolean()).isFalse();
+        assertThat(actionsBodyAfter.path("canReject").asBoolean()).isFalse();
+
+        String detailBeforeRemoveResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + login("lisi")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode detailBeforeRemoveBody = objectMapper.readTree(detailBeforeRemoveResponse);
+        assertThat(detailBeforeRemoveBody.path("data").path("taskTrace").size()).isEqualTo(2);
+        assertThat(detailBeforeRemoveBody.path("data").path("taskTrace").get(1).path("taskKind").asText()).isEqualTo("ADD_SIGN");
+        assertThat(detailBeforeRemoveBody.path("data").path("taskTrace").get(1).path("sourceTaskId").asText()).isEqualTo(taskId);
+        assertThat(detailBeforeRemoveBody.path("data").path("taskTrace").get(1).path("targetUserId").asText()).isEqualTo("usr_003");
+        assertThat(detailBeforeRemoveBody.path("data").path("taskTrace").get(1).path("isAddSignTask").asBoolean()).isTrue();
+
+        mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/remove-sign", taskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetTaskId": "%s",
+                                  "comment": "先取消加签"
+                                }
+                                """.formatted(addSignTaskId)))
+                .andExpect(status().isOk());
+
+        String removeTraceResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + login("lisi")))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode removeTraceBody = objectMapper.readTree(removeTraceResponse);
+        assertThat(removeTraceBody.path("data").path("taskTrace").get(1).path("status").asText()).isEqualTo("REVOKED");
+        assertThat(removeTraceBody.path("data").path("taskTrace").get(1).path("action").asText()).isEqualTo("REMOVE_SIGN");
+
+        String completeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", taskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "同意",
+                                  "taskFormData": {
+                                    "approvedDays": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(completeResponse).path("data").path("status").asText()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void shouldSupportUrgeAndRevokeActions() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl()))
+                .andExpect(status().isOk());
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "biz_revoke_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "催办撤销测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String taskId = objectMapper.readTree(startResponse)
+                .path("data")
+                .path("activeTasks")
+                .get(0)
+                .path("taskId")
+                .asText();
+
+        JsonNode actionsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(actionsBody.path("canUrge").asBoolean()).isTrue();
+        assertThat(actionsBody.path("canRevoke").asBoolean()).isTrue();
+
+        String urgeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/urge", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "请尽快审批"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(urgeResponse).path("data").path("status").asText()).isEqualTo("RUNNING");
+
+        JsonNode afterUrgeDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        boolean hasUrgedEvent = false;
+        for (JsonNode event : afterUrgeDetail.path("instanceEvents")) {
+            if ("TASK_URGED".equals(event.path("eventType").asText())) {
+                hasUrgedEvent = true;
+                break;
+            }
+        }
+        assertThat(hasUrgedEvent).isTrue();
+        assertThat(afterUrgeDetail.path("status").asText()).isEqualTo("PENDING");
+
+        String revokeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/revoke", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "撤销流程"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(objectMapper.readTree(revokeResponse).path("data").path("status").asText()).isEqualTo("REVOKED");
+
+        JsonNode revokeDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + initiatorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(revokeDetail.path("instanceStatus").asText()).isEqualTo("REVOKED");
+        assertThat(revokeDetail.path("taskTrace").get(0).path("isRevoked").asBoolean()).isTrue();
+    }
+
+    @Test
+    void shouldCreateRealCcTasksSupportReadAndApprovalSheetFilters() throws Exception {
+        String initiatorToken = login("zhangsan");
+
+        mockMvc.perform(post("/api/v1/process-definitions/publish")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validCcProcessDsl()))
+                .andExpect(status().isOk());
+
+        String startResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/start")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave_cc",
+                                  "businessKey": "biz_cc_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "抄送测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode startBody = objectMapper.readTree(startResponse);
+        String approvalTaskId = startBody.path("data").path("activeTasks").get(0).path("taskId").asText();
+
+        String completeResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/complete", approvalTaskId)
+                        .header("Authorization", "Bearer " + login("lisi"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "同意"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(objectMapper.readTree(completeResponse).path("data").path("status").asText()).isEqualTo("COMPLETED");
+
+        String detailBeforeReadResponse = mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "biz_cc_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode detailBeforeReadBody = objectMapper.readTree(detailBeforeReadResponse);
+        assertThat(detailBeforeReadBody.path("data").path("taskTrace").size()).isEqualTo(2);
+        JsonNode ccTrace = detailBeforeReadBody.path("data").path("taskTrace").get(1);
+        String ccTaskId = ccTrace.path("taskId").asText();
+        assertThat(ccTrace.path("taskKind").asText()).isEqualTo("CC");
+        assertThat(ccTrace.path("status").asText()).isEqualTo("CC_PENDING");
+        assertThat(ccTrace.path("isCcTask").asBoolean()).isTrue();
+        assertThat(ccTrace.path("readTime").isNull()).isTrue();
+
+        JsonNode ccActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/tasks/{taskId}/actions", ccTaskId)
+                        .header("Authorization", "Bearer " + initiatorToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+                .path("data");
+        assertThat(ccActions.path("canRead").asBoolean()).isTrue();
+        assertThat(ccActions.path("canApprove").asBoolean()).isFalse();
+
+        mockMvc.perform(post("/api/v1/process-runtime/demo/tasks/{taskId}/read", ccTaskId)
+                        .header("Authorization", "Bearer " + initiatorToken))
+                .andExpect(status().isOk());
+
+        JsonNode detailAfterReadBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/demo/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .param("businessType", "OA_LEAVE")
+                        .param("businessId", "biz_cc_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        JsonNode ccTraceAfterRead = detailAfterReadBody.path("data").path("taskTrace").get(1);
+        assertThat(ccTraceAfterRead.path("status").asText()).isEqualTo("CC_READ");
+        assertThat(ccTraceAfterRead.path("readTime").isNull()).isFalse();
+        assertThat(detailAfterReadBody.path("data").path("instanceStatus").asText()).isEqualTo("COMPLETED");
+
+        String approvalSheetPageResponse = mockMvc.perform(post("/api/v1/process-runtime/demo/approval-sheets/page")
+                        .header("Authorization", "Bearer " + initiatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "view": "CC",
+                                  "businessTypes": ["OA_LEAVE"],
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [
+                                    {
+                                      "field": "latestAction",
+                                      "operator": "eq",
+                                      "value": "READ"
+                                    }
+                                  ],
+                                  "sorts": [
+                                    {
+                                      "field": "updatedAt",
+                                      "direction": "desc"
+                                    }
+                                  ],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode approvalSheetPageBody = objectMapper.readTree(approvalSheetPageResponse);
+        assertThat(approvalSheetPageBody.path("data").path("total").asInt()).isEqualTo(1);
+        assertThat(approvalSheetPageBody.path("data").path("records").get(0).path("currentTaskStatus").asText()).isEqualTo("CC_READ");
+        assertThat(approvalSheetPageBody.path("data").path("records").get(0).path("latestAction").asText()).isEqualTo("READ");
+    }
+
+    @Test
     void shouldRejectClaimWhenCurrentUserIsNotCandidate() throws Exception {
         String initiatorToken = login("zhangsan");
 
@@ -780,10 +1140,7 @@ class ProcessRuntimeControllerTest {
                 .getResponse()
                 .getContentAsString();
 
-        return objectMapper.readTree(response)
-                .path("data")
-                .path("accessToken")
-                .asText();
+        return objectMapper.readTree(response).path("data").path("accessToken").asText();
     }
 
     private String validProcessDsl() {
@@ -1024,6 +1381,103 @@ class ProcessRuntimeControllerTest {
                       "target": "end_1",
                       "priority": 10,
                       "label": "通过"
+                    }
+                  ]
+                }
+                """;
+    }
+
+    private String validCcProcessDsl() {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave_cc",
+                  "processName": "请假抄送审批",
+                  "category": "OA",
+                  "processFormKey": "oa-leave-cc-form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "cc_1",
+                      "type": "cc",
+                      "name": "抄送",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "targets": {
+                          "mode": "USER",
+                          "userIds": ["usr_001"],
+                          "roleCodes": [],
+                          "departmentRef": ""
+                        },
+                        "readRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "cc_1",
+                      "priority": 10,
+                      "label": "通过"
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "cc_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "抄送完成"
                     }
                   ]
                 }

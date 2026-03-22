@@ -14,6 +14,7 @@ public record ProcessTaskListItemResponse(
         String applicantUserId,
         String nodeId,
         String nodeName,
+        String taskKind,
         String status,
         String assignmentMode,
         List<String> candidateUserIds,

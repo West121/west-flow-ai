@@ -3,6 +3,7 @@ import {
   useMemo,
   startTransition,
   useState,
+  type ReactNode,
 } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -56,6 +57,10 @@ import { PageShell } from '@/features/shared/page-shell'
 import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
 import {
+  formatApprovalSheetText,
+  resolveApprovalSheetResultLabel,
+} from '@/features/workbench/approval-sheet-helpers'
+import {
   createApprovalSheetColumns,
   summarizeApprovalSheets,
 } from '@/features/workbench/approval-sheet-list'
@@ -66,6 +71,7 @@ import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import {
+  addSignWorkbenchTask,
   getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
   completeWorkbenchTask,
@@ -73,8 +79,13 @@ import {
   getWorkbenchTaskDetail,
   listApprovalSheets,
   listWorkbenchTasks,
+  readWorkbenchTask,
+  removeSignWorkbenchTask,
+  revokeWorkbenchTask,
   returnWorkbenchTask,
   transferWorkbenchTask,
+  urgeWorkbenchTask,
+  type ApprovalSheetListItem,
   type CompleteWorkbenchTaskPayload,
   type WorkbenchTaskDetail,
   type WorkbenchTaskListItem,
@@ -149,18 +160,249 @@ function buildEmptyApprovalSheetPage(search: { page: number; pageSize: number })
   }
 }
 
+const approvalSheetBusinessTypeOptions = [
+  { label: '请假申请', value: 'OA_LEAVE' },
+  { label: '报销申请', value: 'OA_EXPENSE' },
+  { label: '通用申请', value: 'OA_COMMON' },
+] as const
+
+function getApprovalSheetFilterValue(
+  search: ListQuerySearch,
+  field: string
+) {
+  const filter = (search.filters ?? []).find((item) => item.field === field)
+  return typeof filter?.value === 'string' ? filter.value : undefined
+}
+
+function updateApprovalSheetFilter(
+  search: ListQuerySearch,
+  navigate: NavigateFn,
+  field: string,
+  value?: string
+) {
+  const nextFilters = (search.filters ?? []).filter((item) => item.field !== field)
+  if (value) {
+    nextFilters.push({
+      field,
+      operator: 'eq',
+      value,
+    })
+  }
+
+  navigate({
+    search: (prev) => ({
+      ...prev,
+      page: undefined,
+      filters: nextFilters.length > 0 ? nextFilters : undefined,
+    }),
+  })
+}
+
+function isCcApprovalSheetRead(record: ApprovalSheetListItem) {
+  const latestAction = record.latestAction?.toUpperCase()
+  const currentTaskStatus = record.currentTaskStatus?.toUpperCase()
+
+  return (
+    latestAction === 'READ' ||
+    latestAction === 'CC_READ' ||
+    latestAction === 'READ_DONE' ||
+    currentTaskStatus === 'READ'
+  )
+}
+
+function isCcApprovalSheetCompleted(record: ApprovalSheetListItem) {
+  return (
+    record.instanceStatus === 'COMPLETED' ||
+    record.currentTaskStatus?.toUpperCase() === 'COMPLETED'
+  )
+}
+
+function summarizeCcApprovalSheets(records: ApprovalSheetListItem[]) {
+  return {
+    total: records.length,
+    pending: records.filter(
+      (record) => !isCcApprovalSheetRead(record) && !isCcApprovalSheetCompleted(record)
+    ).length,
+    read: records.filter((record) => isCcApprovalSheetRead(record)).length,
+    completed: records.filter((record) => isCcApprovalSheetCompleted(record)).length,
+  }
+}
+
+function ApprovalSheetListToolbar({
+  view,
+  search,
+  navigate,
+  records,
+}: {
+  view: 'DONE' | 'INITIATED' | 'CC'
+  search: ListQuerySearch
+  navigate: NavigateFn
+  records: ApprovalSheetListItem[]
+}) {
+  const statusValue = getApprovalSheetFilterValue(search, 'instanceStatus')
+  const businessTypeValue = getApprovalSheetFilterValue(search, 'businessType')
+  const ccSummary = view === 'CC' ? summarizeCcApprovalSheets(records) : null
+
+  return (
+    <div className='space-y-4 rounded-lg border bg-muted/20 p-4'>
+      <div className='flex flex-wrap items-start justify-between gap-3'>
+        <div className='space-y-1'>
+          <p className='text-sm font-medium'>高级筛选</p>
+          <p className='text-sm text-muted-foreground'>
+            按实例状态和业务类型快速收窄流程中心列表。
+          </p>
+        </div>
+        {ccSummary ? (
+          <div className='flex flex-wrap gap-2'>
+            <Badge variant='secondary'>
+              <span>抄送中</span>
+              <span className='ml-2 text-xs tabular-nums text-muted-foreground'>
+                {ccSummary.pending}
+              </span>
+            </Badge>
+            <Badge variant='secondary'>
+              <span>已阅</span>
+              <span className='ml-2 text-xs tabular-nums text-muted-foreground'>
+                {ccSummary.read}
+              </span>
+            </Badge>
+            <Badge variant='secondary'>
+              <span>已完成</span>
+              <span className='ml-2 text-xs tabular-nums text-muted-foreground'>
+                {ccSummary.completed}
+              </span>
+            </Badge>
+          </div>
+        ) : null}
+      </div>
+
+      <div className='space-y-3'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <span className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>
+            状态
+          </span>
+          {[
+            { label: '全部', value: undefined },
+            { label: '进行中', value: 'RUNNING' },
+            { label: '已完成', value: 'COMPLETED' },
+          ].map((item) => (
+            <Button
+              key={item.label}
+              type='button'
+              variant={statusValue === item.value ? 'secondary' : 'outline'}
+              size='sm'
+              onClick={() =>
+                updateApprovalSheetFilter(search, navigate, 'instanceStatus', item.value)
+              }
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+
+        <div className='flex flex-wrap items-center gap-2'>
+          <span className='text-xs font-medium uppercase tracking-wide text-muted-foreground'>
+            业务类型
+          </span>
+          <Button
+            type='button'
+            variant={businessTypeValue ? 'outline' : 'secondary'}
+            size='sm'
+            onClick={() =>
+              updateApprovalSheetFilter(search, navigate, 'businessType', undefined)
+            }
+          >
+            全部
+          </Button>
+          {approvalSheetBusinessTypeOptions.map((item) => (
+            <Button
+              key={item.value}
+              type='button'
+              variant={businessTypeValue === item.value ? 'secondary' : 'outline'}
+              size='sm'
+              onClick={() =>
+                updateApprovalSheetFilter(search, navigate, 'businessType', item.value)
+              }
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ApprovalSheetActionTimeline({
+  taskTrace,
+}: {
+  taskTrace: WorkbenchTaskDetail['taskTrace']
+}) {
+  const items = taskTrace ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>动作轨迹</CardTitle>
+        <CardDescription>
+          按任务节点回放审批动作、办理人、意见和时间点，便于快速定位流程走向。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {items.length ? (
+          <ol className='space-y-3 border-l border-dashed pl-4'>
+            {items.map((item, index) => (
+              <li key={`${item.taskId}:${item.nodeId}:${index}`} className='space-y-2'>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <Badge variant='secondary'>{resolveApprovalSheetResultLabel(item)}</Badge>
+                  <span className='font-medium'>{item.nodeName}</span>
+                </div>
+                <div className='grid gap-1 text-sm text-muted-foreground'>
+                  <div className='flex flex-wrap gap-x-3 gap-y-1'>
+                    <span>办理人：{formatApprovalSheetText(item.operatorUserId ?? item.assigneeUserId)}</span>
+                    <span>接收时间：{formatDateTime(item.receiveTime)}</span>
+                    <span>读取时间：{formatDateTime(item.readTime)}</span>
+                  </div>
+                  <div className='flex flex-wrap gap-x-3 gap-y-1'>
+                    <span>开始时间：{formatDateTime(item.handleStartTime)}</span>
+                    <span>完成时间：{formatDateTime(item.handleEndTime)}</span>
+                    <span>
+                      时长：
+                      {item.handleDurationSeconds === null ||
+                      item.handleDurationSeconds === undefined
+                        ? '--'
+                        : `${item.handleDurationSeconds} 秒`}
+                    </span>
+                  </div>
+                  <p>意见：{formatApprovalSheetText(item.comment)}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className='rounded-lg border border-dashed p-6 text-sm text-muted-foreground'>
+            暂无动作轨迹。
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 function ApprovalSheetListPageSection({
   title,
   description,
   view,
   search,
   navigate,
+  renderTopContent,
 }: {
   title: string
   description: string
   view: 'DONE' | 'INITIATED' | 'CC'
   search: ListQuerySearch
   navigate: NavigateFn
+  renderTopContent?: (records: ApprovalSheetListItem[]) => ReactNode
 }) {
   const approvalSheetsQuery = useQuery({
     queryKey: ['workbench', 'approval-sheet-page', view, search],
@@ -172,10 +414,16 @@ function ApprovalSheetListPageSection({
   })
 
   const pageData = approvalSheetsQuery.data ?? buildEmptyApprovalSheetPage(search)
-  const summary = summarizeApprovalSheets(pageData.records)
+  const summary =
+    view === 'CC'
+      ? summarizeCcApprovalSheets(pageData.records)
+      : summarizeApprovalSheets(pageData.records)
+  const pendingSummary = 'pending' in summary ? summary.pending : summary.running
+  const completedSummary = 'read' in summary ? summary.read : summary.completed
 
   return (
     <>
+      {renderTopContent ? renderTopContent(pageData.records) : null}
       {approvalSheetsQuery.isError ? (
         <Alert variant='destructive' className='mb-4'>
           <AlertTitle>{title}加载失败</AlertTitle>
@@ -198,19 +446,28 @@ function ApprovalSheetListPageSection({
         total={pageData.total}
         summaries={[
           {
-            label: '审批单总量',
+            label: view === 'CC' ? '抄送总量' : '审批单总量',
             value: String(pageData.total),
-            hint: '实例维度聚合后的审批单数量。',
+            hint:
+              view === 'CC'
+                ? '当前页抄送记录的真实总量。'
+                : '实例维度聚合后的审批单数量。',
           },
           {
-            label: '进行中',
-            value: String(summary.running),
-            hint: '当前页里仍在流转中的审批单。',
+            label: view === 'CC' ? '待阅' : '进行中',
+            value: String(pendingSummary),
+            hint:
+              view === 'CC'
+                ? '尚未确认已阅的抄送记录。'
+                : '当前页里仍在流转中的审批单。',
           },
           {
-            label: '已完成',
-            value: String(summary.completed),
-            hint: '当前页已完成的审批单数量。',
+            label: view === 'CC' ? '已阅' : '已完成',
+            value: String(completedSummary),
+            hint:
+              view === 'CC'
+                ? '已确认已阅的抄送记录。'
+                : '当前页已完成的审批单数量。',
           },
         ]}
         createAction={{
@@ -458,6 +715,26 @@ const returnTaskSchema = z.object({
 
 type ReturnTaskFormValues = z.input<typeof returnTaskSchema>
 
+const addSignTaskSchema = z.object({
+  targetUserId: z.string().trim().min(1, '请输入加签用户编码'),
+  comment: z.string().max(500, '加签说明最多 500 个字符').default(''),
+})
+
+type AddSignTaskFormValues = z.input<typeof addSignTaskSchema>
+
+const removeSignTaskSchema = z.object({
+  targetTaskId: z.string().trim().min(1, '请输入减签任务编号'),
+  comment: z.string().max(500, '减签说明最多 500 个字符').default(''),
+})
+
+type RemoveSignTaskFormValues = z.input<typeof removeSignTaskSchema>
+
+const simpleActionCommentSchema = z.object({
+  comment: z.string().max(500, '说明最多 500 个字符').default(''),
+})
+
+type SimpleActionCommentFormValues = z.input<typeof simpleActionCommentSchema>
+
 export function Dashboard() {
   return (
     <PageShell
@@ -685,6 +962,14 @@ export function WorkbenchDoneListPage() {
       view='DONE'
       search={search}
       navigate={navigate}
+      renderTopContent={(records) => (
+        <ApprovalSheetListToolbar
+          view='DONE'
+          search={search}
+          navigate={navigate}
+          records={records}
+        />
+      )}
     />
   )
 }
@@ -700,6 +985,14 @@ export function WorkbenchInitiatedListPage() {
       view='INITIATED'
       search={search}
       navigate={navigate}
+      renderTopContent={(records) => (
+        <ApprovalSheetListToolbar
+          view='INITIATED'
+          search={search}
+          navigate={navigate}
+          records={records}
+        />
+      )}
     />
   )
 }
@@ -711,10 +1004,18 @@ export function WorkbenchCopiedListPage() {
   return (
     <ApprovalSheetListPageSection
       title='流程中心抄送我'
-      description='本期先提供统一入口和空数据闭环，后续补真实抄送模型后直接接入同一列表页。'
+      description='查看当前登录人的真实抄送记录，支持状态筛选、业务类型筛选和已阅轨迹回查。'
       view='CC'
       search={search}
       navigate={navigate}
+      renderTopContent={(records) => (
+        <ApprovalSheetListToolbar
+          view='CC'
+          search={search}
+          navigate={navigate}
+          records={records}
+        />
+      )}
     />
   )
 }
@@ -736,7 +1037,11 @@ export function WorkbenchTodoDetailPage({
 }: WorkbenchTodoDetailPageProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [addSignDialogOpen, setAddSignDialogOpen] = useState(false)
+  const [removeSignDialogOpen, setRemoveSignDialogOpen] = useState(false)
+  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
+  const [urgeDialogOpen, setUrgeDialogOpen] = useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
   const locator = taskId
     ? { mode: 'task' as const, taskId }
@@ -811,6 +1116,32 @@ export function WorkbenchTodoDetailPage({
       comment: '',
     },
   })
+  const addSignForm = useForm<AddSignTaskFormValues>({
+    resolver: zodResolver(addSignTaskSchema),
+    defaultValues: {
+      targetUserId: '',
+      comment: '',
+    },
+  })
+  const removeSignForm = useForm<RemoveSignTaskFormValues>({
+    resolver: zodResolver(removeSignTaskSchema),
+    defaultValues: {
+      targetTaskId: '',
+      comment: '',
+    },
+  })
+  const revokeForm = useForm<SimpleActionCommentFormValues>({
+    resolver: zodResolver(simpleActionCommentSchema),
+    defaultValues: {
+      comment: '',
+    },
+  })
+  const urgeForm = useForm<SimpleActionCommentFormValues>({
+    resolver: zodResolver(simpleActionCommentSchema),
+    defaultValues: {
+      comment: '',
+    },
+  })
 
   useEffect(() => {
     if (!detail) {
@@ -827,7 +1158,21 @@ export function WorkbenchTodoDetailPage({
     returnForm.reset({
       comment: '',
     })
-  }, [claimForm, detail, returnForm, transferForm])
+    addSignForm.reset({
+      targetUserId: '',
+      comment: '',
+    })
+    removeSignForm.reset({
+      targetTaskId: '',
+      comment: '',
+    })
+    revokeForm.reset({
+      comment: '',
+    })
+    urgeForm.reset({
+      comment: '',
+    })
+  }, [addSignForm, claimForm, detail, removeSignForm, returnForm, revokeForm, transferForm, urgeForm])
 
   async function refreshWorkbenchQueries() {
     await Promise.all([
@@ -916,6 +1261,78 @@ export function WorkbenchTodoDetailPage({
     },
     onError: handleServerError,
   })
+  const addSignMutation = useMutation({
+    mutationFn: (payload: AddSignTaskFormValues) =>
+      addSignWorkbenchTask(requireActionTaskId(), {
+        targetUserId: payload.targetUserId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setAddSignDialogOpen(false)
+      addSignForm.reset({
+        targetUserId: '',
+        comment: '',
+      })
+    },
+    onError: handleServerError,
+  })
+  const removeSignMutation = useMutation({
+    mutationFn: (payload: RemoveSignTaskFormValues) =>
+      removeSignWorkbenchTask(requireActionTaskId(), {
+        targetTaskId: payload.targetTaskId.trim(),
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setRemoveSignDialogOpen(false)
+      removeSignForm.reset({
+        targetTaskId: '',
+        comment: '',
+      })
+    },
+    onError: handleServerError,
+  })
+  const revokeMutation = useMutation({
+    mutationFn: (payload: SimpleActionCommentFormValues) =>
+      revokeWorkbenchTask(requireActionTaskId(), {
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setRevokeDialogOpen(false)
+      revokeForm.reset({
+        comment: '',
+      })
+      if (locator.mode === 'task') {
+        startTransition(() => {
+          navigate({ to: '/workbench/todos/list' })
+        })
+      }
+    },
+    onError: handleServerError,
+  })
+  const urgeMutation = useMutation({
+    mutationFn: (payload: SimpleActionCommentFormValues) =>
+      urgeWorkbenchTask(requireActionTaskId(), {
+        comment: payload.comment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setUrgeDialogOpen(false)
+      urgeForm.reset({
+        comment: '',
+      })
+    },
+    onError: handleServerError,
+  })
+  const readMutation = useMutation({
+    mutationFn: () => readWorkbenchTask(requireActionTaskId()),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+    },
+    onError: handleServerError,
+  })
 
   const actionLabel = useMemo(() => {
     if (!detail) {
@@ -934,10 +1351,29 @@ export function WorkbenchTodoDetailPage({
   const onReturnSubmit = returnForm.handleSubmit((values) => {
     returnMutation.mutate(values)
   })
+  const onAddSignSubmit = addSignForm.handleSubmit((values) => {
+    addSignMutation.mutate(values)
+  })
+  const onRemoveSignSubmit = removeSignForm.handleSubmit((values) => {
+    removeSignMutation.mutate(values)
+  })
+  const onRevokeSubmit = revokeForm.handleSubmit((values) => {
+    revokeMutation.mutate(values)
+  })
+  const onUrgeSubmit = urgeForm.handleSubmit((values) => {
+    urgeMutation.mutate(values)
+  })
   const showCompletionForm = Boolean(
     actionsQuery.data?.canApprove || actionsQuery.data?.canReject
   )
   const hasNodeForm = Boolean(detail?.nodeFormKey && detail?.nodeFormVersion)
+  const hasMoreActions = Boolean(
+    actionsQuery.data?.canAddSign ||
+      actionsQuery.data?.canRemoveSign ||
+      actionsQuery.data?.canRevoke ||
+      actionsQuery.data?.canUrge ||
+      actionsQuery.data?.canRead
+  )
 
   return (
     <PageShell
@@ -1091,7 +1527,8 @@ export function WorkbenchTodoDetailPage({
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>办理时长</dt>
                     <dd>
-                      {detail.handleDurationSeconds === null || detail.handleDurationSeconds === undefined
+                      {detail.handleDurationSeconds === null ||
+                      detail.handleDurationSeconds === undefined
                         ? '--'
                         : `${detail.handleDurationSeconds} 秒`}
                     </dd>
@@ -1099,14 +1536,17 @@ export function WorkbenchTodoDetailPage({
                 </dl>
               </div>
 
-              <div className='md:col-span-2 grid gap-4 xl:grid-cols-2'>
+              <div className='md:col-span-2 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
                 <ApprovalSheetBusinessSection detail={detail} />
-                <ApprovalSheetGraph
-                  flowNodes={detail.flowNodes ?? []}
-                  flowEdges={detail.flowEdges ?? []}
-                  taskTrace={detail.taskTrace ?? []}
-                  instanceEvents={detail.instanceEvents ?? []}
-                />
+                <div className='space-y-4'>
+                  <ApprovalSheetGraph
+                    flowNodes={detail.flowNodes ?? []}
+                    flowEdges={detail.flowEdges ?? []}
+                    taskTrace={detail.taskTrace ?? []}
+                    instanceEvents={detail.instanceEvents ?? []}
+                  />
+                  <ApprovalSheetActionTimeline taskTrace={detail.taskTrace ?? []} />
+                </div>
               </div>
 
               <TaskRuntimeFormCard
@@ -1133,6 +1573,237 @@ export function WorkbenchTodoDetailPage({
                   <Skeleton className='h-10 w-full' />
                   <Skeleton className='h-24 w-full' />
                   <Skeleton className='h-10 w-32' />
+                </div>
+              ) : null}
+
+              {hasMoreActions ? (
+                <div className='rounded-lg border p-4'>
+                  <div className='mb-4 space-y-1'>
+                    <p className='text-sm font-medium'>更多动作</p>
+                    <p className='text-sm text-muted-foreground'>
+                      高级运行态动作会写入审批轨迹，执行后自动刷新当前审批单详情。
+                    </p>
+                  </div>
+                  <div className='grid gap-3'>
+                    {actionsQuery.data?.canAddSign ? (
+                      <Dialog open={addSignDialogOpen} onOpenChange={setAddSignDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>加签</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>加签</DialogTitle>
+                            <DialogDescription>
+                              为当前任务追加一位串行复核办理人。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...addSignForm}>
+                            <form className='space-y-4' onSubmit={onAddSignSubmit}>
+                              <FormField
+                                control={addSignForm.control}
+                                name='targetUserId'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>加签用户编码</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder='例如：usr_003' {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={addSignForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>加签说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入加签说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setAddSignDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={addSignMutation.isPending}>
+                                  {addSignMutation.isPending ? '加签中' : '确认加签'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canRemoveSign ? (
+                      <Dialog open={removeSignDialogOpen} onOpenChange={setRemoveSignDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>减签</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>减签</DialogTitle>
+                            <DialogDescription>
+                              输入待减签的加签任务编号，系统会撤销该串行加签任务。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...removeSignForm}>
+                            <form className='space-y-4' onSubmit={onRemoveSignSubmit}>
+                              <FormField
+                                control={removeSignForm.control}
+                                name='targetTaskId'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>加签任务编号</FormLabel>
+                                    <FormControl>
+                                      <Input placeholder='例如：task_xxx' {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={removeSignForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>减签说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入减签说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setRemoveSignDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={removeSignMutation.isPending}>
+                                  {removeSignMutation.isPending ? '减签中' : '确认减签'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canRevoke ? (
+                      <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>撤销</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>撤销流程</DialogTitle>
+                            <DialogDescription>
+                              仅发起人可撤销，撤销后当前运行中的任务会一并终止。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...revokeForm}>
+                            <form className='space-y-4' onSubmit={onRevokeSubmit}>
+                              <FormField
+                                control={revokeForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>撤销说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入撤销说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setRevokeDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={revokeMutation.isPending}>
+                                  {revokeMutation.isPending ? '撤销中' : '确认撤销'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canUrge ? (
+                      <Dialog open={urgeDialogOpen} onOpenChange={setUrgeDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button type='button' variant='outline'>催办</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>催办</DialogTitle>
+                            <DialogDescription>
+                              催办不会改变任务状态，但会写入实例动作轨迹。
+                            </DialogDescription>
+                          </DialogHeader>
+                          <Form {...urgeForm}>
+                            <form className='space-y-4' onSubmit={onUrgeSubmit}>
+                              <FormField
+                                control={urgeForm.control}
+                                name='comment'
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>催办说明</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        className='min-h-24'
+                                        placeholder='请输入催办说明'
+                                        {...field}
+                                      />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <DialogFooter>
+                                <Button type='button' variant='outline' onClick={() => setUrgeDialogOpen(false)}>
+                                  取消
+                                </Button>
+                                <Button type='submit' disabled={urgeMutation.isPending}>
+                                  {urgeMutation.isPending ? '催办中' : '确认催办'}
+                                </Button>
+                              </DialogFooter>
+                            </form>
+                          </Form>
+                        </DialogContent>
+                      </Dialog>
+                    ) : null}
+
+                    {actionsQuery.data?.canRead ? (
+                      <Button
+                        type='button'
+                        variant='outline'
+                        disabled={readMutation.isPending}
+                        onClick={() => {
+                          readMutation.mutate()
+                        }}
+                      >
+                        {readMutation.isPending ? '处理中' : '已阅'}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
 
@@ -1331,6 +2002,11 @@ export function WorkbenchTodoDetailPage({
               !actionsQuery.data?.canClaim &&
               !actionsQuery.data?.canTransfer &&
               !actionsQuery.data?.canReturn &&
+              !actionsQuery.data?.canAddSign &&
+              !actionsQuery.data?.canRemoveSign &&
+              !actionsQuery.data?.canRevoke &&
+              !actionsQuery.data?.canUrge &&
+              !actionsQuery.data?.canRead &&
               !showCompletionForm ? (
                 <Alert>
                   <AlertTitle>当前没有可执行动作</AlertTitle>
