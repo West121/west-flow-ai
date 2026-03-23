@@ -423,6 +423,31 @@ describe('oa pages', () => {
     ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fleave%2Fleave_001')
   })
 
+  it('exposes OA launch, query, and Copilot context links as a smoke path', async () => {
+    oaApiMocks.listApprovalSheets.mockResolvedValue(mockApprovalSheetPage())
+
+    renderWithQuery(
+      <>
+        <OALeaveCreatePage />
+        <OAQueryPage />
+      </>
+    )
+
+    expect(
+      screen.getByRole('button', { name: '发起请假申请' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 辅助填写请假申请' })
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fleave%2Fcreate')
+    expect(await screen.findByText('OA 流程查询')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 解读 OA 查询结果' })
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fquery')
+    expect(
+      screen.getByRole('link', { name: '发起 OA 申请' })
+    ).toHaveAttribute('href', '/workbench/start')
+  })
+
   it.each([
     {
       name: 'OALeaveCreatePage',

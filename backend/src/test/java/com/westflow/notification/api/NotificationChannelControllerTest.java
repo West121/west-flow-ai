@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.mapper.NotificationLogMapper;
+import com.westflow.notification.model.NotificationChannelRecord;
+import com.westflow.notification.model.NotificationLogRecord;
+import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -209,6 +213,108 @@ class NotificationChannelControllerTest {
                 .getContentAsString();
 
         assertThat(objectMapper.readTree(createMockResponse).path("data").path("channelId").asText()).isNotBlank();
+    }
+
+    @Test
+    void shouldExposeDiagnosticWithConfigMissingFieldsForInvalidRealChannel() throws Exception {
+        String token = login();
+        String channelId = "nch_diag_invalid";
+        notificationChannelMapper.upsert(new NotificationChannelRecord(
+                channelId,
+                "wechat_diag_invalid",
+                "WECHAT",
+                "企业微信诊断",
+                true,
+                false,
+                Map.of("endpoint", "http://127.0.0.1/wechat"),
+                "缺少鉴权与 agent 配置",
+                Instant.parse("2026-03-23T01:00:00Z"),
+                Instant.parse("2026-03-23T01:05:00Z"),
+                null
+        ));
+
+        String response = mockMvc.perform(get("/api/v1/notification/channels/" + channelId + "/diagnostic")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("channelId").asText()).isEqualTo(channelId);
+        assertThat(data.path("mockMode").asBoolean()).isFalse();
+        assertThat(data.path("configurationComplete").asBoolean()).isFalse();
+        assertThat(data.path("healthStatus").asText()).isEqualTo("CONFIG_INVALID");
+        assertThat(data.path("missingConfigFields").isArray()).isTrue();
+        assertThat(data.path("missingConfigFields").toString()).contains("accessToken");
+        assertThat(data.path("missingConfigFields").toString()).contains("agentId");
+        assertThat(data.path("missingConfigFields").toString()).contains("corpId");
+    }
+
+    @Test
+    void shouldExposeDiagnosticWithLatestFailureAndLastDispatchSummary() throws Exception {
+        String token = login();
+        String channelId = "nch_diag_sms";
+        notificationChannelMapper.upsert(new NotificationChannelRecord(
+                channelId,
+                "sms_diag",
+                "SMS",
+                "短信诊断渠道",
+                true,
+                false,
+                Map.of("endpoint", "http://127.0.0.1/sms", "accessToken", "sms-token"),
+                "诊断失败样例",
+                Instant.parse("2026-03-23T01:00:00Z"),
+                Instant.parse("2026-03-23T01:05:00Z"),
+                Instant.parse("2026-03-23T01:10:00Z")
+        ));
+        notificationLogMapper.insert(new NotificationLogRecord(
+                "nlg_success",
+                channelId,
+                "sms_diag",
+                "SMS",
+                "13800138000",
+                "短信提醒",
+                "成功消息",
+                "SMS",
+                true,
+                "SUCCESS",
+                "accepted",
+                Map.of("instanceId", "pi_001"),
+                Instant.parse("2026-03-23T01:10:00Z")
+        ));
+        notificationLogMapper.insert(new NotificationLogRecord(
+                "nlg_failed",
+                channelId,
+                "sms_diag",
+                "SMS",
+                "13800138000",
+                "短信提醒",
+                "失败消息",
+                "SMS",
+                false,
+                "FAILED",
+                "短信发送失败，状态码=502，响应=gateway failed",
+                Map.of("instanceId", "pi_002"),
+                Instant.parse("2026-03-23T01:15:00Z")
+        ));
+
+        String response = mockMvc.perform(get("/api/v1/notification/channels/" + channelId + "/diagnostic")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("configurationComplete").asBoolean()).isTrue();
+        assertThat(data.path("healthStatus").asText()).isEqualTo("DEGRADED");
+        assertThat(data.path("lastDispatchSuccess").asBoolean()).isFalse();
+        assertThat(data.path("lastDispatchStatus").asText()).isEqualTo("FAILED");
+        assertThat(data.path("lastProviderName").asText()).isEqualTo("SMS");
+        assertThat(data.path("lastResponseMessage").asText()).contains("短信发送失败");
+        assertThat(data.path("lastFailureMessage").asText()).contains("短信发送失败");
+        assertThat(data.path("lastFailureAt").asText()).isNotBlank();
     }
 
     private String login() throws Exception {

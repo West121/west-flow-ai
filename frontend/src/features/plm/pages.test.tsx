@@ -1,3 +1,4 @@
+import { Children } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,13 +44,34 @@ const {
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    search,
     children,
     ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }) => (
-    <a href={to} {...props}>
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to?: string
+    search?: Record<string, unknown>
+  }) => {
+    const query =
+      search && Object.keys(search).length > 0
+        ? `?${new URLSearchParams(
+            Object.entries(search).reduce<Record<string, string>>(
+              (acc, [key, value]) => {
+                if (value != null) {
+                  acc[key] = String(value)
+                }
+                return acc
+              },
+              {}
+            )
+          ).toString()}`
+        : ''
+
+    return (
+      <a href={`${to ?? ''}${query}`} {...props}>
       {children}
-    </a>
-  ),
+      </a>
+    )
+  },
   useNavigate: () => navigateMock,
   getRouteApi: () => ({
     useSearch: routeSearchMock,
@@ -99,7 +121,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   }) => (
     <div>
       <h2>{title}</h2>
-      {extraActions}
+      {extraActions ? <>{Children.toArray(extraActions)}</> : null}
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
       <span>total:{total ?? data.length}</span>
       {data.map((item) => (
@@ -250,7 +272,7 @@ describe('plm pages', () => {
     expect(screen.getByText('PLM 发起中心')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '用 AI 推荐 PLM 入口' })
-    ).toHaveAttribute('href', '/ai')
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fstart')
     expect(screen.getByRole('link', { name: '发起 ECR' })).toHaveAttribute(
       'href',
       '/plm/ecr/create'
@@ -385,7 +407,7 @@ describe('plm pages', () => {
     renderWithQuery(<PLMECRCreatePage />)
     expect(
       screen.getByRole('link', { name: '用 AI 辅助填写 ECR' })
-    ).toHaveAttribute('href', '/ai')
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fecr%2Fcreate')
     fireEvent.change(screen.getByLabelText('变更标题'), {
       target: { value: '结构件变更' },
     })
@@ -424,7 +446,7 @@ describe('plm pages', () => {
     renderWithQuery(<PLMECOCreatePage />)
     expect(
       screen.getByRole('link', { name: '用 AI 辅助填写 ECO' })
-    ).toHaveAttribute('href', '/ai')
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Feco%2Fcreate')
     fireEvent.change(screen.getByLabelText('执行标题'), {
       target: { value: 'ECO 下发' },
     })
@@ -464,7 +486,10 @@ describe('plm pages', () => {
     renderWithQuery(<PLMMaterialChangeCreatePage />)
     expect(
       screen.getByRole('link', { name: '用 AI 辅助填写物料变更' })
-    ).toHaveAttribute('href', '/ai')
+    ).toHaveAttribute(
+      'href',
+      '/ai?sourceRoute=%2Fplm%2Fmaterial-master%2Fcreate'
+    )
     fireEvent.change(screen.getByLabelText('物料编码'), {
       target: { value: 'MAT-001' },
     })
@@ -511,12 +536,32 @@ describe('plm pages', () => {
     expect(await screen.findByText('PLM 流程查询')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '用 AI 解读 PLM 查询结果' })
-    ).toHaveAttribute('href', '/ai')
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fquery')
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()
     expect(screen.getByText('total:1')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '发起 PLM 申请' })
     ).toHaveAttribute('href', '/plm/start')
+  })
+
+  it('exposes PLM launch and Copilot context links as a smoke path', () => {
+    renderWithQuery(
+      <>
+        <PLMHomePage />
+        <PLMECRCreatePage />
+      </>
+    )
+
+    expect(screen.getByText('PLM 发起中心')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 推荐 PLM 入口' })
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fstart')
+    expect(
+      screen.getByRole('link', { name: '用 AI 辅助填写 ECR' })
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fecr%2Fcreate')
+    expect(
+      screen.getByRole('button', { name: '发起 ECR 变更申请' })
+    ).toBeInTheDocument()
   })
 
   it('applies status quick filters on PLM list pages', async () => {
@@ -597,7 +642,7 @@ describe('plm pages', () => {
     expect(await screen.findByText('ECR 变更申请详情')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '用 AI 解读当前 PLM 单据' })
-    ).toHaveAttribute('href', '/ai')
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fecr%2Fecr_001')
     expect(await screen.findByText('业务单详情')).toBeInTheDocument()
     expect(await screen.findByText('审批单联查')).toBeInTheDocument()
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()

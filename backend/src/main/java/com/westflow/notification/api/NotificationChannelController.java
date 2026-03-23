@@ -36,6 +36,12 @@ public class NotificationChannelController {
         return ApiResponse.success(notificationChannelService.detail(channelId));
     }
 
+    @GetMapping("/{channelId}/diagnostic")
+    // 查询通知渠道诊断信息。
+    public ApiResponse<NotificationChannelDiagnosticResponse> diagnostic(@PathVariable String channelId) {
+        return ApiResponse.success(notificationChannelService.diagnostic(channelId));
+    }
+
     @GetMapping("/options")
     // 查询通知渠道表单可选项。
     public ApiResponse<NotificationChannelFormOptionsResponse> options() {

@@ -558,13 +558,13 @@ function MessageFormPage({ mode, messageId }: { mode: 'create' | 'edit'; message
   const targetType = useWatch({
     control: form.control,
     name: 'targetType',
-    defaultValue: '',
-  })
+    defaultValue: 'ALL',
+  }) as MessageTargetType
   const status = useWatch({
     control: form.control,
     name: 'status',
     defaultValue: 'DRAFT',
-  })
+  }) as MessageStatus
   const statusOptions = useMemo(() => optionsQuery.data?.statusOptions ?? [], [optionsQuery.data?.statusOptions])
   const targetTypeOptions = useMemo(() => optionsQuery.data?.targetTypeOptions ?? [], [optionsQuery.data?.targetTypeOptions])
 

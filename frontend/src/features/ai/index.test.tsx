@@ -278,6 +278,45 @@ describe('AICopilotPage', () => {
     )
   })
 
+  it.each([
+    {
+      sourceRoute: '/plm/ecr/create',
+      title: '当前 PLM 单据 Copilot',
+      contextTags: ['AI Copilot', 'route:/plm/ecr/create'],
+    },
+    {
+      sourceRoute: '/oa/leave/create',
+      title: '当前 OA 单据 Copilot',
+      contextTags: ['AI Copilot', 'route:/oa/leave/create'],
+    },
+  ])(
+    'creates a contextual Copilot session for $sourceRoute as a smoke path',
+    async ({ sourceRoute, title, contextTags }) => {
+      aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([])
+      aiCopilotApiMocks.createAICopilotSession.mockResolvedValueOnce(
+        buildSession({
+          sessionId: `session_${sourceRoute.replace(/\//g, '_')}`,
+          title,
+          contextTags,
+        })
+      )
+
+      const { AICopilotPage } = await import('./index')
+
+      renderWithQuery(<AICopilotPage sourceRoute={sourceRoute} />)
+
+      await waitFor(() =>
+        expect(aiCopilotApiMocks.createAICopilotSession).toHaveBeenCalledWith(
+          {
+            title,
+            contextTags,
+          },
+          expect.any(Object)
+        )
+      )
+    }
+  )
+
   it('shows contextual route hints and supports Ctrl+Enter to send quickly', async () => {
     const { AICopilotPage } = await import('./index')
 

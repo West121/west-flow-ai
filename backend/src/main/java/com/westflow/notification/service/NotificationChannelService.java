@@ -5,14 +5,17 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.notification.api.NotificationChannelDiagnosticResponse;
 import com.westflow.notification.api.NotificationChannelDetailResponse;
 import com.westflow.notification.api.NotificationChannelFormOptionsResponse;
 import com.westflow.notification.api.NotificationChannelListItemResponse;
 import com.westflow.notification.api.NotificationChannelMutationResponse;
 import com.westflow.notification.api.SaveNotificationChannelRequest;
 import com.westflow.notification.mapper.NotificationChannelMapper;
+import com.westflow.notification.mapper.NotificationLogMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
 import com.westflow.notification.model.NotificationChannelType;
+import com.westflow.notification.model.NotificationLogRecord;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -33,6 +36,7 @@ public class NotificationChannelService {
     private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "updatedAt", "channelCode", "channelName", "lastSentAt");
 
     private final NotificationChannelMapper notificationChannelMapper;
+    private final NotificationLogMapper notificationLogMapper;
 
     // 通知渠道列表支持关键字、状态、渠道类型和 mock 模式筛选。
     public PageResponse<NotificationChannelListItemResponse> page(PageRequest request) {
@@ -65,6 +69,38 @@ public class NotificationChannelService {
         // 详情页直接返回完整配置，方便编辑页一次性回填。
         NotificationChannelRecord record = requireChannel(channelId);
         return toDetail(record);
+    }
+
+    // 聚合配置、mock 状态与最近发送结果，供诊断页直接展示。
+    public NotificationChannelDiagnosticResponse diagnostic(String channelId) {
+        NotificationChannelRecord channel = requireChannel(channelId);
+        NotificationChannelType type = resolveType(channel.channelType());
+        List<String> missingConfigFields = findMissingRequiredFields(type, channel.config(), Boolean.TRUE.equals(channel.mockMode()));
+        List<NotificationLogRecord> logs = notificationLogMapper.selectByChannelId(channel.channelId());
+        NotificationLogRecord latestLog = logs.isEmpty() ? null : logs.get(0);
+        NotificationLogRecord latestFailure = logs.stream()
+                .filter(log -> !log.success())
+                .findFirst()
+                .orElse(null);
+        return new NotificationChannelDiagnosticResponse(
+                channel.channelId(),
+                channel.channelCode(),
+                channel.channelType(),
+                channel.channelName(),
+                channel.enabled(),
+                channel.mockMode(),
+                missingConfigFields.isEmpty(),
+                missingConfigFields,
+                resolveHealthStatus(channel, missingConfigFields, latestLog),
+                channel.lastSentAt(),
+                latestLog == null ? null : latestLog.success(),
+                latestLog == null ? null : latestLog.status(),
+                latestLog == null ? null : latestLog.providerName(),
+                latestLog == null ? null : latestLog.responseMessage(),
+                latestLog == null ? null : latestLog.sentAt(),
+                latestFailure == null ? null : latestFailure.sentAt(),
+                latestFailure == null ? null : latestFailure.responseMessage()
+        );
     }
 
     // 返回可用渠道类型枚举，供表单下拉框使用。
@@ -263,57 +299,67 @@ public class NotificationChannelService {
 
     // 校验渠道配置是否满足类型要求。
     private void validateConfig(NotificationChannelType type, Map<String, Object> config, boolean mockMode) {
-        Map<String, Object> normalized = normalizeConfig(config);
-        if (mockMode) {
-            return;
-        }
-        switch (type) {
-            case EMAIL -> {
-                requireField(normalized, "smtpHost");
-                requireField(normalized, "smtpPort");
-                requireField(normalized, "fromAddress");
-            }
-            case WEBHOOK -> requireField(normalized, "url");
-            case SMS -> {
-                requireField(normalized, "endpoint", "url");
-                requireField(normalized, "accessToken");
-            }
-            case WECHAT -> {
-                requireField(normalized, "endpoint", "url");
-                requireField(normalized, "accessToken");
-                requireField(normalized, "agentId");
-                requireField(normalized, "corpId");
-            }
-            case DINGTALK -> {
-                requireField(normalized, "endpoint", "url");
-                requireField(normalized, "accessToken");
-                requireField(normalized, "agentId");
-                requireField(normalized, "appKey");
-            }
-            default -> {
-            }
-        }
-    }
-
-    // 读取必须配置项，缺失时直接报错。
-    private void requireField(Map<String, Object> config, String key) {
-        requireField(config, key, key);
-    }
-
-    // 允许 endpoint/url 这类兼容字段共用一个校验入口。
-    private void requireField(Map<String, Object> config, String key, String alternateKey) {
-        Object value = config.get(key);
-        if ((value == null || String.valueOf(value).isBlank()) && !key.equals(alternateKey)) {
-            value = config.get(alternateKey);
-        }
-        if (value == null || String.valueOf(value).isBlank()) {
+        List<String> missingFields = findMissingRequiredFields(type, config, mockMode);
+        if (!missingFields.isEmpty()) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
                     HttpStatus.BAD_REQUEST,
                     "通知渠道配置缺少必要参数",
-                    Map.of("field", key)
+                    Map.of("field", missingFields.get(0), "missingFields", missingFields)
             );
         }
+    }
+
+    // 复用创建/更新校验规则，给诊断视图返回缺失字段列表。
+    private List<String> findMissingRequiredFields(NotificationChannelType type, Map<String, Object> config, boolean mockMode) {
+        if (mockMode) {
+            return List.of();
+        }
+        Map<String, Object> normalized = normalizeConfig(config);
+        return switch (type) {
+            case EMAIL -> collectMissingFields(normalized, "smtpHost", "smtpPort", "fromAddress");
+            case WEBHOOK -> collectMissingFields(normalized, "url");
+            case SMS -> collectMissingFields(normalized, List.of(List.of("endpoint", "url")), List.of("accessToken"));
+            case WECHAT -> collectMissingFields(
+                    normalized,
+                    List.of(List.of("endpoint", "url")),
+                    List.of("accessToken", "agentId", "corpId")
+            );
+            case DINGTALK -> collectMissingFields(
+                    normalized,
+                    List.of(List.of("endpoint", "url")),
+                    List.of("accessToken", "agentId", "appKey")
+            );
+            default -> List.of();
+        };
+    }
+
+    private List<String> collectMissingFields(Map<String, Object> config, String... fields) {
+        return collectMissingFields(config, List.of(), List.of(fields));
+    }
+
+    private List<String> collectMissingFields(
+            Map<String, Object> config,
+            List<List<String>> alternatives,
+            List<String> directFields
+    ) {
+        List<String> missingFields = new java.util.ArrayList<String>();
+        for (List<String> group : alternatives) {
+            boolean present = group.stream().anyMatch(field -> !isBlank(config.get(field)));
+            if (!present && !group.isEmpty()) {
+                missingFields.add(group.get(0));
+            }
+        }
+        for (String field : directFields) {
+            if (isBlank(config.get(field))) {
+                missingFields.add(field);
+            }
+        }
+        return List.copyOf(missingFields);
+    }
+
+    private boolean isBlank(Object value) {
+        return value == null || String.valueOf(value).isBlank();
     }
 
     // 配置值做空值归一。
@@ -363,6 +409,26 @@ public class NotificationChannelService {
                 record.updatedAt(),
                 record.lastSentAt()
         );
+    }
+
+    private String resolveHealthStatus(
+            NotificationChannelRecord record,
+            List<String> missingConfigFields,
+            NotificationLogRecord latestLog
+    ) {
+        if (!Boolean.TRUE.equals(record.enabled())) {
+            return "DISABLED";
+        }
+        if (!missingConfigFields.isEmpty()) {
+            return "CONFIG_INVALID";
+        }
+        if (Boolean.TRUE.equals(record.mockMode())) {
+            return "MOCK_READY";
+        }
+        if (latestLog == null) {
+            return "READY";
+        }
+        return latestLog.success() ? "HEALTHY" : "DEGRADED";
     }
 
     // 统一构造请求非法异常。

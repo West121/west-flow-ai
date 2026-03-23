@@ -120,6 +120,32 @@ public class NotificationLogMapper {
         );
     }
 
+    public List<NotificationLogRecord> selectByChannelId(String channelId) {
+        return jdbcTemplate.query(
+                """
+                SELECT
+                  id,
+                  channel_id,
+                  channel_code,
+                  channel_type,
+                  recipient,
+                  title,
+                  content,
+                  provider_name,
+                  success,
+                  status,
+                  response_message,
+                  payload_json,
+                  sent_at
+                FROM wf_notification_log
+                WHERE channel_id = ?
+                ORDER BY sent_at DESC, id DESC
+                """,
+                this::mapRecord,
+                channelId
+        );
+    }
+
     private NotificationLogRecord mapRecord(ResultSet resultSet, int rowNum) throws SQLException {
         return new NotificationLogRecord(
                 resultSet.getString("id"),
