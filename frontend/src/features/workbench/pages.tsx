@@ -56,6 +56,11 @@ import {
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
+import {
+  ProcessCollaborationSection,
+  ProcessTerminationSection,
+  ProcessTimeTravelSection,
+} from '@/features/workflow/advanced-runtime-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
 import {
   ApprovalSheetAutomationActionTimeline,
@@ -114,6 +119,12 @@ import {
   type WorkbenchTaskDetail,
   type WorkbenchTaskListItem,
 } from '@/lib/api/workbench'
+import {
+  getProcessTerminationSnapshot,
+  listProcessCollaborationTrace,
+  listProcessTerminationAuditTrail,
+  listProcessTimeTravelTrace,
+} from '@/lib/api/process-runtime-advanced'
 
 const workbenchTodoListRoute = getRouteApi('/_authenticated/workbench/todos/list')
 const workbenchDoneListRoute = getRouteApi('/_authenticated/workbench/done/list')
@@ -1448,10 +1459,55 @@ export function WorkbenchTodoDetailPage({
   const detail = detailQuery.data
   const resolvedTaskId =
     detail?.activeTaskIds[0] ?? (locator.mode === 'task' ? locator.taskId : null)
+  const rootInstanceId =
+    detail?.processLinks?.[0]?.rootInstanceId ?? detail?.instanceId ?? null
   const actionsQuery = useQuery({
     queryKey: ['workbench', 'todo-actions', resolvedTaskId ?? 'none'],
     queryFn: () => getWorkbenchTaskActions(resolvedTaskId as string),
     enabled: Boolean(resolvedTaskId),
+  })
+  const collaborationTraceQuery = useQuery({
+    queryKey: ['workbench', 'collaboration-trace', detail?.instanceId ?? 'none'],
+    queryFn: () => listProcessCollaborationTrace(detail?.instanceId as string),
+    enabled: Boolean(detail?.instanceId),
+  })
+  const timeTravelTraceQuery = useQuery({
+    queryKey: ['workbench', 'time-travel-trace', detail?.instanceId ?? 'none'],
+    queryFn: () => listProcessTimeTravelTrace(detail?.instanceId as string),
+    enabled: Boolean(detail?.instanceId),
+  })
+  const terminationSnapshotQuery = useQuery({
+    queryKey: [
+      'workbench',
+      'termination-snapshot',
+      rootInstanceId ?? 'none',
+      detail?.instanceId ?? 'none',
+      detail?.operatorUserId ?? 'none',
+      detail?.assigneeUserId ?? 'none',
+      detail?.applicantUserId ?? 'none',
+    ],
+    queryFn: () =>
+      getProcessTerminationSnapshot({
+        rootInstanceId: rootInstanceId as string,
+        targetInstanceId:
+          detail?.instanceId && rootInstanceId && detail.instanceId !== rootInstanceId
+            ? detail.instanceId
+            : undefined,
+        scope:
+          detail?.instanceId && rootInstanceId && detail.instanceId !== rootInstanceId
+            ? 'CHILD'
+            : 'ROOT',
+        propagationPolicy: 'CASCADE_ALL',
+        reason: '审批详情终止策略预览',
+        operatorUserId:
+          detail?.operatorUserId ?? detail?.assigneeUserId ?? detail?.applicantUserId ?? undefined,
+      }),
+    enabled: Boolean(detail?.instanceId && rootInstanceId),
+  })
+  const terminationAuditQuery = useQuery({
+    queryKey: ['workbench', 'termination-audit', rootInstanceId ?? 'none'],
+    queryFn: () => listProcessTerminationAuditTrail(rootInstanceId as string),
+    enabled: Boolean(rootInstanceId),
   })
 
   function requireActionTaskId() {
@@ -1647,6 +1703,10 @@ export function WorkbenchTodoDetailPage({
       queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-detail'] }),
       queryClient.invalidateQueries({ queryKey: ['workbench', 'approval-sheet-detail'] }),
       queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-actions'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'collaboration-trace'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'time-travel-trace'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'termination-snapshot'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'termination-audit'] }),
     ])
   }
 
@@ -2187,6 +2247,16 @@ export function WorkbenchTodoDetailPage({
                       detail.runtimeStructureLinks ?? []
                     )}
                     currentInstanceId={detail.instanceId}
+                  />
+                  <ProcessTerminationSection
+                    snapshot={terminationSnapshotQuery.data ?? null}
+                    audits={terminationAuditQuery.data ?? []}
+                  />
+                  <ProcessCollaborationSection
+                    items={collaborationTraceQuery.data ?? []}
+                  />
+                  <ProcessTimeTravelSection
+                    items={timeTravelTraceQuery.data ?? []}
                   />
                   <ApprovalSheetActionTimeline taskTrace={detail.taskTrace ?? []} />
                   <ApprovalSheetAutomationActionTimeline

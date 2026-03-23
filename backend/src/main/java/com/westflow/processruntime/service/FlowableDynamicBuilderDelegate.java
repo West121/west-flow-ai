@@ -1,6 +1,7 @@
 package com.westflow.processruntime.service;
 
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.processruntime.service.append.DynamicBuildAppendRuntimeService;
 import lombok.RequiredArgsConstructor;
 import org.flowable.engine.delegate.JavaDelegate;
 import org.flowable.engine.delegate.DelegateExecution;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
 @ConditionalOnBean(FlowableEngineFacade.class)
 public class FlowableDynamicBuilderDelegate implements JavaDelegate {
 
-    private final FlowableProcessRuntimeService flowableProcessRuntimeService;
+    private final DynamicBuildAppendRuntimeService dynamicBuildAppendRuntimeService;
 
     @Override
     public void execute(DelegateExecution execution) {
@@ -24,6 +25,6 @@ public class FlowableDynamicBuilderDelegate implements JavaDelegate {
         if (processInstanceId == null || processInstanceId.isBlank() || sourceNodeId == null || sourceNodeId.isBlank()) {
             return;
         }
-        flowableProcessRuntimeService.executeDynamicBuilder(processInstanceId, sourceNodeId);
+        dynamicBuildAppendRuntimeService.executeDynamicBuilder(processInstanceId, sourceNodeId);
     }
 }

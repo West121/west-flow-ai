@@ -36,6 +36,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  ProcessCollaborationSection,
+  ProcessTerminationSection,
+  ProcessTimeTravelSection,
+} from '@/features/workflow/advanced-runtime-sections'
 import { RuntimeStructureSection } from '@/features/workflow/runtime-structure'
 import { InclusiveGatewaySection } from '@/features/workflow/inclusive-gateway-section'
 import {
@@ -64,6 +69,12 @@ import {
   type ApprovalOpinionConfigDetail,
   type WorkflowBindingDetail,
 } from '@/lib/api/workflow-management'
+import {
+  getProcessTerminationSnapshot,
+  listProcessCollaborationTrace,
+  listProcessTerminationAuditTrail,
+  listProcessTimeTravelTrace,
+} from '@/lib/api/process-runtime-advanced'
 import { getApiErrorResponse } from '@/lib/api/client'
 import { handleServerError } from '@/lib/handle-server-error'
 
@@ -518,6 +529,48 @@ export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string 
     queryKey: ['workflow-management-instance-detail', instanceId],
     queryFn: () => getWorkflowInstanceDetail(instanceId),
   })
+  const rootInstanceId =
+    query.data?.processLinks?.[0]?.rootInstanceId ?? query.data?.processInstanceId ?? instanceId
+  const collaborationTraceQuery = useQuery({
+    queryKey: ['workflow-management', 'collaboration-trace', query.data?.processInstanceId ?? instanceId],
+    queryFn: () => listProcessCollaborationTrace(query.data?.processInstanceId ?? instanceId),
+    enabled: Boolean(query.data?.processInstanceId),
+  })
+  const timeTravelTraceQuery = useQuery({
+    queryKey: ['workflow-management', 'time-travel-trace', query.data?.processInstanceId ?? instanceId],
+    queryFn: () => listProcessTimeTravelTrace(query.data?.processInstanceId ?? instanceId),
+    enabled: Boolean(query.data?.processInstanceId),
+  })
+  const terminationSnapshotQuery = useQuery({
+    queryKey: [
+      'workflow-management',
+      'termination-snapshot',
+      rootInstanceId,
+      query.data?.processInstanceId ?? instanceId,
+      query.data?.startUserId ?? 'none',
+    ],
+    queryFn: () =>
+      getProcessTerminationSnapshot({
+        rootInstanceId,
+        targetInstanceId:
+          query.data?.processInstanceId && query.data.processInstanceId !== rootInstanceId
+            ? query.data.processInstanceId
+            : undefined,
+        scope:
+          query.data?.processInstanceId && query.data.processInstanceId !== rootInstanceId
+            ? 'CHILD'
+            : 'ROOT',
+        propagationPolicy: 'CASCADE_ALL',
+        reason: '实例监控终止策略预览',
+        operatorUserId: query.data?.startUserId ?? undefined,
+      }),
+    enabled: Boolean(query.data?.processInstanceId && rootInstanceId),
+  })
+  const terminationAuditQuery = useQuery({
+    queryKey: ['workflow-management', 'termination-audit', rootInstanceId],
+    queryFn: () => listProcessTerminationAuditTrail(rootInstanceId),
+    enabled: Boolean(rootInstanceId),
+  })
   if (query.isLoading) return <DetailSkeleton />
   if (query.isError || !query.data) throw query.error
   const detail = query.data
@@ -567,6 +620,16 @@ export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string 
           (detail.runtimeStructureLinks ?? []) as RuntimeStructureLink[]
         )}
         currentInstanceId={detail.processInstanceId}
+      />
+      <ProcessTerminationSection
+        snapshot={terminationSnapshotQuery.data ?? null}
+        audits={terminationAuditQuery.data ?? []}
+      />
+      <ProcessCollaborationSection
+        items={collaborationTraceQuery.data ?? []}
+      />
+      <ProcessTimeTravelSection
+        items={timeTravelTraceQuery.data ?? []}
       />
     </DetailPage>
   )

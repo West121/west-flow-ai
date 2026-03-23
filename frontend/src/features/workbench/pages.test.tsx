@@ -15,6 +15,7 @@ const {
   useSearchMock,
   routeNavigateMock,
   workbenchApiMocks,
+  advancedRuntimeApiMocks,
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   useSearchMock: vi.fn(),
@@ -37,6 +38,12 @@ const {
     startWorkbenchProcess: vi.fn(),
     transferWorkbenchTask: vi.fn(),
     urgeWorkbenchTask: vi.fn(),
+  },
+  advancedRuntimeApiMocks: {
+    getProcessTerminationSnapshot: vi.fn(),
+    listProcessCollaborationTrace: vi.fn(),
+    listProcessTerminationAuditTrail: vi.fn(),
+    listProcessTimeTravelTrace: vi.fn(),
   },
 }))
 
@@ -123,6 +130,9 @@ vi.mock('@/lib/api/workbench', () => ({
     approvalSheetsPage: '/process-runtime/approval-sheets/page',
     tasksPage: '/process-runtime/tasks/page',
   },
+}))
+vi.mock('@/lib/api/process-runtime-advanced', () => ({
+  ...advancedRuntimeApiMocks,
 }))
 vi.mock('@/stores/auth-store', () => ({
   useAuthStore: (selector: (state: { currentUser: { aiCapabilities: string[] } }) => unknown) =>
@@ -366,6 +376,10 @@ describe('workbench pages', () => {
         },
       ],
     })
+    advancedRuntimeApiMocks.getProcessTerminationSnapshot.mockResolvedValue(null)
+    advancedRuntimeApiMocks.listProcessTerminationAuditTrail.mockResolvedValue([])
+    advancedRuntimeApiMocks.listProcessCollaborationTrace.mockResolvedValue([])
+    advancedRuntimeApiMocks.listProcessTimeTravelTrace.mockResolvedValue([])
     workbenchApiMocks.listApprovalSheets.mockResolvedValue(
       createApprovalSheetPage()
     )
@@ -1468,6 +1482,117 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('APPEND').length).toBeGreaterThan(0)
     expect(screen.getAllByText('DYNAMIC_BUILD').length).toBeGreaterThan(0)
     expect(screen.getByText('附言：追加一位串行复核人')).toBeInTheDocument()
+  })
+
+  it('shows termination strategy, collaboration and time-travel sections in approval detail', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        processLinks: [
+          {
+            linkId: 'subprocess_001',
+            rootInstanceId: 'pi_root_001',
+            parentInstanceId: 'pi_root_001',
+            childInstanceId: 'pi_001',
+            parentNodeId: 'subprocess_review',
+            calledProcessKey: 'oa_sub_review',
+            calledDefinitionId: 'oa_sub_review:1:1004',
+            linkType: 'CALL_ACTIVITY',
+            status: 'RUNNING',
+            terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
+            childFinishPolicy: 'RETURN_TO_PARENT',
+            createdAt: '2026-03-23T10:10:00+08:00',
+            finishedAt: null,
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+    advancedRuntimeApiMocks.getProcessTerminationSnapshot.mockResolvedValue({
+      rootInstanceId: 'pi_root_001',
+      scope: 'CHILD',
+      propagationPolicy: 'CASCADE_ALL',
+      reason: '审批详情终止策略预览',
+      operatorUserId: 'usr_002',
+      summary: 'scope=CHILD, propagation=CASCADE_ALL, targets=2',
+      targetCount: 2,
+      generatedAt: '2026-03-23T10:20:00+08:00',
+      nodes: [],
+    })
+    advancedRuntimeApiMocks.listProcessTerminationAuditTrail.mockResolvedValue([
+      {
+        auditId: 'audit_001',
+        rootInstanceId: 'pi_root_001',
+        targetInstanceId: 'pi_001',
+        parentInstanceId: 'pi_root_001',
+        targetKind: 'SUBPROCESS',
+        terminateScope: 'CHILD',
+        propagationPolicy: 'CASCADE_ALL',
+        eventType: 'PLANNED',
+        resultStatus: 'PLANNED',
+        reason: '终止原因',
+        operatorUserId: 'usr_admin',
+        detailJson: '{}',
+        createdAt: '2026-03-23T10:21:00+08:00',
+        finishedAt: null,
+      },
+    ])
+    advancedRuntimeApiMocks.listProcessCollaborationTrace.mockResolvedValue([
+      {
+        eventId: 'col_001',
+        instanceId: 'pi_001',
+        taskId: 'task_001',
+        eventType: 'COMMENT',
+        subject: '请补充材料',
+        content: '请补充请假附件。',
+        mentionedUserIds: ['usr_002'],
+        permissionCode: 'workflow:collaboration:view',
+        actionType: 'COLLABORATION_EVENT_CREATED',
+        actionCategory: 'COLLABORATION',
+        operatorUserId: 'usr_003',
+        occurredAt: '2026-03-23T10:22:00+08:00',
+        details: {},
+      },
+    ])
+    advancedRuntimeApiMocks.listProcessTimeTravelTrace.mockResolvedValue([
+      {
+        executionId: 'tt_001',
+        instanceId: 'pi_001',
+        strategy: 'BACK_TO_NODE',
+        taskId: 'task_001',
+        targetNodeId: 'approve_manager',
+        targetTaskId: 'task_001',
+        newInstanceId: null,
+        permissionCode: 'workflow:time-travel:view',
+        actionType: 'TIME_TRAVEL_BACK_TO_NODE',
+        actionCategory: 'TIME_TRAVEL',
+        operatorUserId: 'usr_admin',
+        occurredAt: '2026-03-23T10:23:00+08:00',
+        details: {},
+      },
+    ])
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_001' />)
+
+    expect(await screen.findByText('终止高级策略')).toBeInTheDocument()
+    expect(screen.getByText('协同轨迹')).toBeInTheDocument()
+    expect(screen.getByText('穿越时空轨迹')).toBeInTheDocument()
+    expect(await screen.findByText('请补充材料')).toBeInTheDocument()
+    expect(await screen.findByText('回退到历史节点')).toBeInTheDocument()
   })
 
   it('loads approval-sheet detail through the business locator path', async () => {
