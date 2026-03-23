@@ -1,5 +1,6 @@
 package com.westflow.workflowadmin.api;
 
+import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,7 @@ public record WorkflowInstanceDetailResponse(
         List<String> currentTaskNames,
         OffsetDateTime startedAt,
         OffsetDateTime finishedAt,
-        Map<String, Object> variables
+        Map<String, Object> variables,
+        List<ProcessInstanceLinkResponse> processLinks
 ) {
 }

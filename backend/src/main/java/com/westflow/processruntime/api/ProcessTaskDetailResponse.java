@@ -62,6 +62,7 @@ public record ProcessTaskDetailResponse(
         Map<String, Object> formData,
         Map<String, Object> taskFormData,
         List<CountersignTaskGroupResponse> countersignGroups,
+        List<ProcessInstanceLinkResponse> processLinks,
         List<String> activeTaskIds
 ) {
 }

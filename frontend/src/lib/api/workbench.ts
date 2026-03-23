@@ -170,6 +170,22 @@ export type WorkbenchCountersignGroup = {
   members: WorkbenchCountersignGroupMember[]
 }
 
+export type WorkbenchProcessLink = {
+  linkId: string
+  rootInstanceId: string
+  parentInstanceId: string
+  childInstanceId: string
+  parentNodeId: string
+  calledProcessKey: string
+  calledDefinitionId: string
+  linkType: string
+  status: string
+  terminatePolicy: string | null
+  childFinishPolicy: string | null
+  createdAt: string | null
+  finishedAt: string | null
+}
+
 export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   action: string | null
   operatorUserId: string | null
@@ -203,6 +219,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   fieldBindings: WorkflowFieldBinding[]
   taskFormData: Record<string, unknown> | null
   countersignGroups?: WorkbenchCountersignGroup[] | null
+  processLinks?: WorkbenchProcessLink[] | null
   activeTaskIds: string[]
 }
 

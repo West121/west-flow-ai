@@ -95,6 +95,9 @@ public class FlowableRuntimeStartService {
         if (subprocessNodesByKey.isEmpty()) {
             return;
         }
+        String rootInstanceId = java.util.Optional.ofNullable(processLinkService.getByChildInstanceId(parentInstance.getProcessInstanceId()))
+                .map(ProcessLinkRecord::rootInstanceId)
+                .orElse(parentInstance.getProcessInstanceId());
         List<ProcessInstance> childInstances = flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .superProcessInstanceId(parentInstance.getProcessInstanceId())
@@ -117,7 +120,7 @@ public class FlowableRuntimeStartService {
             Instant now = Instant.now();
             processLinkService.createLink(new ProcessLinkRecord(
                     UUID.randomUUID().toString(),
-                    parentInstance.getProcessInstanceId(),
+                    rootInstanceId,
                     parentInstance.getProcessInstanceId(),
                     childInstance.getProcessInstanceId(),
                     subprocessNode.id(),

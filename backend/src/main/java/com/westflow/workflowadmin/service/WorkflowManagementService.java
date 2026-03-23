@@ -10,6 +10,8 @@ import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
 import com.westflow.processdef.model.ProcessDefinitionRecord;
+import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
+import com.westflow.processruntime.service.ProcessLinkService;
 import com.westflow.workflowadmin.api.WorkflowInstanceDetailResponse;
 import com.westflow.workflowadmin.api.WorkflowInstanceListItemResponse;
 import com.westflow.workflowadmin.api.WorkflowOperationLogDetailResponse;
@@ -20,6 +22,7 @@ import com.westflow.workflowadmin.api.WorkflowVersionDetailResponse;
 import com.westflow.workflowadmin.api.WorkflowVersionListItemResponse;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,6 +49,7 @@ public class WorkflowManagementService {
     private final WorkflowOperationLogService workflowOperationLogService;
     private final IdentityAuthService fixtureAuthService;
     private final FlowableEngineFacade flowableEngineFacade;
+    private final ProcessLinkService processLinkService;
 
     public PageResponse<WorkflowVersionListItemResponse> pageVersions(PageRequest request) {
         ensureWorkflowAdminAccess();
@@ -153,8 +157,36 @@ public class WorkflowManagementService {
                 context.currentTaskNames(),
                 toOffsetDateTime(historicInstance.getStartTime()),
                 toOffsetDateTime(historicInstance.getEndTime()),
-                context.variables()
+                context.variables(),
+                processLinks(instanceId)
         );
+    }
+
+    private List<ProcessInstanceLinkResponse> processLinks(String instanceId) {
+        String rootInstanceId = Optional.ofNullable(processLinkService.getByChildInstanceId(instanceId))
+                .map(com.westflow.processruntime.model.ProcessLinkRecord::rootInstanceId)
+                .orElse(instanceId);
+        return processLinkService.listByRootInstanceId(rootInstanceId).stream()
+                .map(record -> new ProcessInstanceLinkResponse(
+                        record.id(),
+                        record.rootInstanceId(),
+                        record.parentInstanceId(),
+                        record.childInstanceId(),
+                        record.parentNodeId(),
+                        record.calledProcessKey(),
+                        record.calledDefinitionId(),
+                        record.linkType(),
+                        record.status(),
+                        record.terminatePolicy(),
+                        record.childFinishPolicy(),
+                        toOffsetDateTime(record.createdAt()),
+                        toOffsetDateTime(record.finishedAt())
+                ))
+                .toList();
+    }
+
+    private OffsetDateTime toOffsetDateTime(Instant value) {
+        return value == null ? null : OffsetDateTime.ofInstant(value, TIME_ZONE);
     }
 
     public PageResponse<WorkflowOperationLogListItemResponse> pageOperationLogs(PageRequest request) {

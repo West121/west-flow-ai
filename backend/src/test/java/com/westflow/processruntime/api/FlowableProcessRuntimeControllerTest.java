@@ -2,6 +2,7 @@ package com.westflow.processruntime.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import org.flowable.engine.RepositoryService;
@@ -49,6 +50,9 @@ class FlowableProcessRuntimeControllerTest {
 
     @Autowired
     private RepositoryService repositoryService;
+
+    @Autowired
+    private FlowableEngineFacade flowableEngineFacade;
 
     /**
      * 每次测试前清理 Flowable 部署，避免版本串扰。
@@ -317,6 +321,61 @@ class FlowableProcessRuntimeControllerTest {
                 Integer.class,
                 instanceId
         )).isEqualTo(1);
+    }
+
+    @Test
+    void shouldTerminateChildSubprocessOnly() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildSubprocessParentPayload());
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_parent_with_subprocess",
+                                  "businessKey": "parent_bill_child_terminate_001",
+                                  "businessType": "OA_COMMON",
+                                  "formData": {
+                                    "billNo": "BILL-CHILD-TERMINATE-001"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String instanceId = startBody.path("instanceId").asText();
+        String childInstanceId = jdbcTemplate.queryForObject(
+                "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ?",
+                String.class,
+                instanceId
+        );
+
+        JsonNode terminateBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/terminate", instanceId)
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "terminateScope": "CHILD",
+                                  "childInstanceId": "%s",
+                                  "reason": "测试终止子流程"
+                                }
+                                """.formatted(childInstanceId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(terminateBody.path("instanceId").asText()).isEqualTo(instanceId);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_process_link WHERE child_instance_id = ? AND status = 'TERMINATED'",
+                Integer.class,
+                childInstanceId
+        )).isEqualTo(1);
+        assertThat(flowableEngineFacade.runtimeService().createProcessInstanceQuery().processInstanceId(childInstanceId).singleResult()).isNull();
     }
 
     @Test

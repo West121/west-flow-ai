@@ -24,6 +24,11 @@ public class ProcessLinkService {
         return processLinkMapper.selectByParentInstanceId(parentInstanceId);
     }
 
+    // 查询某个根流程实例下的全部父子流程关联。
+    public List<ProcessLinkRecord> listByRootInstanceId(String rootInstanceId) {
+        return processLinkMapper.selectByRootInstanceId(rootInstanceId);
+    }
+
     // 按子流程实例 id 查询关联记录。
     public ProcessLinkRecord getByChildInstanceId(String childInstanceId) {
         return processLinkMapper.selectByChildInstanceId(childInstanceId);

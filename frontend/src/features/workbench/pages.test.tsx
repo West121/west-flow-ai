@@ -1210,6 +1210,56 @@ describe('workbench pages', () => {
     expect(screen.getByText(/状态：自动结束/)).toBeInTheDocument()
   })
 
+  it('shows subprocess links in approval detail', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_subprocess_001',
+        activeTaskIds: ['task_subprocess_001'],
+        processLinks: [
+          {
+            linkId: 'link_001',
+            rootInstanceId: 'pi_001',
+            parentInstanceId: 'pi_001',
+            childInstanceId: 'pi_child_001',
+            parentNodeId: 'subprocess_review',
+            calledProcessKey: 'oa_sub_review',
+            calledDefinitionId: 'oa_sub_review:1:1004',
+            linkType: 'CALL_ACTIVITY',
+            status: 'RUNNING',
+            terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
+            childFinishPolicy: 'RETURN_TO_PARENT',
+            createdAt: '2026-03-23T10:10:00+08:00',
+            finishedAt: null,
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_subprocess_001' />)
+
+    expect(await screen.findByText('主子流程')).toBeInTheDocument()
+    expect(screen.getByText('主流程实例：pi_001')).toBeInTheDocument()
+    expect(screen.getByText('子流程实例：pi_child_001')).toBeInTheDocument()
+    expect(screen.getByText('调用节点：subprocess_review')).toBeInTheDocument()
+    expect(screen.getByText('子流程编码：oa_sub_review')).toBeInTheDocument()
+  })
+
   it('loads approval-sheet detail through the business locator path', async () => {
     workbenchApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
       createWorkbenchTaskDetail({

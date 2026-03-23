@@ -212,23 +212,7 @@ public class FlowableProcessRuntimeService {
      */
     public List<ProcessInstanceLinkResponse> links(String instanceId) {
         requireHistoricProcessInstance(instanceId);
-        return processLinkService.listByParentInstanceId(instanceId).stream()
-                .map(record -> new ProcessInstanceLinkResponse(
-                        record.id(),
-                        record.rootInstanceId(),
-                        record.parentInstanceId(),
-                        record.childInstanceId(),
-                        record.parentNodeId(),
-                        record.calledProcessKey(),
-                        record.calledDefinitionId(),
-                        record.linkType(),
-                        record.status(),
-                        record.terminatePolicy(),
-                        record.childFinishPolicy(),
-                        record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
-                        record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
-                ))
-                .toList();
+        return subprocessLinks(instanceId);
     }
 
     /**
@@ -237,9 +221,16 @@ public class FlowableProcessRuntimeService {
     @Transactional
     public CompleteTaskResponse terminate(String instanceId, TerminateProcessInstanceRequest request) {
         String terminateScope = normalizeTerminateScope(request.terminateScope());
-        if (!"ROOT".equals(terminateScope)) {
-            throw actionNotAllowed("当前仅支持终止根流程", Map.of("terminateScope", terminateScope));
+        if ("ROOT".equals(terminateScope)) {
+            return terminateRootProcess(instanceId, request.reason());
         }
+        if ("CHILD".equals(terminateScope) || "SUBPROCESS".equals(terminateScope)) {
+            return terminateChildProcess(instanceId, request.childInstanceId(), request.reason());
+        }
+        throw actionNotAllowed("当前仅支持终止根流程或子流程", Map.of("terminateScope", terminateScope));
+    }
+
+    private CompleteTaskResponse terminateRootProcess(String instanceId, String reason) {
         ProcessInstance runtimeInstance = flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .processInstanceId(instanceId)
@@ -253,8 +244,8 @@ public class FlowableProcessRuntimeService {
             );
         }
         Instant terminatedAt = Instant.now();
-        List<com.westflow.processruntime.model.ProcessLinkRecord> childLinks = processLinkService.listByParentInstanceId(instanceId);
-        flowableTaskActionService.revokeProcessInstance(instanceId, "WESTFLOW_TERMINATE:" + request.reason());
+        List<com.westflow.processruntime.model.ProcessLinkRecord> childLinks = processLinkService.listByRootInstanceId(instanceId);
+        flowableTaskActionService.revokeProcessInstance(instanceId, "WESTFLOW_TERMINATE:" + reason);
         childLinks.forEach(link -> processLinkService.updateStatus(link.childInstanceId(), "TERMINATED", terminatedAt));
         appendInstanceEvent(
                 instanceId,
@@ -267,8 +258,8 @@ public class FlowableProcessRuntimeService {
                 null,
                 null,
                 eventDetails(
-                        "terminateScope", terminateScope,
-                        "reason", request.reason(),
+                        "terminateScope", "ROOT",
+                        "reason", reason,
                         "terminatedChildCount", childLinks.size()
                 ),
                 null,
@@ -280,6 +271,81 @@ public class FlowableProcessRuntimeService {
                 null
         );
         return new CompleteTaskResponse(instanceId, null, "TERMINATED", List.of());
+    }
+
+    private CompleteTaskResponse terminateChildProcess(String instanceId, String childInstanceId, String reason) {
+        String resolvedChildInstanceId = childInstanceId == null || childInstanceId.isBlank()
+                ? instanceId
+                : childInstanceId.trim();
+        var link = Optional.ofNullable(processLinkService.getByChildInstanceId(resolvedChildInstanceId))
+                .orElseThrow(() -> actionNotAllowed(
+                        "目标子流程实例不存在",
+                        Map.of("instanceId", instanceId, "childInstanceId", resolvedChildInstanceId)
+                ));
+        ProcessInstance runtimeChildInstance = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(resolvedChildInstanceId)
+                .singleResult();
+        if (runtimeChildInstance == null) {
+            throw new ContractException(
+                    "PROCESS.INSTANCE_NOT_RUNNING",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "子流程实例未运行，不能终止",
+                    Map.of("childInstanceId", resolvedChildInstanceId)
+            );
+        }
+        Instant terminatedAt = Instant.now();
+        flowableTaskActionService.revokeProcessInstance(resolvedChildInstanceId, "WESTFLOW_TERMINATE:" + reason);
+        processLinkService.updateStatus(resolvedChildInstanceId, "TERMINATED", terminatedAt);
+        appendInstanceEvent(
+                link.parentInstanceId(),
+                null,
+                link.parentNodeId(),
+                "SUBPROCESS_TERMINATED",
+                "子流程已终止",
+                "INSTANCE",
+                null,
+                resolvedChildInstanceId,
+                null,
+                eventDetails(
+                        "terminateScope", "CHILD",
+                        "reason", reason,
+                        "childInstanceId", resolvedChildInstanceId,
+                        "parentNodeId", link.parentNodeId()
+                ),
+                null,
+                link.parentNodeId(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        appendInstanceEvent(
+                resolvedChildInstanceId,
+                null,
+                null,
+                "INSTANCE_TERMINATED",
+                "流程已终止",
+                "INSTANCE",
+                null,
+                null,
+                null,
+                eventDetails(
+                        "terminateScope", "CHILD",
+                        "reason", reason,
+                        "rootInstanceId", link.rootInstanceId(),
+                        "parentInstanceId", link.parentInstanceId()
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return nextTaskResponse(link.parentInstanceId(), null);
     }
 
     /**
@@ -1210,6 +1276,7 @@ public class FlowableProcessRuntimeService {
                 toOffsetDateTime(historicProcessInstance.getStartTime())
         );
         List<CountersignTaskGroupResponse> countersignGroups = flowableCountersignService.queryTaskGroups(processInstanceId);
+        List<ProcessInstanceLinkResponse> processLinks = subprocessLinks(processInstanceId);
         OffsetDateTime createdAt = referenceActiveTask != null
                 ? toOffsetDateTime(referenceActiveTask.getCreateTime())
                 : referenceHistoricTask == null ? toOffsetDateTime(historicProcessInstance.getStartTime()) : toOffsetDateTime(referenceHistoricTask.getCreateTime());
@@ -1270,6 +1337,7 @@ public class FlowableProcessRuntimeService {
                 mapValue(variables.get("westflowFormData")),
                 mapValue(variables.get("westflowTaskFormData")),
                 countersignGroups,
+                processLinks,
                 blockingActiveTasks.stream().map(Task::getId).toList()
         );
     }
@@ -1816,6 +1884,86 @@ public class FlowableProcessRuntimeService {
         return terminateScope == null || terminateScope.isBlank()
                 ? "ROOT"
                 : terminateScope.trim().toUpperCase();
+    }
+
+    private List<ProcessInstanceLinkResponse> subprocessLinks(String instanceId) {
+        String rootInstanceId = Optional.ofNullable(processLinkService.getByChildInstanceId(instanceId))
+                .map(com.westflow.processruntime.model.ProcessLinkRecord::rootInstanceId)
+                .orElse(instanceId);
+        synchronizeProcessLinks(rootInstanceId);
+        return processLinkService.listByRootInstanceId(rootInstanceId).stream()
+                .map(this::toProcessInstanceLinkResponse)
+                .toList();
+    }
+
+    private void synchronizeProcessLinks(String rootInstanceId) {
+        processLinkService.listByRootInstanceId(rootInstanceId).stream()
+                .filter(record -> "RUNNING".equals(record.status()))
+                .forEach(record -> {
+                    ProcessInstance runtimeChild = flowableEngineFacade.runtimeService()
+                            .createProcessInstanceQuery()
+                            .processInstanceId(record.childInstanceId())
+                            .singleResult();
+                    if (runtimeChild != null) {
+                        return;
+                    }
+                    HistoricProcessInstance historicChild = flowableEngineFacade.historyService()
+                            .createHistoricProcessInstanceQuery()
+                            .processInstanceId(record.childInstanceId())
+                            .singleResult();
+                    if (historicChild == null || historicChild.getEndTime() == null) {
+                        return;
+                    }
+                    String resolvedStatus = isTerminatedProcess(historicChild) ? "TERMINATED" : "FINISHED";
+                    processLinkService.updateStatus(record.childInstanceId(), resolvedStatus, historicChild.getEndTime().toInstant());
+                    appendInstanceEvent(
+                            record.parentInstanceId(),
+                            null,
+                            record.parentNodeId(),
+                            "TERMINATED".equals(resolvedStatus) ? "SUBPROCESS_TERMINATED" : "SUBPROCESS_FINISHED",
+                            "TERMINATED".equals(resolvedStatus) ? "子流程已终止" : "子流程已完成",
+                            "INSTANCE",
+                            null,
+                            record.childInstanceId(),
+                            null,
+                            eventDetails(
+                                    "childInstanceId", record.childInstanceId(),
+                                    "parentNodeId", record.parentNodeId(),
+                                    "calledProcessKey", record.calledProcessKey(),
+                                    "resolvedStatus", resolvedStatus
+                            ),
+                            null,
+                            record.parentNodeId(),
+                            null,
+                            null,
+                            null,
+                            null,
+                            null
+                    );
+                });
+    }
+
+    private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(com.westflow.processruntime.model.ProcessLinkRecord record) {
+        return new ProcessInstanceLinkResponse(
+                record.id(),
+                record.rootInstanceId(),
+                record.parentInstanceId(),
+                record.childInstanceId(),
+                record.parentNodeId(),
+                record.calledProcessKey(),
+                record.calledDefinitionId(),
+                record.linkType(),
+                record.status(),
+                record.terminatePolicy(),
+                record.childFinishPolicy(),
+                record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
+                record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
+        );
+    }
+
+    private boolean isTerminatedProcess(HistoricProcessInstance historicProcessInstance) {
+        String deleteReason = historicProcessInstance.getDeleteReason();
+        return deleteReason != null && deleteReason.startsWith("WESTFLOW_TERMINATE:");
     }
 
     private CompleteTaskResponse nextTaskResponse(String processInstanceId, String completedTaskId) {

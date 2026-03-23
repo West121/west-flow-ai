@@ -1,4 +1,4 @@
-import { startTransition, useEffect } from 'react'
+import { startTransition, useEffect, type ReactNode } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -140,6 +140,7 @@ function DetailPage({
   editHref,
   badges,
   sections,
+  children,
 }: {
   title: string
   description: string
@@ -147,6 +148,7 @@ function DetailPage({
   editHref?: string
   badges: string[]
   sections: Array<{ title: string; description: string; items: Array<{ label: string; value: string }> }>
+  children?: ReactNode
 }) {
   return (
     <PageShell
@@ -182,7 +184,53 @@ function DetailPage({
           <DetailSection key={section.title} {...section} />
         ))}
       </div>
+      {children}
     </PageShell>
+  )
+}
+
+function WorkflowProcessLinkSection({
+  processLinks,
+  currentInstanceId,
+}: {
+  processLinks: Awaited<ReturnType<typeof getWorkflowInstanceDetail>>['processLinks']
+  currentInstanceId: string
+}) {
+  if (!processLinks.length) {
+    return null
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>主子流程关系</CardTitle>
+        <CardDescription>
+          这里按调用链展示主流程与子流程实例关系，便于监控联动终止和回查执行状态。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        {processLinks.map((link) => (
+          <div key={link.linkId} className='rounded-lg border p-4'>
+            <div className='mb-2 flex flex-wrap items-center gap-2'>
+              <StatusBadge text={link.status} />
+              <Badge variant='outline'>{link.linkType}</Badge>
+              {link.parentInstanceId === currentInstanceId ? <Badge variant='secondary'>当前主流程</Badge> : null}
+              {link.childInstanceId === currentInstanceId ? <Badge variant='secondary'>当前子流程</Badge> : null}
+            </div>
+            <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
+              <div>主流程实例：{link.parentInstanceId}</div>
+              <div>子流程实例：{link.childInstanceId}</div>
+              <div>调用节点：{link.parentNodeId}</div>
+              <div>子流程编码：{link.calledProcessKey}</div>
+              <div>终止策略：{link.terminatePolicy || '-'}</div>
+              <div>子流程完成策略：{link.childFinishPolicy || '-'}</div>
+              <div>创建时间：{formatDateTime(link.createdAt)}</div>
+              <div>结束时间：{formatDateTime(link.finishedAt)}</div>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -544,7 +592,12 @@ export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string 
           ],
         },
       ]}
-    />
+    >
+      <WorkflowProcessLinkSection
+        processLinks={detail.processLinks}
+        currentInstanceId={detail.processInstanceId}
+      />
+    </DetailPage>
   )
 }
 

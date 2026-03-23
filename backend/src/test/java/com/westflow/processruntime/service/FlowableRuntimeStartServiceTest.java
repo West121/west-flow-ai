@@ -269,6 +269,14 @@ class FlowableRuntimeStartServiceTest {
                 "子流程审批通过",
                 null
         ));
+        assertThat(flowableProcessRuntimeService.links(response.instanceId()))
+                .singleElement()
+                .satisfies(link -> assertThat(link.status()).isEqualTo("FINISHED"));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_process_link WHERE parent_instance_id = ? AND status = 'FINISHED'",
+                Integer.class,
+                response.instanceId()
+        )).isEqualTo(1);
 
         assertThat(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(childInstance.getProcessInstanceId())

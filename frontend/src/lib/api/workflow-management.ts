@@ -54,8 +54,25 @@ export type WorkflowInstanceRecord = {
   finishedAt: string | null
 }
 
+export type WorkflowProcessLink = {
+  linkId: string
+  rootInstanceId: string
+  parentInstanceId: string
+  childInstanceId: string
+  parentNodeId: string
+  calledProcessKey: string
+  calledDefinitionId: string
+  linkType: string
+  status: string
+  terminatePolicy: string | null
+  childFinishPolicy: string | null
+  createdAt: string | null
+  finishedAt: string | null
+}
+
 export type WorkflowInstanceDetail = WorkflowInstanceRecord & {
   variables: Record<string, unknown>
+  processLinks: WorkflowProcessLink[]
 }
 
 export type WorkflowOperationLogRecord = {

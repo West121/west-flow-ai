@@ -85,6 +85,27 @@ public interface ProcessLinkMapper {
               created_at AS createdAt,
               finished_at AS finishedAt
             FROM wf_process_link
+            WHERE root_instance_id = #{rootInstanceId}
+            ORDER BY created_at ASC, id ASC
+            """)
+    List<ProcessLinkRecord> selectByRootInstanceId(@Param("rootInstanceId") String rootInstanceId);
+
+    @Select("""
+            SELECT
+              id,
+              root_instance_id AS rootInstanceId,
+              parent_instance_id AS parentInstanceId,
+              child_instance_id AS childInstanceId,
+              parent_node_id AS parentNodeId,
+              called_process_key AS calledProcessKey,
+              called_definition_id AS calledDefinitionId,
+              link_type AS linkType,
+              status,
+              terminate_policy AS terminatePolicy,
+              child_finish_policy AS childFinishPolicy,
+              created_at AS createdAt,
+              finished_at AS finishedAt
+            FROM wf_process_link
             WHERE child_instance_id = #{childInstanceId}
             LIMIT 1
             """)

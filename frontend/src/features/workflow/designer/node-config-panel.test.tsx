@@ -94,9 +94,9 @@ function buildSubprocessNode(): WorkflowNode {
         businessBindingMode: 'OVERRIDE',
         terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
         childFinishPolicy: 'TERMINATE_PARENT',
-        inputMappingsJson: '[{\"source\":\"billNo\",\"target\":\"sourceBillNo\"}]',
-        outputMappingsJson: '[{\"source\":\"approvedResult\",\"target\":\"purchaseResult\"}]',
-      },
+        inputMappingsJson: '[{"source":"billNo","target":"sourceBillNo"}]',
+        outputMappingsJson: '[{"source":"approvedResult","target":"purchaseResult"}]',
+      } as never,
     },
   }
 }
