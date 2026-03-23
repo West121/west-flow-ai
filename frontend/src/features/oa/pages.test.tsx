@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { sidebarData } from '@/components/layout/data/sidebar-data'
 import {
   OAApprovalSheetDetailPage,
   OACommonCreatePage,
@@ -475,27 +474,4 @@ describe('oa pages', () => {
     expect(screen.getByRole('link', { name: buttonLabel })).toHaveAttribute('href', href)
   })
 
-  it('exposes OA and process-center entries in the sidebar data', () => {
-    const oaGroup = sidebarData.navGroups.find(({ title }) => title === 'OA')
-    const processGroup = sidebarData.navGroups.find(
-      ({ title }) => title === '流程管理'
-    )
-    const processCenter = processGroup?.items.find(
-      (item) => item.title === '流程中心'
-    )
-
-    expect(oaGroup?.items.map((item) => item.title)).toEqual([
-      '请假申请',
-      '报销申请',
-      '通用申请',
-      'OA 流程查询',
-    ])
-    expect(processCenter?.items?.map((item) => item.title)).toEqual([
-      '待办列表',
-      '已办列表',
-      '我发起',
-      '抄送我',
-      '发起流程',
-    ])
-  })
 })

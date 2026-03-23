@@ -5,7 +5,7 @@ import {
 import { apiClient, unwrapResponse, type ApiSuccessResponse } from './client'
 
 export type MenuStatus = 'ENABLED' | 'DISABLED'
-export type MenuType = 'DIRECTORY' | 'MENU' | 'BUTTON'
+export type MenuType = 'DIRECTORY' | 'MENU' | 'PERMISSION'
 
 type BasePageResponse<T> = {
   page: number
@@ -62,6 +62,32 @@ export type MenuFormOptions = {
   }>
 }
 
+export type MenuTreeNode = {
+  menuId: string
+  parentMenuId: string | null
+  menuName: string
+  menuType: MenuType
+  routePath: string | null
+  componentPath: string | null
+  permissionCode: string | null
+  iconName: string | null
+  sortOrder: number
+  visible: boolean
+  enabled: boolean
+  children: MenuTreeNode[]
+}
+
+export type SidebarMenuNode = {
+  menuId: string
+  parentMenuId: string | null
+  title: string
+  menuType: 'DIRECTORY' | 'MENU'
+  routePath: string | null
+  iconName: string | null
+  sortOrder: number
+  children: SidebarMenuNode[]
+}
+
 export type SaveMenuPayload = {
   parentMenuId: string | null
   menuName: string
@@ -97,6 +123,22 @@ export async function getMenuDetail(menuId: string): Promise<MenuDetail> {
 export async function getMenuFormOptions(): Promise<MenuFormOptions> {
   const response = await apiClient.get<ApiSuccessResponse<MenuFormOptions>>(
     '/system/menus/options'
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function getMenuTree(): Promise<MenuTreeNode[]> {
+  const response = await apiClient.get<ApiSuccessResponse<MenuTreeNode[]>>(
+    '/system/menus/tree'
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function getSidebarMenuTree(): Promise<SidebarMenuNode[]> {
+  const response = await apiClient.get<ApiSuccessResponse<SidebarMenuNode[]>>(
+    '/system/menus/sidebar-tree'
   )
 
   return unwrapResponse(response)

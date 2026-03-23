@@ -1,4 +1,5 @@
 import React from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowRight, ChevronRight, Laptop, Moon, Sun } from 'lucide-react'
 import { useSearch } from '@/context/search-provider'
@@ -12,13 +13,22 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
-import { sidebarData } from './layout/data/sidebar-data'
+import { getSidebarMenuTree } from '@/lib/api/system-menus'
+import { flattenSidebarMenuItems } from './layout/sidebar-menu-helpers'
 import { ScrollArea } from './ui/scroll-area'
 
 export function CommandMenu() {
   const navigate = useNavigate()
   const { setTheme } = useTheme()
   const { open, setOpen } = useSearch()
+  const { data } = useQuery({
+    queryKey: ['sidebar-menu-tree'],
+    queryFn: getSidebarMenuTree,
+  })
+  const menuItems = React.useMemo(
+    () => flattenSidebarMenuItems(data ?? []),
+    [data]
+  )
 
   const runCommand = React.useCallback(
     (command: () => unknown) => {
@@ -35,43 +45,35 @@ export function CommandMenu() {
       <CommandList>
         <ScrollArea type='hover' className='h-72 pe-1'>
           <CommandEmpty>未找到匹配结果。</CommandEmpty>
-          {sidebarData.navGroups.map((group) => (
-            <CommandGroup key={group.title} heading={group.title}>
-              {group.items.map((navItem, i) => {
-                if (navItem.url)
-                  return (
+          {Array.from(new Set(menuItems.map((item) => item.groupTitle))).map(
+            (groupTitle) => (
+              <CommandGroup key={groupTitle} heading={groupTitle}>
+                {menuItems
+                  .filter((item) => item.groupTitle === groupTitle)
+                  .map((item) => (
                     <CommandItem
-                      key={`${navItem.url}-${i}`}
-                      value={navItem.title}
+                      key={`${item.url}-${item.title}`}
+                      value={`${groupTitle}-${item.title}`}
                       onSelect={() => {
-                        runCommand(() => navigate({ to: navItem.url }))
+                        runCommand(() => navigate({ to: item.url }))
                       }}
                     >
                       <div className='flex size-4 items-center justify-center'>
                         <ArrowRight className='size-2 text-muted-foreground/80' />
                       </div>
-                      {navItem.title}
+                      {item.title.includes(' / ') ? (
+                        <>
+                          {item.title.split(' / ')[0]} <ChevronRight />{' '}
+                          {item.title.split(' / ')[1]}
+                        </>
+                      ) : (
+                        item.title
+                      )}
                     </CommandItem>
-                  )
-
-                return navItem.items?.map((subItem, i) => (
-                  <CommandItem
-                    key={`${navItem.title}-${subItem.url}-${i}`}
-                    value={`${navItem.title}-${subItem.url}`}
-                    onSelect={() => {
-                      runCommand(() => navigate({ to: subItem.url }))
-                    }}
-                  >
-                    {/* 有子项时展开为二级命令项，保证搜索命中完整路径。 */}
-                    <div className='flex size-4 items-center justify-center'>
-                      <ArrowRight className='size-2 text-muted-foreground/80' />
-                    </div>
-                    {navItem.title} <ChevronRight /> {subItem.title}
-                  </CommandItem>
-                ))
-              })}
+                  ))}
             </CommandGroup>
-          ))}
+            )
+          )}
           <CommandSeparator />
           {/* 主题切换也作为命令入口统一放在这里处理。 */}
           <CommandGroup heading='主题'>

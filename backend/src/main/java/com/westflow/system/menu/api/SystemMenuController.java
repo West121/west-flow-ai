@@ -7,6 +7,7 @@ import com.westflow.common.query.PageResponse;
 import com.westflow.system.menu.service.SystemMenuService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import cn.dev33.satoken.stp.StpUtil;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -48,6 +49,22 @@ public class SystemMenuController {
     @GetMapping("/options")
     public ApiResponse<SystemMenuFormOptionsResponse> options() {
         return ApiResponse.success(systemMenuService.formOptions());
+    }
+
+    /**
+     * 查询完整菜单树。
+     */
+    @GetMapping("/tree")
+    public ApiResponse<java.util.List<SystemMenuTreeNodeResponse>> tree() {
+        return ApiResponse.success(systemMenuService.tree());
+    }
+
+    /**
+     * 查询当前用户左侧导航菜单树。
+     */
+    @GetMapping("/sidebar-tree")
+    public ApiResponse<java.util.List<SidebarMenuNodeResponse>> sidebarTree() {
+        return ApiResponse.success(systemMenuService.sidebarTree(StpUtil.getLoginIdAsString()));
     }
 
     /**

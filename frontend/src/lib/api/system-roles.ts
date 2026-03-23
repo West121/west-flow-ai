@@ -58,7 +58,7 @@ export type SystemRoleFormOptions = {
   menus: Array<{
     id: string
     name: string
-    menuType: 'DIRECTORY' | 'MENU' | 'BUTTON'
+    menuType: 'DIRECTORY' | 'MENU' | 'PERMISSION'
     parentMenuName: string | null
   }>
   scopeTypes: Array<{

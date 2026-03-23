@@ -2,12 +2,13 @@ import { startTransition, useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
-import { type ColumnDef } from '@tanstack/react-table'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   Eye,
   EyeOff,
   Layers3,
@@ -46,30 +47,35 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { getApiErrorResponse } from '@/lib/api/client'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
   createMenu,
   getMenuDetail,
   getMenuFormOptions,
-  listMenus,
+  getMenuTree,
   updateMenu,
   type MenuDetail,
-  type MenuRecord,
+  type MenuTreeNode,
   type MenuType,
   type SaveMenuPayload,
 } from '@/lib/api/system-menus'
-import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
-
-const menusRoute = getRouteApi('/_authenticated/system/menus/list')
 
 const ROOT_VALUE = '__ROOT__'
 
 const menuFormSchema = z.object({
   parentMenuId: z.string().nullable(),
   menuName: z.string().trim().min(2, '菜单名称至少需要 2 个字符'),
-  menuType: z.enum(['DIRECTORY', 'MENU', 'BUTTON'], {
+  menuType: z.enum(['DIRECTORY', 'MENU', 'PERMISSION'], {
     message: '请选择菜单类型',
   }),
   routePath: z.string().nullable(),
@@ -84,40 +90,13 @@ const menuFormSchema = z.object({
 type MenuFormValues = z.infer<typeof menuFormSchema>
 type SubmitAction = 'list' | 'continue'
 
-// 菜单管理页统一用这个方法格式化时间展示。
-function formatDateTime(value: string | null | undefined) {
-  if (!value) {
-    return '-'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-// 菜单状态只保留最直观的启用/停用文案。
-function resolveStatusLabel(status: string) {
-  return status === 'ENABLED' ? '启用' : '停用'
-}
-
 // 菜单类型标签用于列表和表单的同一套文案。
 function resolveMenuTypeLabel(menuType: MenuType) {
   return (
     {
       DIRECTORY: '目录',
       MENU: '菜单',
-      BUTTON: '按钮',
+      PERMISSION: '权限',
     } satisfies Record<MenuType, string>
   )[menuType]
 }
@@ -128,7 +107,7 @@ function resolveMenuTypeVariant(menuType: MenuType) {
     {
       DIRECTORY: 'secondary',
       MENU: 'outline',
-      BUTTON: 'default',
+      PERMISSION: 'default',
     } satisfies Record<MenuType, 'secondary' | 'outline' | 'default'>
   )[menuType]
 }
@@ -263,127 +242,146 @@ function MenuDetailMetric({
   )
 }
 
-const menuColumns: ColumnDef<MenuRecord>[] = [
-  {
-    accessorKey: 'menuName',
-    header: '菜单名称',
-    cell: ({ row }) => (
-      <div className='flex flex-col gap-1'>
-        <span className='font-medium'>{row.original.menuName}</span>
-        <span className='text-xs text-muted-foreground'>{row.original.menuId}</span>
-      </div>
-    ),
-  },
-  {
-    accessorKey: 'menuType',
-    header: '类型',
-    cell: ({ row }) => (
-      <Badge variant={resolveMenuTypeVariant(row.original.menuType)}>
-        {resolveMenuTypeLabel(row.original.menuType)}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: 'parentMenuName',
-    header: '父级菜单',
-    cell: ({ row }) => row.original.parentMenuName ?? '顶级菜单',
-  },
-  {
-    accessorKey: 'routePath',
-    header: '路由路径',
-    cell: ({ row }) => row.original.routePath ?? '-',
-  },
-  {
-    accessorKey: 'sortOrder',
-    header: '排序',
-  },
-  {
-    accessorKey: 'status',
-    header: '状态',
-    cell: ({ row }) => (
-      <div className='flex items-center gap-2'>
-        <Badge
-          variant={
-            row.original.status === 'ENABLED' ? 'secondary' : 'outline'
-          }
-        >
-          {resolveStatusLabel(row.original.status)}
-        </Badge>
-        <Badge variant='outline'>
-          {row.original.visible ? '显示' : '隐藏'}
-        </Badge>
-      </div>
-    ),
-  },
-  {
-    accessorKey: 'createdAt',
-    header: '创建时间',
-    cell: ({ row }) => formatDateTime(row.original.createdAt),
-  },
-  {
-    id: 'action',
-    header: '操作',
-    enableSorting: false,
-    cell: ({ row }) => (
-      <div className='flex items-center gap-2'>
-        <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link to='/system/menus/$menuId' params={{ menuId: row.original.menuId }}>
-            详情
-          </Link>
-        </Button>
-        <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link
-            to='/system/menus/$menuId/edit'
-            params={{ menuId: row.original.menuId }}
-          >
-            编辑
-          </Link>
-        </Button>
-      </div>
-    ),
-  },
-]
+type MenuTreeRow = {
+  menuId: string
+  parentMenuId: string | null
+  menuName: string
+  menuType: MenuType
+  routePath: string | null
+  permissionCode: string | null
+  iconName: string | null
+  sortOrder: number
+  visible: boolean
+  enabled: boolean
+  depth: number
+  hasChildren: boolean
+}
+
+function flattenMenuTree(
+  nodes: MenuTreeNode[],
+  expandedIds: Set<string>,
+  keyword: string,
+  depth = 0
+): MenuTreeRow[] {
+  return nodes.flatMap((node) => {
+    const normalizedKeyword = keyword.trim().toLowerCase()
+    const matchesSelf =
+      normalizedKeyword.length === 0 ||
+      node.menuName.toLowerCase().includes(normalizedKeyword) ||
+      (node.routePath ?? '').toLowerCase().includes(normalizedKeyword) ||
+      (node.permissionCode ?? '').toLowerCase().includes(normalizedKeyword)
+
+    const childRows = flattenMenuTree(
+      node.children,
+      expandedIds,
+      normalizedKeyword,
+      depth + 1
+    )
+    const matchesBranch = matchesSelf || childRows.length > 0
+
+    if (!matchesBranch) {
+      return []
+    }
+
+    const currentRow: MenuTreeRow = {
+      menuId: node.menuId,
+      parentMenuId: node.parentMenuId,
+      menuName: node.menuName,
+      menuType: node.menuType,
+      routePath: node.routePath,
+      permissionCode: node.permissionCode,
+      iconName: node.iconName,
+      sortOrder: node.sortOrder,
+      visible: node.visible,
+      enabled: node.enabled,
+      depth,
+      hasChildren: node.children.length > 0,
+    }
+
+    if (!expandedIds.has(node.menuId) && normalizedKeyword.length === 0) {
+      return [currentRow]
+    }
+
+    return [currentRow, ...childRows]
+  })
+}
 
 export function MenusListPage() {
-  const search = menusRoute.useSearch()
-  const navigate = menusRoute.useNavigate()
+  const [keyword, setKeyword] = useState('')
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['system-menus', search],
-    queryFn: () => listMenus(search),
+    queryKey: ['system-menu-tree'],
+    queryFn: getMenuTree,
   })
+  const [expandedIds, setExpandedIds] = useState<Set<string> | null>(null)
+
+  const defaultExpandedIds = useMemo(() => {
+    const nextExpandedIds = new Set<string>()
+    const walk = (nodes: MenuTreeNode[]) => {
+      nodes.forEach((node) => {
+        if (node.children.length > 0) {
+          nextExpandedIds.add(node.menuId)
+        }
+        walk(node.children)
+      })
+    }
+    walk(data ?? [])
+    return nextExpandedIds
+  }, [data])
+
+  const effectiveExpandedIds = expandedIds ?? defaultExpandedIds
+
+  const rows = useMemo(
+    () => flattenMenuTree(data ?? [], effectiveExpandedIds, keyword),
+    [data, effectiveExpandedIds, keyword]
+  )
 
   const summaries = useMemo(() => {
-    const records = data?.records ?? []
-    const visibleCount = records.filter((item) => item.visible).length
-    const enabledCount = records.filter((item) => item.status === 'ENABLED').length
-    const directoryCount = records.filter(
+    const walk = (nodes: MenuTreeNode[]): MenuTreeNode[] =>
+      nodes.flatMap((node) => [node, ...walk(node.children)])
+
+    const allNodes = walk(data ?? [])
+    const visibleCount = allNodes.filter((item) => item.visible).length
+    const enabledCount = allNodes.filter((item) => item.enabled).length
+    const directoryCount = allNodes.filter(
       (item) => item.menuType === 'DIRECTORY'
     ).length
 
     return [
       {
         label: '菜单总量',
-        value: String(data?.total ?? 0),
-        hint: '统一管理系统与流程平台的导航、页面入口和按钮权限。',
+        value: String(allNodes.length),
+        hint: '目录、菜单、权限统一落在同一棵菜单树里做权限治理。',
       },
       {
-        label: '当前页可见',
+        label: '侧边栏可见',
         value: String(visibleCount),
-        hint: '可见状态用于控制侧边栏、导航区和工作台入口的展示。',
+        hint: '仅目录和菜单且 visible=true 的节点会进入左侧导航。',
       },
       {
         label: '目录节点',
         value: String(directoryCount),
-        hint: `当前页启用 ${enabledCount} 项，便于继续扩展日志、字典、监控等系统模块。`,
+        hint: `当前启用 ${enabledCount} 项，权限节点不会出现在侧边栏。`,
       },
     ]
   }, [data])
+
+  const toggleExpand = (menuId: string) => {
+    setExpandedIds((current) => {
+      const next = new Set(current ?? defaultExpandedIds)
+      if (next.has(menuId)) {
+        next.delete(menuId)
+      } else {
+        next.add(menuId)
+      }
+      return next
+    })
+  }
 
   if (isLoading) {
     return (
       <PageShell
         title='菜单管理'
-        description='系统管理中的菜单模块采用独立列表页，统一承载分页、模糊搜索、排序和后续分组能力。'
+        description='菜单管理已切到树形表格，统一维护目录、菜单和权限节点。'
       >
         <Skeleton className='h-64 w-full' />
       </PageShell>
@@ -401,22 +399,140 @@ export function MenusListPage() {
   }
 
   return (
-    <ResourceListPage
+    <PageShell
       title='菜单管理'
-      description='菜单、目录、按钮全部按独立 CRUD 页面维护，列表页保留模糊查询、分页、排序和后续筛选/分组能力。'
-      endpoint='/system/menus/page'
-      searchPlaceholder='搜索菜单名称、路由路径或权限标识'
-      search={search}
-      navigate={navigate}
-      columns={menuColumns}
-      data={data.records}
-      total={data.total}
-      summaries={summaries}
-      createAction={{
-        label: '新建菜单',
-        href: '/system/menus/create',
-      }}
-    />
+      description='菜单树是左侧导航与权限标识的唯一来源，创建/编辑/详情类子页面以权限节点方式入库但不展示到侧边栏。'
+      actions={
+        <div className='flex items-center gap-2'>
+          <Button asChild>
+            <Link to='/system/menus/create'>新建菜单</Link>
+          </Button>
+        </div>
+      }
+    >
+      <div className='grid gap-4 md:grid-cols-3'>
+        {summaries.map((summary) => (
+          <Card key={summary.label}>
+            <CardHeader className='pb-2'>
+              <CardDescription>{summary.label}</CardDescription>
+              <CardTitle className='text-2xl'>{summary.value}</CardTitle>
+            </CardHeader>
+            <CardContent className='text-sm text-muted-foreground'>
+              {summary.hint}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader className='gap-3 md:flex-row md:items-end md:justify-between'>
+          <div className='space-y-1'>
+            <CardTitle>菜单树</CardTitle>
+            <CardDescription>
+              只展示树形结构，不再把创建、修改、详情、执行页混入左侧导航。
+            </CardDescription>
+          </div>
+          <div className='flex w-full max-w-sm items-center gap-2'>
+            <Input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder='搜索菜单名称、路由路径或权限标识'
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>菜单名称</TableHead>
+                <TableHead>类型</TableHead>
+                <TableHead>路由路径</TableHead>
+                <TableHead>权限标识</TableHead>
+                <TableHead>排序</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className='text-right'>操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.menuId}>
+                  <TableCell>
+                    <div
+                      className='flex items-center gap-2'
+                      style={{ paddingLeft: `${row.depth * 20}px` }}
+                    >
+                      {row.hasChildren ? (
+                        <Button
+                          type='button'
+                          variant='ghost'
+                          size='icon'
+                          className='size-7'
+                          onClick={() => toggleExpand(row.menuId)}
+                        >
+                          {effectiveExpandedIds.has(row.menuId) ? (
+                            <ChevronDown className='size-4' />
+                          ) : (
+                            <ChevronRight className='size-4' />
+                          )}
+                        </Button>
+                      ) : (
+                        <span className='inline-flex size-7 items-center justify-center text-muted-foreground'>
+                          ·
+                        </span>
+                      )}
+                      <div className='flex flex-col gap-1'>
+                        <span className='font-medium'>{row.menuName}</span>
+                        <span className='text-xs text-muted-foreground'>
+                          {row.menuId}
+                        </span>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={resolveMenuTypeVariant(row.menuType)}>
+                      {resolveMenuTypeLabel(row.menuType)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{row.routePath ?? '-'}</TableCell>
+                  <TableCell>{row.permissionCode ?? '-'}</TableCell>
+                  <TableCell>{row.sortOrder}</TableCell>
+                  <TableCell>
+                    <div className='flex items-center gap-2'>
+                      <Badge variant={row.enabled ? 'secondary' : 'outline'}>
+                        {row.enabled ? '启用' : '停用'}
+                      </Badge>
+                      <Badge variant='outline'>
+                        {row.visible ? '显示' : '隐藏'}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell className='text-right'>
+                    <div className='flex justify-end gap-2'>
+                      <Button asChild variant='ghost' className='h-8 px-2'>
+                        <Link
+                          to='/system/menus/$menuId'
+                          params={{ menuId: row.menuId }}
+                        >
+                          详情
+                        </Link>
+                      </Button>
+                      <Button asChild variant='ghost' className='h-8 px-2'>
+                        <Link
+                          to='/system/menus/$menuId/edit'
+                          params={{ menuId: row.menuId }}
+                        >
+                          编辑
+                        </Link>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </PageShell>
   )
 }
 
@@ -518,7 +634,7 @@ function MenuFormPage({
   const parentMenuOptions = useMemo(
     () =>
       (optionsQuery.data?.parentMenus ?? []).filter(
-        (item) => item.id !== menuId && item.menuType !== 'BUTTON'
+        (item) => item.id !== menuId && item.menuType !== 'PERMISSION'
       ),
     [menuId, optionsQuery.data?.parentMenus]
   )

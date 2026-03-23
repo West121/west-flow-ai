@@ -150,7 +150,7 @@ class SystemMenuControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "parentMenuId": "menu_system_user",
+                                  "parentMenuId": "menu_system_user_create",
                                   "menuName": "系统管理",
                                   "menuType": "DIRECTORY",
                                   "routePath": "/system",
@@ -192,6 +192,32 @@ class SystemMenuControllerTest {
         JsonNode optionsData = objectMapper.readTree(optionsResponse).path("data");
         assertThat(optionsData.path("menuTypes").isArray()).isTrue();
         assertThat(optionsData.path("parentMenus").isArray()).isTrue();
+    }
+
+    @Test
+    void shouldReturnMenuTreeAndSidebarTree() throws Exception {
+        String token = login();
+
+        String treeResponse = mockMvc.perform(get("/api/v1/system/menus/tree")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode treeData = objectMapper.readTree(treeResponse).path("data");
+        assertThat(treeData.isArray()).isTrue();
+        assertThat(treeData.findValuesAsText("menuId")).contains("menu_workbench", "menu_system");
+
+        String sidebarResponse = mockMvc.perform(get("/api/v1/system/menus/sidebar-tree")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode sidebarData = objectMapper.readTree(sidebarResponse).path("data");
+        assertThat(sidebarData.isArray()).isTrue();
+        assertThat(sidebarData.findValuesAsText("menuId")).contains("menu_workbench");
+        assertThat(sidebarData.findValuesAsText("menuType")).doesNotContain("PERMISSION");
     }
 
     private String login() throws Exception {

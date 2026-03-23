@@ -2315,3 +2315,766 @@ SELECT
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_notification_template WHERE id = 'tpl_seed_notify_001');
+
+UPDATE wf_menu
+SET menu_type = 'PERMISSION',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_permission_probe'
+  AND menu_type <> 'PERMISSION';
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_org',
+    NULL,
+    '组织管理',
+    'DIRECTORY',
+    '/system/org',
+    NULL,
+    NULL,
+    'Building2',
+    20,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_org');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_center',
+    NULL,
+    '流程中心',
+    'DIRECTORY',
+    '/workbench',
+    NULL,
+    NULL,
+    'CheckCircle2',
+    40,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_center');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_oa',
+    NULL,
+    'OA',
+    'DIRECTORY',
+    '/oa',
+    NULL,
+    NULL,
+    'FileText',
+    60,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_plm',
+    NULL,
+    'PLM',
+    'DIRECTORY',
+    '/plm',
+    NULL,
+    NULL,
+    'Package2',
+    70,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_plm');
+
+UPDATE wf_menu
+SET menu_name = '流程管理',
+    sort_order = 50,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_workflow';
+
+UPDATE wf_menu
+SET sort_order = 10,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_workbench';
+
+UPDATE wf_menu
+SET sort_order = 30,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system';
+
+UPDATE wf_menu
+SET parent_menu_id = 'menu_org',
+    sort_order = 10,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_user';
+
+UPDATE wf_menu
+SET parent_menu_id = 'menu_org',
+    sort_order = 20,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_company';
+
+UPDATE wf_menu
+SET parent_menu_id = 'menu_org',
+    sort_order = 30,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_department';
+
+UPDATE wf_menu
+SET parent_menu_id = 'menu_org',
+    sort_order = 40,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_post';
+
+UPDATE wf_menu
+SET parent_menu_id = 'menu_workflow_center',
+    sort_order = 10,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_workbench_todo';
+
+UPDATE wf_menu
+SET sort_order = 10,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_workbench_dashboard';
+
+UPDATE wf_menu
+SET sort_order = 10,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_role';
+
+UPDATE wf_menu
+SET sort_order = 20,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_menu';
+
+UPDATE wf_menu
+SET sort_order = 30,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_dict_type';
+
+UPDATE wf_menu
+SET sort_order = 40,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_dict_item';
+
+UPDATE wf_menu
+SET sort_order = 50,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_agent';
+
+UPDATE wf_menu
+SET sort_order = 60,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_handover';
+
+UPDATE wf_menu
+SET sort_order = 70,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_message';
+
+UPDATE wf_menu
+SET sort_order = 80,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_file';
+
+UPDATE wf_menu
+SET sort_order = 90,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_notification_template';
+
+UPDATE wf_menu
+SET sort_order = 100,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_notification_record';
+
+UPDATE wf_menu
+SET sort_order = 110,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_notification_channel';
+
+UPDATE wf_menu
+SET sort_order = 120,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_trigger';
+
+UPDATE wf_menu
+SET sort_order = 130,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_log';
+
+UPDATE wf_menu
+SET sort_order = 140,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 'menu_system_monitor';
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_center_done',
+    'menu_workflow_center',
+    '已办列表',
+    'MENU',
+    '/workbench/done/list',
+    'workbench/done/list',
+    'workbench:done:view',
+    'CheckCircle2',
+    20,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_center_done');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_center_initiated',
+    'menu_workflow_center',
+    '我发起',
+    'MENU',
+    '/workbench/initiated/list',
+    'workbench/initiated/list',
+    'workbench:initiated:view',
+    'FileText',
+    30,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_center_initiated');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_center_copied',
+    'menu_workflow_center',
+    '抄送我',
+    'MENU',
+    '/workbench/copied/list',
+    'workbench/copied/list',
+    'workbench:copied:view',
+    'Mail',
+    40,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_center_copied');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_center_start',
+    'menu_workflow_center',
+    '发起流程',
+    'MENU',
+    '/workbench/start',
+    'workbench/start',
+    'workbench:start:view',
+    'FileText',
+    50,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_center_start');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_version',
+    'menu_workflow',
+    '流程版本',
+    'MENU',
+    '/workflow/versions/list',
+    'workflow/versions/list',
+    'workflow:version:view',
+    'ScrollText',
+    30,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_version');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_publish_record',
+    'menu_workflow',
+    '发布记录',
+    'MENU',
+    '/workflow/publish-records/list',
+    'workflow/publish-records/list',
+    'workflow:publish-record:view',
+    'BookText',
+    40,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_publish_record');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_instance',
+    'menu_workflow',
+    '实例监控',
+    'MENU',
+    '/workflow/instances/list',
+    'workflow/instances/list',
+    'workflow:instance:view',
+    'Gauge',
+    50,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_instance');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_operation_log',
+    'menu_workflow',
+    '操作日志',
+    'MENU',
+    '/workflow/operation-logs/list',
+    'workflow/operation-logs/list',
+    'workflow:operation-log:view',
+    'ScrollText',
+    60,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_operation_log');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_opinion_config',
+    'menu_workflow',
+    '审批意见配置',
+    'MENU',
+    '/workflow/opinion-configs/list',
+    'workflow/opinion-configs/list',
+    'workflow:opinion-config:view',
+    'SquareMenu',
+    70,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_opinion_config');
+
+INSERT INTO wf_menu (
+    id,
+    parent_menu_id,
+    menu_name,
+    menu_type,
+    route_path,
+    component_path,
+    permission_code,
+    icon_name,
+    sort_order,
+    visible,
+    enabled,
+    created_at,
+    updated_at
+)
+SELECT
+    'menu_workflow_binding',
+    'menu_workflow',
+    '业务流程绑定',
+    'MENU',
+    '/workflow/bindings/list',
+    'workflow/bindings/list',
+    'workflow:binding:view',
+    'ArrowRightLeft',
+    80,
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_binding');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_oa_leave', 'menu_oa', '请假申请', 'MENU', '/oa/leave/create', 'oa/leave/create', 'oa:leave:create', 'FileText', 10, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_leave');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_oa_expense', 'menu_oa', '报销申请', 'MENU', '/oa/expense/create', 'oa/expense/create', 'oa:expense:create', 'ReceiptText', 20, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_expense');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_oa_common', 'menu_oa', '通用申请', 'MENU', '/oa/common/create', 'oa/common/create', 'oa:common:create', 'NotebookText', 30, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_common');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_oa_query', 'menu_oa', 'OA 流程查询', 'MENU', '/oa/query', 'oa/query', 'oa:query:view', 'Search', 40, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_query');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_plm_start', 'menu_plm', 'PLM 发起中心', 'MENU', '/plm/start', 'plm/start', 'plm:start:view', 'Package2', 10, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_plm_start');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_plm_ecr', 'menu_plm', 'ECR 变更申请', 'MENU', '/plm/ecr/create', 'plm/ecr/create', 'plm:ecr:create', 'FileText', 20, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_plm_ecr');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_plm_eco', 'menu_plm', 'ECO 变更执行', 'MENU', '/plm/eco/create', 'plm/eco/create', 'plm:eco:create', 'ScrollText', 30, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_plm_eco');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_plm_material_master', 'menu_plm', '物料主数据变更申请', 'MENU', '/plm/material-master/create', 'plm/material-master/create', 'plm:material-master:create', 'NotebookText', 40, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_plm_material_master');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_plm_query', 'menu_plm', 'PLM 流程查询', 'MENU', '/plm/query', 'plm/query', 'plm:query:view', 'Search', 50, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_plm_query');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_user_create', 'menu_system_user', '新建用户', 'PERMISSION', '/system/users/create', 'system/users/create', 'system:user:create-page', 'Users', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_user_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_user_edit', 'menu_system_user', '编辑用户', 'PERMISSION', '/system/users/$userId/edit', 'system/users/$userId/edit', 'system:user:edit-page', 'Users', 20, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_user_edit');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_user_detail', 'menu_system_user', '用户详情', 'PERMISSION', '/system/users/$userId', 'system/users/$userId', 'system:user:detail-page', 'Users', 30, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_user_detail');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_company_create', 'menu_system_company', '新建公司', 'PERMISSION', '/system/companies/create', 'system/companies/create', 'system:company:create-page', 'Building2', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_company_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_department_create', 'menu_system_department', '新建部门', 'PERMISSION', '/system/departments/create', 'system/departments/create', 'system:department:create-page', 'Building2', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_department_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_post_create', 'menu_system_post', '新建岗位', 'PERMISSION', '/system/posts/create', 'system/posts/create', 'system:post:create-page', 'CircleUserRound', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_post_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_role_create', 'menu_system_role', '新建角色', 'PERMISSION', '/system/roles/create', 'system/roles/create', 'system:role:create-page', 'ShieldCheck', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_role_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_system_menu_create', 'menu_system_menu', '新建菜单', 'PERMISSION', '/system/menus/create', 'system/menus/create', 'system:menu:create-page', 'SquareMenu', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_system_menu_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_workflow_binding_create', 'menu_workflow_binding', '新建业务流程绑定', 'PERMISSION', '/workflow/bindings/create', 'workflow/bindings/create', 'workflow:binding:create-page', 'ArrowRightLeft', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_binding_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_workflow_opinion_config_create', 'menu_workflow_opinion_config', '新建审批意见配置', 'PERMISSION', '/workflow/opinion-configs/create', 'workflow/opinion-configs/create', 'workflow:opinion-config:create-page', 'SquareMenu', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_opinion_config_create');
+
+INSERT INTO wf_menu (
+    id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
+)
+SELECT 'menu_workbench_todo_detail', 'menu_workbench_todo', '待办详情', 'PERMISSION', '/workbench/todos/$taskId', 'workbench/todos/$taskId', 'workbench:todo:detail-page', 'ListTodo', 10, FALSE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workbench_todo_detail');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_oa_sidebar_' || m.id, 'role_oa_user', m.id, CURRENT_TIMESTAMP
+FROM wf_menu m
+WHERE m.id IN (
+    'menu_workbench_dashboard',
+    'menu_workbench_todo',
+    'menu_workflow_center_done',
+    'menu_workflow_center_initiated',
+    'menu_workflow_center_copied',
+    'menu_workflow_center_start',
+    'menu_oa',
+    'menu_oa_leave',
+    'menu_oa_expense',
+    'menu_oa_common',
+    'menu_oa_query',
+    'menu_plm',
+    'menu_plm_start',
+    'menu_plm_ecr',
+    'menu_plm_eco',
+    'menu_plm_material_master',
+    'menu_plm_query'
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM wf_role_menu rm
+    WHERE rm.id = 'rm_oa_sidebar_' || m.id
+);
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_process_sidebar_' || m.id, 'role_process_admin', m.id, CURRENT_TIMESTAMP
+FROM wf_menu m
+WHERE m.id IN (
+    'menu_org',
+    'menu_system_user',
+    'menu_system_company',
+    'menu_system_department',
+    'menu_system_post',
+    'menu_workflow_center',
+    'menu_workbench_todo',
+    'menu_workflow_center_done',
+    'menu_workflow_center_initiated',
+    'menu_workflow_center_copied',
+    'menu_workflow_center_start',
+    'menu_workflow_definition',
+    'menu_workflow_designer',
+    'menu_workflow_version',
+    'menu_workflow_publish_record',
+    'menu_workflow_instance',
+    'menu_workflow_operation_log',
+    'menu_workflow_opinion_config',
+    'menu_workflow_binding',
+    'menu_oa',
+    'menu_oa_leave',
+    'menu_oa_expense',
+    'menu_oa_common',
+    'menu_oa_query',
+    'menu_plm',
+    'menu_plm_start',
+    'menu_plm_ecr',
+    'menu_plm_eco',
+    'menu_plm_material_master',
+    'menu_plm_query'
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM wf_role_menu rm
+    WHERE rm.id = 'rm_process_sidebar_' || m.id
+);
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT
+    'rm_sysadmin_' || m.id,
+    'role_system_admin',
+    m.id,
+    CURRENT_TIMESTAMP
+FROM wf_menu m
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM wf_role_menu rm
+    WHERE rm.id = 'rm_sysadmin_' || m.id
+);

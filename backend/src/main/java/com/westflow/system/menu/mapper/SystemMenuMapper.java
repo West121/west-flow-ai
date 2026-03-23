@@ -3,6 +3,8 @@ package com.westflow.system.menu.mapper;
 import com.westflow.system.menu.api.SystemMenuDetailResponse;
 import com.westflow.system.menu.api.SystemMenuFormOptionsResponse;
 import com.westflow.system.menu.api.SystemMenuListItemResponse;
+import com.westflow.system.menu.api.SystemMenuTreeFlatNode;
+import com.westflow.system.menu.api.SidebarMenuFlatNode;
 import com.westflow.system.menu.service.SystemMenuService.SystemMenuEntity;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
@@ -128,6 +130,21 @@ public interface SystemMenuMapper {
     List<SystemMenuFormOptionsResponse.ParentMenuOption> selectParentMenuOptions();
 
     @Select("""
+            SELECT
+              m.id,
+              m.parent_menu_id,
+              m.menu_name AS name,
+              m.menu_type,
+              m.enabled
+            FROM wf_menu m
+            ORDER BY
+              CASE WHEN m.parent_menu_id IS NULL THEN 0 ELSE 1 END ASC,
+              m.sort_order ASC,
+              m.created_at ASC
+            """)
+    List<SystemMenuFormOptionsResponse.ParentMenuTreeOption> selectParentMenuTreeOptions();
+
+    @Select("""
             SELECT parent_menu_id
             FROM wf_menu
             WHERE id = #{menuId}
@@ -157,6 +174,59 @@ public interface SystemMenuMapper {
             @Param("parentMenuId") String parentMenuId,
             @Param("excludeMenuId") String excludeMenuId
     );
+
+    @Select("""
+            SELECT
+              m.id AS menu_id,
+              m.parent_menu_id,
+              m.menu_name,
+              m.menu_type,
+              m.route_path,
+              m.component_path,
+              m.permission_code,
+              m.icon_name,
+              m.sort_order,
+              m.visible,
+              m.enabled
+            FROM wf_menu m
+            ORDER BY
+              CASE WHEN m.parent_menu_id IS NULL THEN 0 ELSE 1 END ASC,
+              m.sort_order ASC,
+              m.created_at ASC
+            """)
+    List<SystemMenuTreeFlatNode> selectTreeNodes();
+
+    @Select("""
+            SELECT DISTINCT rm.menu_id
+            FROM wf_user_role ur
+            INNER JOIN wf_role r ON r.id = ur.role_id
+            INNER JOIN wf_role_menu rm ON rm.role_id = r.id
+            INNER JOIN wf_menu m ON m.id = rm.menu_id
+            WHERE ur.user_id = #{userId}
+              AND r.enabled = TRUE
+              AND m.enabled = TRUE
+            """)
+    List<String> selectGrantedMenuIdsByUserId(@Param("userId") String userId);
+
+    @Select("""
+            SELECT
+              m.id AS menu_id,
+              m.parent_menu_id,
+              m.menu_name AS title,
+              m.menu_type,
+              m.route_path,
+              m.icon_name,
+              m.sort_order
+            FROM wf_menu m
+            WHERE m.enabled = TRUE
+              AND m.visible = TRUE
+              AND m.menu_type IN ('DIRECTORY', 'MENU')
+            ORDER BY
+              CASE WHEN m.parent_menu_id IS NULL THEN 0 ELSE 1 END ASC,
+              m.sort_order ASC,
+              m.created_at ASC
+            """)
+    List<SidebarMenuFlatNode> selectNavigableSidebarNodes();
 
     @Insert("""
             INSERT INTO wf_menu (

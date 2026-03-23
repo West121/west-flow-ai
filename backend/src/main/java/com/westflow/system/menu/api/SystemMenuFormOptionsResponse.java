@@ -23,4 +23,16 @@ public record SystemMenuFormOptionsResponse(
             boolean enabled
     ) {
     }
+
+    /**
+     * 树形菜单选项。
+     */
+    public record ParentMenuTreeOption(
+            String id,
+            String parentMenuId,
+            String name,
+            String menuType,
+            boolean enabled
+    ) {
+    }
 }

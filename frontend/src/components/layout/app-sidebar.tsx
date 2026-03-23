@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { useLayout } from '@/context/layout-provider'
 import {
   Sidebar,
@@ -6,7 +7,9 @@ import {
   SidebarHeader,
   SidebarRail,
 } from '@/components/ui/sidebar'
+import { getSidebarMenuTree } from '@/lib/api/system-menus'
 import { sidebarData } from './data/sidebar-data'
+import { buildNavGroups } from './sidebar-menu-helpers'
 import { NavGroup } from './nav-group'
 import { NavUser } from './nav-user'
 import { TeamSwitcher } from './team-switcher'
@@ -14,6 +17,12 @@ import { TeamSwitcher } from './team-switcher'
 // 应用侧边栏，集中承载工作空间、导航分组和用户菜单。
 export function AppSidebar() {
   const { collapsible, variant } = useLayout()
+  const { data } = useQuery({
+    queryKey: ['sidebar-menu-tree'],
+    queryFn: getSidebarMenuTree,
+  })
+  const navGroups = buildNavGroups(data ?? [])
+
   return (
     <Sidebar collapsible={collapsible} variant={variant}>
       <SidebarHeader>
@@ -23,7 +32,7 @@ export function AppSidebar() {
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
-        {sidebarData.navGroups.map((props) => (
+        {navGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}
       </SidebarContent>

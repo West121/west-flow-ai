@@ -87,7 +87,7 @@ describe('system menu api', () => {
           menuTypes: [
             { code: 'DIRECTORY', name: '目录' },
             { code: 'MENU', name: '菜单' },
-            { code: 'BUTTON', name: '按钮' },
+            { code: 'PERMISSION', name: '权限' },
           ],
           parentMenus: [
             {
@@ -106,6 +106,8 @@ describe('system menu api', () => {
       listMenus,
       getMenuDetail,
       getMenuFormOptions,
+      getMenuTree,
+      getSidebarMenuTree,
       createMenu,
       updateMenu,
     } = await import('./system-menus')
@@ -139,6 +141,43 @@ describe('system menu api', () => {
         },
       ]),
     })
+
+    getMock
+      .mockResolvedValueOnce(
+        okResponse([
+          {
+            menuId: 'menu_system',
+            parentMenuId: null,
+            menuName: '系统管理',
+            menuType: 'DIRECTORY',
+            routePath: '/system',
+            componentPath: null,
+            permissionCode: null,
+            iconName: 'ShieldCheck',
+            sortOrder: 20,
+            visible: true,
+            enabled: true,
+            children: [],
+          },
+        ])
+      )
+      .mockResolvedValueOnce(
+        okResponse([
+          {
+            menuId: 'menu_workbench',
+            parentMenuId: null,
+            title: '工作台',
+            menuType: 'DIRECTORY',
+            routePath: '/workbench',
+            iconName: 'FolderKanban',
+            sortOrder: 10,
+            children: [],
+          },
+        ])
+      )
+
+    await expect(getMenuTree()).resolves.toHaveLength(1)
+    await expect(getSidebarMenuTree()).resolves.toHaveLength(1)
 
     await expect(
       createMenu({
