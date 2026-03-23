@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.westflow.ai.gateway.AiGatewayRequest;
 import com.westflow.ai.gateway.AiGatewayResponse;
+import com.westflow.ai.service.AiRegistryCatalogService;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.ai.chat.client.ChatClient;
@@ -18,15 +19,26 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
     private final ChatClient chatClient;
     private final SupervisorAgent supervisorAgent;
     private final LlmRoutingAgent routingAgent;
+    private final AiRegistryCatalogService aiRegistryCatalogService;
 
     public SpringAiAlibabaCopilotRuntimeService(
             ChatClient chatClient,
             SupervisorAgent supervisorAgent,
             LlmRoutingAgent routingAgent
     ) {
+        this(chatClient, supervisorAgent, routingAgent, null);
+    }
+
+    public SpringAiAlibabaCopilotRuntimeService(
+            ChatClient chatClient,
+            SupervisorAgent supervisorAgent,
+            LlmRoutingAgent routingAgent,
+            AiRegistryCatalogService aiRegistryCatalogService
+    ) {
         this.chatClient = chatClient;
         this.supervisorAgent = supervisorAgent;
         this.routingAgent = routingAgent;
+        this.aiRegistryCatalogService = aiRegistryCatalogService;
     }
 
     /**
@@ -47,6 +59,8 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
     }
 
     private String buildPrompt(AiGatewayRequest request, AiGatewayResponse response) {
+        String agentPrompt = resolveAgentPrompt(request, response);
+        String skillPrompt = resolveSkillPrompt(request, response);
         return """
                 你是 West Flow AI Copilot。
                 当前路由模式：%s
@@ -54,13 +68,18 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
                 当前用户问题：%s
                 当前上下文标签：%s
                 当前可用技能：%s
+                当前智能体提示：%s
+                当前技能内容：
+                %s
                 请直接输出简洁中文回答，不要暴露内部推理。
                 """.formatted(
                 response.routeMode(),
                 request.domain(),
                 request.content(),
                 request.contextTags(),
-                response.skillIds()
+                response.skillIds(),
+                agentPrompt,
+                skillPrompt
         );
     }
 
@@ -100,5 +119,32 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             }
             return "已通过 Routing 智能体整理当前问题，可继续补充上下文。";
         }
+    }
+
+    private String resolveAgentPrompt(AiGatewayRequest request, AiGatewayResponse response) {
+        if (aiRegistryCatalogService == null) {
+            return "无";
+        }
+        return aiRegistryCatalogService.findAgent(request.userId(), response.agentId(), request.domain())
+                .map(AiRegistryCatalogService.AiAgentCatalogItem::systemPrompt)
+                .filter(prompt -> !prompt.isBlank())
+                .orElse("无");
+    }
+
+    private String resolveSkillPrompt(AiGatewayRequest request, AiGatewayResponse response) {
+        if (aiRegistryCatalogService == null || response.skillIds().isEmpty()) {
+            return "无";
+        }
+        String content = aiRegistryCatalogService.matchSkills(
+                        request.userId(),
+                        request.content(),
+                        request.domain(),
+                        response.skillIds()
+                ).stream()
+                .map(AiRegistryCatalogService.AiSkillCatalogItem::content)
+                .filter(text -> text != null && !text.isBlank())
+                .reduce((left, right) -> left + "\n\n---\n\n" + right)
+                .orElse("");
+        return content.isBlank() ? "无" : content;
     }
 }

@@ -29,6 +29,7 @@ import com.westflow.ai.tool.AiToolRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -67,9 +68,11 @@ class AiCopilotServiceTest {
     private AiAuditMapper aiAuditMapper;
 
     private AiCopilotService aiCopilotService;
+    private AtomicBoolean confirmedWriteExecuted;
 
     @BeforeEach
     void setUp() {
+        confirmedWriteExecuted = new AtomicBoolean(false);
         AiAgentRegistry aiAgentRegistry = new AiAgentRegistry(List.of(
                 new AiAgentDescriptor("supervisor", "Supervisor", "SUPERVISOR", List.of("OA", "PLM", "GENERAL"), true, 100),
                 new AiAgentDescriptor("routing", "Routing", "ROUTING", List.of("OA", "PLM", "GENERAL"), false, 80)
@@ -79,6 +82,12 @@ class AiCopilotServiceTest {
                 new AiSkillDescriptor("plm-change-summary", "PLM 变更摘要", List.of("PLM"), List.of("PLM", "ECR", "ECO"), false, 80)
         ));
         AiToolRegistry aiToolRegistry = new AiToolRegistry(List.of(
+                AiToolDefinition.read(
+                        "task.query",
+                        AiToolSource.PLATFORM,
+                        "已返回待办列表",
+                        context -> Map.of("count", 1, "items", List.of("task_001"))
+                ),
                 AiToolDefinition.read(
                         "workflow.todo.list",
                         AiToolSource.PLATFORM,
@@ -99,15 +108,24 @@ class AiCopilotServiceTest {
                 ),
                 AiToolDefinition.write(
                         "process.start",
-                        AiToolSource.AGENT,
+                        AiToolSource.PLATFORM,
                         "请确认是否发起流程",
                         context -> Map.of("accepted", true)
+                ),
+                AiToolDefinition.write(
+                        "task.handle",
+                        AiToolSource.PLATFORM,
+                        "请确认是否处理当前待办",
+                        context -> {
+                            confirmedWriteExecuted.set(true);
+                            return Map.of("accepted", true, "done", true);
+                        }
                 ),
                 AiToolDefinition.write(
                         "workflow.task.complete",
                         AiToolSource.AGENT,
                         "请确认是否完成当前待办",
-                        context -> Map.of("accepted", true)
+                        context -> Map.of("accepted", true, "done", true)
                 )
         ));
         ChatClient chatClient = org.mockito.Mockito.mock(ChatClient.class);
@@ -135,7 +153,7 @@ class AiCopilotServiceTest {
 
         AiToolCallResultResponse result = aiCopilotService.executeToolCall(
                 "conv_001",
-                new AiToolCallRequest("workflow.todo.list", AiToolType.READ, AiToolSource.PLATFORM, Map.of("keyword", "请假"))
+                new AiToolCallRequest("task.query", AiToolType.READ, AiToolSource.PLATFORM, Map.of("keyword", "请假"))
         );
 
         assertThat(result.status()).isEqualTo("EXECUTED");
@@ -150,7 +168,7 @@ class AiCopilotServiceTest {
 
         AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
                 "conv_001",
-                new AiToolCallRequest("workflow.task.complete", AiToolType.WRITE, AiToolSource.AGENT, Map.of("taskId", "task_001"))
+                new AiToolCallRequest("task.handle", AiToolType.WRITE, AiToolSource.PLATFORM, Map.of("taskId", "task_001", "action", "COMPLETE"))
         );
         assertThat(pending.status()).isEqualTo("PENDING_CONFIRMATION");
         assertThat(pending.requiresConfirmation()).isTrue();
@@ -158,14 +176,14 @@ class AiCopilotServiceTest {
         when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
                 pending.toolCallId(),
                 "conv_001",
-                "workflow.task.complete",
+                "task.handle",
                 AiToolType.WRITE,
-                AiToolSource.AGENT,
+                AiToolSource.PLATFORM,
                 "PENDING_CONFIRMATION",
                 true,
-                "{\"taskId\":\"task_001\"}",
+                "{\"taskId\":\"task_001\",\"action\":\"COMPLETE\"}",
                 "{}",
-                "请确认是否完成当前待办",
+                "请确认是否处理当前待办",
                 pending.confirmationId(),
                 "usr_001",
                 LocalDateTime.of(2026, 3, 23, 10, 10),
@@ -178,6 +196,8 @@ class AiCopilotServiceTest {
         );
 
         assertThat(confirmed.status()).isEqualTo("CONFIRMED");
+        assertThat(confirmed.result()).containsEntry("done", true);
+        assertThat(confirmedWriteExecuted.get()).isTrue();
         verify(aiConfirmationMapper).insertConfirmation(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }

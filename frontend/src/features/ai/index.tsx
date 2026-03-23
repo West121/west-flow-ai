@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
@@ -43,7 +43,11 @@ const aiCopilotSessionKey = (sessionId: string) =>
   ['ai-copilot', 'sessions', sessionId] as const
 
 // AI Copilot 页面负责会话导航、消息流、富消息块与确认动作的完整渲染。
-export function AICopilotPage() {
+export function AICopilotPage({
+  sourceRoute = '',
+}: {
+  sourceRoute?: string
+}) {
   const queryClient = useQueryClient()
   const [activeSessionId, setActiveSessionId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -51,20 +55,25 @@ export function AICopilotPage() {
   const [pendingConfirmationId, setPendingConfirmationId] = useState<string | null>(
     null
   )
+  const bootstrappedRouteRef = useRef('')
 
   const sessionsQuery = useQuery({
     queryKey: aiCopilotSessionsKey,
     queryFn: listAICopilotSessions,
   })
 
-  const activeSessionIdFromList = sessionsQuery.data?.[0]?.sessionId ?? ''
-  const effectiveActiveSessionId = activeSessionId || activeSessionIdFromList
-
-  useEffect(() => {
-    if (!activeSessionId && activeSessionIdFromList) {
-      setActiveSessionId(activeSessionIdFromList)
+  const sessions = useMemo(() => sessionsQuery.data ?? [], [sessionsQuery.data])
+  const routeTag = sourceRoute ? `route:${sourceRoute}` : ''
+  const contextualSessionId = useMemo(() => {
+    if (!routeTag) {
+      return ''
     }
-  }, [activeSessionId, activeSessionIdFromList])
+
+    return sessions.find((session) => session.contextTags.includes(routeTag))?.sessionId ?? ''
+  }, [routeTag, sessions])
+  const activeSessionIdFromList = sessionsQuery.data?.[0]?.sessionId ?? ''
+  const effectiveActiveSessionId =
+    activeSessionId || contextualSessionId || activeSessionIdFromList
 
   const activeSessionQuery = useQuery({
     queryKey: aiCopilotSessionKey(effectiveActiveSessionId),
@@ -87,6 +96,8 @@ export function AICopilotPage() {
       )
     },
   })
+  const { mutate: createSession, isPending: isCreatingSession } =
+    createSessionMutation
 
   const sendMessageMutation = useMutation({
     mutationFn: sendAICopilotMessage,
@@ -123,7 +134,33 @@ export function AICopilotPage() {
     },
   })
 
-  const sessions = sessionsQuery.data ?? []
+  useEffect(() => {
+    if (!sourceRoute || sessionsQuery.isLoading || isCreatingSession) {
+      return
+    }
+
+    if (bootstrappedRouteRef.current === sourceRoute) {
+      return
+    }
+
+    bootstrappedRouteRef.current = sourceRoute
+    if (contextualSessionId) {
+      return
+    }
+
+    createSession({
+      title: buildContextualSessionTitle(sourceRoute),
+      contextTags: ['AI Copilot', routeTag],
+    })
+  }, [
+    sourceRoute,
+    routeTag,
+    contextualSessionId,
+    sessionsQuery.isLoading,
+    isCreatingSession,
+    createSession,
+  ])
+
   const activeSession = activeSessionQuery.data ?? null
   const filteredSessions = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase()
@@ -155,13 +192,17 @@ export function AICopilotPage() {
       !activeSession)
 
   const handleCreateSession = () => {
-    if (createSessionMutation.isPending) {
+    if (isCreatingSession) {
       return
     }
 
-    createSessionMutation.mutate({
-      title: '新建 Copilot 会话',
-      contextTags: ['AI Copilot'],
+    createSession({
+      title: sourceRoute
+        ? buildContextualSessionTitle(sourceRoute)
+        : '新建 Copilot 会话',
+      contextTags: sourceRoute
+        ? ['AI Copilot', `route:${sourceRoute}`]
+        : ['AI Copilot'],
     })
   }
 
@@ -500,6 +541,25 @@ export function AICopilotPage() {
       </div>
     </Main>
   )
+}
+
+function buildContextualSessionTitle(sourceRoute: string) {
+  if (sourceRoute.startsWith('/workbench')) {
+    return '当前审批事项 Copilot'
+  }
+  if (sourceRoute.startsWith('/oa/')) {
+    return '当前 OA 单据 Copilot'
+  }
+  if (sourceRoute.startsWith('/plm/')) {
+    return '当前 PLM 单据 Copilot'
+  }
+  if (sourceRoute.startsWith('/workflow/')) {
+    return '当前流程设计 Copilot'
+  }
+  if (sourceRoute.startsWith('/system/')) {
+    return '当前系统管理 Copilot'
+  }
+  return '当前页面 Copilot'
 }
 
 function SectionLabel({

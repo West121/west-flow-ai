@@ -27,13 +27,27 @@ public class AiToolExecutionService {
 
     private final AiToolRegistry aiToolRegistry;
     private final Clock clock;
+    private final AiRegistryCatalogService aiRegistryCatalogService;
 
     public AiToolExecutionService(AiToolRegistry aiToolRegistry) {
-        this(aiToolRegistry, Clock.system(TIME_ZONE));
+        this(aiToolRegistry, null, Clock.system(TIME_ZONE));
+    }
+
+    public AiToolExecutionService(AiToolRegistry aiToolRegistry, AiRegistryCatalogService aiRegistryCatalogService) {
+        this(aiToolRegistry, aiRegistryCatalogService, Clock.system(TIME_ZONE));
     }
 
     public AiToolExecutionService(AiToolRegistry aiToolRegistry, Clock clock) {
+        this(aiToolRegistry, null, clock);
+    }
+
+    public AiToolExecutionService(
+            AiToolRegistry aiToolRegistry,
+            AiRegistryCatalogService aiRegistryCatalogService,
+            Clock clock
+    ) {
         this.aiToolRegistry = Objects.requireNonNull(aiToolRegistry, "aiToolRegistry");
+        this.aiRegistryCatalogService = aiRegistryCatalogService;
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -41,9 +55,16 @@ public class AiToolExecutionService {
      * 执行工具调用。
      */
     public AiToolCallResultResponse executeToolCall(String conversationId, AiToolCallRequest request) {
+        return executeToolCall(conversationId, request, null);
+    }
+
+    /**
+     * 按指定用户权限执行工具调用。
+     */
+    public AiToolCallResultResponse executeToolCall(String conversationId, AiToolCallRequest request, String userId) {
         Objects.requireNonNull(conversationId, "conversationId");
         Objects.requireNonNull(request, "request");
-        AiToolDefinition definition = aiToolRegistry.require(request.toolKey());
+        AiToolDefinition definition = resolveDefinition(request, userId);
         validateDefinition(request, definition);
 
         OffsetDateTime now = now();
@@ -86,6 +107,49 @@ public class AiToolExecutionService {
         );
     }
 
+    /**
+     * 在确认写操作后真正执行工具处理器。
+     */
+    public AiToolCallResultResponse executeConfirmedWriteToolCall(
+            String conversationId,
+            AiToolCallRequest request,
+            String userId,
+            String toolCallId,
+            String confirmationId
+    ) {
+        Objects.requireNonNull(conversationId, "conversationId");
+        Objects.requireNonNull(request, "request");
+        AiToolDefinition definition = resolveDefinition(request, userId);
+        validateDefinition(request, definition);
+        if (definition.toolType() != AiToolType.WRITE) {
+            throw new ContractException(
+                    "VALIDATION.FIELD_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "只允许执行已确认的写操作工具"
+            );
+        }
+
+        OffsetDateTime now = now();
+        Map<String, Object> result = definition.handler().execute(
+                new AiToolExecutionContext(conversationId, request, definition, now)
+        );
+        return new AiToolCallResultResponse(
+                toolCallId,
+                conversationId,
+                request.toolKey(),
+                request.toolType(),
+                request.toolSource(),
+                "CONFIRMED",
+                false,
+                confirmationId,
+                definition.summary(),
+                request.arguments(),
+                result,
+                now,
+                now
+        );
+    }
+
     private void validateDefinition(AiToolCallRequest request, AiToolDefinition definition) {
         if (request.toolType() != definition.toolType()) {
             throw new ContractException(
@@ -107,6 +171,22 @@ public class AiToolExecutionService {
 
     private OffsetDateTime now() {
         return OffsetDateTime.ofInstant(Instant.now(clock), ZoneOffset.ofHours(8));
+    }
+
+    private AiToolDefinition resolveDefinition(AiToolCallRequest request, String userId) {
+        AiToolDefinition registeredDefinition = aiToolRegistry.require(request.toolKey());
+        if (aiRegistryCatalogService == null) {
+            return registeredDefinition;
+        }
+        AiRegistryCatalogService.AiToolCatalogItem catalogItem = aiRegistryCatalogService.findTool(userId, request.toolKey())
+                .orElseThrow(() -> new ContractException("VALIDATION.FIELD_INVALID", HttpStatus.BAD_REQUEST, "工具未注册"));
+        return new AiToolDefinition(
+                catalogItem.toolCode(),
+                catalogItem.toolSource(),
+                catalogItem.toolType(),
+                catalogItem.toolName(),
+                registeredDefinition.handler()
+        );
     }
 
     private String newId(String prefix) {

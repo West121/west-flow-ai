@@ -2,6 +2,7 @@ package com.westflow.ai.orchestration;
 
 import com.westflow.ai.agent.AiAgentRegistry;
 import com.westflow.ai.gateway.AiGatewayRequest;
+import com.westflow.ai.service.AiRegistryCatalogService;
 import com.westflow.ai.skill.AiSkillRegistry;
 import java.util.List;
 
@@ -12,13 +13,28 @@ public class AiOrchestrationPlanner {
 
     private final AiAgentRegistry aiAgentRegistry;
     private final AiSkillRegistry aiSkillRegistry;
+    private final AiRegistryCatalogService aiRegistryCatalogService;
 
     public AiOrchestrationPlanner(AiAgentRegistry aiAgentRegistry, AiSkillRegistry aiSkillRegistry) {
         this.aiAgentRegistry = aiAgentRegistry;
         this.aiSkillRegistry = aiSkillRegistry;
+        this.aiRegistryCatalogService = null;
+    }
+
+    public AiOrchestrationPlanner(AiRegistryCatalogService aiRegistryCatalogService) {
+        this.aiAgentRegistry = null;
+        this.aiSkillRegistry = null;
+        this.aiRegistryCatalogService = aiRegistryCatalogService;
     }
 
     public AiOrchestrationPlan plan(AiGatewayRequest request) {
+        if (aiRegistryCatalogService != null) {
+            return planByCatalog(request);
+        }
+        return planByStaticRegistry(request);
+    }
+
+    private AiOrchestrationPlan planByStaticRegistry(AiGatewayRequest request) {
         if (request.writeAction() || looksLikeWriteAction(request)) {
             return new AiOrchestrationPlan(
                     "SUPERVISOR",
@@ -41,6 +57,45 @@ public class AiOrchestrationPlanner {
         return new AiOrchestrationPlan(
                 "ROUTING",
                 aiAgentRegistry.findRoutingAgent(request.domain()).map(descriptor -> descriptor.agentId()).orElse("routing"),
+                false,
+                List.of()
+        );
+    }
+
+    private AiOrchestrationPlan planByCatalog(AiGatewayRequest request) {
+        if (request.writeAction() || looksLikeWriteAction(request)) {
+            return new AiOrchestrationPlan(
+                    "SUPERVISOR",
+                    aiRegistryCatalogService.findSupervisor(request.userId(), request.domain())
+                            .map(AiRegistryCatalogService.AiAgentCatalogItem::agentCode)
+                            .orElse("supervisor-agent"),
+                    true,
+                    List.of()
+            );
+        }
+        List<String> skillIds = aiRegistryCatalogService.matchSkills(
+                        request.userId(),
+                        request.content(),
+                        request.domain(),
+                        request.skillIds()
+                ).stream()
+                .map(AiRegistryCatalogService.AiSkillCatalogItem::skillCode)
+                .toList();
+        if (!skillIds.isEmpty()) {
+            return new AiOrchestrationPlan(
+                    "SKILL",
+                    aiRegistryCatalogService.findRoutingAgent(request.userId(), request.domain())
+                            .map(AiRegistryCatalogService.AiAgentCatalogItem::agentCode)
+                            .orElse("routing-agent"),
+                    false,
+                    skillIds
+            );
+        }
+        return new AiOrchestrationPlan(
+                "ROUTING",
+                aiRegistryCatalogService.findRoutingAgent(request.userId(), request.domain())
+                        .map(AiRegistryCatalogService.AiAgentCatalogItem::agentCode)
+                        .orElse("routing-agent"),
                 false,
                 List.of()
         );

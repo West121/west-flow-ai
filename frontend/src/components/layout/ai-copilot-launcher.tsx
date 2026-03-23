@@ -28,7 +28,12 @@ export function AICopilotLauncher() {
           : 'border-white/10 bg-slate-950/90 text-slate-50 hover:-translate-y-0.5 hover:bg-slate-900'
       )}
     >
-      <Link to='/ai' search={{}}>
+      <Link
+        to='/ai'
+        search={{
+          sourceRoute: routerState.location.pathname,
+        }}
+      >
         <span className='flex items-center gap-2'>
           <span
             className={cn(

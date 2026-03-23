@@ -220,4 +220,29 @@ describe('AICopilotPage', () => {
       expect(screen.getAllByText('已确认').length).toBeGreaterThan(0)
     )
   })
+
+  it('creates a contextual session when opened from a business route', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([])
+    aiCopilotApiMocks.createAICopilotSession.mockResolvedValueOnce(
+      buildSession({
+        sessionId: 'session_route_001',
+        title: '当前 PLM 单据 Copilot',
+        contextTags: ['AI Copilot', 'route:/plm/ecr/create'],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage sourceRoute='/plm/ecr/create' />)
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.createAICopilotSession).toHaveBeenCalledWith(
+        {
+          title: '当前 PLM 单据 Copilot',
+          contextTags: ['AI Copilot', 'route:/plm/ecr/create'],
+        },
+        expect.any(Object)
+      )
+    )
+  })
 })
