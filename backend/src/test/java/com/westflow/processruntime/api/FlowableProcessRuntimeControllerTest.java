@@ -31,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Sql(statements = {
         "DELETE FROM wf_process_definition",
         "DELETE FROM wf_process_link",
+        "DELETE FROM wf_runtime_append_link",
         "DELETE FROM wf_business_process_link",
         "DELETE FROM oa_leave_bill"
 }, executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
@@ -376,6 +377,115 @@ class FlowableProcessRuntimeControllerTest {
                 childInstanceId
         )).isEqualTo(1);
         assertThat(flowableEngineFacade.runtimeService().createProcessInstanceQuery().processInstanceId(childInstanceId).singleResult()).isNull();
+    }
+
+    @Test
+    void shouldAppendTaskAndUpdateAppendLinkStatusOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        String targetToken = login("wangwu");
+        publishLeaveProcess();
+        seedLeaveBill("leave_025");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_025");
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode appendBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/append", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "appendPolicy": "PARALLEL_WITH_CURRENT",
+                                  "targetUserIds": ["usr_003"],
+                                  "comment": "追加王五协同处理",
+                                  "appendVariables": {
+                                    "appendReason": "补充审批"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String appendedTaskId = appendBody.path("targetTaskId").asText();
+        assertThat(appendBody.path("appendType").asText()).isEqualTo("TASK");
+        assertThat(appendBody.path("status").asText()).isEqualTo("RUNNING");
+        assertThat(appendedTaskId).isNotBlank();
+
+        JsonNode detailBeforeComplete = approvalDetailByBusiness(applicantToken, "leave_025");
+        assertThat(detailBeforeComplete.path("appendLinks").isArray()).isTrue();
+        assertThat(detailBeforeComplete.path("appendLinks").size()).isEqualTo(1);
+        assertThat(detailBeforeComplete.path("appendLinks").get(0).path("targetTaskId").asText()).isEqualTo(appendedTaskId);
+        assertThat(detailBeforeComplete.path("appendLinks").get(0).path("status").asText()).isEqualTo("RUNNING");
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", appendedTaskId)
+                        .header("Authorization", "Bearer " + targetToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_003",
+                                  "comment": "已处理追加任务"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode detailAfterComplete = approvalDetailByBusiness(applicantToken, "leave_025");
+        assertThat(detailAfterComplete.path("appendLinks").get(0).path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(detailAfterComplete.path("appendLinks").get(0).path("finishedAt").isNull()).isFalse();
+    }
+
+    @Test
+    void shouldAppendSubprocessAndUpdateAppendLinkStatusOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        publishLeaveProcess();
+        seedLeaveBill("leave_026");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_026");
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode appendBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/append-subprocess", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "appendPolicy": "SERIAL_AFTER_CURRENT",
+                                  "calledProcessKey": "oa_sub_review",
+                                  "calledVersionPolicy": "LATEST_PUBLISHED",
+                                  "comment": "追加子流程复核",
+                                  "appendVariables": {
+                                    "appendReason": "补充子流程"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String childInstanceId = appendBody.path("targetInstanceId").asText();
+        assertThat(appendBody.path("appendType").asText()).isEqualTo("SUBPROCESS");
+        assertThat(childInstanceId).isNotBlank();
+
+        JsonNode detailBeforeTerminate = approvalDetailByBusiness(applicantToken, "leave_026");
+        assertThat(detailBeforeTerminate.path("appendLinks").get(0).path("targetInstanceId").asText()).isEqualTo(childInstanceId);
+        assertThat(detailBeforeTerminate.path("appendLinks").get(0).path("status").asText()).isEqualTo("RUNNING");
+
+        mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/terminate", childInstanceId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "terminateScope": "CHILD",
+                                  "childInstanceId": "%s",
+                                  "reason": "追加子流程终止"
+                                }
+                                """.formatted(childInstanceId)))
+                .andExpect(status().isOk());
+
+        JsonNode detailAfterTerminate = approvalDetailByBusiness(applicantToken, "leave_026");
+        assertThat(detailAfterTerminate.path("appendLinks").get(0).path("status").asText()).isEqualTo("TERMINATED");
     }
 
     @Test

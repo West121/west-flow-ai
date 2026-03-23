@@ -79,6 +79,32 @@ public interface ProcessDefinitionMapper {
     ProcessDefinitionRecord selectLatestPublishedByProcessKey(@Param("processKey") String processKey);
 
     @Select("""
+            SELECT
+              id AS process_definition_id,
+              process_key,
+              process_name,
+              category,
+              version,
+              status,
+              dsl_json,
+              bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
+              created_at,
+              updated_at
+            FROM wf_process_definition
+            WHERE process_key = #{processKey}
+              AND version = #{version}
+              AND status = 'PUBLISHED'
+            LIMIT 1
+            """)
+    ProcessDefinitionRecord selectPublishedByProcessKeyAndVersion(
+            @Param("processKey") String processKey,
+            @Param("version") Integer version
+    );
+
+    @Select("""
             SELECT COALESCE(MAX(version), 0)
             FROM wf_process_definition
             WHERE process_key = #{processKey}

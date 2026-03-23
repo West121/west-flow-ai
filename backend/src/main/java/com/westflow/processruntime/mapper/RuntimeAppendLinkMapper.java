@@ -220,4 +220,32 @@ public interface RuntimeAppendLinkMapper {
             @Param("status") String status,
             @Param("finishedAt") Instant finishedAt
     );
+
+    @Update("""
+            UPDATE wf_runtime_append_link
+               SET status = #{status},
+                   finished_at = #{finishedAt},
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE root_instance_id = #{rootInstanceId}
+               AND status = 'RUNNING'
+            """)
+    int updateStatusByRootInstanceId(
+            @Param("rootInstanceId") String rootInstanceId,
+            @Param("status") String status,
+            @Param("finishedAt") Instant finishedAt
+    );
+
+    @Update("""
+            UPDATE wf_runtime_append_link
+               SET status = #{status},
+                   finished_at = #{finishedAt},
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE parent_instance_id = #{parentInstanceId}
+               AND status = 'RUNNING'
+            """)
+    int updateStatusByParentInstanceId(
+            @Param("parentInstanceId") String parentInstanceId,
+            @Param("status") String status,
+            @Param("finishedAt") Instant finishedAt
+    );
 }

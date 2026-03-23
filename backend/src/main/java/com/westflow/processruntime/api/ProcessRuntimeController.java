@@ -77,6 +77,13 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.links(instanceId));
     }
 
+    @GetMapping("/instances/{instanceId}/append-links")
+    @SaCheckLogin
+    // 查询流程实例下挂载的运行时追加与动态构建关联。
+    public ApiResponse<java.util.List<RuntimeAppendLinkResponse>> appendLinks(@PathVariable String instanceId) {
+        return ApiResponse.success(flowableProcessRuntimeService.appendLinks(instanceId));
+    }
+
     @PostMapping("/instances/{instanceId}/terminate")
     @SaCheckLogin
     // 按指定作用域终止流程实例。
@@ -197,6 +204,20 @@ public class ProcessRuntimeController {
     // 完成任务。
     public ApiResponse<CompleteTaskResponse> complete(@PathVariable String taskId, @Valid @RequestBody CompleteTaskRequest request) {
         return ApiResponse.success(flowableProcessRuntimeService.complete(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/append")
+    @SaCheckLogin
+    // 追加人工任务。
+    public ApiResponse<AppendTaskResponse> appendTask(@PathVariable String taskId, @Valid @RequestBody AppendTaskRequest request) {
+        return ApiResponse.success(flowableProcessRuntimeService.appendTask(taskId, request));
+    }
+
+    @PostMapping("/tasks/{taskId}/append-subprocess")
+    @SaCheckLogin
+    // 追加子流程。
+    public ApiResponse<AppendTaskResponse> appendSubprocess(@PathVariable String taskId, @Valid @RequestBody AppendTaskRequest request) {
+        return ApiResponse.success(flowableProcessRuntimeService.appendSubprocess(taskId, request));
     }
 
     @PostMapping("/tasks/{taskId}/transfer")

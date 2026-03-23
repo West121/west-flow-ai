@@ -13,6 +13,8 @@ import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
 import com.westflow.processruntime.api.ApprovalSheetListView;
 import com.westflow.processruntime.api.ApprovalSheetPageRequest;
 import com.westflow.processruntime.api.AddSignTaskRequest;
+import com.westflow.processruntime.api.AppendTaskRequest;
+import com.westflow.processruntime.api.AppendTaskResponse;
 import com.westflow.processruntime.api.ClaimTaskRequest;
 import com.westflow.processruntime.api.ClaimTaskResponse;
 import com.westflow.processruntime.api.CompleteTaskRequest;
@@ -33,6 +35,7 @@ import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
 import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
+import com.westflow.processruntime.api.RuntimeAppendLinkResponse;
 import com.westflow.processruntime.api.RejectTaskRequest;
 import com.westflow.processruntime.api.RevokeTaskRequest;
 import com.westflow.processruntime.api.RemoveSignTaskRequest;
@@ -46,6 +49,7 @@ import com.westflow.processruntime.api.UrgeTaskRequest;
 import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WakeUpInstanceRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
+import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
 import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -95,6 +99,7 @@ public class FlowableProcessRuntimeService {
     private final ProcessDefinitionService processDefinitionService;
     private final ApprovalSheetQueryService approvalSheetQueryService;
     private final ProcessLinkService processLinkService;
+    private final RuntimeAppendLinkService runtimeAppendLinkService;
     private final ProcessRuntimeTraceStore traceStore;
     private final JdbcTemplate jdbcTemplate;
     private final WorkflowOperationLogService workflowOperationLogService;
@@ -216,6 +221,18 @@ public class FlowableProcessRuntimeService {
     }
 
     /**
+     * 查询实例维度的追加与动态构建附属结构。
+     */
+    public List<RuntimeAppendLinkResponse> appendLinks(String instanceId) {
+        requireHistoricProcessInstance(instanceId);
+        String rootInstanceId = resolveRuntimeTreeRootInstanceId(instanceId);
+        synchronizeAppendLinks(rootInstanceId);
+        return runtimeAppendLinkService.listByRootInstanceId(rootInstanceId).stream()
+                .map(this::toRuntimeAppendLinkResponse)
+                .toList();
+    }
+
+    /**
      * 终止流程实例。当前先收口根流程级联终止，后续再扩子流程单独终止。
      */
     @Transactional
@@ -245,6 +262,7 @@ public class FlowableProcessRuntimeService {
         }
         Instant terminatedAt = Instant.now();
         List<com.westflow.processruntime.model.ProcessLinkRecord> childLinks = processLinkService.listByRootInstanceId(instanceId);
+        runtimeAppendLinkService.markTerminatedByRootInstanceId(instanceId, terminatedAt);
         flowableTaskActionService.revokeProcessInstance(instanceId, "WESTFLOW_TERMINATE:" + reason);
         childLinks.forEach(link -> processLinkService.updateStatus(link.childInstanceId(), "TERMINATED", terminatedAt));
         appendInstanceEvent(
@@ -277,11 +295,17 @@ public class FlowableProcessRuntimeService {
         String resolvedChildInstanceId = childInstanceId == null || childInstanceId.isBlank()
                 ? instanceId
                 : childInstanceId.trim();
-        var link = Optional.ofNullable(processLinkService.getByChildInstanceId(resolvedChildInstanceId))
-                .orElseThrow(() -> actionNotAllowed(
+        var link = processLinkService.getByChildInstanceId(resolvedChildInstanceId);
+        RuntimeAppendLinkRecord appendLink = null;
+        if (link == null) {
+            appendLink = runtimeAppendLinkService.getByTargetInstanceId(resolvedChildInstanceId);
+            if (appendLink == null) {
+                throw actionNotAllowed(
                         "目标子流程实例不存在",
                         Map.of("instanceId", instanceId, "childInstanceId", resolvedChildInstanceId)
-                ));
+                );
+            }
+        }
         ProcessInstance runtimeChildInstance = flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .processInstanceId(resolvedChildInstanceId)
@@ -295,32 +319,63 @@ public class FlowableProcessRuntimeService {
             );
         }
         Instant terminatedAt = Instant.now();
+        runtimeAppendLinkService.markTerminatedByParentInstanceId(resolvedChildInstanceId, terminatedAt);
         flowableTaskActionService.revokeProcessInstance(resolvedChildInstanceId, "WESTFLOW_TERMINATE:" + reason);
-        processLinkService.updateStatus(resolvedChildInstanceId, "TERMINATED", terminatedAt);
-        appendInstanceEvent(
-                link.parentInstanceId(),
-                null,
-                link.parentNodeId(),
-                "SUBPROCESS_TERMINATED",
-                "子流程已终止",
-                "INSTANCE",
-                null,
-                resolvedChildInstanceId,
-                null,
-                eventDetails(
-                        "terminateScope", "CHILD",
-                        "reason", reason,
-                        "childInstanceId", resolvedChildInstanceId,
-                        "parentNodeId", link.parentNodeId()
-                ),
-                null,
-                link.parentNodeId(),
-                null,
-                null,
-                null,
-                null,
-                null
-        );
+        if (link != null) {
+            processLinkService.updateStatus(resolvedChildInstanceId, "TERMINATED", terminatedAt);
+            appendInstanceEvent(
+                    link.parentInstanceId(),
+                    null,
+                    link.parentNodeId(),
+                    "SUBPROCESS_TERMINATED",
+                    "子流程已终止",
+                    "INSTANCE",
+                    null,
+                    resolvedChildInstanceId,
+                    null,
+                    eventDetails(
+                            "terminateScope", "CHILD",
+                            "reason", reason,
+                            "childInstanceId", resolvedChildInstanceId,
+                            "parentNodeId", link.parentNodeId()
+                    ),
+                    null,
+                    link.parentNodeId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        } else {
+            runtimeAppendLinkService.updateStatusByTargetInstanceId(resolvedChildInstanceId, "TERMINATED", terminatedAt);
+            appendInstanceEvent(
+                    appendLink.parentInstanceId(),
+                    null,
+                    appendLink.sourceNodeId(),
+                    "APPEND_TERMINATED",
+                    "追加子流程已终止",
+                    "INSTANCE",
+                    appendLink.sourceTaskId(),
+                    resolvedChildInstanceId,
+                    null,
+                    eventDetails(
+                            "terminateScope", "CHILD",
+                            "reason", reason,
+                            "childInstanceId", resolvedChildInstanceId,
+                            "sourceTaskId", appendLink.sourceTaskId(),
+                            "sourceNodeId", appendLink.sourceNodeId(),
+                            "appendLinkId", appendLink.id()
+                    ),
+                    null,
+                    appendLink.sourceNodeId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
         appendInstanceEvent(
                 resolvedChildInstanceId,
                 null,
@@ -334,8 +389,8 @@ public class FlowableProcessRuntimeService {
                 eventDetails(
                         "terminateScope", "CHILD",
                         "reason", reason,
-                        "rootInstanceId", link.rootInstanceId(),
-                        "parentInstanceId", link.parentInstanceId()
+                        "rootInstanceId", link != null ? link.rootInstanceId() : appendLink.rootInstanceId(),
+                        "parentInstanceId", link != null ? link.parentInstanceId() : appendLink.parentInstanceId()
                 ),
                 null,
                 null,
@@ -345,7 +400,7 @@ public class FlowableProcessRuntimeService {
                 null,
                 null
         );
-        return nextTaskResponse(link.parentInstanceId(), null);
+        return nextTaskResponse(link != null ? link.parentInstanceId() : appendLink.parentInstanceId(), null);
     }
 
     /**
@@ -437,6 +492,221 @@ public class FlowableProcessRuntimeService {
                 null
         );
         return new CompleteTaskResponse(task.getProcessInstanceId(), taskId, "RUNNING", List.of(toTaskView(addSignTask)));
+    }
+
+    /**
+     * 为当前任务追加一段人工处理链路。
+     */
+    @Transactional
+    public AppendTaskResponse appendTask(String taskId, AppendTaskRequest request) {
+        Task sourceTask = requireTaskForAppend(taskId);
+        if (!"NORMAL".equals(resolveTaskKind(sourceTask))) {
+            throw actionNotAllowed("当前任务不支持追加", Map.of("taskId", taskId));
+        }
+        List<String> targetUserIds = normalizeTargetUserIds(request.targetUserIds(), taskId);
+        String appendPolicy = normalizeAppendPolicy(request.appendPolicy());
+        String sourceNodeId = sourceTask.getTaskDefinitionKey();
+        String sourceNodeName = sourceTask.getName();
+        String targetUserId = targetUserIds.get(0);
+        String comment = request.comment();
+        appendComment(sourceTask, comment);
+        String appendLinkId = UUID.randomUUID().toString();
+        Map<String, Object> localVariables = new LinkedHashMap<>();
+        if (request.appendVariables() != null && !request.appendVariables().isEmpty()) {
+            localVariables.putAll(request.appendVariables());
+        }
+        localVariables.putAll(eventDetails(
+                "westflowTaskKind", "APPEND",
+                "westflowAppendType", "TASK",
+                "westflowSourceTaskId", sourceTask.getId(),
+                "westflowSourceNodeId", sourceNodeId,
+                "westflowAppendPolicy", appendPolicy,
+                "westflowTriggerMode", "APPEND",
+                "westflowTargetUserId", targetUserId,
+                "westflowOperatorUserId", currentUserId()
+        ));
+        Task appendedTask = flowableTaskActionService.createAdhocTask(
+                sourceTask.getProcessInstanceId(),
+                sourceTask.getProcessDefinitionId(),
+                sourceNodeId,
+                sourceNodeName + "（追加）",
+                "APPEND",
+                targetUserId,
+                targetUserIds,
+                sourceTask.getId(),
+                localVariables
+        );
+        RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
+                appendLinkId,
+                resolveRuntimeTreeRootInstanceId(sourceTask.getProcessInstanceId()),
+                sourceTask.getProcessInstanceId(),
+                sourceTask.getId(),
+                sourceNodeId,
+                "TASK",
+                "ADHOC_TASK",
+                appendPolicy,
+                appendedTask.getId(),
+                null,
+                targetUserId,
+                null,
+                null,
+                "RUNNING",
+                "APPEND",
+                currentUserId(),
+                comment,
+                Instant.now(),
+                null
+        );
+        runtimeAppendLinkService.createLink(appendLink);
+        flowableEngineFacade.taskService().setVariableLocal(appendedTask.getId(), "westflowAppendLinkId", appendLink.id());
+        flowableEngineFacade.taskService().setVariableLocal(appendedTask.getId(), "westflowAppendType", "TASK");
+        flowableEngineFacade.taskService().setVariableLocal(appendedTask.getId(), "westflowAppendPolicy", appendPolicy);
+        flowableEngineFacade.taskService().setVariableLocal(appendedTask.getId(), "westflowTaskKind", "APPEND");
+        appendInstanceEvent(
+                sourceTask.getProcessInstanceId(),
+                appendedTask.getId(),
+                appendedTask.getTaskDefinitionKey(),
+                "TASK_APPENDED",
+                "任务已追加",
+                "TASK",
+                sourceTask.getId(),
+                appendedTask.getId(),
+                targetUserId,
+                eventDetails(
+                        "comment", comment,
+                        "appendType", "TASK",
+                        "appendPolicy", appendPolicy,
+                        "sourceTaskId", sourceTask.getId(),
+                        "sourceNodeId", sourceNodeId,
+                        "targetTaskId", appendedTask.getId(),
+                        "targetUserId", targetUserId,
+                        "appendLinkId", appendLink.id()
+                ),
+                null,
+                sourceNodeId,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return new AppendTaskResponse(
+                sourceTask.getProcessInstanceId(),
+                sourceTask.getId(),
+                "TASK",
+                "RUNNING",
+                appendedTask.getId(),
+                null,
+                activeAppendTasks(sourceTask.getProcessInstanceId()),
+                appendLinks(sourceTask.getProcessInstanceId())
+        );
+    }
+
+    /**
+     * 为当前任务追加一个附属子流程。
+     */
+    @Transactional
+    public AppendTaskResponse appendSubprocess(String taskId, AppendTaskRequest request) {
+        Task sourceTask = requireTaskForAppend(taskId);
+        if (!"NORMAL".equals(resolveTaskKind(sourceTask))) {
+            throw actionNotAllowed("当前任务不支持追加", Map.of("taskId", taskId));
+        }
+        String calledProcessKey = normalizeCalledProcessKey(request.calledProcessKey(), taskId);
+        String appendPolicy = normalizeAppendPolicy(request.appendPolicy());
+        String versionPolicy = normalizeVersionPolicy(request.calledVersionPolicy());
+        PublishedProcessDefinition definition = "FIXED_VERSION".equals(versionPolicy)
+                ? processDefinitionService.getPublishedByProcessKeyAndVersion(calledProcessKey, request.calledVersion())
+                : processDefinitionService.getLatestByProcessKey(calledProcessKey);
+        String sourceNodeId = sourceTask.getTaskDefinitionKey();
+        String comment = request.comment();
+        appendComment(sourceTask, comment);
+        Map<String, Object> parentVariables = runtimeVariables(sourceTask.getProcessInstanceId());
+
+        Map<String, Object> variables = new LinkedHashMap<>();
+        String businessKey = stringValue(parentVariables.get("westflowBusinessKey"));
+        variables.put("westflowProcessDefinitionId", definition.processDefinitionId());
+        variables.put("westflowProcessKey", definition.processKey());
+        variables.put("westflowProcessName", definition.processName());
+        variables.put("westflowBusinessType", stringValue(parentVariables.get("westflowBusinessType")));
+        variables.put("westflowBusinessKey", businessKey);
+        variables.put("westflowInitiatorUserId", stringValue(parentVariables.get("westflowInitiatorUserId")));
+        variables.put("westflowParentInstanceId", sourceTask.getProcessInstanceId());
+        variables.put("westflowRootInstanceId", resolveRuntimeTreeRootInstanceId(sourceTask.getProcessInstanceId()));
+        variables.put("westflowAppendType", "SUBPROCESS");
+        variables.put("westflowAppendPolicy", appendPolicy);
+        variables.put("westflowAppendTriggerMode", "APPEND");
+        variables.put("westflowAppendSourceTaskId", sourceTask.getId());
+        variables.put("westflowAppendSourceNodeId", sourceNodeId);
+        variables.put("westflowAppendOperatorUserId", currentUserId());
+        if (request.appendVariables() != null && !request.appendVariables().isEmpty()) {
+            variables.putAll(request.appendVariables());
+        }
+        ProcessInstance childInstance = flowableEngineFacade.runtimeService()
+                .startProcessInstanceByKey(
+                        definition.processKey(),
+                        businessKey == null || businessKey.isBlank() ? sourceTask.getProcessInstanceId() : businessKey,
+                        variables
+                );
+        RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
+                UUID.randomUUID().toString(),
+                resolveRuntimeTreeRootInstanceId(sourceTask.getProcessInstanceId()),
+                sourceTask.getProcessInstanceId(),
+                sourceTask.getId(),
+                sourceNodeId,
+                "SUBPROCESS",
+                "ADHOC_SUBPROCESS",
+                appendPolicy,
+                null,
+                childInstance.getProcessInstanceId(),
+                null,
+                definition.processKey(),
+                definition.processDefinitionId(),
+                "RUNNING",
+                "APPEND",
+                currentUserId(),
+                comment,
+                Instant.now(),
+                null
+        );
+        runtimeAppendLinkService.createLink(appendLink);
+        appendInstanceEvent(
+                sourceTask.getProcessInstanceId(),
+                null,
+                sourceNodeId,
+                "SUBPROCESS_APPENDED",
+                "子流程已追加",
+                "INSTANCE",
+                sourceTask.getId(),
+                null,
+                null,
+                eventDetails(
+                        "comment", comment,
+                        "appendType", "SUBPROCESS",
+                        "appendPolicy", appendPolicy,
+                        "sourceTaskId", sourceTask.getId(),
+                        "sourceNodeId", sourceNodeId,
+                        "childInstanceId", childInstance.getProcessInstanceId(),
+                        "calledProcessKey", definition.processKey(),
+                        "appendLinkId", appendLink.id()
+                ),
+                null,
+                sourceNodeId,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return new AppendTaskResponse(
+                sourceTask.getProcessInstanceId(),
+                sourceTask.getId(),
+                "SUBPROCESS",
+                "RUNNING",
+                null,
+                childInstance.getProcessInstanceId(),
+                activeAppendTasks(sourceTask.getProcessInstanceId()),
+                appendLinks(sourceTask.getProcessInstanceId())
+        );
     }
 
     /**
@@ -547,6 +817,7 @@ public class FlowableProcessRuntimeService {
         String taskKind = resolveTaskKind(task);
         String operatorUserId = normalizeUserId(request.operatorUserId());
         task = claimTaskIfNeeded(task, operatorUserId);
+        RuntimeAppendLinkRecord appendLink = runtimeAppendLinkService.getByTargetTaskId(taskId);
         if ("CC".equals(taskKind)) {
             throw actionNotAllowed("当前抄送任务不支持办理", Map.of("taskId", taskId));
         }
@@ -570,6 +841,34 @@ public class FlowableProcessRuntimeService {
         appendComment(task, request.comment());
         flowableEngineFacade.taskService().setVariableLocal(taskId, "westflowTaskKind", taskKind);
         flowableTaskActionService.complete(taskId, variables);
+        if (appendLink != null) {
+            runtimeAppendLinkService.updateStatusByTargetTaskId(taskId, "COMPLETED", Instant.now());
+            appendInstanceEvent(
+                    task.getProcessInstanceId(),
+                    task.getId(),
+                    task.getTaskDefinitionKey(),
+                    "TASK_APPEND_COMPLETED",
+                    "追加任务已完成",
+                    "TASK",
+                    task.getId(),
+                    task.getId(),
+                    currentUserId(),
+                    eventDetails(
+                            "appendType", appendLink.appendType(),
+                            "appendLinkId", appendLink.id(),
+                            "sourceTaskId", appendLink.sourceTaskId(),
+                            "sourceNodeId", appendLink.sourceNodeId(),
+                            "targetUserId", appendLink.targetUserId()
+                    ),
+                    null,
+                    task.getTaskDefinitionKey(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
         flowableCountersignService.syncAfterTaskCompleted(
                 task.getProcessDefinitionId(),
                 task.getProcessInstanceId(),
@@ -1277,6 +1576,7 @@ public class FlowableProcessRuntimeService {
         );
         List<CountersignTaskGroupResponse> countersignGroups = flowableCountersignService.queryTaskGroups(processInstanceId);
         List<ProcessInstanceLinkResponse> processLinks = subprocessLinks(processInstanceId);
+        List<RuntimeAppendLinkResponse> runtimeAppendLinks = appendLinks(processInstanceId);
         OffsetDateTime createdAt = referenceActiveTask != null
                 ? toOffsetDateTime(referenceActiveTask.getCreateTime())
                 : referenceHistoricTask == null ? toOffsetDateTime(historicProcessInstance.getStartTime()) : toOffsetDateTime(referenceHistoricTask.getCreateTime());
@@ -1338,6 +1638,7 @@ public class FlowableProcessRuntimeService {
                 mapValue(variables.get("westflowTaskFormData")),
                 countersignGroups,
                 processLinks,
+                runtimeAppendLinks,
                 blockingActiveTasks.stream().map(Task::getId).toList()
         );
     }
@@ -1714,6 +2015,30 @@ public class FlowableProcessRuntimeService {
         return claimTaskIfNeeded(task, currentUserId());
     }
 
+    private Task requireTaskForAppend(String taskId) {
+        Task task = requireActiveTask(taskId);
+        List<String> candidateUserIds = candidateUsers(taskId);
+        String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
+        boolean canAppend = currentUserId().equals(task.getAssignee())
+                || (task.getAssignee() == null && candidateUserIds.contains(currentUserId()))
+                || currentUserId().equals(initiatorUserId);
+        if (!canAppend) {
+            throw actionNotAllowed(
+                    "当前任务不允许执行追加",
+                    eventDetails(
+                            "taskId", taskId,
+                            "userId", currentUserId(),
+                            "assigneeUserId", task.getAssignee(),
+                            "initiatorUserId", initiatorUserId
+                    )
+            );
+        }
+        if (currentUserId().equals(initiatorUserId)) {
+            return task;
+        }
+        return claimTaskIfNeeded(task, currentUserId());
+    }
+
     // 在委派、催办场景下校验目标用户。
     private String requireTargetUserId(String targetUserId, String taskId) {
         if (targetUserId == null || targetUserId.isBlank()) {
@@ -1725,6 +2050,55 @@ public class FlowableProcessRuntimeService {
             );
         }
         return targetUserId.trim();
+    }
+
+    private List<String> normalizeTargetUserIds(List<String> targetUserIds, String taskId) {
+        List<String> normalized = targetUserIds == null ? List.of() : targetUserIds.stream()
+                .filter(userId -> userId != null && !userId.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (normalized.isEmpty()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "targetUserIds 不能为空",
+                    Map.of("taskId", taskId)
+            );
+        }
+        return normalized;
+    }
+
+    private String normalizeAppendPolicy(String appendPolicy) {
+        if (appendPolicy == null || appendPolicy.isBlank()) {
+            return "SERIAL_AFTER_CURRENT";
+        }
+        String normalized = appendPolicy.trim().toUpperCase();
+        return List.of("SERIAL_AFTER_CURRENT", "PARALLEL_WITH_CURRENT", "SERIAL_BEFORE_NEXT").contains(normalized)
+                ? normalized
+                : "SERIAL_AFTER_CURRENT";
+    }
+
+    private String normalizeVersionPolicy(String versionPolicy) {
+        if (versionPolicy == null || versionPolicy.isBlank()) {
+            return "LATEST_PUBLISHED";
+        }
+        String normalized = versionPolicy.trim().toUpperCase();
+        return List.of("LATEST_PUBLISHED", "FIXED_VERSION").contains(normalized)
+                ? normalized
+                : "LATEST_PUBLISHED";
+    }
+
+    private String normalizeCalledProcessKey(String calledProcessKey, String taskId) {
+        if (calledProcessKey == null || calledProcessKey.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "calledProcessKey 不能为空",
+                    Map.of("taskId", taskId)
+            );
+        }
+        return calledProcessKey.trim();
     }
 
     private String normalizeTargetUserId(String userId, String fieldName) {
@@ -1943,6 +2317,128 @@ public class FlowableProcessRuntimeService {
                 });
     }
 
+    private String resolveRuntimeTreeRootInstanceId(String instanceId) {
+        var processLink = processLinkService.getByChildInstanceId(instanceId);
+        if (processLink != null) {
+            return processLink.rootInstanceId();
+        }
+        RuntimeAppendLinkRecord appendLink = runtimeAppendLinkService.getByTargetInstanceId(instanceId);
+        if (appendLink != null && appendLink.rootInstanceId() != null && !appendLink.rootInstanceId().isBlank()) {
+            return appendLink.rootInstanceId();
+        }
+        return instanceId;
+    }
+
+    private void synchronizeAppendLinks(String rootInstanceId) {
+        runtimeAppendLinkService.listByRootInstanceId(rootInstanceId).stream()
+                .filter(record -> "RUNNING".equals(record.status()))
+                .forEach(record -> {
+                    if (record.targetTaskId() != null && !record.targetTaskId().isBlank()) {
+                        Task runtimeTask = flowableEngineFacade.taskService()
+                                .createTaskQuery()
+                                .taskId(record.targetTaskId())
+                                .singleResult();
+                        if (runtimeTask != null) {
+                            return;
+                        }
+                        HistoricTaskInstance historicTask = flowableEngineFacade.historyService()
+                                .createHistoricTaskInstanceQuery()
+                                .taskId(record.targetTaskId())
+                                .singleResult();
+                        if (historicTask == null || historicTask.getEndTime() == null) {
+                            return;
+                        }
+                        String resolvedStatus = historicTask.getDeleteReason() != null && !historicTask.getDeleteReason().isBlank()
+                                ? "TERMINATED"
+                                : "COMPLETED";
+                        runtimeAppendLinkService.updateStatusByTargetTaskId(
+                                record.targetTaskId(),
+                                resolvedStatus,
+                                historicTask.getEndTime().toInstant()
+                        );
+                        appendInstanceEvent(
+                                record.parentInstanceId(),
+                                record.targetTaskId(),
+                                record.sourceNodeId(),
+                                "TERMINATED".equals(resolvedStatus) ? "APPEND_TERMINATED" : "TASK_APPEND_COMPLETED",
+                                "TERMINATED".equals(resolvedStatus) ? "追加任务已终止" : "追加任务已完成",
+                                "TASK",
+                                record.sourceTaskId(),
+                                record.targetTaskId(),
+                                record.targetUserId(),
+                                eventDetails(
+                                        "appendLinkId", record.id(),
+                                        "appendType", record.appendType(),
+                                        "runtimeLinkType", record.runtimeLinkType(),
+                                        "sourceTaskId", record.sourceTaskId(),
+                                        "sourceNodeId", record.sourceNodeId(),
+                                        "targetTaskId", record.targetTaskId(),
+                                        "targetUserId", record.targetUserId(),
+                                        "resolvedStatus", resolvedStatus
+                                ),
+                                null,
+                                record.sourceNodeId(),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null
+                        );
+                        return;
+                    }
+                    if (record.targetInstanceId() != null && !record.targetInstanceId().isBlank()) {
+                        ProcessInstance runtimeChild = flowableEngineFacade.runtimeService()
+                                .createProcessInstanceQuery()
+                                .processInstanceId(record.targetInstanceId())
+                                .singleResult();
+                        if (runtimeChild != null) {
+                            return;
+                        }
+                        HistoricProcessInstance historicChild = flowableEngineFacade.historyService()
+                                .createHistoricProcessInstanceQuery()
+                                .processInstanceId(record.targetInstanceId())
+                                .singleResult();
+                        if (historicChild == null || historicChild.getEndTime() == null) {
+                            return;
+                        }
+                        String resolvedStatus = isTerminatedProcess(historicChild) ? "TERMINATED" : "COMPLETED";
+                        runtimeAppendLinkService.updateStatusByTargetInstanceId(
+                                record.targetInstanceId(),
+                                resolvedStatus,
+                                historicChild.getEndTime().toInstant()
+                        );
+                        appendInstanceEvent(
+                                record.parentInstanceId(),
+                                null,
+                                record.sourceNodeId(),
+                                "TERMINATED".equals(resolvedStatus) ? "APPEND_TERMINATED" : "SUBPROCESS_APPENDED_FINISHED",
+                                "TERMINATED".equals(resolvedStatus) ? "追加子流程已终止" : "追加子流程已完成",
+                                "INSTANCE",
+                                record.sourceTaskId(),
+                                record.targetInstanceId(),
+                                null,
+                                eventDetails(
+                                        "appendLinkId", record.id(),
+                                        "appendType", record.appendType(),
+                                        "runtimeLinkType", record.runtimeLinkType(),
+                                        "sourceTaskId", record.sourceTaskId(),
+                                        "sourceNodeId", record.sourceNodeId(),
+                                        "childInstanceId", record.targetInstanceId(),
+                                        "calledProcessKey", record.calledProcessKey(),
+                                        "resolvedStatus", resolvedStatus
+                                ),
+                                null,
+                                record.sourceNodeId(),
+                                null,
+                                null,
+                                null,
+                                null,
+                                null
+                        );
+                    }
+                });
+    }
+
     private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(com.westflow.processruntime.model.ProcessLinkRecord record) {
         return new ProcessInstanceLinkResponse(
                 record.id(),
@@ -1959,6 +2455,44 @@ public class FlowableProcessRuntimeService {
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
                 record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
         );
+    }
+
+    private RuntimeAppendLinkResponse toRuntimeAppendLinkResponse(RuntimeAppendLinkRecord record) {
+        return new RuntimeAppendLinkResponse(
+                record.id(),
+                record.rootInstanceId(),
+                record.parentInstanceId(),
+                record.sourceTaskId(),
+                record.sourceNodeId(),
+                record.appendType(),
+                record.runtimeLinkType(),
+                record.policy(),
+                record.targetTaskId(),
+                record.targetInstanceId(),
+                record.targetUserId(),
+                record.calledProcessKey(),
+                record.calledDefinitionId(),
+                record.status(),
+                record.triggerMode(),
+                record.operatorUserId(),
+                record.commentText(),
+                record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
+                record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
+        );
+    }
+
+    private List<ProcessTaskSnapshot> activeAppendTasks(String processInstanceId) {
+        return flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .active()
+                .orderByTaskCreateTime()
+                .asc()
+                .list()
+                .stream()
+                .filter(task -> "APPEND".equals(resolveTaskKind(task)))
+                .map(this::toTaskView)
+                .toList();
     }
 
     private boolean isTerminatedProcess(HistoricProcessInstance historicProcessInstance) {
@@ -2472,19 +3006,29 @@ public class FlowableProcessRuntimeService {
     }
 
     private String resolveProcessInstanceIdByBusinessKey(String businessId) {
-        org.flowable.engine.runtime.ProcessInstance runtimeInstance = flowableEngineFacade.runtimeService()
+        List<org.flowable.engine.runtime.ProcessInstance> runtimeInstances = flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .processInstanceBusinessKey(businessId)
-                .singleResult();
-        if (runtimeInstance != null) {
-            return runtimeInstance.getProcessInstanceId();
+                .list();
+        if (!runtimeInstances.isEmpty()) {
+            return runtimeInstances.stream()
+                    .filter(instance -> instance.getSuperExecutionId() == null
+                            || instance.getRootProcessInstanceId() == null
+                            || instance.getRootProcessInstanceId().equals(instance.getProcessInstanceId()))
+                    .findFirst()
+                    .orElse(runtimeInstances.get(0))
+                    .getProcessInstanceId();
         }
-        HistoricProcessInstance historicInstance = flowableEngineFacade.historyService()
+        List<HistoricProcessInstance> historicInstances = flowableEngineFacade.historyService()
                 .createHistoricProcessInstanceQuery()
                 .processInstanceBusinessKey(businessId)
-                .singleResult();
-        if (historicInstance != null) {
-            return historicInstance.getId();
+                .list();
+        if (!historicInstances.isEmpty()) {
+            return historicInstances.stream()
+                    .filter(instance -> instance.getSuperProcessInstanceId() == null)
+                    .findFirst()
+                    .orElse(historicInstances.get(0))
+                    .getId();
         }
         throw resourceNotFound("审批单不存在", Map.of("businessId", businessId));
     }

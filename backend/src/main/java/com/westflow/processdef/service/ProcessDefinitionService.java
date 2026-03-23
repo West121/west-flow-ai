@@ -158,6 +158,18 @@ public class ProcessDefinitionService {
         return toPublishedProcessDefinition(record);
     }
 
+    // 按流程键和版本获取已发布定义，供运行时附属子流程按版本启动。
+    public PublishedProcessDefinition getPublishedByProcessKeyAndVersion(String processKey, Integer version) {
+        if (version == null) {
+            return getLatestByProcessKey(processKey);
+        }
+        ProcessDefinitionRecord record = processDefinitionMapper.selectPublishedByProcessKeyAndVersion(processKey, version);
+        if (record == null) {
+            throw resourceNotFound("processKey", processKey + ":" + version);
+        }
+        return toPublishedProcessDefinition(record);
+    }
+
     // 按主键获取已保存的流程定义，发布后和草稿态都适用。
     public PublishedProcessDefinition getById(String processDefinitionId) {
         return toPublishedProcessDefinition(getRecordById(processDefinitionId));

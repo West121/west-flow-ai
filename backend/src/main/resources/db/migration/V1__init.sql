@@ -581,7 +581,7 @@ INSERT INTO wf_menu (
 SELECT
     'menu_workbench_dashboard',
     'menu_workbench',
-    '平台总览',
+    '工作台',
     'MENU',
     '/',
     'dashboard/overview',
@@ -735,7 +735,7 @@ INSERT INTO wf_menu (
 )
 SELECT
     'menu_system_role',
-    'menu_system',
+    'menu_org',
     '角色管理',
     'MENU',
     '/system/roles/list',
@@ -2553,12 +2553,14 @@ SET parent_menu_id = 'menu_workflow_center',
 WHERE id = 'menu_workbench_todo';
 
 UPDATE wf_menu
-SET sort_order = 10,
+SET menu_name = '工作台',
+    sort_order = 10,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 'menu_workbench_dashboard';
 
 UPDATE wf_menu
-SET sort_order = 10,
+SET parent_menu_id = 'menu_org',
+    sort_order = 50,
     updated_at = CURRENT_TIMESTAMP
 WHERE id = 'menu_system_role';
 

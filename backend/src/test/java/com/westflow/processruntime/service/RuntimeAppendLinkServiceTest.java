@@ -57,6 +57,24 @@ class RuntimeAppendLinkServiceTest {
         verify(runtimeAppendLinkMapper).updateStatusByTargetInstanceId("instance_1", "TERMINATED", finishedAt);
     }
 
+    @Test
+    void shouldMarkRuntimeAppendLinksTerminatedByRootInstanceId() {
+        Instant finishedAt = Instant.parse("2026-03-23T10:15:30Z");
+
+        runtimeAppendLinkService.markTerminatedByRootInstanceId("root_1", finishedAt);
+
+        verify(runtimeAppendLinkMapper).updateStatusByRootInstanceId("root_1", "TERMINATED", finishedAt);
+    }
+
+    @Test
+    void shouldMarkRuntimeAppendLinksTerminatedByParentInstanceId() {
+        Instant finishedAt = Instant.parse("2026-03-23T10:15:30Z");
+
+        runtimeAppendLinkService.markTerminatedByParentInstanceId("parent_1", finishedAt);
+
+        verify(runtimeAppendLinkMapper).updateStatusByParentInstanceId("parent_1", "TERMINATED", finishedAt);
+    }
+
     private RuntimeAppendLinkRecord record(String id, String rootInstanceId, String parentInstanceId) {
         return new RuntimeAppendLinkRecord(
                 id,

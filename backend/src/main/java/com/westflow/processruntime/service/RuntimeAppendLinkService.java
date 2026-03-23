@@ -53,4 +53,14 @@ public class RuntimeAppendLinkService {
     public void updateStatusByTargetInstanceId(String targetInstanceId, String status, Instant finishedAt) {
         runtimeAppendLinkMapper.updateStatusByTargetInstanceId(targetInstanceId, status, finishedAt);
     }
+
+    // 通过根流程实例更新全部附属结构状态。
+    public void markTerminatedByRootInstanceId(String rootInstanceId, Instant finishedAt) {
+        runtimeAppendLinkMapper.updateStatusByRootInstanceId(rootInstanceId, "TERMINATED", finishedAt);
+    }
+
+    // 通过父流程实例更新全部附属结构状态。
+    public void markTerminatedByParentInstanceId(String parentInstanceId, Instant finishedAt) {
+        runtimeAppendLinkMapper.updateStatusByParentInstanceId(parentInstanceId, "TERMINATED", finishedAt);
+    }
 }
