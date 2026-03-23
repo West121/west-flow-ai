@@ -2,8 +2,8 @@ package com.westflow.processruntime.api;
 
 import java.util.List;
 
-// 运行态任务视图。
-public record RuntimeTaskView(
+// 运行态任务快照，供开始流程、任务动作和离职转办响应复用。
+public record ProcessTaskSnapshot(
         String taskId,
         String nodeId,
         String nodeName,

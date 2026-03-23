@@ -4,7 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
-import com.westflow.processruntime.api.RuntimeTaskView;
+import com.westflow.processruntime.api.ProcessTaskSnapshot;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import java.util.LinkedHashMap;
@@ -21,7 +21,7 @@ import org.springframework.stereotype.Service;
 import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 
 /**
- * 基于真实 Flowable 引擎发起流程实例，并回填最小活动任务视图。
+ * 基于真实 Flowable 引擎发起流程实例，并回填最小活动任务快照。
  */
 @Service
 @RequiredArgsConstructor
@@ -41,7 +41,7 @@ public class FlowableRuntimeStartService {
         Map<String, Object> variables = buildStartVariables(definition, request);
         ProcessInstance instance = flowableEngineFacade.runtimeService()
                 .startProcessInstanceByKey(definition.processKey(), request.businessKey(), variables);
-        List<RuntimeTaskView> activeTasks = flowableEngineFacade.taskService()
+        List<ProcessTaskSnapshot> activeTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(instance.getProcessInstanceId())
                 .active()
@@ -123,9 +123,9 @@ public class FlowableRuntimeStartService {
     }
 
     /**
-     * 将 Flowable 活动任务转换为现阶段可复用的任务视图。
+     * 将 Flowable 活动任务转换为可复用的运行态任务快照。
      */
-    private RuntimeTaskView toTaskView(Task task) {
+    private ProcessTaskSnapshot toTaskView(Task task) {
         List<String> candidateUserIds = flowableEngineFacade.taskService()
                 .getIdentityLinksForTask(task.getId())
                 .stream()
@@ -137,7 +137,7 @@ public class FlowableRuntimeStartService {
         String taskKind = resolveTaskKind(task);
         String assignmentMode = task.getAssignee() != null || !candidateUserIds.isEmpty() ? "USER" : null;
         String status = task.getAssignee() == null && !candidateUserIds.isEmpty() ? "PENDING_CLAIM" : "PENDING";
-        return new RuntimeTaskView(
+        return new ProcessTaskSnapshot(
                 task.getId(),
                 task.getTaskDefinitionKey(),
                 task.getName(),

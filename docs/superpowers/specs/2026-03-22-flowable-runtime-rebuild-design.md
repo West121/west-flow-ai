@@ -1,8 +1,10 @@
 # Phase 3 真实 Flowable 运行态重构设计
 
-> 状态：Approved v1
+> 状态：Archived v2026-03-23
 > 日期：2026-03-22
-> 适用范围：`codex/m0-foundation` Phase 3
+> 适用范围：`codex/m0-foundation` Phase 3 历史重构设计
+
+> 历史说明：本文件记录从 demo 运行态迁移到真实 `Flowable` 的设计背景。迁移现已完成；文中 `/api/v1/process-runtime/demo/*` 和 `ProcessDemoService` 仅用于描述当时起点，不再代表当前接口现状。
 
 ## 1. 背景
 

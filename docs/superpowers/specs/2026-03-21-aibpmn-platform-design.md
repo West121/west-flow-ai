@@ -27,7 +27,7 @@
 
 说明：
 
-- `backend/src/main/java/com/westflow/processruntime/api/DemoTaskView.java` 仍是一个历史类名残留，但它不代表 demo 运行时，也不是接口路径语义
+- 早期设计里曾出现 `backend/src/main/java/com/westflow/processruntime/api/DemoTaskView.java` 这一历史类名；当前代码已经统一为 `RuntimeTaskView`，旧名字仅保留在历史说明中
 - 当前对外接口、路由和契约必须统一按正式运行时与正式业务能力描述
 
 ## 3. 当前平台结构

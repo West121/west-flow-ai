@@ -36,8 +36,8 @@ class InMemoryProcessRuntimeTraceStoreTest {
         InMemoryProcessRuntimeTraceStore store = new InMemoryProcessRuntimeTraceStore();
         ProcessDslPayload payload = new ProcessDslPayload(
                 "1.0.0",
-                "demo",
-                "演示流程",
+                "runtime_trace_process",
+                "运行态轨迹流程",
                 "OA",
                 "form_key",
                 "1.0.0",
@@ -71,7 +71,7 @@ class InMemoryProcessRuntimeTraceStoreTest {
                                 "触发节点",
                                 null,
                                 Map.of(),
-                                Map.of("triggerKey", "demo.trigger"),
+                                Map.of("triggerKey", "runtime.trigger"),
                                 Map.of()
                         )
                 ),

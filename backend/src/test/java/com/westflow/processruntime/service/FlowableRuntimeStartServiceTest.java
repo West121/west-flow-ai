@@ -204,7 +204,7 @@ class FlowableRuntimeStartServiceTest {
         assertThat(activeTasks).hasSize(2);
         assertThat(activeTasks.stream().map(Task::getAssignee)).containsExactlyInAnyOrder("usr_002", "usr_003");
         assertThat(response.activeTasks()).hasSize(2);
-        assertThat(response.activeTasks().stream().map(com.westflow.processruntime.api.RuntimeTaskView::assigneeUserId))
+        assertThat(response.activeTasks().stream().map(com.westflow.processruntime.api.ProcessTaskSnapshot::assigneeUserId))
                 .containsExactlyInAnyOrder("usr_002", "usr_003");
     }
 

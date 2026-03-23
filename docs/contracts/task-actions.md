@@ -252,4 +252,5 @@
 
 说明：
 
-- 代码中个别历史类名如 `DemoTaskView` 仍可能存在，但不代表对外接口仍是 demo 运行时
+- 历史文档里可能仍出现 `DemoTaskView` 这一旧类名；当前代码已统一为 `RuntimeTaskView`
+- `aimcpdemo` 之类独立演示域不属于流程运行态对外协议，不能据此推断任务接口仍走 demo 口径

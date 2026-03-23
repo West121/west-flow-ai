@@ -1,12 +1,14 @@
 # 委派与代理运行态设计
 
-> 状态：Frozen v1
+> 状态：Archived v2026-03-23
 > Owner：流程运行时 owner
 > 冻结时点：2026-03-22
 
+> 历史说明：本文件记录 2026-03-22 冻结时的运行态设计语义。当前正式接口已经统一为 `/api/v1/process-runtime/*`，文中 demo 路径仅代表当时阶段性草案。
+
 ## 目标
 
-在现有 `processruntime` demo 模型内补齐以下运行态能力：
+在当时的 `processruntime` 阶段模型内补齐以下运行态能力：
 
 - `委派`
 - `代理`
@@ -67,10 +69,16 @@
 
 ## 后端变更
 
-### 新动作
+### 当时新增动作草案
 
 - `POST /api/v1/process-runtime/demo/tasks/{taskId}/delegate`
 - `POST /api/v1/process-runtime/demo/users/{sourceUserId}/handover`
+
+当前真实接口对应为：
+
+- `POST /api/v1/process-runtime/tasks/{taskId}/delegate`
+- `POST /api/v1/process-runtime/users/{sourceUserId}/handover/preview`
+- `POST /api/v1/process-runtime/users/{sourceUserId}/handover/execute`
 
 ### 新状态
 

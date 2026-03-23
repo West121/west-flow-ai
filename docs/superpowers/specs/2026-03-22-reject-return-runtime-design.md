@@ -1,8 +1,10 @@
 # 驳回与回退策略运行态设计
 
-> 状态：Approved v1
+> 状态：Archived v2026-03-23
 > 日期：2026-03-22
-> 适用范围：`codex/m0-foundation` 流程运行态下一批高级动作
+> 适用范围：`codex/m0-foundation` 历史设计冻结稿，供回看当时动作语义
+
+> 历史说明：本文件保留 2026-03-22 设计冻结时的表述。当前真实接口已统一到 `/api/v1/process-runtime/*`，下文出现的 `/api/v1/process-runtime/demo/*` 仅代表当时草案，不再代表现状。
 
 ## 1. 背景
 
@@ -140,14 +142,21 @@
 
 ## 5. 接口设计
 
-新增运行态接口：
+当时冻结的新增运行态接口草案：
 
 - `POST /api/v1/process-runtime/demo/tasks/{taskId}/reject`
 - `POST /api/v1/process-runtime/demo/tasks/{taskId}/jump`
 - `POST /api/v1/process-runtime/demo/tasks/{taskId}/take-back`
 - `POST /api/v1/process-runtime/demo/instances/{instanceId}/wake-up`
 
-说明：
+当前真实接口对应为：
+
+- `POST /api/v1/process-runtime/tasks/{taskId}/reject`
+- `POST /api/v1/process-runtime/tasks/{taskId}/jump`
+- `POST /api/v1/process-runtime/tasks/{taskId}/take-back`
+- `POST /api/v1/process-runtime/instances/{instanceId}/wake-up`
+
+当时设计说明：
 
 - 现有 `POST /complete` 保留给 `APPROVE` 和基础 `REJECT` 兼容逻辑
 - 前端新页面与详情页统一切到专用动作接口，不再靠 `complete(action=REJECT)` 承载复杂策略
@@ -182,7 +191,7 @@
 - `拿回`
 - `唤醒`
 
-## 7. 实现约束
+## 7. 当时实现约束
 
 - 继续复用当前 `processruntime` 单一 demo 运行时，不引入第二套动作引擎
 - 不在本批次内修改 OA 业务表结构
