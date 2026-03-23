@@ -23,6 +23,7 @@ class AiRuntimeToolCallbackProviderTest {
     @Test
     void shouldExposeReadableToolsThroughInternalMcpProvider() {
         AiRegistryCatalogService aiRegistryCatalogService = mock(AiRegistryCatalogService.class);
+        AiMcpClientFactory aiMcpClientFactory = mock(AiMcpClientFactory.class);
         AiToolRegistry aiToolRegistry = new AiToolRegistry(List.of(
                 AiToolDefinition.read(
                         "task.query",
@@ -38,6 +39,8 @@ class AiRuntimeToolCallbackProviderTest {
                         null,
                         "INTERNAL",
                         "ai:copilot:open",
+                        List.of("OA"),
+                        100,
                         Map.of()
                 )));
         when(aiRegistryCatalogService.listReadableTools("usr_001", "OA"))
@@ -55,10 +58,12 @@ class AiRuntimeToolCallbackProviderTest {
                         95,
                         Map.of()
                 )));
+        when(aiMcpClientFactory.createClients("usr_001", "OA")).thenReturn(List.of());
 
         AiRuntimeToolCallbackProvider provider = new AiRuntimeToolCallbackProvider(
                 aiRegistryCatalogService,
                 aiToolRegistry,
+                aiMcpClientFactory,
                 new ObjectMapper()
         );
 

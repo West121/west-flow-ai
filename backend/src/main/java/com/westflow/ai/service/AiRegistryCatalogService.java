@@ -128,9 +128,22 @@ public class AiRegistryCatalogService {
      * 查询当前用户可用的 MCP 注册项。
      */
     public Optional<AiMcpCatalogItem> findMcp(String userId, String mcpCode) {
-        return listMcps(userId).stream()
+        return listMcps(userId, null).stream()
                 .filter(item -> item.mcpCode().equals(mcpCode))
                 .findFirst();
+    }
+
+    /**
+     * 列出当前用户在指定业务域可用的 MCP 注册项。
+     */
+    public List<AiMcpCatalogItem> listMcps(String userId, String domain) {
+        List<String> capabilities = capabilities(userId);
+        return aiRegistryMapper.selectEnabledMcpRegistries().stream()
+                .map(this::toMcpCatalogItem)
+                .filter(item -> supportsCapability(capabilities, item.requiredCapabilityCode()))
+                .filter(item -> supportsDomain(item.supportedDomains(), domain))
+                .sorted(Comparator.comparingInt(AiMcpCatalogItem::priority).reversed())
+                .toList();
     }
 
     /**
@@ -175,14 +188,6 @@ public class AiRegistryCatalogService {
         List<String> capabilities = capabilities(userId);
         return aiRegistryMapper.selectEnabledToolRegistries().stream()
                 .map(this::toToolCatalogItem)
-                .filter(item -> supportsCapability(capabilities, item.requiredCapabilityCode()))
-                .toList();
-    }
-
-    private List<AiMcpCatalogItem> listMcps(String userId) {
-        List<String> capabilities = capabilities(userId);
-        return aiRegistryMapper.selectEnabledMcpRegistries().stream()
-                .map(this::toMcpCatalogItem)
                 .filter(item -> supportsCapability(capabilities, item.requiredCapabilityCode()))
                 .toList();
     }
@@ -249,6 +254,8 @@ public class AiRegistryCatalogService {
                 row.endpointUrl(),
                 row.transportType(),
                 row.requiredCapabilityCode(),
+                readStringList(metadata, "businessDomains"),
+                readInt(metadata, "priority", 50),
                 metadata
         );
     }
@@ -454,6 +461,8 @@ public class AiRegistryCatalogService {
             String endpointUrl,
             String transportType,
             String requiredCapabilityCode,
+            List<String> supportedDomains,
+            int priority,
             Map<String, Object> metadata
     ) {
     }

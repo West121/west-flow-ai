@@ -7,11 +7,14 @@ import com.westflow.ai.model.AiToolCallRequest;
 import com.westflow.ai.tool.AiToolDefinition;
 import com.westflow.ai.tool.AiToolExecutionContext;
 import com.westflow.ai.tool.AiToolRegistry;
+import io.modelcontextprotocol.client.McpSyncClient;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -29,15 +32,18 @@ public class AiRuntimeToolCallbackProvider {
 
     private final AiRegistryCatalogService aiRegistryCatalogService;
     private final AiToolRegistry aiToolRegistry;
+    private final AiMcpClientFactory aiMcpClientFactory;
     private final ObjectMapper objectMapper;
 
     public AiRuntimeToolCallbackProvider(
             AiRegistryCatalogService aiRegistryCatalogService,
             AiToolRegistry aiToolRegistry,
+            AiMcpClientFactory aiMcpClientFactory,
             ObjectMapper objectMapper
     ) {
         this.aiRegistryCatalogService = aiRegistryCatalogService;
         this.aiToolRegistry = aiToolRegistry;
+        this.aiMcpClientFactory = aiMcpClientFactory;
         this.objectMapper = objectMapper;
     }
 
@@ -45,14 +51,27 @@ public class AiRuntimeToolCallbackProvider {
      * 为当前会话构造可直接执行的只读工具回调。
      */
     public ToolCallbackProvider createProvider(String userId, String domain) {
+        List<ToolCallback> callbacks = new ArrayList<>(internalCallbacks(userId, domain));
+        callbacks.addAll(externalCallbacks(userId, domain));
+        return ToolCallbackProvider.from(callbacks);
+    }
+
+    private List<ToolCallback> internalCallbacks(String userId, String domain) {
         if (aiRegistryCatalogService.findMcp(userId, INTERNAL_MCP_CODE).isEmpty()) {
-            return ToolCallbackProvider.from(List.of());
+            return List.of();
         }
-        List<ToolCallback> callbacks = aiRegistryCatalogService.listReadableTools(userId, domain).stream()
+        return aiRegistryCatalogService.listReadableTools(userId, domain).stream()
                 .filter(item -> INTERNAL_MCP_CODE.equalsIgnoreCase(item.mcpCode()))
                 .map(this::toToolCallback)
                 .toList();
-        return ToolCallbackProvider.from(callbacks);
+    }
+
+    private List<ToolCallback> externalCallbacks(String userId, String domain) {
+        List<McpSyncClient> clients = aiMcpClientFactory.createClients(userId, domain);
+        if (clients.isEmpty()) {
+            return List.of();
+        }
+        return SyncMcpToolCallbackProvider.syncToolCallbacks(clients);
     }
 
     private ToolCallback toToolCallback(AiRegistryCatalogService.AiToolCatalogItem item) {
