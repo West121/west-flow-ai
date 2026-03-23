@@ -16,7 +16,15 @@ import com.westflow.ai.tool.AiToolDefinition;
 import com.westflow.ai.tool.AiToolRegistry;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.PageRequest;
+import com.westflow.oa.api.CreateOACommonRequestBillRequest;
+import com.westflow.oa.api.CreateOAExpenseBillRequest;
+import com.westflow.oa.api.CreateOALeaveBillRequest;
+import com.westflow.oa.service.OALaunchService;
+import com.westflow.plm.api.CreatePLMEcoBillRequest;
+import com.westflow.plm.api.CreatePLMEcrBillRequest;
+import com.westflow.plm.api.CreatePLMMaterialChangeBillRequest;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import com.westflow.plm.api.PlmLaunchResponse;
 import com.westflow.plm.service.PlmLaunchService;
 import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
 import com.westflow.processruntime.api.ApprovalSheetListView;
@@ -27,10 +35,13 @@ import com.westflow.processruntime.api.RejectTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.processruntime.service.FlowableRuntimeStartService;
+import com.westflow.oa.api.OALaunchResponse;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
@@ -62,6 +73,8 @@ public class AiCopilotConfiguration {
             ProcessDefinitionService processDefinitionService,
             FlowableProcessRuntimeService flowableProcessRuntimeService,
             FlowableRuntimeStartService flowableRuntimeStartService,
+            OALaunchService oaLaunchService,
+            PlmLaunchService plmLaunchService,
             JdbcTemplate jdbcTemplate
     ) {
         return new AiToolRegistry(List.of(
@@ -118,24 +131,12 @@ public class AiCopilotConfiguration {
                         "process.start",
                         AiToolSource.PLATFORM,
                         "发起流程",
-                        context -> {
-                            String processKey = stringValue(context.request().arguments().get("processKey"));
-                            if (processKey.isBlank()) {
-                                throw new ContractException("VALIDATION.FIELD_INVALID", HttpStatus.BAD_REQUEST, "缺少 processKey");
-                            }
-                            var response = flowableRuntimeStartService.start(new StartProcessRequest(
-                                    processKey,
-                                    stringValue(context.request().arguments().get("businessKey")),
-                                    stringValue(context.request().arguments().get("businessType")),
-                                    mapValue(context.request().arguments().get("formData"))
-                            ));
-                            return Map.of(
-                                    "instanceId", response.instanceId(),
-                                    "processDefinitionId", response.processDefinitionId(),
-                                    "status", response.status(),
-                                    "activeTasks", response.activeTasks()
-                            );
-                        }
+                        context -> handleProcessStart(
+                                flowableRuntimeStartService,
+                                oaLaunchService,
+                                plmLaunchService,
+                                context.request().arguments()
+                        )
                 ),
                 AiToolDefinition.write(
                         "task.handle",
@@ -385,6 +386,86 @@ public class AiCopilotConfiguration {
         return count == null ? 0L : count;
     }
 
+    private static Map<String, Object> handleProcessStart(
+            FlowableRuntimeStartService flowableRuntimeStartService,
+            OALaunchService oaLaunchService,
+            PlmLaunchService plmLaunchService,
+            Map<String, Object> arguments
+    ) {
+        String businessType = stringValue(arguments.get("businessType")).toUpperCase();
+        String sceneCode = normalizeSceneCode(arguments.get("sceneCode"));
+        Map<String, Object> formData = mapValue(arguments.get("formData"));
+
+        return switch (businessType) {
+            case "OA_LEAVE" -> toLaunchResult(
+                    oaLaunchService.createLeaveBill(new CreateOALeaveBillRequest(
+                            sceneCode,
+                            parseInt(formData.get("days"), 0),
+                            stringValue(formData.get("reason"))
+                    ))
+            );
+            case "OA_EXPENSE" -> toLaunchResult(
+                    oaLaunchService.createExpenseBill(new CreateOAExpenseBillRequest(
+                            sceneCode,
+                            parseDecimal(formData.get("amount")),
+                            stringValue(formData.get("reason"))
+                    ))
+            );
+            case "OA_COMMON" -> toLaunchResult(
+                    oaLaunchService.createCommonRequestBill(new CreateOACommonRequestBillRequest(
+                            sceneCode,
+                            stringValue(formData.get("title")),
+                            stringValue(formData.get("content"))
+                    ))
+            );
+            case "PLM_ECR" -> toLaunchResult(
+                    plmLaunchService.createEcrBill(new CreatePLMEcrBillRequest(
+                            sceneCode,
+                            stringValue(formData.get("changeTitle")),
+                            stringValue(formData.get("changeReason")),
+                            nullableString(formData.get("affectedProductCode")),
+                            nullableString(formData.get("priorityLevel"))
+                    ))
+            );
+            case "PLM_ECO" -> toLaunchResult(
+                    plmLaunchService.createEcoBill(new CreatePLMEcoBillRequest(
+                            sceneCode,
+                            stringValue(formData.get("executionTitle")),
+                            stringValue(formData.get("executionPlan")),
+                            parseDate(formData.get("effectiveDate")),
+                            stringValue(formData.get("changeReason"))
+                    ))
+            );
+            case "PLM_MATERIAL" -> toLaunchResult(
+                    plmLaunchService.createMaterialChangeBill(new CreatePLMMaterialChangeBillRequest(
+                            sceneCode,
+                            stringValue(formData.get("materialCode")),
+                            stringValue(formData.get("materialName")),
+                            stringValue(formData.get("changeReason")),
+                            nullableString(formData.get("changeType"))
+                    ))
+            );
+            default -> {
+                String processKey = stringValue(arguments.get("processKey"));
+                if (processKey.isBlank()) {
+                    throw new ContractException("VALIDATION.FIELD_INVALID", HttpStatus.BAD_REQUEST, "缺少 processKey");
+                }
+                var response = flowableRuntimeStartService.start(new StartProcessRequest(
+                        processKey,
+                        stringValue(arguments.get("businessKey")),
+                        stringValue(arguments.get("businessType")),
+                        formData
+                ));
+                yield Map.of(
+                        "instanceId", response.instanceId(),
+                        "processDefinitionId", response.processDefinitionId(),
+                        "status", response.status(),
+                        "activeTasks", response.activeTasks()
+                );
+            }
+        };
+    }
+
     private static Map<String, Object> queryPlmBills(JdbcTemplate jdbcTemplate, String keyword) {
         String normalizedKeyword = keyword == null ? "" : keyword.trim();
         String likeKeyword = "%" + normalizedKeyword + "%";
@@ -419,6 +500,61 @@ public class AiCopilotConfiguration {
         Map<String, Object> merged = new LinkedHashMap<>(arguments == null ? Map.of() : arguments);
         merged.put("action", action);
         return merged;
+    }
+
+    private static Map<String, Object> toLaunchResult(OALaunchResponse response) {
+        return Map.of(
+                "billId", response.billId(),
+                "billNo", response.billNo(),
+                "instanceId", response.processInstanceId(),
+                "activeTasks", response.activeTasks()
+        );
+    }
+
+    private static Map<String, Object> toLaunchResult(PlmLaunchResponse response) {
+        return Map.of(
+                "billId", response.billId(),
+                "billNo", response.billNo(),
+                "instanceId", response.processInstanceId(),
+                "activeTasks", response.activeTasks()
+        );
+    }
+
+    private static String normalizeSceneCode(Object value) {
+        String sceneCode = stringValue(value);
+        return sceneCode.isBlank() ? "default" : sceneCode;
+    }
+
+    private static String nullableString(Object value) {
+        String text = stringValue(value);
+        return text.isBlank() ? null : text;
+    }
+
+    private static BigDecimal parseDecimal(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        String text = stringValue(value);
+        if (text.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(text);
+        } catch (NumberFormatException exception) {
+            throw new ContractException("VALIDATION.FIELD_INVALID", HttpStatus.BAD_REQUEST, "金额格式不正确");
+        }
+    }
+
+    private static LocalDate parseDate(Object value) {
+        String text = stringValue(value);
+        if (text.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(text);
+        } catch (RuntimeException exception) {
+            throw new ContractException("VALIDATION.FIELD_INVALID", HttpStatus.BAD_REQUEST, "日期格式不正确");
+        }
     }
 
     private static Map<String, Object> handleTaskAction(

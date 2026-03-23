@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const aiCopilotApiMocks = vi.hoisted(() => ({
@@ -242,6 +242,7 @@ describe('AICopilotPage', () => {
           sessionId: 'session_001',
           confirmationId: 'session_001_confirm_001',
           decision: 'confirm',
+          argumentsOverride: undefined,
         },
         expect.any(Object)
       )
@@ -436,5 +437,137 @@ describe('AICopilotPage', () => {
     expect(screen.getAllByText('命中：外部知识库检索').length).toBeGreaterThan(0)
     expect(screen.getAllByText('来源：SKILL').length).toBeGreaterThan(0)
     expect(screen.getAllByText('来源：MCP').length).toBeGreaterThan(0)
+  })
+
+  it('submits editable form preview arguments and retries failure blocks', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_form_001',
+        title: 'AI 发起流程',
+        preview: '已生成可编辑表单卡。',
+        status: 'active',
+        updatedAt: '2026-03-23T09:10:00.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot', 'route:/oa/leave/create'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(async () =>
+      buildSession({
+        sessionId: 'session_form_001',
+        title: 'AI 发起流程',
+        contextTags: ['AI Copilot', 'route:/oa/leave/create'],
+        history: [
+          {
+            messageId: 'session_form_001_msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-23T09:10:10.000Z',
+            content: '我已经整理好发起参数，请确认。',
+            blocks: [
+              {
+                type: 'form-preview',
+                title: '拟发起流程预览',
+                description: '确认前可直接修改表单字段。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'process.start',
+                sourceName: 'process.start',
+                toolType: 'WRITE',
+                result: {
+                  editable: true,
+                  confirmationId: 'session_form_001_confirm_001',
+                  processKey: 'oa_leave',
+                  businessType: 'OA_LEAVE',
+                  sceneCode: 'default',
+                  formData: {
+                    days: '1',
+                    reason: '默认原因',
+                  },
+                },
+                fields: [
+                  { label: '流程编码', value: 'oa_leave' },
+                  { label: '业务类型', value: 'OA_LEAVE' },
+                ],
+                trace: [],
+              },
+              {
+                type: 'confirm',
+                confirmationId: 'session_form_001_confirm_001',
+                title: '请确认是否继续执行',
+                summary: '确认后将发起真实业务流程。',
+                confirmLabel: '确认处理',
+                cancelLabel: '暂不执行',
+                status: 'pending',
+              },
+              {
+                type: 'failure',
+                title: '执行失败',
+                summary: '上次执行失败，可直接重试。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  retryable: true,
+                  confirmationId: 'session_form_001_confirm_002',
+                },
+                failure: {
+                  code: 'AI.TOOL_EXECUTE_FAILED',
+                  message: '执行失败',
+                  detail: '请重试',
+                },
+                trace: [],
+              },
+            ],
+          },
+        ],
+      })
+    )
+    aiCopilotApiMocks.confirmAICopilotConfirmation.mockResolvedValue(
+      buildSession({
+        sessionId: 'session_form_001',
+        title: 'AI 发起流程',
+        contextTags: ['AI Copilot', 'route:/oa/leave/create'],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('AI 发起流程')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryAllByTestId('ai-form-preview-editor').length).toBeGreaterThan(0)
+    )
+    const editableFormSection = screen
+      .queryAllByTestId('ai-form-preview-editor')
+      .find((section) => !within(section).getByTestId('ai-form-preview-submit').hasAttribute('disabled'))!
+    const editableInputs = within(editableFormSection).getAllByRole('textbox')
+    fireEvent.change(editableInputs[1], {
+      target: { value: '参加客户评审' },
+    })
+    expect(editableInputs[1]).toHaveValue('参加客户评审')
+    expect(
+      screen
+        .queryAllByTestId('ai-form-preview-submit')
+        .some((button) => !button.hasAttribute('disabled'))
+    ).toBe(true)
+
+    fireEvent.click(
+      screen
+        .getAllByRole('button', { name: '重新执行' })
+        .find((button) => !button.hasAttribute('disabled'))!
+    )
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.confirmAICopilotConfirmation).toHaveBeenCalledWith(
+        {
+          sessionId: 'session_form_001',
+          confirmationId: 'session_form_001_confirm_002',
+          decision: 'confirm',
+          argumentsOverride: undefined,
+        },
+        expect.any(Object)
+      )
+    )
   })
 })

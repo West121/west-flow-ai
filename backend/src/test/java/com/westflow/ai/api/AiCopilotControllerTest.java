@@ -156,7 +156,7 @@ class AiCopilotControllerTest {
 
         ApiResponse<AiToolCallResultResponse> confirmResponse = aiCopilotController.confirmToolCall(
                 "tool_002",
-                new AiConfirmToolCallRequest(true, "确认执行")
+                new AiConfirmToolCallRequest(true, "确认执行", Map.of())
         );
         assertThat(confirmResponse.data().status()).isEqualTo("CONFIRMED");
         assertThat(confirmResponse.data().requiresConfirmation()).isFalse();

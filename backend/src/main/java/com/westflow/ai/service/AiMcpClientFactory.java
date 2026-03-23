@@ -20,15 +20,17 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
  * 运行时 MCP 客户端工厂，负责按数据库注册项创建并缓存真实 MCP 客户端。
  */
-@Slf4j
 @Service
 public class AiMcpClientFactory {
+
+    private static final Logger log = LoggerFactory.getLogger(AiMcpClientFactory.class);
 
     private final AiRegistryCatalogService aiRegistryCatalogService;
     private final ObjectMapper objectMapper;

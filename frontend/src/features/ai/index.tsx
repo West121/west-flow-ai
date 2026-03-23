@@ -231,7 +231,8 @@ export function AICopilotPage({
 
   const handleResolveConfirmation = (
     confirmationId: string,
-    decision: AICopilotConfirmationDecision
+    decision: AICopilotConfirmationDecision,
+    argumentsOverride?: Record<string, unknown>
   ) => {
     if (!effectiveActiveSessionId || confirmMutation.isPending) {
       return
@@ -242,6 +243,7 @@ export function AICopilotPage({
       sessionId: effectiveActiveSessionId,
       confirmationId,
       decision,
+      argumentsOverride,
     })
   }
 
@@ -802,10 +804,14 @@ function MessageBubble({
 }: {
   message: AICopilotMessage
   pendingConfirmationId: string | null
-  onConfirm: (confirmationId: string) => void
+  onConfirm: (confirmationId: string, argumentsOverride?: Record<string, unknown>) => void
   onCancel: (confirmationId: string) => void
 }) {
   const isUser = message.role === 'user'
+  const confirmBlock = message.blocks?.find(
+    (block): block is Extract<AICopilotMessageBlock, { type: 'confirm' }> =>
+      block.type === 'confirm'
+  )
 
   return (
     <div
@@ -842,16 +848,33 @@ function MessageBubble({
                 isPending={
                   block.type === 'confirm'
                     ? pendingConfirmationId === block.confirmationId
+                    : (block.type === 'form-preview' || block.type === 'failure') &&
+                        typeof block.result?.confirmationId === 'string'
+                      ? pendingConfirmationId === block.result.confirmationId
                     : false
                 }
                 onConfirm={
                   block.type === 'confirm'
                     ? () => onConfirm(block.confirmationId)
+                    : block.type === 'form-preview' &&
+                        typeof block.result?.confirmationId === 'string'
+                      ? (argumentsOverride) =>
+                          onConfirm(block.result?.confirmationId as string, argumentsOverride)
+                      : block.type === 'failure' &&
+                          typeof block.result?.confirmationId === 'string'
+                        ? () => onConfirm(block.result?.confirmationId as string)
                     : undefined
                 }
                 onCancel={
                   block.type === 'confirm' && block.cancelLabel
                     ? () => onCancel(block.confirmationId)
+                    : undefined
+                }
+                linkedConfirmBlock={confirmBlock}
+                onRetry={
+                  block.type === 'failure' &&
+                      typeof block.result?.confirmationId === 'string'
+                    ? () => onConfirm(block.result?.confirmationId as string)
                     : undefined
                 }
               />
@@ -869,16 +892,138 @@ function MessageBubble({
   )
 }
 
+function EditableFormPreviewCard({
+  block,
+  isPending,
+  onConfirm,
+  linkedConfirmBlock,
+}: {
+  block: Extract<AICopilotMessageBlock, { type: 'form-preview' }>
+  isPending?: boolean
+  onConfirm?: (argumentsOverride?: Record<string, unknown>) => void
+  linkedConfirmBlock?: Extract<AICopilotMessageBlock, { type: 'confirm' }>
+}) {
+  const editable = Boolean(block.result?.editable)
+  const initialFormData = useMemo(
+    () => toEditableFormData(block.result?.formData),
+    [block.result]
+  )
+  const [formData, setFormData] = useState<Record<string, string>>(initialFormData)
+
+  useEffect(() => {
+    setFormData(initialFormData)
+  }, [initialFormData])
+
+  const confirmationSummary =
+    linkedConfirmBlock?.summary ?? '确认后会按当前表单参数执行真实业务发起。'
+
+  return (
+    <Card className='border-cyan-300/20 bg-cyan-300/10 text-slate-50 shadow-none'>
+      <CardHeader className='space-y-2 pb-3'>
+        <CardTitle className='flex items-center gap-2 text-base'>
+          <SquareStack className='size-4 text-cyan-200' />
+          {block.title}
+        </CardTitle>
+        {block.description ? (
+          <p className='text-sm leading-6 text-cyan-50/80'>{block.description}</p>
+        ) : null}
+        <TraceMeta block={block} />
+      </CardHeader>
+      <CardContent className='space-y-3 pt-0'>
+        {block.fields.map((field) => (
+          <div
+            key={field.label}
+            className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2'
+          >
+            <div className='flex items-center justify-between gap-3'>
+              <span className='text-xs text-slate-300'>{field.label}</span>
+              <span className='text-sm font-medium text-white'>{field.value}</span>
+            </div>
+            {field.hint ? (
+              <p className='mt-1 text-[11px] text-slate-400'>{field.hint}</p>
+            ) : null}
+          </div>
+        ))}
+
+        {editable ? (
+          <div
+            data-testid='ai-form-preview-editor'
+            className='space-y-3 rounded-2xl border border-white/10 bg-slate-950/30 p-3'
+          >
+            <p className='text-xs uppercase tracking-[0.18em] text-cyan-100/80'>
+              可编辑业务表单
+            </p>
+            {Object.entries(formData).map(([key, value]) => (
+              <div key={key} className='space-y-1'>
+                <label className='text-xs text-slate-300'>{key}</label>
+                {value.length > 40 ? (
+                  <Textarea
+                    value={value}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))
+                    }
+                    className='min-h-24 border-white/10 bg-slate-950/50 text-white'
+                  />
+                ) : (
+                  <Input
+                    value={value}
+                    onChange={(event) =>
+                      setFormData((current) => ({
+                        ...current,
+                        [key]: event.target.value,
+                      }))
+                    }
+                    className='border-white/10 bg-slate-950/50 text-white'
+                  />
+                )}
+              </div>
+            ))}
+            <p className='text-xs leading-5 text-slate-300'>{confirmationSummary}</p>
+            <div className='flex flex-wrap gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                data-testid='ai-form-preview-submit'
+                className='bg-cyan-200 text-slate-950 hover:bg-cyan-100'
+                onClick={() =>
+                  onConfirm?.({
+                    processKey: block.result?.processKey,
+                    businessType: block.result?.businessType,
+                    sceneCode: block.result?.sceneCode,
+                    formData,
+                  })
+                }
+                disabled={!onConfirm || isPending}
+              >
+                {isPending ? '提交中…' : '确认并发起'}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 function BlockCard({
   block,
   isPending,
   onConfirm,
   onCancel,
+  onRetry,
+  linkedConfirmBlock,
 }: {
   block: AICopilotMessageBlock
   isPending?: boolean
-  onConfirm?: () => void
+  onConfirm?: (argumentsOverride?: Record<string, unknown>) => void
   onCancel?: () => void
+  onRetry?: () => void
+  linkedConfirmBlock?: Extract<AICopilotMessageBlock, { type: 'confirm' }>
 }) {
   switch (block.type) {
     case 'confirm': {
@@ -930,7 +1075,7 @@ function BlockCard({
                 type='button'
                 size='sm'
                 className='bg-amber-200 text-slate-950 hover:bg-amber-100'
-                onClick={onConfirm}
+                onClick={() => onConfirm?.()}
                 disabled={!onConfirm || isPending}
               >
                 {isPending ? '确认中…' : block.confirmLabel}
@@ -954,37 +1099,12 @@ function BlockCard({
     }
     case 'form-preview':
       return (
-        <Card className='border-cyan-300/20 bg-cyan-300/10 text-slate-50 shadow-none'>
-          <CardHeader className='space-y-2 pb-3'>
-            <CardTitle className='flex items-center gap-2 text-base'>
-              <SquareStack className='size-4 text-cyan-200' />
-              {block.title}
-            </CardTitle>
-            {block.description ? (
-              <p className='text-sm leading-6 text-cyan-50/80'>
-                {block.description}
-              </p>
-            ) : null}
-          </CardHeader>
-          <CardContent className='space-y-2 pt-0'>
-            {block.fields.map((field) => (
-              <div
-                key={field.label}
-                className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2'
-              >
-                <div className='flex items-center justify-between gap-3'>
-                  <span className='text-xs text-slate-300'>{field.label}</span>
-                  <span className='text-sm font-medium text-white'>
-                    {field.value}
-                  </span>
-                </div>
-                {field.hint ? (
-                  <p className='mt-1 text-[11px] text-slate-400'>{field.hint}</p>
-                ) : null}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <EditableFormPreviewCard
+          block={block}
+          isPending={isPending}
+          onConfirm={onConfirm}
+          linkedConfirmBlock={linkedConfirmBlock}
+        />
       )
     case 'stats':
       return (
@@ -1168,6 +1288,19 @@ function BlockCard({
                 ) : null}
               </div>
             ) : null}
+            {block.result?.retryable ? (
+              <div className='flex gap-2'>
+                <Button
+                  type='button'
+                  size='sm'
+                  className='bg-rose-200 text-slate-950 hover:bg-rose-100'
+                  onClick={onRetry}
+                  disabled={!onRetry || isPending}
+                >
+                  {isPending ? '重试中…' : '重新执行'}
+                </Button>
+              </div>
+            ) : null}
             {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
           </CardContent>
         </Card>
@@ -1314,6 +1447,19 @@ function formatAuditAction(actionType: string) {
     default:
       return actionType
   }
+}
+
+function toEditableFormData(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      item == null ? '' : String(item),
+    ])
+  )
 }
 
 function upsertSessionSummary(

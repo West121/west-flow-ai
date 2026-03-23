@@ -271,7 +271,7 @@ class AiCopilotServiceTest {
 
         AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
                 pending.toolCallId(),
-                new AiConfirmToolCallRequest(true, "确认执行")
+                new AiConfirmToolCallRequest(true, "确认执行", Map.of())
         );
 
         assertThat(confirmed.status()).isEqualTo("CONFIRMED");
@@ -439,7 +439,7 @@ class AiCopilotServiceTest {
 
         AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
                 pending.toolCallId(),
-                new AiConfirmToolCallRequest(true, "确认执行")
+                new AiConfirmToolCallRequest(true, "确认执行", Map.of("taskId", "task_override_001"))
         );
 
         assertThat(confirmed.status()).isEqualTo("FAILED");
@@ -463,6 +463,59 @@ class AiCopilotServiceTest {
         assertThat(confirmBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
                 .contains("工具名称", "工具类型", "确认人", "确认意见");
+    }
+
+    @Test
+    void shouldMergeArgumentsOverrideWhenConfirmingWriteToolCall() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+
+        AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
+                "conv_001",
+                new AiToolCallRequest(
+                        "task.handle",
+                        AiToolType.WRITE,
+                        AiToolSource.PLATFORM,
+                        Map.of(
+                                "taskId", "task_001",
+                                "action", "COMPLETE",
+                                "comment", "初始意见"
+                        )
+                )
+        );
+
+        when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
+                pending.toolCallId(),
+                "conv_001",
+                "task.handle",
+                AiToolType.WRITE,
+                AiToolSource.PLATFORM,
+                "PENDING_CONFIRMATION",
+                true,
+                "{\"taskId\":\"task_001\",\"action\":\"COMPLETE\",\"comment\":\"初始意见\"}",
+                "{}",
+                "请确认是否处理当前待办",
+                pending.confirmationId(),
+                "usr_001",
+                LocalDateTime.of(2026, 3, 23, 10, 10),
+                LocalDateTime.of(2026, 3, 23, 10, 10)
+        ));
+
+        AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
+                pending.toolCallId(),
+                new AiConfirmToolCallRequest(
+                        true,
+                        "改成新意见后执行",
+                        Map.of(
+                                "comment", "AI 改写后的审批意见",
+                                "action", "COMPLETE"
+                        )
+                )
+        );
+
+        assertThat(confirmed.arguments())
+                .containsEntry("taskId", "task_001")
+                .containsEntry("action", "COMPLETE")
+                .containsEntry("comment", "AI 改写后的审批意见");
     }
 
     private AiConversationRecord conversation() {

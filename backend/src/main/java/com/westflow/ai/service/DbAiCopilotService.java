@@ -222,11 +222,15 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         LocalDateTime now = now();
         String status = request.approved() ? TOOL_STATUS_CONFIRMED : TOOL_STATUS_CANCELLED;
+        Map<String, Object> mergedArguments = mergeArguments(
+                parseJsonMap(toolCall.argumentsJson()),
+                request.argumentsOverride()
+        );
         AiToolCallRequest toolCallRequest = new AiToolCallRequest(
                 toolCall.toolKey(),
                 toolCall.toolType(),
                 toolCall.toolSource(),
-                parseJsonMap(toolCall.argumentsJson())
+                mergedArguments
         );
         String resultJson = request.approved()
                 ? toJson(Map.of("approved", true, "comment", request.comment()))
@@ -343,7 +347,7 @@ public class DbAiCopilotService implements AiCopilotService {
                                     "pending",
                                     buildRouteTrace(gatewayResponse, domain, routePath, toolResult.toolCallId())
                             ),
-                            buildProcessStartPreviewBlock(content, domain, routePath),
+                            buildProcessStartPreviewBlock(content, domain, routePath, toolResult),
                             resultBlock(
                                     toolResult.toolSource().name(),
                                     toolResult.toolKey(),
@@ -454,7 +458,14 @@ public class DbAiCopilotService implements AiCopilotService {
                                 "AI.TOOL_EXECUTE_FAILED",
                                 "写操作执行失败",
                                 finalResult.summary(),
-                                trace
+                                trace,
+                                Map.of(
+                                        "toolCallId", toolCall.toolCallId(),
+                                        "confirmationId", confirmation.confirmationId(),
+                                        "retryable", true,
+                                        "arguments", finalResult.arguments(),
+                                        "toolType", toolCall.toolType().name()
+                                )
                         )
                                 : resultBlock(
                                 toolCall.toolSource().name(),
@@ -681,7 +692,8 @@ public class DbAiCopilotService implements AiCopilotService {
             String code,
             String message,
             String detail,
-            List<TraceStep> trace
+            List<TraceStep> trace,
+            Map<String, Object> result
     ) {
         return new AiMessageBlockResponse(
                 "failure",
@@ -700,7 +712,7 @@ public class DbAiCopilotService implements AiCopilotService {
                 sourceKey,
                 sourceName,
                 toolType,
-                Map.of(),
+                result,
                 new Failure(code, message, detail),
                 trace,
                 List.of(),
@@ -837,11 +849,12 @@ public class DbAiCopilotService implements AiCopilotService {
     private AiToolCallRequest buildWriteToolCall(String content, String domain, String routePath) {
         String taskId = extractTaskId(routePath);
         if (content.contains("发起") || content.contains("提交")) {
+            Map<String, Object> startDraft = buildProcessStartDraft(content, domain, routePath);
             return new AiToolCallRequest(
                     "process.start",
                     AiToolType.WRITE,
                     AiToolSource.PLATFORM,
-                    Map.of("content", content, "domain", domain, "routePath", routePath)
+                    startDraft
             );
         }
         if (content.contains("认领")) {
@@ -874,6 +887,68 @@ public class DbAiCopilotService implements AiCopilotService {
                 AiToolSource.PLATFORM,
                 Map.of("content", content, "domain", domain, "routePath", routePath, "taskId", taskId, "action", "COMPLETE")
         );
+    }
+
+    private Map<String, Object> buildProcessStartDraft(String content, String domain, String routePath) {
+        Map<String, Object> formData = new java.util.LinkedHashMap<>();
+        Map<String, Object> draft = new java.util.LinkedHashMap<>();
+        draft.put("content", content);
+        draft.put("domain", domain);
+        draft.put("routePath", routePath);
+        draft.put("sceneCode", "default");
+
+        switch (routePath == null ? "" : routePath) {
+            case "/oa/leave/create" -> {
+                draft.put("processKey", "oa_leave");
+                draft.put("businessType", "OA_LEAVE");
+                formData.put("days", 1);
+                formData.put("reason", extractReasonSeed(content, "请补充请假原因"));
+            }
+            case "/oa/expense/create" -> {
+                draft.put("processKey", "oa_expense");
+                draft.put("businessType", "OA_EXPENSE");
+                formData.put("amount", "100.00");
+                formData.put("reason", extractReasonSeed(content, "请补充报销事由"));
+            }
+            case "/oa/common/create" -> {
+                draft.put("processKey", "oa_common");
+                draft.put("businessType", "OA_COMMON");
+                formData.put("title", extractTitleSeed(content, "AI 发起的通用申请"));
+                formData.put("content", extractReasonSeed(content, "请补充申请内容"));
+            }
+            case "/plm/ecr/create" -> {
+                draft.put("processKey", "plm_ecr");
+                draft.put("businessType", "PLM_ECR");
+                formData.put("changeTitle", extractTitleSeed(content, "AI 发起的 ECR 变更"));
+                formData.put("changeReason", extractReasonSeed(content, "请补充变更原因"));
+                formData.put("affectedProductCode", "");
+                formData.put("priorityLevel", "MEDIUM");
+            }
+            case "/plm/eco/create" -> {
+                draft.put("processKey", "plm_eco");
+                draft.put("businessType", "PLM_ECO");
+                formData.put("executionTitle", extractTitleSeed(content, "AI 发起的 ECO 执行"));
+                formData.put("executionPlan", extractReasonSeed(content, "请补充执行说明"));
+                formData.put("effectiveDate", "");
+                formData.put("changeReason", extractReasonSeed(content, "请补充变更原因"));
+            }
+            case "/plm/material-master/create" -> {
+                draft.put("processKey", "plm_material");
+                draft.put("businessType", "PLM_MATERIAL");
+                formData.put("materialCode", "");
+                formData.put("materialName", extractTitleSeed(content, "AI 发起的物料主数据变更"));
+                formData.put("changeReason", extractReasonSeed(content, "请补充变更原因"));
+                formData.put("changeType", "ATTRIBUTE_UPDATE");
+            }
+            default -> {
+                draft.put("processKey", "");
+                draft.put("businessType", "");
+                formData.put("content", content);
+            }
+        }
+
+        draft.put("formData", Map.copyOf(formData));
+        return Map.copyOf(draft);
     }
 
     private AiToolCallRequest buildReadToolCall(String content, String domain, List<String> skillIds, String routePath) {
@@ -1051,6 +1126,36 @@ public class DbAiCopilotService implements AiCopilotService {
         fields.add(new Field("摘要", summary, null));
         fields.add(new Field("状态", status, null));
         return List.copyOf(fields);
+    }
+
+    private Map<String, Object> mergeArguments(
+            Map<String, Object> originalArguments,
+            Map<String, Object> argumentsOverride
+    ) {
+        Map<String, Object> merged = new java.util.LinkedHashMap<>(originalArguments == null ? Map.of() : originalArguments);
+        if (argumentsOverride == null || argumentsOverride.isEmpty()) {
+            return Map.copyOf(merged);
+        }
+        argumentsOverride.forEach((key, value) -> {
+            if ("formData".equals(key) && value instanceof Map<?, ?> overrideFormData) {
+                Map<String, Object> currentFormData = new java.util.LinkedHashMap<>(mapValue(merged.get("formData")));
+                overrideFormData.forEach((formKey, formValue) -> currentFormData.put(String.valueOf(formKey), formValue));
+                merged.put("formData", Map.copyOf(currentFormData));
+            } else {
+                merged.put(key, value);
+            }
+        });
+        return Map.copyOf(merged);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> normalized = new java.util.LinkedHashMap<>();
+            map.forEach((key, item) -> normalized.put(String.valueOf(key), item));
+            return Map.copyOf(normalized);
+        }
+        return Map.of();
     }
 
     private List<AiMessageBlockResponse> buildReadBlocks(
@@ -1303,6 +1408,23 @@ public class DbAiCopilotService implements AiCopilotService {
         return matcher.find() ? matcher.group(1) : fallbackKeyword;
     }
 
+    private String extractTitleSeed(String content, String fallbackTitle) {
+        String normalized = content == null ? "" : content.trim();
+        if (normalized.isBlank()) {
+            return fallbackTitle;
+        }
+        return normalized.length() > 24 ? normalized.substring(0, 24) : normalized;
+    }
+
+    private String extractReasonSeed(String content, String fallbackReason) {
+        String normalized = content == null ? "" : content.trim();
+        return normalized.isBlank() ? fallbackReason : normalized;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
     private String resolveDomainFromRoute(String routePath) {
         if (routePath == null || routePath.isBlank()) {
             return "GENERAL";
@@ -1325,7 +1447,14 @@ public class DbAiCopilotService implements AiCopilotService {
         return "GENERAL";
     }
 
-    private AiMessageBlockResponse buildProcessStartPreviewBlock(String content, String domain, String routePath) {
+    private AiMessageBlockResponse buildProcessStartPreviewBlock(
+            String content,
+            String domain,
+            String routePath,
+            AiToolCallResultResponse toolResult
+    ) {
+        Map<String, Object> arguments = toolResult.arguments();
+        Map<String, Object> formData = mapValue(arguments.get("formData"));
         return new AiMessageBlockResponse(
                 "form-preview",
                 "拟发起流程预览",
@@ -1339,9 +1468,34 @@ public class DbAiCopilotService implements AiCopilotService {
                 null,
                 null,
                 null,
+                toolResult.toolSource().name(),
+                toolResult.toolKey(),
+                toolResult.toolKey(),
+                toolResult.toolType().name(),
+                Map.of(
+                        "toolCallId", toolResult.toolCallId(),
+                        "confirmationId", toolResult.confirmationId(),
+                        "toolKey", toolResult.toolKey(),
+                        "toolType", toolResult.toolType().name(),
+                        "businessType", stringValue(arguments.get("businessType")),
+                        "processKey", stringValue(arguments.get("processKey")),
+                        "sceneCode", stringValue(arguments.getOrDefault("sceneCode", "default")),
+                        "formData", formData,
+                        "editable", true
+                ),
+                null,
+                buildToolResultTrace(
+                        toolResult.toolSource().name(),
+                        toolResult.toolKey(),
+                        toolResult.toolKey(),
+                        toolResult.status(),
+                        "待确认前可编辑业务表单"
+                ),
                 List.of(
                         new Field("业务域", domain, null),
                         new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
+                        new Field("流程编码", stringValue(arguments.get("processKey")), null),
+                        new Field("业务类型", stringValue(arguments.get("businessType")), null),
                         new Field("用户指令", content, "确认后进入实际流程发起")
                 ),
                 List.of()

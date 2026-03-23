@@ -277,6 +277,15 @@ describe('ai-copilot api', () => {
         sessionId: 'session_002',
         confirmationId: 'confirm_001',
         decision: 'confirm',
+        argumentsOverride: {
+          processKey: 'oa_leave',
+          businessType: 'OA_LEAVE',
+          sceneCode: 'default',
+          formData: {
+            days: '1',
+            reason: '参加客户评审',
+          },
+        },
       })
     ).resolves.toMatchObject({
       messageCount: 3,
@@ -313,6 +322,15 @@ describe('ai-copilot api', () => {
       {
         approved: true,
         comment: undefined,
+        argumentsOverride: {
+          processKey: 'oa_leave',
+          businessType: 'OA_LEAVE',
+          sceneCode: 'default',
+          formData: {
+            days: '1',
+            reason: '参加客户评审',
+          },
+        },
       }
     )
     expect(getMock).toHaveBeenNthCalledWith(

@@ -30,12 +30,35 @@ export type AICopilotConfirmBlock = {
   resolvedAt?: string | null
   resolvedBy?: string | null
   resolutionNote?: string | null
+  sourceType?: string
+  sourceKey?: string
+  sourceName?: string
+  toolType?: string
+  result?: Record<string, unknown>
+  trace?: AICopilotTraceStep[]
+  fields?: {
+    label: string
+    value: string
+    hint?: string
+  }[]
+  metrics?: {
+    label: string
+    value: string
+    hint?: string
+    tone?: 'neutral' | 'positive' | 'warning'
+  }[]
 }
 
 export type AICopilotFormPreviewBlock = {
   type: 'form-preview'
   title: string
   description?: string
+  sourceType?: string
+  sourceKey?: string
+  sourceName?: string
+  toolType?: string
+  result?: Record<string, unknown>
+  trace?: AICopilotTraceStep[]
   fields: {
     label: string
     value: string
@@ -103,6 +126,7 @@ export type AICopilotFailureBlock = {
   sourceKey?: string
   sourceName?: string
   toolType?: string
+  result?: Record<string, unknown>
   failure?: AICopilotFailureInfo
   trace?: AICopilotTraceStep[]
 }
@@ -193,6 +217,7 @@ export type AICopilotConfirmationInput = {
   confirmationId: string
   decision: AICopilotConfirmationDecision
   note?: string
+  argumentsOverride?: Record<string, unknown>
 }
 
 type AICopilotApiResponse<T> = {
@@ -406,11 +431,12 @@ export async function confirmAICopilotConfirmation(
   }
 
   await postAICopilotResource<
-    { approved: boolean; comment?: string },
+    { approved: boolean; comment?: string; argumentsOverride?: Record<string, unknown> },
     unknown
   >(`/ai/copilot/tool-calls/${targetToolCall.toolCallId}/confirm`, {
     approved: input.decision === 'confirm',
     comment: input.note,
+    argumentsOverride: input.argumentsOverride,
   })
 
   const refreshed = await getConversationDetail(input.sessionId)

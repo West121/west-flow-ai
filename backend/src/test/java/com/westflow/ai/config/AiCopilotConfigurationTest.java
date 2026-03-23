@@ -8,6 +8,8 @@ import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.ai.service.AiRegistryCatalogService;
 import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
 import com.westflow.ai.tool.AiToolRegistry;
+import com.westflow.oa.service.OALaunchService;
+import com.westflow.plm.service.PlmLaunchService;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.processruntime.service.FlowableRuntimeStartService;
@@ -37,6 +39,8 @@ class AiCopilotConfigurationTest {
                 mock(ProcessDefinitionService.class),
                 mock(FlowableProcessRuntimeService.class),
                 mock(FlowableRuntimeStartService.class),
+                mock(OALaunchService.class),
+                mock(PlmLaunchService.class),
                 mock(JdbcTemplate.class)
         );
         ReactAgent workflowDesignAgent = configuration.workflowDesignAgent(chatModel);
