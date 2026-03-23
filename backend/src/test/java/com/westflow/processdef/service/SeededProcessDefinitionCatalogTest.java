@@ -43,4 +43,57 @@ class SeededProcessDefinitionCatalogTest {
                 "plm_material_change"
         );
     }
+
+    @Test
+    void shouldSeedUpgradedOaLeaveDslAndBpmn() {
+        String dslJson = jdbcTemplate.queryForObject(
+                """
+                SELECT dsl_json
+                FROM wf_process_definition
+                WHERE status = 'PUBLISHED'
+                  AND process_key = 'oa_leave'
+                ORDER BY version DESC
+                LIMIT 1
+                """,
+                String.class
+        );
+        String bpmnXml = jdbcTemplate.queryForObject(
+                """
+                SELECT bpmn_xml
+                FROM wf_process_definition
+                WHERE status = 'PUBLISHED'
+                  AND process_key = 'oa_leave'
+                ORDER BY version DESC
+                LIMIT 1
+                """,
+                String.class
+        );
+
+        assertThat(dslJson).contains(
+                "condition_leave_split",
+                "approve_manager_role",
+                "approve_dept_lead",
+                "approve_hr_specialist",
+                "approve_manager_field",
+                "approve_director_formula",
+                "\"fieldKey\":\"leaveDays\"",
+                "\"operator\":\"GT\"",
+                "\"formulaExpression\":\"urgent == true || leaveDays >= 5\"",
+                "\"assignment\":{\"mode\":\"ROLE\"",
+                "\"assignment\":{\"mode\":\"DEPARTMENT\"",
+                "\"assignment\":{\"mode\":\"FORM_FIELD\"",
+                "\"assignment\":{\"mode\":\"FORMULA\""
+        );
+        assertThat(bpmnXml).contains(
+                "<exclusiveGateway",
+                "id=\"condition_leave_split\"",
+                "flowable:candidateGroups=\"role_manager\"",
+                "flowable:candidateGroups=\"dept_002\"",
+                "flowable:candidateGroups=\"role_hr\"",
+                "flowable:assignee=\"managerUserId\"",
+                "flowable:assignee=\"${leaveDays >= 5 ? 'usr_005' : (managerUserId != null ? managerUserId : 'usr_002')}\"",
+                "leaveDays > 3",
+                "urgent == true || leaveDays >= 5"
+        );
+    }
 }

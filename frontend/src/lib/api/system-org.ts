@@ -96,6 +96,7 @@ export type DepartmentFormOptions = {
     name: string
     companyId: string
     companyName: string
+    parentDepartmentId: string | null
     enabled: boolean
   }>
 }

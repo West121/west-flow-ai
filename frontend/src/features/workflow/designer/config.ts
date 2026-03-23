@@ -1,6 +1,7 @@
 import {
   type WorkflowApproverNodeConfig,
   type WorkflowCcNodeConfig,
+  type WorkflowConditionOperator,
   type WorkflowConditionNodeConfig,
   type WorkflowEdgeConditionType,
   type WorkflowFieldBinding,
@@ -16,6 +17,7 @@ import {
   type WorkflowDynamicBuilderSourceMode,
   type WorkflowDynamicBuilderTerminatePolicy,
   type WorkflowDynamicBuildMode,
+  type WorkflowFormulaFunctionName,
   type WorkflowStartNodeConfig,
   type WorkflowReminderChannel,
   type WorkflowSubprocessNodeConfig,
@@ -25,7 +27,11 @@ import {
 
 export type WorkflowEdgeCondition = {
   type: WorkflowEdgeConditionType
-  expression: string
+  expression?: string
+  fieldKey?: string
+  operator?: WorkflowConditionOperator
+  value?: string | number | boolean | null
+  formulaExpression?: string
 }
 
 export type WorkflowNodeConfigRecord = {
@@ -49,6 +55,7 @@ const defaultApproverConfig: WorkflowApproverNodeConfig = {
     roleCodes: [],
     departmentRef: '',
     formFieldKey: '',
+    formulaExpression: '',
   },
   nodeFormKey: '',
   nodeFormVersion: '',
@@ -104,6 +111,13 @@ const defaultConditionConfig: WorkflowConditionNodeConfig = {
   expressionMode: 'EXPRESSION',
   expressionFieldKey: '',
 }
+
+const supportedFormulaFunctionNames: WorkflowFormulaFunctionName[] = [
+  'ifElse',
+  'contains',
+  'daysBetween',
+  'isBlank',
+]
 
 const defaultTimerConfig: WorkflowTimerNodeConfig = {
   scheduleType: 'RELATIVE_TO_ARRIVAL',
@@ -259,6 +273,34 @@ function normalizeGatewayDirection(value: unknown): WorkflowGatewayDirection {
   return value === 'JOIN' ? 'JOIN' : 'SPLIT'
 }
 
+function normalizeConditionMode(value: unknown): WorkflowConditionNodeConfig['expressionMode'] {
+  if (value === 'FIELD_COMPARE' || value === 'FORMULA') {
+    return value
+  }
+  return defaultConditionConfig.expressionMode
+}
+
+function normalizeConditionType(value: unknown): WorkflowEdgeConditionType {
+  if (value === 'FIELD' || value === 'FORMULA') {
+    return value
+  }
+  return 'EXPRESSION'
+}
+
+function normalizeConditionOperator(value: unknown): WorkflowConditionOperator | undefined {
+  if (
+    value === 'EQ' ||
+    value === 'NE' ||
+    value === 'GT' ||
+    value === 'GE' ||
+    value === 'LT' ||
+    value === 'LE'
+  ) {
+    return value
+  }
+  return undefined
+}
+
 // 根据节点类型返回默认配置，设计器初始化会用到。
 export function defaultNodeConfig<K extends WorkflowNodeKind>(
   kind: K
@@ -410,6 +452,9 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
         formFieldKey: value?.assignment?.formFieldKey
           ? String(value.assignment.formFieldKey)
           : defaultApproverConfig.assignment.formFieldKey,
+        formulaExpression: value?.assignment?.formulaExpression
+          ? String(value.assignment.formulaExpression)
+          : defaultApproverConfig.assignment.formulaExpression,
       },
       nodeFormKey: value?.nodeFormKey ? String(value.nodeFormKey) : '',
       nodeFormVersion: value?.nodeFormVersion ? String(value.nodeFormVersion) : '',
@@ -541,10 +586,7 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
     const value = config as Partial<WorkflowConditionNodeConfig> | null | undefined
     return {
       defaultEdgeId: value?.defaultEdgeId ? String(value.defaultEdgeId) : '',
-      expressionMode:
-        value?.expressionMode === 'FIELD_COMPARE'
-          ? 'FIELD_COMPARE'
-          : defaultConditionConfig.expressionMode,
+      expressionMode: normalizeConditionMode(value?.expressionMode),
       expressionFieldKey: value?.expressionFieldKey ? String(value.expressionFieldKey) : '',
     } as WorkflowNodeConfigMap[K]
   }
@@ -624,12 +666,22 @@ export function edgeConditionFromConfig(
   condition: unknown
 ): WorkflowEdgeCondition | undefined {
   const value = condition as Partial<WorkflowEdgeCondition> | null | undefined
-  if (!value?.expression) {
+  const type = normalizeConditionType(value?.type)
+  const expression = value?.expression ? String(value.expression) : ''
+  const fieldKey = value?.fieldKey ? String(value.fieldKey) : ''
+  const formulaExpression = value?.formulaExpression
+    ? String(value.formulaExpression)
+    : ''
+  if (!expression && !fieldKey && !formulaExpression) {
     return undefined
   }
   return {
-    type: value.type === 'EXPRESSION' ? value.type : 'EXPRESSION',
-    expression: String(value.expression),
+    type,
+    expression: expression || undefined,
+    fieldKey: fieldKey || undefined,
+    operator: normalizeConditionOperator(value?.operator),
+    value: value?.value ?? null,
+    formulaExpression: formulaExpression || undefined,
   }
 }
 
@@ -637,10 +689,25 @@ export function normalizeEdgeCondition(condition: unknown) {
   return edgeConditionFromConfig(condition)
 }
 
-export function buildConditionFormDefaults(edgeId: string, expression = '', label = '') {
+export function buildConditionFormDefaults(
+  edgeId: string,
+  label = '',
+  condition?: unknown
+) {
+  const value = edgeConditionFromConfig(condition)
   return {
     edgeId,
     label,
-    conditionExpression: expression,
+    conditionType: value?.type ?? 'EXPRESSION',
+    conditionExpression: value?.expression ?? '',
+    conditionFieldKey: value?.fieldKey ?? '',
+    conditionOperator: value?.operator ?? 'EQ',
+    conditionValue:
+      value?.value === null || value?.value === undefined ? '' : String(value.value),
+    formulaExpression: value?.formulaExpression ?? '',
   }
+}
+
+export function workflowFormulaFunctionHints() {
+  return supportedFormulaFunctionNames
 }

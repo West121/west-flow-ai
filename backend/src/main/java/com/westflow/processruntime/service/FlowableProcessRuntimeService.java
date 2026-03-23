@@ -98,6 +98,12 @@ public class FlowableProcessRuntimeService {
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern SIMPLE_COMPARISON_PATTERN = Pattern.compile("^([A-Za-z0-9_\\.]+)\\s*(==|!=|>=|<=|>|<)\\s*(.+)$");
 
+    private record NodeMetadata(String nodeName, String nodeType) {
+    }
+
+    private record DefinitionMetadata(String processName, Integer version) {
+    }
+
     private final FlowableEngineFacade flowableEngineFacade;
     private final FlowableRuntimeStartService flowableRuntimeStartService;
     private final FlowableTaskActionService flowableTaskActionService;
@@ -1937,12 +1943,21 @@ public class FlowableProcessRuntimeService {
             List<String> activatedTargetNodeNames = new ArrayList<>();
             List<String> skippedTargetNodeIds = new ArrayList<>();
             List<String> skippedTargetNodeNames = new ArrayList<>();
+            List<String> branchLabels = new ArrayList<>();
+            List<String> branchExpressions = new ArrayList<>();
             OffsetDateTime firstActivatedAt = null;
 
             for (ProcessDslPayload.Edge edge : branchEdges) {
                 String targetNodeId = edge.target();
                 if (targetNodeId == null || targetNodeId.isBlank()) {
                     continue;
+                }
+                branchLabels.add(edge.label() == null || edge.label().isBlank()
+                        ? targetNodeId
+                        : edge.label());
+                String expression = edgeConditionExpression(edge);
+                if (expression != null) {
+                    branchExpressions.add(expression);
                 }
                 ProcessDslPayload.Node targetNode = nodeById.get(targetNodeId);
                 boolean activated = hasReachedInclusiveBranchTarget(
@@ -1991,6 +2006,9 @@ public class FlowableProcessRuntimeService {
                     List.copyOf(activatedTargetNodeNames),
                     List.copyOf(skippedTargetNodeIds),
                     List.copyOf(skippedTargetNodeNames),
+                    List.copyOf(branchLabels),
+                    List.copyOf(branchExpressions),
+                    buildInclusiveDecisionSummary(branchEdges.size(), activatedTargetNodeIds.size(), join != null),
                     firstActivatedAt,
                     finishedAt
             ));
@@ -2731,9 +2749,7 @@ public class FlowableProcessRuntimeService {
     }
 
     private List<ProcessInstanceLinkResponse> subprocessLinks(String instanceId) {
-        String rootInstanceId = Optional.ofNullable(processLinkService.getByChildInstanceId(instanceId))
-                .map(com.westflow.processruntime.model.ProcessLinkRecord::rootInstanceId)
-                .orElse(instanceId);
+        String rootInstanceId = processLinkService.resolveRootInstanceId(instanceId);
         synchronizeProcessLinks(rootInstanceId);
         return processLinkService.listByRootInstanceId(rootInstanceId).stream()
                 .map(this::toProcessInstanceLinkResponse)
@@ -2788,9 +2804,9 @@ public class FlowableProcessRuntimeService {
     }
 
     private String resolveRuntimeTreeRootInstanceId(String instanceId) {
-        var processLink = processLinkService.getByChildInstanceId(instanceId);
-        if (processLink != null) {
-            return processLink.rootInstanceId();
+        String processLinkRootInstanceId = processLinkService.resolveRootInstanceId(instanceId);
+        if (!instanceId.equals(processLinkRootInstanceId)) {
+            return processLinkRootInstanceId;
         }
         RuntimeAppendLinkRecord appendLink = runtimeAppendLinkService.getByTargetInstanceId(instanceId);
         if (appendLink != null && appendLink.rootInstanceId() != null && !appendLink.rootInstanceId().isBlank()) {
@@ -3341,14 +3357,24 @@ public class FlowableProcessRuntimeService {
     }
 
     private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(com.westflow.processruntime.model.ProcessLinkRecord record) {
+        NodeMetadata parentNode = resolveNodeMetadata(record.parentInstanceId(), record.parentNodeId());
+        DefinitionMetadata childDefinition = resolveDefinitionMetadata(
+                record.childInstanceId(),
+                record.calledDefinitionId(),
+                record.calledProcessKey()
+        );
         return new ProcessInstanceLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
                 record.parentInstanceId(),
                 record.childInstanceId(),
                 record.parentNodeId(),
+                parentNode.nodeName(),
+                parentNode.nodeType(),
                 record.calledProcessKey(),
                 record.calledDefinitionId(),
+                childDefinition.processName(),
+                childDefinition.version(),
                 record.linkType(),
                 record.status(),
                 record.terminatePolicy(),
@@ -3359,22 +3385,35 @@ public class FlowableProcessRuntimeService {
     }
 
     private RuntimeAppendLinkResponse toRuntimeAppendLinkResponse(RuntimeAppendLinkRecord record) {
+        NodeMetadata sourceNode = resolveNodeMetadata(record.parentInstanceId(), record.sourceNodeId());
+        Map<String, Object> sourceNodeConfig = resolveNodeConfig(record.parentInstanceId(), record.sourceNodeId());
+        DefinitionMetadata targetDefinition = resolveTargetProcessDefinition(record);
+        String targetTaskName = resolveTaskName(record.targetTaskId());
         return new RuntimeAppendLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
                 record.parentInstanceId(),
                 record.sourceTaskId(),
                 record.sourceNodeId(),
+                sourceNode.nodeName(),
+                sourceNode.nodeType(),
                 record.appendType(),
                 record.runtimeLinkType(),
                 record.policy(),
                 record.targetTaskId(),
+                targetTaskName,
                 record.targetInstanceId(),
                 record.targetUserId(),
                 record.calledProcessKey(),
                 record.calledDefinitionId(),
+                targetDefinition.processName(),
+                targetDefinition.version(),
                 record.status(),
                 record.triggerMode(),
+                stringValue(sourceNodeConfig.get("buildMode")),
+                stringValue(sourceNodeConfig.get("sourceMode")),
+                stringValue(sourceNodeConfig.get("ruleExpression")),
+                stringValue(sourceNodeConfig.get("manualTemplateCode")),
                 record.operatorUserId(),
                 record.commentText(),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
@@ -3603,6 +3642,107 @@ public class FlowableProcessRuntimeService {
             throw resourceNotFound("流程定义不存在", Map.of("processInstanceId", processInstanceId));
         }
         return processDefinitionService.getLatestByProcessKey(processKey);
+    }
+
+    private Optional<PublishedProcessDefinition> resolvePublishedDefinitionByInstance(String processInstanceId) {
+        Map<String, Object> variables = runtimeOrHistoricVariables(processInstanceId);
+        String platformDefinitionId = stringValue(variables.get("westflowProcessDefinitionId"));
+        String processKey = stringValue(variables.get("westflowProcessKey"));
+        try {
+            return Optional.of(resolvePublishedDefinition(platformDefinitionId, platformDefinitionId, processKey, processInstanceId));
+        } catch (RuntimeException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private NodeMetadata resolveNodeMetadata(String processInstanceId, String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return new NodeMetadata(null, null);
+        }
+        return resolvePublishedDefinitionByInstance(processInstanceId)
+                .map(definition -> definition.dsl().nodes().stream()
+                        .filter(node -> nodeId.equals(node.id()))
+                        .findFirst()
+                        .map(node -> new NodeMetadata(
+                                node.name() == null || node.name().isBlank() ? nodeId : node.name(),
+                                node.type()
+                        ))
+                        .orElse(new NodeMetadata(nodeId, null)))
+                .orElse(new NodeMetadata(nodeId, null));
+    }
+
+    private Map<String, Object> resolveNodeConfig(String processInstanceId, String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return Map.of();
+        }
+        return resolvePublishedDefinitionByInstance(processInstanceId)
+                .map(definition -> nodeConfig(definition.dsl(), nodeId))
+                .orElse(Map.of());
+    }
+
+    private DefinitionMetadata resolveDefinitionMetadata(String processInstanceId, String definitionId, String processKey) {
+        try {
+            PublishedProcessDefinition definition;
+            if (definitionId != null && !definitionId.isBlank()) {
+                try {
+                    definition = processDefinitionService.getById(definitionId);
+                } catch (RuntimeException ignored) {
+                    definition = processDefinitionService.getByFlowableDefinitionId(definitionId);
+                }
+            } else {
+                Map<String, Object> variables = runtimeOrHistoricVariables(processInstanceId);
+                definition = resolvePublishedDefinition(
+                        stringValue(variables.get("westflowProcessDefinitionId")),
+                        stringValue(variables.get("westflowProcessDefinitionId")),
+                        processKey,
+                        processInstanceId
+                );
+            }
+            return new DefinitionMetadata(definition.processName(), definition.version());
+        } catch (RuntimeException exception) {
+            return new DefinitionMetadata(null, null);
+        }
+    }
+
+    private DefinitionMetadata resolveTargetProcessDefinition(RuntimeAppendLinkRecord record) {
+        if (record.targetInstanceId() != null && !record.targetInstanceId().isBlank()) {
+            return resolveDefinitionMetadata(record.targetInstanceId(), record.calledDefinitionId(), record.calledProcessKey());
+        }
+        return resolveDefinitionMetadata(record.parentInstanceId(), record.calledDefinitionId(), record.calledProcessKey());
+    }
+
+    private String resolveTaskName(String taskId) {
+        if (taskId == null || taskId.isBlank()) {
+            return null;
+        }
+        Task runtimeTask = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .taskId(taskId)
+                .singleResult();
+        if (runtimeTask != null) {
+            return runtimeTask.getName();
+        }
+        HistoricTaskInstance historicTask = flowableEngineFacade.historyService()
+                .createHistoricTaskInstanceQuery()
+                .taskId(taskId)
+                .singleResult();
+        return historicTask == null ? null : historicTask.getName();
+    }
+
+    private String edgeConditionExpression(ProcessDslPayload.Edge edge) {
+        if (edge == null || edge.condition() == null || edge.condition().isEmpty()) {
+            return null;
+        }
+        Object expression = edge.condition().get("expression");
+        return stringValue(expression);
+    }
+
+    private String buildInclusiveDecisionSummary(int branchCount, int activatedCount, boolean hasJoin) {
+        String base = "已激活 " + activatedCount + "/" + branchCount + " 条分支";
+        if (!hasJoin) {
+            return base + "，未找到汇聚节点";
+        }
+        return base;
     }
 
     private HistoricProcessInstance requireHistoricProcessInstance(String processInstanceId) {

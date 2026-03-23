@@ -167,26 +167,7 @@ public class WorkflowManagementService {
     }
 
     private List<ProcessInstanceLinkResponse> processLinks(String instanceId) {
-        String rootInstanceId = Optional.ofNullable(processLinkService.getByChildInstanceId(instanceId))
-                .map(com.westflow.processruntime.model.ProcessLinkRecord::rootInstanceId)
-                .orElse(instanceId);
-        return processLinkService.listByRootInstanceId(rootInstanceId).stream()
-                .map(record -> new ProcessInstanceLinkResponse(
-                        record.id(),
-                        record.rootInstanceId(),
-                        record.parentInstanceId(),
-                        record.childInstanceId(),
-                        record.parentNodeId(),
-                        record.calledProcessKey(),
-                        record.calledDefinitionId(),
-                        record.linkType(),
-                        record.status(),
-                        record.terminatePolicy(),
-                        record.childFinishPolicy(),
-                        toOffsetDateTime(record.createdAt()),
-                        toOffsetDateTime(record.finishedAt())
-                ))
-                .toList();
+        return flowableProcessRuntimeService.links(processLinkService.resolveRootInstanceId(instanceId));
     }
 
     private OffsetDateTime toOffsetDateTime(Instant value) {

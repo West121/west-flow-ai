@@ -18,9 +18,9 @@ import {
 import {
   AlarmClockCheck,
   Bot,
-  BringToFront,
   CircleDotDashed,
   LayoutGrid,
+  MoveDiagonal2,
   Redo2,
   Save,
   Sparkles,
@@ -60,6 +60,7 @@ import {
 import {
   ProcessFormSelector,
 } from './designer/form-selection'
+import { WorkflowDesignerLayout } from './designer/designer-layout'
 import {
   workflowNodeTemplates,
   type WorkflowNodeTemplate,
@@ -87,11 +88,41 @@ type DefinitionRow = {
   status: '已发布' | '草稿'
 }
 
+type DesignerStructurePreset = {
+  id: 'SUBPROCESS_CHAIN' | 'DYNAMIC_BUILDER_CHAIN' | 'INCLUSIVE_BRANCH'
+  title: string
+  description: string
+}
+
+const designerStructurePresets: DesignerStructurePreset[] = [
+  {
+    id: 'SUBPROCESS_CHAIN',
+    title: '主子流程模板',
+    description: '一键插入父流程审批、子流程调用和回传确认三段骨架。',
+  },
+  {
+    id: 'DYNAMIC_BUILDER_CHAIN',
+    title: '动态构建模板',
+    description: '快速生成“规则触发 -> 动态构建 -> 汇总确认”的链路。',
+  },
+  {
+    id: 'INCLUSIVE_BRANCH',
+    title: '包容分支模板',
+    description: '直接插入可命中多分支并汇聚的包容网关结构。',
+  },
+]
+
 const workflowNodeTypes = {
   workflow: WorkflowNodeCard,
 }
 
 const helperLineThreshold = 16
+const defaultLeaveFormFields: ProcessDefinitionMeta['formFields'] = [
+  { fieldKey: 'leaveType', label: '请假类型', valueType: 'string' },
+  { fieldKey: 'leaveDays', label: '请假天数', valueType: 'number' },
+  { fieldKey: 'urgent', label: '是否紧急', valueType: 'boolean' },
+  { fieldKey: 'managerUserId', label: '直属负责人', valueType: 'string' },
+]
 // 默认先挂一套请假流程表单，保证设计器打开后就能直接预览和发布。
 const defaultProcessForm = findProcessRuntimeFormByProcessKey('oa_leave')
 const defaultDefinitionMeta: ProcessDefinitionMeta = {
@@ -100,7 +131,7 @@ const defaultDefinitionMeta: ProcessDefinitionMeta = {
   category: 'OA',
   processFormKey: defaultProcessForm?.formKey ?? '',
   processFormVersion: defaultProcessForm?.formVersion ?? '',
-  formFields: [],
+  formFields: defaultLeaveFormFields,
 }
 
 // 把后端状态统一映射成列表页中文状态。
@@ -288,9 +319,26 @@ function GuideLinesOverlay({ lines }: { lines: WorkflowHelperLines }) {
 // 左侧节点面板负责提供可拖拽的流程节点模板。
 function DesignerPalette({
   onAppendNode,
+  onAppendPreset,
 }: {
   onAppendNode: (template: WorkflowNodeTemplate) => void
+  onAppendPreset: (preset: DesignerStructurePreset['id']) => void
 }) {
+  const advancedStructureKinds: WorkflowNodeTemplate['kind'][] = [
+    'subprocess',
+    'dynamic-builder',
+    'inclusive',
+    'parallel',
+  ]
+  const isAdvancedStructureTemplate = (kind: WorkflowNodeTemplate['kind']) =>
+    advancedStructureKinds.includes(kind)
+  const advancedTemplates = workflowNodeTemplates.filter((template) =>
+    isAdvancedStructureTemplate(template.kind)
+  )
+  const baseTemplates = workflowNodeTemplates.filter(
+    (template) => !isAdvancedStructureTemplate(template.kind)
+  )
+
   return (
     <Card className='h-full border-dashed bg-card/95'>
       <CardHeader>
@@ -303,7 +351,72 @@ function DesignerPalette({
         </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
-        {workflowNodeTemplates.map((template) => {
+        <div className='rounded-2xl border border-primary/15 bg-primary/[0.04] p-3'>
+          <div className='mb-3 flex items-start justify-between gap-3'>
+            <div>
+              <p className='text-sm font-semibold'>高级结构</p>
+              <p className='text-xs leading-5 text-muted-foreground'>
+                子流程、动态构建和复杂分支从这里起步，避免在面板里来回找。
+              </p>
+            </div>
+            <Badge variant='secondary' className='shrink-0'>
+              复杂编排
+            </Badge>
+          </div>
+          <div className='grid grid-cols-2 gap-2'>
+            {advancedTemplates.map((template) => {
+              const Icon = template.icon
+              return (
+                <button
+                  key={template.kind}
+                  type='button'
+                  draggable
+                  onDoubleClick={() => onAppendNode(template)}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData(
+                      'application/west-flow-node',
+                      template.kind
+                    )
+                  }}
+                  className='rounded-2xl border bg-background/90 p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm'
+                >
+                  <div className='mb-2 flex items-center justify-between gap-2'>
+                    <div className='flex size-9 items-center justify-center rounded-2xl bg-primary/10 text-primary'>
+                      <Icon className='size-4' />
+                    </div>
+                    <MoveDiagonal2 className='size-3.5 text-muted-foreground' />
+                  </div>
+                  <p className='text-sm font-medium'>{template.label}</p>
+                  <p className='mt-1 text-xs leading-5 text-muted-foreground'>
+                    {template.description}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+          <Separator className='my-3' />
+          <div className='grid gap-2'>
+            {designerStructurePresets.map((preset) => (
+              <button
+                key={preset.id}
+                type='button'
+                className='rounded-2xl border bg-background/95 px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]'
+                onClick={() => onAppendPreset(preset.id)}
+              >
+                <div className='flex items-center justify-between gap-3'>
+                  <p className='text-sm font-medium'>{preset.title}</p>
+                  <Badge variant='outline'>插入模板</Badge>
+                </div>
+                <p className='mt-1 text-xs leading-5 text-muted-foreground'>
+                  {preset.description}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {baseTemplates.map((template) => {
           const Icon = template.icon
 
           return (
@@ -385,6 +498,9 @@ function WorkflowDesignerWorkspace({
     (state) => state.addNodeFromTemplate
   )
   const autoLayout = useWorkflowDesignerStore((state) => state.autoLayout)
+  const addStructurePreset = useWorkflowDesignerStore(
+    (state) => state.addStructurePreset
+  )
   const hydrateSnapshot = useWorkflowDesignerStore(
     (state) => state.hydrateSnapshot
   )
@@ -527,17 +643,6 @@ function WorkflowDesignerWorkspace({
         <>
           <Button
             variant='outline'
-            onClick={() => {
-              startTransition(() => {
-                void reactFlow.fitView({ padding: 0.18, duration: 280 })
-              })
-            }}
-          >
-            <BringToFront data-icon='inline-start' />
-            适配视图
-          </Button>
-          <Button
-            variant='outline'
             disabled={!canUndo}
             onClick={() => undo()}
           >
@@ -587,92 +692,97 @@ function WorkflowDesignerWorkspace({
         </>
       }
     >
-      <div className='grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]'>
-        <DesignerPalette onAppendNode={handleAppendNode} />
-
-        <Card className='border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.08),_transparent_46%)]'>
-          <CardHeader className='flex flex-row items-start justify-between gap-4'>
-            <div className='space-y-2'>
-              <CardTitle>画布工作区</CardTitle>
-              <CardDescription>
-                已启用网格吸附、辅助线提示与流程骨架节点，适合继续接入 DSL 校验与节点表单。
-              </CardDescription>
-            </div>
-            <div className='flex flex-wrap gap-2'>
-              <Badge variant='secondary'>
-                <CircleDotDashed />
-                网格吸附
-              </Badge>
-              <Badge variant='secondary'>
-                <Sparkles />
-                辅助线
-              </Badge>
-              <Badge variant='secondary'>
-                <Bot />
-                AI 设计预留
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div
-              className='relative h-[680px] overflow-hidden rounded-2xl border bg-background/85'
-              onDragOver={(event) => {
-                event.preventDefault()
-                event.dataTransfer.dropEffect = 'move'
-              }}
-              onDrop={handleDrop}
-            >
-              <GuideLinesOverlay lines={helperLines} />
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={workflowNodeTypes}
-                onNodesChange={applyNodeChanges}
-                onEdgesChange={applyEdgeChanges}
-                onConnect={handleConnect}
-                onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                onPaneClick={() => setSelectedNodeId(null)}
-                onNodeDrag={(_, node) => {
-                  setHelperLines(findHelperLines(node, nodes))
+      <WorkflowDesignerLayout
+        palette={
+          <DesignerPalette
+            onAppendNode={handleAppendNode}
+            onAppendPreset={addStructurePreset}
+          />
+        }
+        canvas={
+          <Card className='border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.08),_transparent_46%)]'>
+            <CardHeader className='flex flex-row items-start justify-between gap-4'>
+              <div className='space-y-2'>
+                <CardTitle>画布工作区</CardTitle>
+                <CardDescription>
+                  已启用网格吸附、辅助线提示与流程骨架节点，适合继续接入 DSL 校验与节点表单。
+                </CardDescription>
+              </div>
+              <div className='flex flex-wrap gap-2'>
+                <Badge variant='secondary'>
+                  <CircleDotDashed />
+                  网格吸附
+                </Badge>
+                <Badge variant='secondary'>
+                  <Sparkles />
+                  辅助线
+                </Badge>
+                <Badge variant='secondary'>
+                  <Bot />
+                  AI 设计预留
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div
+                className='relative h-[680px] overflow-hidden rounded-2xl border bg-background/85'
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
                 }}
-                onNodeDragStop={() =>
-                  setHelperLines({ vertical: null, horizontal: null })
-                }
-                minZoom={0.45}
-                maxZoom={1.6}
-                snapToGrid
-                snapGrid={[20, 20]}
-                fitView
-                proOptions={{ hideAttribution: true }}
-                defaultEdgeOptions={{
-                  type: 'smoothstep',
-                  animated: false,
-                }}
+                onDrop={handleDrop}
               >
-                <Panel
-                  position='top-left'
-                  className='rounded-2xl border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm'
+                <GuideLinesOverlay lines={helperLines} />
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={workflowNodeTypes}
+                  onNodesChange={applyNodeChanges}
+                  onEdgesChange={applyEdgeChanges}
+                  onConnect={handleConnect}
+                  onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+                  onPaneClick={() => setSelectedNodeId(null)}
+                  onNodeDrag={(_, node) => {
+                    setHelperLines(findHelperLines(node, nodes))
+                  }}
+                  onNodeDragStop={() =>
+                    setHelperLines({ vertical: null, horizontal: null })
+                  }
+                  minZoom={0.45}
+                  maxZoom={1.6}
+                  snapToGrid
+                  snapGrid={[20, 20]}
+                  fitView
+                  proOptions={{ hideAttribution: true }}
+                  defaultEdgeOptions={{
+                    type: 'smoothstep',
+                    animated: false,
+                  }}
                 >
-                  从左侧拖入节点，双击节点模板可快速追加
-                </Panel>
-                <MiniMap
-                  pannable
-                  zoomable
-                  nodeBorderRadius={16}
-                  className='rounded-xl border bg-background/90'
-                />
-                <Controls position='bottom-left' showInteractive={false} />
-                <Background
-                  variant={BackgroundVariant.Dots}
-                  gap={20}
-                  size={1.2}
-                />
-              </ReactFlow>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className='flex flex-col gap-4'>
+                  <Panel
+                    position='top-left'
+                    className='rounded-2xl border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm'
+                  >
+                    从左侧拖入节点，双击节点模板可快速追加
+                  </Panel>
+                  <MiniMap
+                    pannable
+                    zoomable
+                    nodeBorderRadius={16}
+                    className='rounded-xl border bg-background/90'
+                  />
+                  <Controls position='bottom-left' showInteractive={false} />
+                  <Background
+                    variant={BackgroundVariant.Dots}
+                    gap={20}
+                    size={1.2}
+                  />
+                </ReactFlow>
+              </div>
+            </CardContent>
+          </Card>
+        }
+        flowSettings={
           <Card className='bg-card/95'>
             <CardHeader>
               <CardTitle>流程配置</CardTitle>
@@ -755,15 +865,16 @@ function WorkflowDesignerWorkspace({
               <div className='space-y-3 rounded-2xl border p-4 text-sm'>
                 <div className='flex items-center gap-2 font-medium'>
                   <AlarmClockCheck className='size-4 text-primary' />
-                  M0 设计基线
+                  当前示例基线
                 </div>
                 <p className='text-muted-foreground'>
-                  已提供设计器画布、拖放、撤销重做、自动布局、查库回填和流程定义列表联调。
+                  默认加载请假审批案例，包含排他网关、角色选人、部门选人、表单字段选人和自定义公式选人。
                 </p>
               </div>
             </CardContent>
           </Card>
-
+        }
+        nodeSettings={
           <Card className='bg-card/95'>
             <CardHeader>
               <CardTitle>节点配置</CardTitle>
@@ -772,7 +883,12 @@ function WorkflowDesignerWorkspace({
               </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-4 text-sm'>
-              <NodeConfigPanel node={selectedNode} edges={edges} onApply={updateNodeDraft} />
+              <NodeConfigPanel
+                node={selectedNode}
+                edges={edges}
+                processFormFields={definitionMeta.formFields}
+                onApply={updateNodeDraft}
+              />
               {selectedNode ? (
                 <div className='rounded-2xl border p-4'>
                   <p className='text-xs text-muted-foreground'>画布坐标</p>
@@ -801,8 +917,8 @@ function WorkflowDesignerWorkspace({
               </Button>
             </CardContent>
           </Card>
-        </div>
-      </div>
+        }
+      />
     </PageShell>
   )
 }

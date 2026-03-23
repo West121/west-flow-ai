@@ -38,6 +38,7 @@ const snapshot: WorkflowSnapshot = {
             roleCodes: [],
             departmentRef: '',
             formFieldKey: '',
+            formulaExpression: '',
           },
           approvalPolicy: {
             type: 'SEQUENTIAL',
@@ -452,6 +453,80 @@ describe('workflow designer dsl mapping', () => {
       })
   })
 
+  it('round-trips formula branch expressions', () => {
+    const formulaSnapshot: WorkflowSnapshot = {
+      nodes: [
+        snapshot.nodes[0]!,
+        {
+          ...snapshot.nodes[1]!,
+          id: 'condition_1',
+          data: {
+            ...snapshot.nodes[1]!.data,
+            kind: 'condition',
+            label: '排他网关',
+            description: '公式分支',
+            config: {
+              defaultEdgeId: 'edge_default',
+              expressionMode: 'FORMULA',
+              expressionFieldKey: '',
+            },
+          },
+        },
+        snapshot.nodes[2]!,
+      ],
+      edges: [
+        { id: 'edge_default', source: 'start_1', target: 'condition_1', type: 'smoothstep' },
+        {
+          id: 'edge_formula',
+          source: 'condition_1',
+          target: 'end_1',
+          type: 'smoothstep',
+          label: '公式分支',
+          data: {
+            condition: {
+              type: 'FORMULA',
+              formulaExpression: 'ifElse(amount > 10000, "A", "B")',
+            },
+          },
+        },
+      ],
+      selectedNodeId: 'condition_1',
+    }
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(formulaSnapshot, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.edges.find((edge) => edge.id === 'edge_formula')?.condition).toMatchObject({
+      type: 'FORMULA',
+      formulaExpression: 'ifElse(amount > 10000, "A", "B")',
+    })
+
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:formula-1',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 1,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl,
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.edges.find((edge) => edge.id === 'edge_formula')?.data?.condition)
+      .toMatchObject({
+        type: 'FORMULA',
+        formulaExpression: 'ifElse(amount > 10000, "A", "B")',
+      })
+  })
+
   it('hydrates the designer snapshot from the persisted process definition detail', () => {
     const hydrated = processDefinitionDetailToWorkflowSnapshot({
       processDefinitionId: 'oa_leave:1',
@@ -669,6 +744,7 @@ describe('workflow designer dsl mapping', () => {
                 roleCodes: [],
                 departmentRef: '',
                 formFieldKey: '',
+                formulaExpression: '',
               },
               approvalPolicy: {
                 type: 'SEQUENTIAL',
@@ -707,6 +783,7 @@ describe('workflow designer dsl mapping', () => {
                 roleCodes: [],
                 departmentRef: '',
                 formFieldKey: '',
+                formulaExpression: '',
               },
               approvalPolicy: {
                 type: 'SEQUENTIAL',

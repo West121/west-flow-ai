@@ -24,7 +24,9 @@ function buildTimerNode(): WorkflowNode {
   }
 }
 
-function buildApproverNode(): WorkflowNode {
+function buildApproverNode(
+  assignmentMode: 'USER' | 'ROLE' | 'DEPARTMENT' | 'DEPARTMENT_AND_CHILDREN' | 'FORM_FIELD' = 'USER'
+): WorkflowNode {
   return {
     id: 'approve_1',
     type: 'workflow',
@@ -36,11 +38,12 @@ function buildApproverNode(): WorkflowNode {
       tone: 'brand',
       config: {
         assignment: {
-          mode: 'USER',
+          mode: assignmentMode,
           userIds: ['usr_002', 'usr_003'],
           roleCodes: [],
           departmentRef: '',
           formFieldKey: '',
+          formulaExpression: '',
         },
         approvalPolicy: {
           type: 'SEQUENTIAL',
@@ -94,8 +97,8 @@ function buildSubprocessNode(): WorkflowNode {
         businessBindingMode: 'OVERRIDE',
         terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
         childFinishPolicy: 'TERMINATE_PARENT',
-        inputMappingsJson: '[{"source":"billNo","target":"sourceBillNo"}]',
-        outputMappingsJson: '[{"source":"approvedResult","target":"purchaseResult"}]',
+        inputMappings: [{ source: 'billNo', target: 'sourceBillNo' }],
+        outputMappings: [{ source: 'approvedResult', target: 'purchaseResult' }],
       } as never,
     },
   }
@@ -171,6 +174,35 @@ const inclusiveSplitEdges: WorkflowEdge[] = [
   },
 ]
 
+const conditionEdges: WorkflowEdge[] = [
+  {
+    id: 'edge_yes',
+    source: 'condition_1',
+    target: 'approve_yes',
+    type: 'smoothstep',
+    label: '正常审批',
+    data: {
+      condition: {
+        type: 'EXPRESSION',
+        expression: 'amount > 10000',
+      },
+    },
+  },
+  {
+    id: 'edge_formula',
+    source: 'condition_1',
+    target: 'approve_formula',
+    type: 'smoothstep',
+    label: '公式审批',
+    data: {
+      condition: {
+        type: 'FORMULA',
+        formulaExpression: 'ifElse(amount > 10000, "A", "B")',
+      },
+    },
+  },
+]
+
 describe('workflow designer node config panel', () => {
   it('exposes subprocess node template in the palette', () => {
     expect(workflowNodeTemplates.some((template) => template.kind === 'subprocess')).toBe(true)
@@ -226,6 +258,53 @@ describe('workflow designer node config panel', () => {
     expect(screen.getByDisplayValue('3')).toBeInTheDocument()
   })
 
+  it('supports form field assignment with the field selector', async () => {
+    const onApply = vi.fn()
+
+    const node = buildApproverNode('FORM_FIELD')
+    node.data.config = {
+      ...node.data.config,
+      approvalMode: 'SINGLE',
+      approvalPolicy: {
+        type: 'SINGLE',
+        voteThreshold: null,
+      },
+      voteRule: {
+        thresholdPercent: null,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [],
+      },
+    } as typeof node.data.config
+
+    render(
+      <NodeConfigPanel
+        node={node}
+        edges={edges}
+        onApply={onApply}
+      />
+    )
+
+    expect(screen.getByText('表单字段编码')).toBeInTheDocument()
+    const fieldInput = screen.getByPlaceholderText('请选择或输入字段编码')
+    fireEvent.change(fieldInput, { target: { value: 'departmentId' } })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          assignment: expect.objectContaining({
+            mode: 'FORM_FIELD',
+            formFieldKey: 'departmentId',
+          }),
+        }),
+      }),
+      undefined
+    )
+  })
+
   it('submits countersign fields back to the canvas patch', async () => {
     const onApply = vi.fn()
 
@@ -254,6 +333,70 @@ describe('workflow designer node config panel', () => {
     )
   })
 
+  it('submits approver field bindings back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    const node = buildApproverNode('USER')
+    node.data.config = {
+      ...node.data.config,
+      approvalMode: 'SINGLE',
+      approvalPolicy: {
+        type: 'SINGLE',
+        voteThreshold: null,
+      },
+      voteRule: {
+        thresholdPercent: null,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [],
+      },
+      nodeFormKey: 'oa-leave-approve-form',
+      nodeFormVersion: '1.0.0',
+      fieldBindings: [
+        {
+          source: 'PROCESS_FORM',
+          sourceFieldKey: 'leaveDays',
+          targetFieldKey: 'approvedDays',
+        },
+      ],
+    } as typeof node.data.config
+
+    render(
+      <NodeConfigPanel
+        node={node}
+        edges={edges}
+        onApply={onApply}
+        processFormFields={[
+          { fieldKey: 'leaveDays', label: '请假天数', valueType: 'number' },
+          { fieldKey: 'leaveType', label: '请假类型', valueType: 'string' },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('字段绑定')).toBeInTheDocument()
+    fireEvent.change(screen.getByDisplayValue('approvedDays'), {
+      target: { value: 'approvedLeaveDays' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          fieldBindings: [
+            {
+              source: 'PROCESS_FORM',
+              sourceFieldKey: 'leaveDays',
+              targetFieldKey: 'approvedLeaveDays',
+            },
+          ],
+        }),
+      }),
+      undefined
+    )
+  })
+
   it('hydrates and submits subprocess fields back to the canvas patch', async () => {
     const onApply = vi.fn()
 
@@ -269,6 +412,9 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getByRole('spinbutton', { name: '固定版本号' }), {
       target: { value: '5' },
     })
+    fireEvent.change(screen.getByDisplayValue('sourceBillNo'), {
+      target: { value: 'leaveRequestNo' },
+    })
 
     fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
 
@@ -283,6 +429,12 @@ describe('workflow designer node config panel', () => {
           businessBindingMode: 'OVERRIDE',
           terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
           childFinishPolicy: 'TERMINATE_PARENT',
+          inputMappings: [
+            { source: 'billNo', target: 'leaveRequestNo' },
+          ],
+          outputMappings: [
+            { source: 'approvedResult', target: 'purchaseResult' },
+          ],
         }),
       }),
       undefined
@@ -301,7 +453,7 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getByRole('spinbutton', { name: '最大生成数量' }), {
       target: { value: '2' },
     })
-    fireEvent.change(screen.getByRole('textbox', { name: '模板编码' }), {
+    fireEvent.change(screen.getByPlaceholderText('append_leave_audit'), {
       target: { value: 'append_leave_chain' },
     })
 
@@ -417,6 +569,72 @@ describe('workflow designer node config panel', () => {
           condition: {
             type: 'EXPRESSION',
             expression: 'urgent == true',
+          },
+        },
+      ]
+    )
+  })
+
+  it('supports formula mode for condition branches', async () => {
+    const onApply = vi.fn()
+
+    render(
+      <NodeConfigPanel
+        node={{
+          id: 'condition_1',
+          type: 'workflow',
+          position: { x: 100, y: 100 },
+          data: {
+            kind: 'condition',
+            label: '排他网关',
+            description: '条件分支',
+            tone: 'warning',
+            config: {
+              defaultEdgeId: 'edge_yes',
+              expressionMode: 'FORMULA',
+              expressionFieldKey: '',
+            },
+          },
+        }}
+        edges={conditionEdges}
+        onApply={onApply}
+      />
+    )
+
+    fireEvent.click(screen.getAllByRole('combobox')[1]!)
+    fireEvent.click(screen.getByRole('option', { name: '安全公式' }))
+
+    const formulaInputs = screen.getAllByPlaceholderText(
+      '请输入受控公式表达式，例如：ifElse(amount > 10000, "A", "B")'
+    )
+    fireEvent.change(formulaInputs[formulaInputs.length - 1]!, {
+      target: { value: 'ifElse(amount > 20000, "A", "B")' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'condition_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          defaultEdgeId: 'edge_yes',
+          expressionMode: 'FORMULA',
+        }),
+      }),
+      [
+        {
+          edgeId: 'edge_yes',
+          label: '正常审批',
+          condition: undefined,
+        },
+        {
+          edgeId: 'edge_formula',
+          label: '公式审批',
+          condition: {
+            type: 'FORMULA',
+            expression: 'ifElse(amount > 20000, "A", "B")',
+            formulaExpression: 'ifElse(amount > 20000, "A", "B")',
           },
         },
       ]

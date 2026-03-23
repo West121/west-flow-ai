@@ -364,6 +364,134 @@ class ProcessDslToBpmnServiceTest {
     }
 
     @Test
+    void shouldConvertRoleDepartmentAndFieldAssignmentsWithFieldAndFormulaBranchesIntoBpmnXml() {
+        ProcessDslPayload payload = new ProcessDslPayload(
+                "1.0.0",
+                "oa_leave",
+                "请假审批",
+                "OA",
+                "oa-leave-form",
+                "1.1.0",
+                List.of(
+                        new ProcessDslPayload.FormField("leaveType", "请假类型", "STRING", true),
+                        new ProcessDslPayload.FormField("leaveDays", "请假天数", "NUMBER", true),
+                        new ProcessDslPayload.FormField("urgent", "是否紧急", "BOOLEAN", false),
+                        new ProcessDslPayload.FormField("managerUserId", "直属负责人", "USER", false)
+                ),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of(
+                                "initiatorEditable", true
+                        )),
+                        node("condition_leave_split", "condition", "请假天数分支", Map.of(
+                                "defaultEdgeId", "edge_leave_short"
+                        )),
+                        node("approve_manager_role", "approver", "部门经理审批", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("role_manager"),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false
+                        )),
+                        node("approve_dept_lead", "approver", "部门负责人审批", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "DEPARTMENT",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "dept_002",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false
+                        )),
+                        node("approve_hr_specialist", "approver", "HR 专员审批", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("role_hr"),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false
+                        )),
+                        node("approve_manager_field", "approver", "负责人确认", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "FORM_FIELD",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", "managerUserId",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false
+                        )),
+                        node("approve_director_formula", "approver", "总监确认", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "FORMULA",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", "",
+                                        "formulaExpression", "leaveDays >= 5 ? 'usr_005' : managerUserId"
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false
+                        )),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "condition_leave_split", 1, null),
+                        edge("edge_leave_short", "condition_leave_split", "approve_manager_role", 10, null),
+                        edge("edge_leave_long", "condition_leave_split", "approve_dept_lead", 20, Map.of(
+                                "type", "FIELD",
+                                "fieldKey", "leaveDays",
+                                "operator", "GT",
+                                "value", 3
+                        )),
+                        edge("edge_leave_urgent", "condition_leave_split", "approve_hr_specialist", 30, Map.of(
+                                "type", "FORMULA",
+                                "formulaExpression", "urgent == true || leaveDays >= 5"
+                        )),
+                        edge("edge_2", "approve_manager_role", "approve_manager_field", 40, null),
+                        edge("edge_3", "approve_dept_lead", "approve_manager_field", 50, null),
+                        edge("edge_4", "approve_hr_specialist", "approve_director_formula", 60, null),
+                        edge("edge_5", "approve_manager_field", "approve_director_formula", 70, null),
+                        edge("edge_6", "approve_director_formula", "end_1", 80, null)
+                )
+        );
+
+        String xml = service.convert(payload, "oa_leave:1", 1);
+
+        assertThat(xml).contains(
+                "<exclusiveGateway",
+                "id=\"condition_leave_split\"",
+                "default=\"edge_leave_short\"",
+                "flowable:candidateGroups=\"role_manager\"",
+                "flowable:candidateGroups=\"dept_002\"",
+                "flowable:candidateGroups=\"role_hr\"",
+                "flowable:assignee=\"${managerUserId}\"",
+                "westflow:formulaExpression=\"leaveDays &gt;= 5 ? 'usr_005' : managerUserId\"",
+                "leaveDays > 3",
+                "urgent == true || leaveDays >= 5"
+        );
+    }
+
+    @Test
     void shouldConvertDynamicBuilderNodeIntoPlaceholderServiceTask() {
         ProcessDslPayload payload = new ProcessDslPayload(
                 "1.0.0",

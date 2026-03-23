@@ -180,6 +180,7 @@ public interface SystemDepartmentMapper {
             "  d.department_name AS name,",
             "  d.company_id,",
             "  c.company_name,",
+            "  d.parent_department_id,",
             "  d.enabled",
             "FROM wf_department d",
             "INNER JOIN wf_company c ON c.id = d.company_id",

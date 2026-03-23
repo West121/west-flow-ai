@@ -175,6 +175,15 @@ public class ProcessDefinitionService {
         return toPublishedProcessDefinition(getRecordById(processDefinitionId));
     }
 
+    // 按 Flowable 定义主键反查平台侧已发布定义。
+    public PublishedProcessDefinition getByFlowableDefinitionId(String flowableDefinitionId) {
+        ProcessDefinitionRecord record = processDefinitionMapper.selectByFlowableDefinitionId(flowableDefinitionId);
+        if (record == null) {
+            throw resourceNotFound("flowableDefinitionId", flowableDefinitionId);
+        }
+        return toPublishedProcessDefinition(record);
+    }
+
     // 按关键字、状态和分类组合分页查询流程定义列表。
     public PageResponse<ProcessDefinitionListItemResponse> page(PageRequest request) {
         // 流程定义列表同时支持关键词、状态和分类筛选。

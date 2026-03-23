@@ -175,7 +175,16 @@ describe('system organization api', () => {
       .mockResolvedValueOnce(
         okResponse({
           companies: [{ id: 'cmp_001', name: '西流科技', enabled: true }],
-          parentDepartments: [],
+          parentDepartments: [
+            {
+              id: 'dept_001',
+              name: '财务部',
+              companyId: 'cmp_001',
+              companyName: '西流科技',
+              parentDepartmentId: null,
+              enabled: true,
+            },
+          ],
         })
       )
       .mockResolvedValueOnce(
@@ -234,6 +243,7 @@ describe('system organization api', () => {
     })
     await expect(getDepartmentFormOptions('cmp_001')).resolves.toMatchObject({
       companies: [{ id: 'cmp_001' }],
+      parentDepartments: [{ id: 'dept_001', parentDepartmentId: null }],
     })
     await expect(
       createDepartment({

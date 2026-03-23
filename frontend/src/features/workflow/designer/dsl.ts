@@ -66,7 +66,11 @@ export type ProcessDefinitionDslPayload = {
     label: string
     condition?: {
       type: string
-      expression: string
+      expression?: string
+      fieldKey?: string
+      operator?: string
+      value?: string | number | boolean | null
+      formulaExpression?: string
     }
   }>
 }

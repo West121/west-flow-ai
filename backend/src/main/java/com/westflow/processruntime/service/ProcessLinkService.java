@@ -34,6 +34,18 @@ public class ProcessLinkService {
         return processLinkMapper.selectByChildInstanceId(childInstanceId);
     }
 
+    // 解析某个实例所属的根流程实例 id。
+    public String resolveRootInstanceId(String instanceId) {
+        if (instanceId == null || instanceId.isBlank()) {
+            return instanceId;
+        }
+        ProcessLinkRecord link = getByChildInstanceId(instanceId);
+        if (link != null && link.rootInstanceId() != null && !link.rootInstanceId().isBlank()) {
+            return link.rootInstanceId();
+        }
+        return instanceId;
+    }
+
     // 更新子流程关联状态和结束时间。
     public void updateStatus(String childInstanceId, String status, Instant finishedAt) {
         processLinkMapper.updateStatus(childInstanceId, status, finishedAt);

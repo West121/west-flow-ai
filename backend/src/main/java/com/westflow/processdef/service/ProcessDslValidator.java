@@ -59,6 +59,19 @@ public class ProcessDslValidator {
             "TERMINATE_GENERATED_ONLY",
             "TERMINATE_PARENT_AND_GENERATED"
     );
+    private static final List<String> SUPPORTED_BRANCH_CONDITION_TYPES = List.of(
+            "EXPRESSION",
+            "FIELD",
+            "FORMULA"
+    );
+    private static final List<String> SUPPORTED_FIELD_CONDITION_OPERATORS = List.of(
+            "EQ",
+            "NE",
+            "GT",
+            "GE",
+            "LT",
+            "LE"
+    );
     private static final List<String> SUPPORTED_APPROVAL_MODES = List.of(
             "SINGLE",
             "SEQUENTIAL",
@@ -223,6 +236,11 @@ public class ProcessDslValidator {
                 case "FORM_FIELD" -> {
                     if (asString(assignment.get("formFieldKey")) == null) {
                         throw invalid("approver 节点表单字段不能为空", Map.of("nodeId", node.id()));
+                    }
+                }
+                case "FORMULA" -> {
+                    if (asString(assignment.get("formulaExpression")) == null) {
+                        throw invalid("approver 节点自定义公式不能为空", Map.of("nodeId", node.id()));
                     }
                 }
                 default -> throw invalid("approver 节点 assignment.mode 不合法", Map.of("nodeId", node.id(), "mode", mode));
@@ -550,18 +568,7 @@ public class ProcessDslValidator {
                     .filter(edge -> !edge.id().equals(defaultEdgeId))
                     .toList();
             for (ProcessDslPayload.Edge edge : nonDefaultEdges) {
-                Map<String, Object> condition = mapValue(edge.condition());
-                String expression = asString(condition.get("expression"));
-                String type = asString(condition.get("type"));
-                if (type == null) {
-                    throw invalid("condition 分支必须配置 condition.type", Map.of("nodeId", node.id(), "edgeId", edge.id()));
-                }
-                if (!"EXPRESSION".equals(type)) {
-                    throw invalid("condition 分支 condition.type 不合法", Map.of("nodeId", node.id(), "edgeId", edge.id(), "type", type));
-                }
-                if (expression == null) {
-                    throw invalid("condition 分支必须配置 expression", Map.of("nodeId", node.id(), "edgeId", edge.id()));
-                }
+                validateBranchCondition(node, edge, "condition");
             }
         }
     }
@@ -627,21 +634,7 @@ public class ProcessDslValidator {
                 throw invalid("inclusive_split 节点至少需要两条出边", Map.of("nodeId", split.id(), "outgoingCount", edges.size()));
             }
             for (ProcessDslPayload.Edge edge : edges) {
-                Map<String, Object> condition = mapValue(edge.condition());
-                String expression = asString(condition.get("expression"));
-                String type = asString(condition.get("type"));
-                if (type == null) {
-                    throw invalid("inclusive_split 分支必须配置 condition.type", Map.of("nodeId", split.id(), "edgeId", edge.id()));
-                }
-                if (!"EXPRESSION".equals(type)) {
-                    throw invalid(
-                            "inclusive_split 分支 condition.type 不合法",
-                            Map.of("nodeId", split.id(), "edgeId", edge.id(), "type", type)
-                    );
-                }
-                if (expression == null) {
-                    throw invalid("inclusive_split 分支必须配置 expression", Map.of("nodeId", split.id(), "edgeId", edge.id()));
-                }
+                validateBranchCondition(split, edge, "inclusive_split");
             }
             if (!canReachNodeType(split.id(), "inclusive_join", outgoingEdges, nodeById, new HashSet<>(), false)) {
                 throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of("nodeId", split.id()));
@@ -656,6 +649,68 @@ public class ProcessDslValidator {
             if (!canReachNodeType(join.id(), "inclusive_split", incomingEdges, nodeById, new HashSet<>(), true)) {
                 throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of("nodeId", join.id()));
             }
+        }
+    }
+
+    // 校验条件分支的表达式类型，支持表达式、字段与公式三类第一批增强。
+    private void validateBranchCondition(ProcessDslPayload.Node node, ProcessDslPayload.Edge edge, String branchNodeType) {
+        Map<String, Object> condition = mapValue(edge.condition());
+        String type = asString(condition.get("type"));
+        if (type == null) {
+            throw invalid(branchNodeType + " 分支必须配置 condition.type", Map.of("nodeId", node.id(), "edgeId", edge.id()));
+        }
+        if (!SUPPORTED_BRANCH_CONDITION_TYPES.contains(type)) {
+            throw invalid(
+                    branchNodeType + " 分支 condition.type 不合法",
+                    Map.of("nodeId", node.id(), "edgeId", edge.id(), "type", type)
+            );
+        }
+
+        switch (type) {
+            case "EXPRESSION" -> {
+                if (asString(condition.get("expression")) == null) {
+                    throw invalid(branchNodeType + " 分支必须配置 expression", Map.of("nodeId", node.id(), "edgeId", edge.id()));
+                }
+            }
+            case "FIELD" -> validateFieldBranchCondition(node, edge, condition, branchNodeType);
+            case "FORMULA" -> {
+                String formulaExpression = asString(condition.get("expression"));
+                if (formulaExpression == null) {
+                    formulaExpression = asString(condition.get("formulaExpression"));
+                }
+                if (formulaExpression == null) {
+                    throw invalid(branchNodeType + " 分支 FORMULA 类型必须配置 expression", details("nodeId", node.id(), "edgeId", edge.id()));
+                }
+            }
+            default -> throw invalid(
+                    branchNodeType + " 分支 condition.type 不合法",
+                    Map.of("nodeId", node.id(), "edgeId", edge.id(), "type", type)
+            );
+        }
+    }
+
+    // 字段分支要求指定字段、比较符和比较值。
+    private void validateFieldBranchCondition(
+            ProcessDslPayload.Node node,
+            ProcessDslPayload.Edge edge,
+            Map<String, Object> condition,
+            String branchNodeType
+    ) {
+        String fieldKey = asString(condition.get("fieldKey"));
+        if (fieldKey == null) {
+            throw invalid(branchNodeType + " 分支 FIELD 类型必须配置 fieldKey", Map.of("nodeId", node.id(), "edgeId", edge.id()));
+        }
+
+        String operator = asString(condition.get("operator"));
+        if (operator == null || !SUPPORTED_FIELD_CONDITION_OPERATORS.contains(operator)) {
+            throw invalid(
+                    branchNodeType + " 分支 FIELD 类型 operator 不合法",
+                    details("nodeId", node.id(), "edgeId", edge.id(), "operator", operator)
+            );
+        }
+
+        if (condition.get("value") == null) {
+            throw invalid(branchNodeType + " 分支 FIELD 类型必须配置 value", Map.of("nodeId", node.id(), "edgeId", edge.id()));
         }
     }
 

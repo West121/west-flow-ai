@@ -48,6 +48,27 @@ public interface ProcessDefinitionMapper {
               created_at,
               updated_at
             FROM wf_process_definition
+            WHERE flowable_definition_id = #{flowableDefinitionId}
+            LIMIT 1
+            """)
+    ProcessDefinitionRecord selectByFlowableDefinitionId(@Param("flowableDefinitionId") String flowableDefinitionId);
+
+    @Select("""
+            SELECT
+              id AS process_definition_id,
+              process_key,
+              process_name,
+              category,
+              version,
+              status,
+              dsl_json,
+              bpmn_xml,
+              publisher_user_id,
+              deployment_id,
+              flowable_definition_id,
+              created_at,
+              updated_at
+            FROM wf_process_definition
             WHERE process_key = #{processKey}
               AND status = 'DRAFT'
             ORDER BY updated_at DESC, created_at DESC

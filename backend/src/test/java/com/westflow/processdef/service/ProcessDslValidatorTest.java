@@ -203,6 +203,115 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldAcceptFieldAndFormulaBranchConditionsWithMixedAssignments() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("condition_1", "condition", Map.of("defaultEdgeId", "edge_short")),
+                        approverNodeWithConfig("approve_short", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("role_manager"),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "SINGLE",
+                                "operations", List.of("APPROVE", "REJECT")
+                        )),
+                        approverNodeWithConfig("approve_long", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "DEPARTMENT",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "dept_002",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalMode", "SINGLE",
+                                "operations", List.of("APPROVE", "REJECT")
+                        )),
+                        approverNodeWithConfig("approve_formula", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "FORMULA",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", "",
+                                        "formulaExpression", "leaveDays >= 5 ? 'usr_005' : managerUserId"
+                                ),
+                                "approvalMode", "SINGLE",
+                                "operations", List.of("APPROVE", "REJECT")
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "condition_1"),
+                        edge("edge_short", "condition_1", "approve_short"),
+                        edge("edge_long", "condition_1", "approve_long", fieldCondition("leaveDays", "GT", 3)),
+                        edge("edge_formula", "condition_1", "approve_formula", formulaCondition("urgent == true || leaveDays >= 5")),
+                        edge("edge_2", "approve_short", "end_1"),
+                        edge("edge_3", "approve_long", "end_1"),
+                        edge("edge_4", "approve_formula", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldRejectFieldBranchWithoutOperator() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("condition_1", "condition", Map.of("defaultEdgeId", "edge_short")),
+                        approverNode("approve_short"),
+                        approverNode("approve_long"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "condition_1"),
+                        edge("edge_short", "condition_1", "approve_short"),
+                        edge("edge_long", "condition_1", "approve_long", Map.of(
+                                "type", "FIELD",
+                                "fieldKey", "leaveDays",
+                                "value", 3
+                        )),
+                        edge("edge_2", "approve_short", "end_1"),
+                        edge("edge_3", "approve_long", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "FIELD 类型 operator 不合法");
+    }
+
+    @Test
+    void shouldRejectFormulaBranchWithoutExpression() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("condition_1", "condition", Map.of("defaultEdgeId", "edge_short")),
+                        approverNode("approve_short"),
+                        approverNode("approve_formula"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "condition_1"),
+                        edge("edge_short", "condition_1", "approve_short"),
+                        edge("edge_formula", "condition_1", "approve_formula", Map.of(
+                                "type", "FORMULA"
+                        )),
+                        edge("edge_2", "approve_short", "end_1"),
+                        edge("edge_3", "approve_formula", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "FORMULA 类型必须配置 expression");
+    }
+
+    @Test
     void shouldRejectApproverWithoutAssignment() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),
@@ -805,5 +914,21 @@ class ProcessDslValidatorTest {
                 "type", "EXPRESSION",
                 "expression", expression
         );
+    }
+
+    private Map<String, Object> fieldCondition(String fieldKey, String operator, Object value) {
+        Map<String, Object> condition = new LinkedHashMap<>();
+        condition.put("type", "FIELD");
+        condition.put("fieldKey", fieldKey);
+        condition.put("operator", operator);
+        condition.put("value", value);
+        return condition;
+    }
+
+    private Map<String, Object> formulaCondition(String expression) {
+        Map<String, Object> condition = new LinkedHashMap<>();
+        condition.put("type", "FORMULA");
+        condition.put("formulaExpression", expression);
+        return condition;
     }
 }

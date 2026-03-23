@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
-import { Check, RotateCcw, Save } from 'lucide-react'
+import { Check, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,8 +26,11 @@ import {
   parseListValue,
 } from './config'
 import { NodeFormSelector } from './form-selection'
+import { WorkflowFieldSelector, WorkflowFormulaEditor } from './expression-tools'
+import { WorkflowPrincipalPickerField } from './selection-picker'
 import {
   type WorkflowFieldBinding,
+  type WorkflowConditionOperator,
   type WorkflowGatewayDirection,
   type WorkflowApproverApprovalPolicyType,
   type WorkflowApproverAssignmentMode,
@@ -38,8 +41,10 @@ import {
   type WorkflowDynamicBuildMode,
   type WorkflowEdge,
   type WorkflowNode,
+  type WorkflowProcessFormField,
   type WorkflowReapprovePolicy,
   type WorkflowReminderChannel,
+  type WorkflowFieldBindingSource,
   type WorkflowSubprocessBusinessBindingMode,
   type WorkflowSubprocessChildFinishPolicy,
   type WorkflowSubprocessTerminatePolicy,
@@ -56,6 +61,7 @@ const assignmentModes = [
   { value: 'DEPARTMENT', label: '部门' },
   { value: 'DEPARTMENT_AND_CHILDREN', label: '部门及子部门' },
   { value: 'FORM_FIELD', label: '表单字段' },
+  { value: 'FORMULA', label: '自定义公式' },
 ] satisfies Array<{ value: WorkflowApproverAssignmentMode; label: string }>
 
 const approvalPolicyTypes = [
@@ -154,11 +160,31 @@ const operationOptions = [
   { key: 'TRANSFER', label: '转办' },
 ] as const
 
+const conditionTypeOptions = [
+  { value: 'EXPRESSION', label: '手写表达式' },
+  { value: 'FIELD', label: '字段比较' },
+  { value: 'FORMULA', label: '安全公式' },
+] satisfies Array<{ value: 'EXPRESSION' | 'FIELD' | 'FORMULA'; label: string }>
+
 const branchSchema = z.object({
   edgeId: z.string(),
   label: z.string(),
+  conditionType: z.enum(['EXPRESSION', 'FIELD', 'FORMULA']),
   conditionExpression: z.string(),
+  conditionFieldKey: z.string(),
+  conditionOperator: z.enum(['EQ', 'NE', 'GT', 'GE', 'LT', 'LE']),
+  conditionValue: z.string(),
+  formulaExpression: z.string(),
 })
+
+const conditionOperators = [
+  { value: 'EQ', label: '等于' },
+  { value: 'NE', label: '不等于' },
+  { value: 'GT', label: '大于' },
+  { value: 'GE', label: '大于等于' },
+  { value: 'LT', label: '小于' },
+  { value: 'LE', label: '小于等于' },
+] satisfies Array<{ value: WorkflowConditionOperator; label: string }>
 
 // 节点配置表单使用一个大 schema 统一兜住校验。
 const nodeConfigFormSchema = z
@@ -188,11 +214,13 @@ const nodeConfigFormSchema = z
         'DEPARTMENT',
         'DEPARTMENT_AND_CHILDREN',
         'FORM_FIELD',
+        'FORMULA',
       ]),
       userIds: z.string(),
       roleCodes: z.string(),
       departmentRef: z.string(),
       formFieldKey: z.string(),
+      formulaExpression: z.string(),
       nodeFormKey: z.string(),
       nodeFormVersion: z.string(),
       fieldBindingsJson: z.string(),
@@ -275,12 +303,12 @@ const nodeConfigFormSchema = z
       retryIntervalMinutes: z.string(),
       payloadTemplate: z.string(),
     }),
-    condition: z.object({
-      defaultEdgeId: z.string(),
-      expressionMode: z.string(),
-      expressionFieldKey: z.string(),
-      branches: z.array(branchSchema),
-    }),
+      condition: z.object({
+        defaultEdgeId: z.string(),
+        expressionMode: z.enum(['EXPRESSION', 'FIELD_COMPARE', 'FORMULA']),
+        expressionFieldKey: z.string(),
+        branches: z.array(branchSchema),
+      }),
     inclusive: z.object({
       gatewayDirection: z.enum(['SPLIT', 'JOIN']),
       branches: z.array(branchSchema),
@@ -312,15 +340,22 @@ const nodeConfigFormSchema = z
       ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: '请输入部门编码',
+          message: '请选择部门',
           path: ['approver', 'departmentRef'],
         })
       }
       if (values.approver.assignmentMode === 'FORM_FIELD' && !values.approver.formFieldKey.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: '请输入表单字段编码',
+          message: '请选择表单字段',
           path: ['approver', 'formFieldKey'],
+        })
+      }
+      if (values.approver.assignmentMode === 'FORMULA' && !values.approver.formulaExpression.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '请输入自定义公式',
+          path: ['approver', 'formulaExpression'],
         })
       }
       if (!values.approver.nodeFormKey.trim() && values.approver.fieldBindingsJson.trim() !== '[]') {
@@ -547,7 +582,7 @@ const nodeConfigFormSchema = z
       if (values.cc.targetMode === 'DEPARTMENT' && !values.cc.departmentRef.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: '请输入抄送部门编码',
+          message: '请选择抄送部门',
           path: ['cc', 'departmentRef'],
         })
       }
@@ -705,23 +740,38 @@ const nodeConfigFormSchema = z
         })
       }
 
-      if (
-        values.condition.expressionMode === 'FIELD_COMPARE' &&
-        !values.condition.expressionFieldKey.trim()
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: '字段表达式模式需要填写表单字段编码',
-          path: ['condition', 'expressionFieldKey'],
-        })
-      }
-
       values.condition.branches.forEach((branch, index) => {
-        if (branch.edgeId !== values.condition.defaultEdgeId && !branch.conditionExpression.trim()) {
+        if (branch.edgeId === values.condition.defaultEdgeId) {
+          return
+        }
+        if (branch.conditionType === 'EXPRESSION' && !branch.conditionExpression.trim()) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: '非默认分支需要配置条件表达式',
             path: ['condition', 'branches', index, 'conditionExpression'],
+          })
+        }
+        if (branch.conditionType === 'FIELD') {
+          if (!branch.conditionFieldKey.trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '字段分支需要选择表单字段',
+              path: ['condition', 'branches', index, 'conditionFieldKey'],
+            })
+          }
+          if (!branch.conditionValue.trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '字段分支需要填写比较值',
+              path: ['condition', 'branches', index, 'conditionValue'],
+            })
+          }
+        }
+        if (branch.conditionType === 'FORMULA' && !branch.formulaExpression.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '公式分支需要填写公式表达式',
+            path: ['condition', 'branches', index, 'formulaExpression'],
           })
         }
       })
@@ -737,11 +787,34 @@ const nodeConfigFormSchema = z
       }
 
       values.inclusive.branches.forEach((branch, index) => {
-        if (!branch.conditionExpression.trim()) {
+        if (branch.conditionType === 'EXPRESSION' && !branch.conditionExpression.trim()) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: '包容网关每条出边都需要配置条件表达式',
             path: ['inclusive', 'branches', index, 'conditionExpression'],
+          })
+        }
+        if (branch.conditionType === 'FIELD') {
+          if (!branch.conditionFieldKey.trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '包容网关字段分支需要选择表单字段',
+              path: ['inclusive', 'branches', index, 'conditionFieldKey'],
+            })
+          }
+          if (!branch.conditionValue.trim()) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '包容网关字段分支需要填写比较值',
+              path: ['inclusive', 'branches', index, 'conditionValue'],
+            })
+          }
+        }
+        if (branch.conditionType === 'FORMULA' && !branch.formulaExpression.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '包容网关公式分支需要填写公式表达式',
+            path: ['inclusive', 'branches', index, 'formulaExpression'],
           })
         }
       })
@@ -753,6 +826,328 @@ type NodeConfigFormValues = z.infer<typeof nodeConfigFormSchema>
 function parseNumber(value: string) {
   const nextValue = Number(value)
   return Number.isFinite(nextValue) ? nextValue : null
+}
+
+function parseFieldBindingsJson(json: string): WorkflowFieldBinding[] {
+  try {
+    const parsed = JSON.parse(json)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed
+      .map((binding) => binding as Partial<WorkflowFieldBinding>)
+      .filter((binding): binding is Partial<WorkflowFieldBinding> => Boolean(binding))
+      .map<WorkflowFieldBinding>((binding) => ({
+        source: binding.source === 'NODE_FORM' ? 'NODE_FORM' : 'PROCESS_FORM',
+        sourceFieldKey: binding.sourceFieldKey?.trim() ?? '',
+        targetFieldKey: binding.targetFieldKey?.trim() ?? '',
+      }))
+      .filter((binding) => binding.sourceFieldKey && binding.targetFieldKey)
+  } catch {
+    return []
+  }
+}
+
+function parseVariableMappingsJson(json: string): WorkflowSubprocessVariableMapping[] {
+  try {
+    const parsed = JSON.parse(json)
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return parsed
+      .map((item) => item as Partial<WorkflowSubprocessVariableMapping>)
+      .filter((item): item is Partial<WorkflowSubprocessVariableMapping> => Boolean(item))
+      .map<WorkflowSubprocessVariableMapping>((item) => ({
+        source: item.source?.trim() ?? '',
+        target: item.target?.trim() ?? '',
+      }))
+      .filter((item) => item.source && item.target)
+  } catch {
+    return []
+  }
+}
+
+function serializeFieldBindings(bindings: WorkflowFieldBinding[]) {
+  return JSON.stringify(bindings, null, 2)
+}
+
+function serializeVariableMappings(bindings: WorkflowSubprocessVariableMapping[]) {
+  return JSON.stringify(bindings, null, 2)
+}
+
+function VariableMappingEditor({
+  label,
+  description,
+  value,
+  onChange,
+  sourceOptions,
+  targetOptions,
+  sourcePlaceholder,
+  targetPlaceholder,
+}: {
+  label: string
+  description?: string
+  value: string
+  onChange: (value: string) => void
+  sourceOptions?: WorkflowProcessFormField[]
+  targetOptions?: WorkflowProcessFormField[]
+  sourcePlaceholder?: string
+  targetPlaceholder?: string
+}) {
+  const mappings = useMemo(
+    () => parseVariableMappingsJson(value),
+    [value]
+  )
+  const sourceFieldOptions = useMemo(
+    () =>
+      sourceOptions?.map((field) => ({
+        fieldKey: field.fieldKey,
+        label: field.label,
+        valueType: field.valueType,
+      })) ?? [],
+    [sourceOptions]
+  )
+  const targetFieldOptions = useMemo(
+    () =>
+      targetOptions?.map((field) => ({
+        fieldKey: field.fieldKey,
+        label: field.label,
+        valueType: field.valueType,
+      })) ?? [],
+    [targetOptions]
+  )
+
+  function updateMappings(
+    updater: (current: WorkflowSubprocessVariableMapping[]) => WorkflowSubprocessVariableMapping[]
+  ) {
+    onChange(serializeVariableMappings(updater(mappings)))
+  }
+
+  return (
+    <div className='grid gap-3 rounded-xl border border-dashed p-3'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='grid gap-1'>
+          <Label>{label}</Label>
+          {description ? (
+            <p className='text-xs text-muted-foreground'>{description}</p>
+          ) : null}
+        </div>
+        <Button
+          type='button'
+          variant='secondary'
+          size='sm'
+          onClick={() =>
+            updateMappings((current) => [
+              ...current,
+              { source: '', target: '' },
+            ])
+          }
+        >
+          <Plus className='mr-1 size-4' />
+          新增映射
+        </Button>
+      </div>
+
+      {mappings.length === 0 ? (
+        <div className='rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground'>
+          暂未配置变量映射，子流程会默认继承当前流程变量。
+        </div>
+      ) : null}
+
+      <div className='grid gap-3'>
+        {mappings.map((mapping, index) => (
+          <div
+            key={`${label}-${index}`}
+            className='grid gap-3 rounded-xl border bg-background p-3 md:grid-cols-[1fr_1fr_auto]'
+          >
+            <WorkflowFieldSelector
+              label='来源字段'
+              description='支持从流程表单字段直接映射。'
+              value={mapping.source}
+              onChange={(next) =>
+                updateMappings((current) =>
+                  current.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, source: next } : item
+                  )
+                )
+              }
+              options={sourceFieldOptions}
+              placeholder={sourcePlaceholder ?? '请输入来源变量或字段编码'}
+            />
+            <WorkflowFieldSelector
+              label='目标字段'
+              description='子流程变量名或父流程回填字段编码。'
+              value={mapping.target}
+              onChange={(next) =>
+                updateMappings((current) =>
+                  current.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, target: next } : item
+                  )
+                )
+              }
+              options={targetFieldOptions}
+              placeholder={targetPlaceholder ?? '请输入目标变量或字段编码'}
+            />
+            <div className='flex items-end justify-end'>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                onClick={() =>
+                  updateMappings((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index)
+                  )
+                }
+                aria-label={`删除映射 ${index + 1}`}
+              >
+                <Trash2 className='size-4' />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FieldBindingEditor({
+  value,
+  onChange,
+  processFieldOptions,
+}: {
+  value: string
+  onChange: (value: string) => void
+  processFieldOptions: WorkflowProcessFormField[]
+}) {
+  const bindings = useMemo(() => parseFieldBindingsJson(value), [value])
+  const fieldOptions = useMemo(
+    () =>
+      processFieldOptions.map((field) => ({
+        fieldKey: field.fieldKey,
+        label: field.label,
+        valueType: field.valueType,
+      })),
+    [processFieldOptions]
+  )
+
+  function updateBindings(
+    updater: (current: WorkflowFieldBinding[]) => WorkflowFieldBinding[]
+  ) {
+    onChange(serializeFieldBindings(updater(bindings)))
+  }
+
+  function updateBindingSource(index: number, source: WorkflowFieldBindingSource) {
+    updateBindings((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, source } : item
+      )
+    )
+  }
+
+  return (
+    <div className='grid gap-3 rounded-xl border border-dashed p-3'>
+      <div className='flex items-start justify-between gap-3'>
+        <div className='grid gap-1'>
+          <Label>字段绑定</Label>
+          <p className='text-xs text-muted-foreground'>
+            用可视化方式配置流程表单与节点表单之间的字段映射。
+          </p>
+        </div>
+        <Button
+          type='button'
+          variant='secondary'
+          size='sm'
+          onClick={() =>
+            updateBindings((current) => [
+              ...current,
+              {
+                source: 'PROCESS_FORM',
+                sourceFieldKey: '',
+                targetFieldKey: '',
+              },
+            ])
+          }
+        >
+          <Plus className='mr-1 size-4' />
+          新增绑定
+        </Button>
+      </div>
+
+      {bindings.length === 0 ? (
+        <div className='rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground'>
+          暂未配置字段绑定，节点表单会按默认字段自行渲染。
+        </div>
+      ) : null}
+
+      <div className='grid gap-3'>
+        {bindings.map((binding, index) => (
+          <div
+            key={`binding-${index}`}
+            className='grid gap-3 rounded-xl border bg-background p-3 md:grid-cols-[180px_1fr_1fr_auto]'
+          >
+            <div className='grid gap-2'>
+              <Label>来源</Label>
+              <Select
+                value={binding.source}
+                onValueChange={(next) =>
+                  updateBindingSource(index, next as WorkflowFieldBindingSource)
+                }
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue placeholder='请选择来源' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='PROCESS_FORM'>流程表单</SelectItem>
+                  <SelectItem value='NODE_FORM'>节点表单</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <WorkflowFieldSelector
+              label='来源字段'
+              value={binding.sourceFieldKey}
+              onChange={(next) =>
+                updateBindings((current) =>
+                  current.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, sourceFieldKey: next } : item
+                  )
+                )
+              }
+              options={fieldOptions}
+              placeholder='请选择来源字段'
+            />
+            <WorkflowFieldSelector
+              label='目标字段'
+              value={binding.targetFieldKey}
+              onChange={(next) =>
+                updateBindings((current) =>
+                  current.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, targetFieldKey: next } : item
+                  )
+                )
+              }
+              options={fieldOptions}
+              placeholder='请输入目标字段编码'
+            />
+            <div className='flex items-end justify-end'>
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                onClick={() =>
+                  updateBindings((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index)
+                  )
+                }
+                aria-label={`删除字段绑定 ${index + 1}`}
+              >
+                <Trash2 className='size-4' />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigFormValues {
@@ -769,8 +1164,8 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
   const branchDefaults = outgoingEdges.map((edge) => ({
     ...buildConditionFormDefaults(
       edge.id,
-      edge.data?.condition?.expression ?? '',
-      typeof edge.label === 'string' ? edge.label : edge.id
+      typeof edge.label === 'string' ? edge.label : edge.id,
+      edge.data?.condition
     ),
   }))
 
@@ -794,6 +1189,7 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
       ),
       departmentRef: String(assignment.departmentRef ?? ''),
       formFieldKey: String(assignment.formFieldKey ?? ''),
+      formulaExpression: String(assignment.formulaExpression ?? ''),
       nodeFormKey: String(config.nodeFormKey ?? ''),
       nodeFormVersion: String(config.nodeFormVersion ?? ''),
       fieldBindingsJson: JSON.stringify(
@@ -936,7 +1332,7 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
           : outgoingEdges[0]?.id ?? '',
       expressionMode:
         typeof config.expressionMode === 'string' && config.expressionMode.trim().length > 0
-          ? String(config.expressionMode)
+          ? (config.expressionMode as 'EXPRESSION' | 'FIELD_COMPARE' | 'FORMULA')
           : 'EXPRESSION',
       expressionFieldKey: String(config.expressionFieldKey ?? ''),
       branches: branchDefaults,
@@ -988,30 +1384,6 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
 }
 
 function buildNodePatch(values: NodeConfigFormValues) {
-  function parseBindings(json: string): WorkflowFieldBinding[] {
-    try {
-      const parsed = JSON.parse(json)
-      if (!Array.isArray(parsed)) {
-        return []
-      }
-      return parsed
-        .map((binding) => binding as Partial<WorkflowFieldBinding>)
-        .filter(
-          (binding): binding is Partial<WorkflowFieldBinding> =>
-            Boolean(binding)
-        )
-        .map<WorkflowFieldBinding>((binding) => ({
-          source:
-            binding.source === 'NODE_FORM' ? 'NODE_FORM' : 'PROCESS_FORM',
-          sourceFieldKey: binding.sourceFieldKey?.trim() ?? '',
-          targetFieldKey: binding.targetFieldKey?.trim() ?? '',
-        }))
-        .filter((binding) => binding.sourceFieldKey && binding.targetFieldKey)
-    } catch {
-      return []
-    }
-  }
-
   function parseVoteWeights(json: string): WorkflowVoteWeight[] {
     try {
       const parsed = JSON.parse(json)
@@ -1026,25 +1398,6 @@ function buildNodePatch(values: NodeConfigFormValues) {
           weight: Number(item.weight),
         }))
         .filter((item) => item.userId && Number.isFinite(item.weight) && item.weight > 0)
-    } catch {
-      return []
-    }
-  }
-
-  function parseVariableMappings(json: string): WorkflowSubprocessVariableMapping[] {
-    try {
-      const parsed = JSON.parse(json)
-      if (!Array.isArray(parsed)) {
-        return []
-      }
-      return parsed
-        .map((item) => item as Partial<WorkflowSubprocessVariableMapping>)
-        .filter((item): item is Partial<WorkflowSubprocessVariableMapping> => Boolean(item))
-        .map<WorkflowSubprocessVariableMapping>((item) => ({
-          source: item.source?.trim() ?? '',
-          target: item.target?.trim() ?? '',
-        }))
-        .filter((item) => item.source && item.target)
     } catch {
       return []
     }
@@ -1066,10 +1419,11 @@ function buildNodePatch(values: NodeConfigFormValues) {
             roleCodes: parseListValue(values.approver.roleCodes),
             departmentRef: values.approver.departmentRef.trim(),
             formFieldKey: values.approver.formFieldKey.trim(),
+            formulaExpression: values.approver.formulaExpression.trim(),
           },
           nodeFormKey: values.approver.nodeFormKey.trim(),
           nodeFormVersion: values.approver.nodeFormVersion.trim(),
-          fieldBindings: parseBindings(values.approver.fieldBindingsJson),
+          fieldBindings: parseFieldBindingsJson(values.approver.fieldBindingsJson),
           approvalMode: values.approver.approvalPolicyType,
           voteRule: {
             thresholdPercent:
@@ -1133,8 +1487,8 @@ function buildNodePatch(values: NodeConfigFormValues) {
           businessBindingMode: values.subprocess.businessBindingMode,
           terminatePolicy: values.subprocess.terminatePolicy,
           childFinishPolicy: values.subprocess.childFinishPolicy,
-          inputMappings: parseVariableMappings(values.subprocess.inputMappingsJson),
-          outputMappings: parseVariableMappings(values.subprocess.outputMappingsJson),
+          inputMappings: parseVariableMappingsJson(values.subprocess.inputMappingsJson),
+          outputMappings: parseVariableMappingsJson(values.subprocess.outputMappingsJson),
         },
       }
     case 'dynamic-builder':
@@ -1225,6 +1579,7 @@ export function NodeConfigPanel({
   edges,
   onApply,
   onReset,
+  processFormFields = [],
 }: {
   node: WorkflowNode | null
   edges: WorkflowEdge[]
@@ -1242,10 +1597,20 @@ export function NodeConfigPanel({
     }>
   ) => void
   onReset?: () => void
+  processFormFields?: WorkflowProcessFormField[]
 }) {
   const outgoingEdges = useMemo(
     () => edges.filter((edge) => edge.source === node?.id),
     [edges, node?.id]
+  )
+  const processFieldOptions = useMemo(
+    () =>
+      processFormFields.map((field) => ({
+        fieldKey: field.fieldKey,
+        label: field.label,
+        valueType: field.valueType,
+      })),
+    [processFormFields]
   )
 
   const form = useForm<NodeConfigFormValues>({
@@ -1263,6 +1628,7 @@ export function NodeConfigPanel({
             roleCodes: '',
             departmentRef: '',
             formFieldKey: '',
+            formulaExpression: '',
             nodeFormKey: '',
             nodeFormVersion: '',
             fieldBindingsJson: '[]',
@@ -1375,18 +1741,29 @@ export function NodeConfigPanel({
     control: form.control,
     name: 'approver.nodeFormVersion',
   })
+  const selectedApproverUserIds = useWatch({
+    control: form.control,
+    name: 'approver.userIds',
+  })
+  const selectedApproverRoleCodes = useWatch({
+    control: form.control,
+    name: 'approver.roleCodes',
+  })
+  const selectedApproverDepartmentRef = useWatch({
+    control: form.control,
+    name: 'approver.departmentRef',
+  })
   const selectedDynamicBuilderSourceMode = useWatch({
     control: form.control,
     name: 'dynamicBuilder.sourceMode',
   })
   const selectedCcMode = useWatch({ control: form.control, name: 'cc.targetMode' })
+  const selectedCcUserIds = useWatch({ control: form.control, name: 'cc.userIds' })
+  const selectedCcRoleCodes = useWatch({ control: form.control, name: 'cc.roleCodes' })
+  const selectedCcDepartmentRef = useWatch({ control: form.control, name: 'cc.departmentRef' })
   const selectedBranches = useWatch({
     control: form.control,
     name: 'condition.branches',
-  })
-  const selectedConditionMode = useWatch({
-    control: form.control,
-    name: 'condition.expressionMode',
   })
   const selectedInclusiveDirection = useWatch({
     control: form.control,
@@ -1435,19 +1812,46 @@ export function NodeConfigPanel({
             condition:
               branch.edgeId === values.condition.defaultEdgeId
                 ? undefined
-                : {
-                    type: 'EXPRESSION' as const,
-                    expression: branch.conditionExpression.trim(),
-                  },
+                : branch.conditionType === 'FIELD'
+                  ? {
+                      type: 'FIELD' as const,
+                      fieldKey: branch.conditionFieldKey.trim(),
+                      operator: branch.conditionOperator,
+                      value: branch.conditionValue.trim(),
+                    }
+                  : branch.conditionType === 'FORMULA'
+                    ? {
+                        type: 'FORMULA' as const,
+                        expression: branch.formulaExpression.trim(),
+                        formulaExpression: branch.formulaExpression.trim(),
+                      }
+                    : {
+                        type: 'EXPRESSION' as const,
+                        expression: branch.conditionExpression.trim(),
+                      },
           }))
         : values.kind === 'inclusive' && values.inclusive.gatewayDirection === 'SPLIT'
           ? values.inclusive.branches.map((branch) => ({
               edgeId: branch.edgeId,
               label: branch.label.trim() || branch.edgeId,
-              condition: {
-                type: 'EXPRESSION' as const,
-                expression: branch.conditionExpression.trim(),
-              },
+              condition:
+                branch.conditionType === 'FIELD'
+                  ? {
+                      type: 'FIELD' as const,
+                      fieldKey: branch.conditionFieldKey.trim(),
+                      operator: branch.conditionOperator,
+                      value: branch.conditionValue.trim(),
+                    }
+                  : branch.conditionType === 'FORMULA'
+                    ? {
+                        type: 'FORMULA' as const,
+                        expression: branch.formulaExpression.trim(),
+                        formulaExpression: branch.formulaExpression.trim(),
+                      }
+                    : {
+                        type: 'EXPRESSION' as const,
+                        expression: branch.conditionExpression.trim(),
+                      },
             }))
           : undefined
 
@@ -1695,9 +2099,17 @@ export function NodeConfigPanel({
               name='subprocess.inputMappingsJson'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>输入映射 JSON</FormLabel>
                   <FormControl>
-                    <Textarea {...field} rows={4} placeholder='[{\"source\":\"billNo\",\"target\":\"sourceBillNo\"}]' />
+                    <VariableMappingEditor
+                      label='输入映射'
+                      description='把父流程字段按需映射到子流程变量，避免手写 JSON。'
+                      value={field.value}
+                      onChange={field.onChange}
+                      sourceOptions={processFormFields}
+                      targetOptions={processFormFields}
+                      sourcePlaceholder='请选择父流程字段或输入变量编码'
+                      targetPlaceholder='请输入子流程变量编码'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -1709,9 +2121,17 @@ export function NodeConfigPanel({
               name='subprocess.outputMappingsJson'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>输出映射 JSON</FormLabel>
                   <FormControl>
-                    <Textarea {...field} rows={4} placeholder='[{\"source\":\"approvedResult\",\"target\":\"purchaseResult\"}]' />
+                    <VariableMappingEditor
+                      label='输出映射'
+                      description='子流程完成后，把结果字段回填到父流程上下文。'
+                      value={field.value}
+                      onChange={field.onChange}
+                      sourceOptions={processFormFields}
+                      targetOptions={processFormFields}
+                      sourcePlaceholder='请输入子流程结果字段编码'
+                      targetPlaceholder='请选择父流程字段或输入变量编码'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -1785,9 +2205,34 @@ export function NodeConfigPanel({
                 name='dynamicBuilder.ruleExpression'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>规则表达式</FormLabel>
                     <FormControl>
-                      <Textarea {...field} rows={4} placeholder='${amount > 1000}' />
+                      <div className='grid gap-3 rounded-xl border border-dashed p-3'>
+                        <WorkflowFormulaEditor
+                          label='规则表达式'
+                          description='根据表单字段和公式函数，决定运行时生成哪种附属结构。'
+                          value={field.value}
+                          onChange={field.onChange}
+                          fieldOptions={processFieldOptions}
+                          placeholder='例如：ifElse(leaveDays >= 5, "DIRECTOR_CHAIN", "HR_RECORD")'
+                        />
+                        <div className='flex flex-wrap gap-2'>
+                          {[
+                            'ifElse(leaveDays >= 3, "FINANCE_AND_HR", "HR_ONLY")',
+                            'ifElse(leaveType == "ANNUAL", "DIRECTOR_CHAIN", "MANAGER_ONLY")',
+                            'ifElse(amount >= 5000, "PURCHASE_REVIEW", "DIRECT_PASS")',
+                          ].map((snippet, index) => (
+                            <Button
+                              key={snippet}
+                              type='button'
+                              variant='secondary'
+                              size='sm'
+                              onClick={() => field.onChange(snippet)}
+                            >
+                              规则模板 {index + 1}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1801,9 +2246,34 @@ export function NodeConfigPanel({
                 name='dynamicBuilder.manualTemplateCode'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>模板编码</FormLabel>
                     <FormControl>
-                      <Input {...field} placeholder='append_leave_audit' />
+                      <div className='grid gap-3 rounded-xl border border-dashed p-3'>
+                        <div className='grid gap-2'>
+                          <Label>模板编码</Label>
+                          <Input {...field} placeholder='append_leave_audit' />
+                          <p className='text-xs text-muted-foreground'>
+                            人工模板适合固定附加链路，例如请假超过三天时追加 HR 备案。
+                          </p>
+                        </div>
+                        <div className='flex flex-wrap gap-2'>
+                          {[
+                            'append_leave_chain',
+                            'append_finance_review',
+                            'append_hr_record',
+                            'append_subprocess_leave_cancel',
+                          ].map((templateCode) => (
+                            <Button
+                              key={templateCode}
+                              type='button'
+                              variant='secondary'
+                              size='sm'
+                              onClick={() => field.onChange(templateCode)}
+                            >
+                              {templateCode}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1912,51 +2382,51 @@ export function NodeConfigPanel({
             />
 
             {selectedApproverMode === 'USER' ? (
-              <FormField
-                control={form.control}
-                name='approver.userIds'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>人员编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='usr_001, usr_002' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <WorkflowPrincipalPickerField
+                kind='USER'
+                label='人员编码'
+                description='支持多选，已选人员会写入审批节点处理人。'
+                value={parseListValue(selectedApproverUserIds)}
+                onChange={(next) =>
+                  form.setValue('approver.userIds', next.join(', '), {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
               />
             ) : null}
 
             {selectedApproverMode === 'ROLE' ? (
-              <FormField
-                control={form.control}
-                name='approver.roleCodes'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>角色编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='role_manager, role_hr' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <WorkflowPrincipalPickerField
+                kind='ROLE'
+                label='角色编码'
+                description='支持多选，写入角色编码列表。'
+                value={parseListValue(selectedApproverRoleCodes)}
+                onChange={(next) =>
+                  form.setValue('approver.roleCodes', next.join(', '), {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
               />
             ) : null}
 
             {selectedApproverMode === 'DEPARTMENT' ||
             selectedApproverMode === 'DEPARTMENT_AND_CHILDREN' ? (
-              <FormField
-                control={form.control}
-                name='approver.departmentRef'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>部门编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='dept_finance' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <WorkflowPrincipalPickerField
+                kind='DEPARTMENT'
+                label='部门编码'
+                description='支持选择指定部门，保留部门 ID 作为流程配置值。'
+                value={parseListValue(selectedApproverDepartmentRef)}
+                onChange={(next) =>
+                  form.setValue('approver.departmentRef', next[0] ?? '', {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
               />
             ) : null}
 
@@ -1966,10 +2436,33 @@ export function NodeConfigPanel({
                 name='approver.formFieldKey'
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>表单字段编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='applicant.managerCode' />
-                    </FormControl>
+                    <WorkflowFieldSelector
+                      label='表单字段编码'
+                      description='从流程表单字段中选择一个来源字段。'
+                      value={field.value}
+                      onChange={field.onChange}
+                      options={processFieldOptions}
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+
+            {selectedApproverMode === 'FORMULA' ? (
+              <FormField
+                control={form.control}
+                name='approver.formulaExpression'
+                render={({ field }) => (
+                  <FormItem>
+                    <WorkflowFormulaEditor
+                      label='处理人公式'
+                      description='使用受控表达式计算处理人编码，建议返回单个 userId。'
+                      value={field.value}
+                      onChange={field.onChange}
+                      fieldOptions={processFieldOptions}
+                      placeholder='例如：leaveDays >= 5 ? "usr_004" : managerUserId'
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
@@ -2015,20 +2508,13 @@ export function NodeConfigPanel({
               name='approver.fieldBindingsJson'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>字段绑定 JSON</FormLabel>
                   <FormControl>
-                    <Textarea
-                      {...field}
-                      rows={4}
-                      className='font-mono text-xs'
-                      placeholder='[
-  {"source":"PROCESS_FORM","sourceFieldKey":"days","targetFieldKey":"approvedDays"}
-]'
+                    <FieldBindingEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                      processFieldOptions={processFormFields}
                     />
                   </FormControl>
-                  <p className='text-xs text-muted-foreground'>
-                    目前用 JSON 数组承接，后续再拆成更细的可视化绑定编辑器。
-                  </p>
                   <FormMessage />
                 </FormItem>
               )}
@@ -2382,50 +2868,50 @@ export function NodeConfigPanel({
             />
 
             {selectedCcMode === 'USER' ? (
-              <FormField
-                control={form.control}
-                name='cc.userIds'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>人员编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='usr_003, usr_004' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <WorkflowPrincipalPickerField
+                kind='USER'
+                label='人员编码'
+                description='支持多选，作为抄送接收人。'
+                value={parseListValue(selectedCcUserIds)}
+                onChange={(next) =>
+                  form.setValue('cc.userIds', next.join(', '), {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
               />
             ) : null}
 
             {selectedCcMode === 'ROLE' ? (
-              <FormField
-                control={form.control}
-                name='cc.roleCodes'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>角色编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='role_manager' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <WorkflowPrincipalPickerField
+                kind='ROLE'
+                label='角色编码'
+                description='支持多选，选择角色后会自动展开为接收人。'
+                value={parseListValue(selectedCcRoleCodes)}
+                onChange={(next) =>
+                  form.setValue('cc.roleCodes', next.join(', '), {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
               />
             ) : null}
 
             {selectedCcMode === 'DEPARTMENT' ? (
-              <FormField
-                control={form.control}
-                name='cc.departmentRef'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>部门编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='dept_finance' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+              <WorkflowPrincipalPickerField
+                kind='DEPARTMENT'
+                label='部门编码'
+                description='选择要抄送的部门。'
+                value={parseListValue(selectedCcDepartmentRef)}
+                onChange={(next) =>
+                  form.setValue('cc.departmentRef', next[0] ?? '', {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                    shouldValidate: true,
+                  })
+                }
               />
             ) : null}
 
@@ -2456,43 +2942,9 @@ export function NodeConfigPanel({
               排他网关
             </div>
 
-            <FormField
-              control={form.control}
-              name='condition.expressionMode'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>表达式模式</FormLabel>
-                  <FormControl>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <SelectTrigger className='w-full'>
-                        <SelectValue placeholder='请选择表达式模式' />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='EXPRESSION'>手写表达式</SelectItem>
-                        <SelectItem value='FIELD_COMPARE'>字段表达式</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {selectedConditionMode === 'FIELD_COMPARE' ? (
-              <FormField
-                control={form.control}
-                name='condition.expressionFieldKey'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>表单字段编码</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder='applicant.amount' />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
+            <div className='rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground'>
+              排他网关支持按分支分别配置手写表达式、字段比较和安全公式，默认分支不需要填写条件。
+            </div>
 
             <FormField
               control={form.control}
@@ -2563,19 +3015,122 @@ export function NodeConfigPanel({
                     )}
                   />
 
+                  {branch.edgeId !== form.getValues('condition.defaultEdgeId') ? (
+                    <FormField
+                      control={form.control}
+                      name={`condition.branches.${index}.conditionType`}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>条件类型</FormLabel>
+                          <FormControl>
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <SelectTrigger className='w-full'>
+                                <SelectValue placeholder='请选择条件类型' />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {conditionTypeOptions.map((item) => (
+                                  <SelectItem key={item.value} value={item.value}>
+                                    {item.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  ) : null}
+
                   <FormField
                     control={form.control}
                     name={`condition.branches.${index}.conditionExpression`}
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>条件表达式</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            {...field}
-                            rows={3}
-                            placeholder='例如：amount > 10000 && department == "FINANCE"'
+                        {branch.edgeId === form.getValues('condition.defaultEdgeId') ? (
+                          <div className='rounded-xl border border-dashed p-3 text-xs text-muted-foreground'>
+                            默认分支不需要配置条件，未命中其他分支时会自动进入这条路径。
+                          </div>
+                        ) : branch.conditionType === 'FIELD' ? (
+                          <div className='grid gap-3'>
+                            <FormLabel>比较值</FormLabel>
+                            <Input
+                              value={branch.conditionValue}
+                              onChange={(event) =>
+                                form.setValue(
+                                  `condition.branches.${index}.conditionValue`,
+                                  event.target.value,
+                                  { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+                                )
+                              }
+                              placeholder='例如：10000'
+                            />
+                            <div className='grid gap-2 md:grid-cols-[1fr_160px]'>
+                              <WorkflowFieldSelector
+                                label='字段覆盖'
+                                description='如需覆盖全局字段，可在这里重新选择。'
+                                value={branch.conditionFieldKey}
+                                onChange={(next) =>
+                                  form.setValue(
+                                    `condition.branches.${index}.conditionFieldKey`,
+                                    next,
+                                    { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+                                  )
+                                }
+                                options={processFieldOptions}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`condition.branches.${index}.conditionOperator`}
+                                render={({ field: operatorField }) => (
+                                  <FormItem>
+                                    <FormLabel>比较符</FormLabel>
+                                    <FormControl>
+                                      <Select
+                                        value={operatorField.value}
+                                        onValueChange={operatorField.onChange}
+                                      >
+                                        <SelectTrigger className='w-full'>
+                                          <SelectValue placeholder='请选择比较符' />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {conditionOperators.map((item) => (
+                                            <SelectItem key={item.value} value={item.value}>
+                                              {item.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </div>
+                        ) : branch.conditionType === 'FORMULA' ? (
+                          <WorkflowFormulaEditor
+                            label='安全公式'
+                            description='支持字段引用、常量、比较/逻辑运算以及内置函数提示。'
+                            value={branch.formulaExpression}
+                            onChange={(next) =>
+                              form.setValue(
+                                `condition.branches.${index}.formulaExpression`,
+                                next,
+                                { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+                              )
+                            }
+                            fieldOptions={processFieldOptions}
                           />
-                        </FormControl>
+                        ) : (
+                          <FormControl>
+                            <Textarea
+                              {...field}
+                              rows={3}
+                              placeholder='例如：amount > 10000 && department == "FINANCE"'
+                            />
+                          </FormControl>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -2906,17 +3461,117 @@ export function NodeConfigPanel({
 
                           <FormField
                             control={form.control}
+                            name={`inclusive.branches.${index}.conditionType`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>条件类型</FormLabel>
+                                <FormControl>
+                                  <Select value={field.value} onValueChange={field.onChange}>
+                                    <SelectTrigger className='w-full'>
+                                      <SelectValue placeholder='请选择条件类型' />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {conditionTypeOptions.map((item) => (
+                                        <SelectItem key={item.value} value={item.value}>
+                                          {item.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
                             name={`inclusive.branches.${index}.conditionExpression`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>条件表达式</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    {...field}
-                                    rows={3}
-                                    placeholder='例如：amount > 10000 || urgent == true'
+                                {branch.conditionType === 'FIELD' ? (
+                                  <div className='grid gap-3'>
+                                    <FormLabel>字段比较</FormLabel>
+                                    <Input
+                                      value={branch.conditionValue}
+                                      onChange={(event) =>
+                                        form.setValue(
+                                          `inclusive.branches.${index}.conditionValue`,
+                                          event.target.value,
+                                          { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+                                        )
+                                      }
+                                      placeholder='例如：10000'
+                                    />
+                                    <div className='grid gap-2 md:grid-cols-[1fr_160px]'>
+                                      <WorkflowFieldSelector
+                                        label='表单字段'
+                                        description='从流程表单里选择一个条件字段。'
+                                        value={branch.conditionFieldKey}
+                                        onChange={(next) =>
+                                          form.setValue(
+                                            `inclusive.branches.${index}.conditionFieldKey`,
+                                            next,
+                                            { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+                                          )
+                                        }
+                                        options={processFieldOptions}
+                                      />
+                                      <FormField
+                                        control={form.control}
+                                        name={`inclusive.branches.${index}.conditionOperator`}
+                                        render={({ field: operatorField }) => (
+                                          <FormItem>
+                                            <FormLabel>比较符</FormLabel>
+                                            <FormControl>
+                                              <Select
+                                                value={operatorField.value}
+                                                onValueChange={operatorField.onChange}
+                                              >
+                                                <SelectTrigger className='w-full'>
+                                                  <SelectValue placeholder='请选择比较符' />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {conditionOperators.map((item) => (
+                                                    <SelectItem key={item.value} value={item.value}>
+                                                      {item.label}
+                                                    </SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                            </FormControl>
+                                            <FormMessage />
+                                          </FormItem>
+                                        )}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : branch.conditionType === 'FORMULA' ? (
+                                  <WorkflowFormulaEditor
+                                    label='安全公式'
+                                    description='支持字段引用、常量、比较/逻辑运算以及内置函数提示。'
+                                    value={branch.formulaExpression}
+                                    onChange={(next) =>
+                                      form.setValue(
+                                        `inclusive.branches.${index}.formulaExpression`,
+                                        next,
+                                        { shouldDirty: true, shouldTouch: true, shouldValidate: true }
+                                      )
+                                    }
+                                    fieldOptions={processFieldOptions}
                                   />
-                                </FormControl>
+                                ) : (
+                                  <>
+                                    <FormLabel>条件表达式</FormLabel>
+                                    <FormControl>
+                                      <Textarea
+                                        {...field}
+                                        rows={3}
+                                        placeholder='例如：amount > 10000 || urgent == true'
+                                      />
+                                    </FormControl>
+                                  </>
+                                )}
                                 <FormMessage />
                               </FormItem>
                             )}

@@ -18,6 +18,9 @@ public record InclusiveGatewayHitResponse(
         List<String> activatedTargetNodeNames,
         List<String> skippedTargetNodeIds,
         List<String> skippedTargetNodeNames,
+        List<String> branchLabels,
+        List<String> branchExpressions,
+        String decisionSummary,
         OffsetDateTime firstActivatedAt,
         OffsetDateTime finishedAt
 ) {

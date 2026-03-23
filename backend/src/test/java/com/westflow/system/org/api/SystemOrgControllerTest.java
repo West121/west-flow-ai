@@ -244,6 +244,15 @@ class SystemOrgControllerTest {
         JsonNode optionsData = objectMapper.readTree(optionsResponse).path("data");
         assertThat(optionsData.path("companies").isArray()).isTrue();
         assertThat(optionsData.path("parentDepartments").isArray()).isTrue();
+        JsonNode nestedDepartment = null;
+        for (JsonNode item : optionsData.path("parentDepartments")) {
+            if (departmentId.equals(item.path("id").asText())) {
+                nestedDepartment = item;
+                break;
+            }
+        }
+        assertThat(nestedDepartment).isNotNull();
+        assertThat(nestedDepartment.path("parentDepartmentId").asText()).isEqualTo("dept_001");
     }
 
     @Test

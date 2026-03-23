@@ -69,6 +69,7 @@ class SystemMonitorControllerTest {
     void shouldQueryOrchestratorScansAndTriggerExecutionsAndChannelHealth() throws Exception {
         String token = login();
 
+        setupOrchestratorScanRecords();
         orchestratorService.manualScan();
 
         String orchestratorResponse = mockMvc.perform(post("/api/v1/system/monitor/orchestrator-scans/page")
@@ -331,6 +332,20 @@ class SystemMonitorControllerTest {
                 "发送失败",
                 Map.of(),
                 Instant.parse("2026-03-22T09:13:00Z")
+        ));
+    }
+
+    private void setupOrchestratorScanRecords() {
+        orchestratorScanRecordMapper.insert(new com.westflow.system.monitor.model.OrchestratorScanRecord(
+                "orc_exec_seed_001",
+                "orc_run_seed_001",
+                "monitor_target_001",
+                "监控测试目标",
+                "REMINDER",
+                "SUCCEEDED",
+                "扫描完成",
+                Instant.parse("2026-03-22T09:05:00Z"),
+                Instant.parse("2026-03-22T09:05:00Z")
         ));
     }
 

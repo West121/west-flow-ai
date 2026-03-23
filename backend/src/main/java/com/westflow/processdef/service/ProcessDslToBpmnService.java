@@ -100,6 +100,10 @@ public class ProcessDslToBpmnService {
         task.setName(node.name());
         Map<String, Object> assignment = mapValue(config.get("assignment"));
         List<String> userIds = stringListValue(assignment.get("userIds"));
+        List<String> roleCodes = stringListValue(assignment.get("roleCodes"));
+        String departmentRef = stringValue(assignment.get("departmentRef"));
+        String formFieldKey = stringValue(assignment.get("formFieldKey"));
+        String formulaExpression = stringValue(assignment.get("formulaExpression"));
         String approvalMode = resolveApprovalMode(config);
         if (isCountersignApprovalMode(config, approvalMode) && userIds.size() > 1) {
             task.setAssignee("${" + countersignElementVariable(node.id()) + "}");
@@ -108,6 +112,14 @@ public class ProcessDslToBpmnService {
             task.setAssignee(userIds.get(0));
         } else if (!userIds.isEmpty()) {
             task.setCandidateUsers(userIds);
+        } else if (!roleCodes.isEmpty()) {
+            task.setCandidateGroups(roleCodes);
+        } else if (departmentRef != null) {
+            task.setCandidateGroups(List.of(departmentRef));
+        } else if (formFieldKey != null) {
+            task.setAssignee("${" + formFieldKey + "}");
+        } else if (formulaExpression != null) {
+            task.setAssignee(wrapExpression(formulaExpression));
         }
         return task;
     }
@@ -233,7 +245,7 @@ public class ProcessDslToBpmnService {
         flow.setTargetRef(edge.target());
         flow.setName(edge.label());
         Map<String, Object> condition = mapValue(edge.condition());
-        String expression = stringValue(condition.get("expression"));
+        String expression = resolveConditionExpression(condition);
         if (expression != null) {
             flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression));
         }
@@ -242,10 +254,62 @@ public class ProcessDslToBpmnService {
         if (conditionType != null) {
             addExtensionAttribute(flow, "conditionType", conditionType);
         }
+        addExtensionAttribute(flow, "conditionFieldKey", stringValue(condition.get("fieldKey")));
+        addExtensionAttribute(flow, "conditionOperator", stringValue(condition.get("operator")));
+        addExtensionAttribute(flow, "conditionValue", serializeConditionValue(condition.get("value")));
+        addExtensionAttribute(flow, "conditionFormulaExpression", stringValue(condition.get("formulaExpression")));
         return flow;
     }
 
+    private String resolveConditionExpression(Map<String, Object> condition) {
+        String expression = stringValue(condition.get("expression"));
+        if (expression != null) {
+            return expression;
+        }
+        String type = stringValue(condition.get("type"));
+        if (type == null) {
+            return null;
+        }
+        if ("FIELD".equals(type)) {
+            return buildFieldConditionExpression(condition);
+        }
+        if ("FORMULA".equals(type)) {
+            String formulaExpression = stringValue(condition.get("formulaExpression"));
+            if (formulaExpression != null) {
+                return formulaExpression;
+            }
+            return stringValue(condition.get("formula"));
+        }
+        return null;
+    }
+
+    private String buildFieldConditionExpression(Map<String, Object> condition) {
+        String fieldKey = stringValue(condition.get("fieldKey"));
+        String operator = stringValue(condition.get("operator"));
+        Object value = condition.get("value");
+        if (fieldKey == null || operator == null || value == null) {
+            return null;
+        }
+        String mappedOperator = switch (operator) {
+            case "EQ" -> "==";
+            case "NE" -> "!=";
+            case "GT" -> ">";
+            case "GE" -> ">=";
+            case "LT" -> "<";
+            case "LE" -> "<=";
+            default -> null;
+        };
+        if (mappedOperator == null) {
+            return null;
+        }
+        return "${" + fieldKey + " " + mappedOperator + " " + stringifyConditionValue(value) + "}";
+    }
+
     private String normalizeSequenceFlowConditionExpression(String expression) {
+        return wrapExpression(expression);
+    }
+
+    private String wrapExpression(String expression) {
         String trimmed = expression.trim();
         if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
             return trimmed;
@@ -301,6 +365,7 @@ public class ProcessDslToBpmnService {
         attrs.put("roleCodes", joinValues(assignment.get("roleCodes")));
         attrs.put("departmentRef", stringValue(assignment.get("departmentRef")));
         attrs.put("formFieldKey", stringValue(assignment.get("formFieldKey")));
+        attrs.put("formulaExpression", stringValue(assignment.get("formulaExpression")));
 
         Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
         attrs.put("approvalPolicyType", stringValue(approvalPolicy.get("type")));
@@ -462,6 +527,40 @@ public class ProcessDslToBpmnService {
             items.add(sourceText + "->" + targetText);
         }
         return items.isEmpty() ? null : String.join(",", items);
+    }
+
+    private String serializeConditionValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return String.valueOf(value);
+        }
+        if (value instanceof List<?> list) {
+            List<String> items = new ArrayList<>();
+            for (Object item : list) {
+                String serialized = serializeConditionValue(item);
+                if (serialized != null) {
+                    items.add(serialized);
+                }
+            }
+            return items.isEmpty() ? null : String.join(",", items);
+        }
+        return String.valueOf(value);
+    }
+
+    private String stringifyConditionValue(Object value) {
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return String.valueOf(value);
+        }
+        String text = String.valueOf(value);
+        if (text.startsWith("${") && text.endsWith("}")) {
+            return text;
+        }
+        return "'" + text.replace("'", "\\'") + "'";
     }
 
     private String stringValue(Object value) {

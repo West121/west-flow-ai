@@ -23,6 +23,7 @@ export type WorkflowApproverAssignmentMode =
   | 'DEPARTMENT'
   | 'DEPARTMENT_AND_CHILDREN'
   | 'FORM_FIELD'
+  | 'FORMULA'
 
 export type WorkflowApproverApprovalPolicyType =
   | 'SINGLE'
@@ -87,7 +88,10 @@ export type WorkflowDynamicBuilderNodeConfig = {
 }
 
 export type WorkflowCcTargetMode = 'USER' | 'ROLE' | 'DEPARTMENT'
-export type WorkflowConditionExpressionMode = 'EXPRESSION' | 'FIELD_COMPARE'
+export type WorkflowConditionExpressionMode =
+  | 'EXPRESSION'
+  | 'FIELD_COMPARE'
+  | 'FORMULA'
 export type WorkflowFormFieldValueType =
   | 'string'
   | 'number'
@@ -104,13 +108,20 @@ export type WorkflowFieldBinding = {
   targetFieldKey: string
 }
 
+export type WorkflowConditionOperator = 'EQ' | 'NE' | 'GT' | 'GE' | 'LT' | 'LE'
+export type WorkflowFormulaFunctionName =
+  | 'ifElse'
+  | 'contains'
+  | 'daysBetween'
+  | 'isBlank'
+
 export type WorkflowProcessFormField = {
   fieldKey: string
   label: string
   valueType: WorkflowFormFieldValueType
 }
 
-export type WorkflowEdgeConditionType = 'EXPRESSION'
+export type WorkflowEdgeConditionType = 'EXPRESSION' | 'FIELD' | 'FORMULA'
 
 export type WorkflowStartNodeConfig = {
   initiatorEditable: boolean
@@ -123,6 +134,7 @@ export type WorkflowApproverNodeConfig = {
     roleCodes: string[]
     departmentRef: string
     formFieldKey: string
+    formulaExpression: string
   }
   nodeFormKey?: string
   nodeFormVersion?: string
@@ -232,7 +244,11 @@ export type WorkflowNode = Node<WorkflowNodeData, 'workflow'>
 export type WorkflowEdgeData = {
   condition?: {
     type: WorkflowEdgeConditionType
-    expression: string
+    expression?: string
+    fieldKey?: string
+    operator?: WorkflowConditionOperator
+    value?: string | number | boolean | null
+    formulaExpression?: string
   }
 }
 

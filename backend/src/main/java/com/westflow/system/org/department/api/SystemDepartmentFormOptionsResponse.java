@@ -22,6 +22,7 @@ public record SystemDepartmentFormOptionsResponse(
             String name,
             String companyId,
             String companyName,
+            String parentDepartmentId,
             boolean enabled
     ) {
     }
