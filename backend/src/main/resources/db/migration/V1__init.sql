@@ -1771,6 +1771,23 @@ CREATE TABLE IF NOT EXISTS wf_business_process_link (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS wf_process_link (
+    id VARCHAR(64) PRIMARY KEY,
+    root_instance_id VARCHAR(64) NOT NULL,
+    parent_instance_id VARCHAR(64) NOT NULL,
+    child_instance_id VARCHAR(64) NOT NULL UNIQUE,
+    parent_node_id VARCHAR(64) NOT NULL,
+    called_process_key VARCHAR(128) NOT NULL,
+    called_definition_id VARCHAR(128) NOT NULL,
+    link_type VARCHAR(32) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    terminate_policy VARCHAR(64) NOT NULL,
+    child_finish_policy VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS wf_workflow_operation_log (
     id VARCHAR(64) PRIMARY KEY,
     process_instance_id VARCHAR(64),
