@@ -1,8 +1,9 @@
 import { type ReactNode } from 'react'
 import { getRouteApi, Link } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ColumnDef } from '@tanstack/react-table'
-import { AlertCircle, ArrowLeft, Box, Cpu, Gauge, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Box, Cpu, Gauge, Loader2, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import {
   listNotificationChannelHealths,
   listOrchestratorScans,
   listTriggerExecutions,
+  recheckNotificationChannelHealth,
   type NotificationChannelHealthDetail,
   type NotificationChannelHealthListRecord,
   type OrchestratorScanDetail,
@@ -30,6 +32,7 @@ import {
   type TriggerExecutionDetail,
   type TriggerExecutionListRecord,
 } from '@/lib/api/system-monitor'
+import { getApiErrorMessage } from '@/lib/api/client'
 import { type ListQuerySearch as BaseListQuerySearch } from '@/features/shared/table/query-contract'
 
 const orchestratorScanListRoute =
@@ -620,9 +623,23 @@ export function SystemMonitorNotificationChannelHealthListPage() {
 
 export function SystemMonitorNotificationChannelHealthDetailPage() {
   const { channelId } = notificationChannelHealthDetailRoute.useParams()
+  const queryClient = useQueryClient()
+  const detailQueryKey = ['system-monitor-channel-health-detail', channelId] as const
   const query = useQuery({
-    queryKey: ['system-monitor-channel-health-detail', channelId],
+    queryKey: detailQueryKey,
     queryFn: () => getNotificationChannelHealthDetail(channelId),
+  })
+  const recheckMutation = useMutation({
+    mutationFn: () => recheckNotificationChannelHealth(channelId),
+    onSuccess: async (result) => {
+      queryClient.setQueryData(detailQueryKey, result)
+      toast.success('渠道健康已重新检查')
+      await query.refetch()
+    },
+    onError: async (error) => {
+      toast.error(getApiErrorMessage(error, '渠道重检失败，请稍后重试。'))
+      await query.refetch()
+    },
   })
 
   if (query.isLoading) {
@@ -652,12 +669,26 @@ export function SystemMonitorNotificationChannelHealthDetailPage() {
       title='渠道健康详情'
       description='聚焦单个通知渠道的可用性与历史回执。'
       actions={
-        <Button asChild variant='ghost'>
-          <Link to='/system/monitor/notification-channels/health/list'>
-            <ArrowLeft data-icon='inline-start' />
-            返回列表
-          </Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <Button
+            variant='outline'
+            onClick={() => recheckMutation.mutate()}
+            disabled={recheckMutation.isPending}
+          >
+            {recheckMutation.isPending ? (
+              <Loader2 data-icon='inline-start' className='animate-spin' />
+            ) : (
+              <RefreshCw data-icon='inline-start' />
+            )}
+            重检渠道健康
+          </Button>
+          <Button asChild variant='ghost'>
+            <Link to='/system/monitor/notification-channels/health/list'>
+              <ArrowLeft data-icon='inline-start' />
+              返回列表
+            </Link>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>

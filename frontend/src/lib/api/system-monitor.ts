@@ -142,3 +142,13 @@ export async function getNotificationChannelHealthDetail(
 
   return unwrapResponse(response)
 }
+
+export async function recheckNotificationChannelHealth(
+  channelId: string
+): Promise<NotificationChannelHealthDetail> {
+  const response = await apiClient.post<ApiSuccessResponse<NotificationChannelHealthDetail>>(
+    `/system/monitor/notification-channels/health/${channelId}/recheck`
+  )
+
+  return unwrapResponse(response)
+}

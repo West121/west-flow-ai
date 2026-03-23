@@ -12,6 +12,7 @@ import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.mapper.NotificationLogMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
 import com.westflow.notification.model.NotificationLogRecord;
+import com.westflow.notification.service.NotificationChannelService;
 import com.westflow.system.monitor.api.response.NotificationChannelHealthDetailResponse;
 import com.westflow.system.monitor.api.response.NotificationChannelHealthListItemResponse;
 import com.westflow.system.monitor.api.response.OrchestratorScanDetailResponse;
@@ -22,7 +23,6 @@ import com.westflow.system.monitor.mapper.OrchestratorScanRecordMapper;
 import com.westflow.system.monitor.mapper.TriggerExecutionRecordMapper;
 import com.westflow.system.monitor.model.OrchestratorScanRecord;
 import com.westflow.system.monitor.model.TriggerExecutionRecord;
-import com.westflow.system.monitor.api.response.NotificationChannelHealthListItemResponse;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -117,6 +117,7 @@ public class SystemMonitorService {
     private final TriggerExecutionRecordMapper triggerExecutionRecordMapper;
     private final NotificationChannelMapper notificationChannelMapper;
     private final NotificationLogMapper notificationLogMapper;
+    private final NotificationChannelService notificationChannelService;
     private final IdentityAuthService fixtureAuthService;
 
     public SystemMonitorService(
@@ -124,12 +125,14 @@ public class SystemMonitorService {
             TriggerExecutionRecordMapper triggerExecutionRecordMapper,
             NotificationChannelMapper notificationChannelMapper,
             NotificationLogMapper notificationLogMapper,
+            NotificationChannelService notificationChannelService,
             IdentityAuthService fixtureAuthService
     ) {
         this.orchestratorScanRecordMapper = orchestratorScanRecordMapper;
         this.triggerExecutionRecordMapper = triggerExecutionRecordMapper;
         this.notificationChannelMapper = notificationChannelMapper;
         this.notificationLogMapper = notificationLogMapper;
+        this.notificationChannelService = notificationChannelService;
         this.fixtureAuthService = fixtureAuthService;
     }
 
@@ -279,6 +282,12 @@ public class SystemMonitorService {
                 channel.remark(),
                 resolveChannelEndpoint(channel)
         );
+    }
+
+    public NotificationChannelHealthDetailResponse recheckNotificationChannelHealth(String channelId) {
+        ensureAccess();
+        notificationChannelService.diagnostic(channelId);
+        return detailNotificationChannelHealth(channelId);
     }
 
     private OrchestratorFilters parseOrchestratorFilters(List<FilterItem> filters) {

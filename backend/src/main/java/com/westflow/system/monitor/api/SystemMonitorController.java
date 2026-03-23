@@ -66,4 +66,9 @@ public class SystemMonitorController {
     public ApiResponse<NotificationChannelHealthDetailResponse> detailNotificationChannelHealth(@PathVariable String channelId) {
         return ApiResponse.success(systemMonitorService.detailNotificationChannelHealth(channelId));
     }
+
+    @PostMapping("/notification-channels/health/{channelId}/recheck")
+    public ApiResponse<NotificationChannelHealthDetailResponse> recheckNotificationChannelHealth(@PathVariable String channelId) {
+        return ApiResponse.success(systemMonitorService.recheckNotificationChannelHealth(channelId));
+    }
 }

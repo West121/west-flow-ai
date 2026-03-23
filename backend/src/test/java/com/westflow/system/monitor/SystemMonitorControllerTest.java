@@ -253,6 +253,19 @@ class SystemMonitorControllerTest {
         assertThat(healthDetailData.path("channelId").asText()).isEqualTo("chn_001");
         assertThat(healthDetailData.path("successRate").asInt()).isEqualTo(67);
         assertThat(healthDetailData.path("totalAttempts").asLong()).isEqualTo(3);
+
+        String recheckResponse = mockMvc.perform(post("/api/v1/system/monitor/notification-channels/health/chn_001/recheck")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode recheckData = objectMapper.readTree(recheckResponse).path("data");
+        assertThat(recheckData.path("channelId").asText()).isEqualTo("chn_001");
+        assertThat(recheckData.path("channelCode").asText()).isEqualTo("mail_main");
+        assertThat(recheckData.path("status").asText()).isEqualTo("ENABLED");
+        assertThat(recheckData.path("latestStatus").asText()).isEqualTo("FAILED");
+        assertThat(recheckData.path("latestResponseMessage").asText()).isEqualTo("发送失败");
     }
 
     private void setupNotificationChannelRecords() {
@@ -263,7 +276,12 @@ class SystemMonitorControllerTest {
                 "邮件渠道",
                 true,
                 false,
-                Map.of("endpoint", "smtp://127.0.0.1"),
+                Map.of(
+                        "endpoint", "smtp://127.0.0.1",
+                        "smtpHost", "127.0.0.1",
+                        "smtpPort", "25",
+                        "fromAddress", "ops@westflow.cn"
+                ),
                 "监控测试",
                 Instant.parse("2026-03-22T09:00:00Z"),
                 Instant.parse("2026-03-22T09:00:00Z"),
