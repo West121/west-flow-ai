@@ -39,6 +39,9 @@ import {
   createPLMECOExecution,
   createPLMECRRequest,
   createPLMMaterialChangeRequest,
+  getPLMECOExecutionDetail,
+  getPLMECRRequestDetail,
+  getPLMMaterialChangeDetail,
   listPLMECOExecutions,
   listPLMECRRequests,
   listPLMApprovalSheets,
@@ -903,6 +906,19 @@ function PLMBusinessBillDetailPage({
   description: string
   fields: PlmBusinessField[]
 }) {
+  const businessDetailQuery = useQuery({
+    queryKey: ['plm', 'business-detail', businessType, billId],
+    queryFn: () => {
+      switch (businessType) {
+        case 'PLM_ECR':
+          return getPLMECRRequestDetail(billId)
+        case 'PLM_ECO':
+          return getPLMECOExecutionDetail(billId)
+        case 'PLM_MATERIAL':
+          return getPLMMaterialChangeDetail(billId)
+      }
+    },
+  })
   const approvalDetailQuery = useQuery({
     queryKey: ['plm', 'approval-detail', businessType, billId],
     queryFn: () =>
@@ -912,10 +928,9 @@ function PLMBusinessBillDetailPage({
       }),
   })
   const approvalDetail = approvalDetailQuery.data
-  const businessDetail = (approvalDetail?.businessData ?? {}) as Record<
-    string,
-    unknown
-  >
+  const businessDetail =
+    businessDetailQuery.data ??
+    ((approvalDetail?.businessData ?? {}) as Record<string, unknown>)
   const approvalHref = resolveApprovalDetailHref(approvalDetail)
   const detailRoutePath =
     businessType === 'PLM_ECR'
@@ -940,12 +955,14 @@ function PLMBusinessBillDetailPage({
         </div>
       }
     >
-      {approvalDetailQuery.isError ? (
+      {approvalDetailQuery.isError || businessDetailQuery.isError ? (
         <Alert variant='destructive' className='mb-4'>
           <AlertTitle>业务单详情加载失败</AlertTitle>
           <AlertDescription>
             {approvalDetailQuery.error instanceof Error
               ? approvalDetailQuery.error.message
+              : businessDetailQuery.error instanceof Error
+                ? businessDetailQuery.error.message
               : '请稍后重试'}
           </AlertDescription>
         </Alert>
@@ -962,7 +979,13 @@ function PLMBusinessBillDetailPage({
               )}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className='space-y-4'>
+            <div className='rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground'>
+              <p>{formatPlmBusinessValue(businessDetail?.detailSummary)}</p>
+              <p className='mt-2'>
+                {formatPlmBusinessValue(businessDetail?.approvalSummary)}
+              </p>
+            </div>
             <dl className='grid gap-4 text-sm md:grid-cols-2'>
               {fields.map((field) => (
                 <div key={field.key} className='space-y-1 rounded-lg border bg-muted/20 p-4'>
@@ -970,6 +993,18 @@ function PLMBusinessBillDetailPage({
                   <dd>{formatPlmBusinessValue(businessDetail?.[field.key])}</dd>
                 </div>
               ))}
+              <div className='space-y-1 rounded-lg border bg-muted/20 p-4'>
+                <dt className='text-xs text-muted-foreground'>创建人</dt>
+                <dd>{formatPlmBusinessValue(businessDetail?.creatorUserId)}</dd>
+              </div>
+              <div className='space-y-1 rounded-lg border bg-muted/20 p-4'>
+                <dt className='text-xs text-muted-foreground'>创建时间</dt>
+                <dd>{formatPlmBusinessValue(businessDetail?.createdAt)}</dd>
+              </div>
+              <div className='space-y-1 rounded-lg border bg-muted/20 p-4'>
+                <dt className='text-xs text-muted-foreground'>更新时间</dt>
+                <dd>{formatPlmBusinessValue(businessDetail?.updatedAt)}</dd>
+              </div>
             </dl>
           </CardContent>
         </Card>
@@ -1135,6 +1170,61 @@ function resolvePlmStatusVariant(status: string) {
   }
 }
 
+function withStatusFilter(
+  search: ListQuerySearch,
+  status: string | null
+): ListQuerySearch {
+  const nextFilters = (search.filters ?? []).filter(
+    (item) => item.field !== 'status'
+  )
+  if (status) {
+    nextFilters.push({ field: 'status', operator: 'eq', value: status })
+  }
+  return {
+    ...search,
+    page: 1,
+    filters: nextFilters,
+  }
+}
+
+function buildPlmQuickActions(search: ListQuerySearch, navigate: NavigateFn) {
+  const selectedStatus = (search.filters ?? []).find(
+    (item) => item.field === 'status' && item.operator === 'eq'
+  )?.value
+  const activeStatus =
+    typeof selectedStatus === 'string' ? selectedStatus : undefined
+
+  return (
+    <div className='flex flex-wrap gap-2'>
+      <Button
+        type='button'
+        variant={activeStatus === undefined ? 'default' : 'outline'}
+        onClick={() => navigate({ search: () => withStatusFilter(search, null) })}
+      >
+        全部
+      </Button>
+      <Button
+        type='button'
+        variant={activeStatus === 'RUNNING' ? 'default' : 'outline'}
+        onClick={() =>
+          navigate({ search: () => withStatusFilter(search, 'RUNNING') })
+        }
+      >
+        审批中
+      </Button>
+      <Button
+        type='button'
+        variant={activeStatus === 'COMPLETED' ? 'default' : 'outline'}
+        onClick={() =>
+          navigate({ search: () => withStatusFilter(search, 'COMPLETED') })
+        }
+      >
+        已完成
+      </Button>
+    </div>
+  )
+}
+
 function plmSummaryItems(total: number, search: ListQuerySearch) {
   return [
     {
@@ -1190,6 +1280,7 @@ function PlmBillListPage<T>({
       data={records}
       total={total}
       summaries={plmSummaryItems(total, search)}
+      extraActions={buildPlmQuickActions(search, navigate)}
       createAction={{
         label: createLabel,
         href: createHref,

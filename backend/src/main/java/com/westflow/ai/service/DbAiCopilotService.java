@@ -427,13 +427,7 @@ public class DbAiCopilotService implements AiCopilotService {
         String content = request.approved() ? "操作确认成功，系统已记录执行结果。" : "已取消本次操作，流程状态保持不变。";
         List<Field> executionFields = buildWriteExecutionFields(toolCall, confirmation, request, finalResult);
         List<Metric> executionMetrics = buildWriteExecutionMetrics(toolCall, finalResult);
-        List<TraceStep> trace = buildToolResultTrace(
-                toolCall.toolSource().name(),
-                toolCall.toolKey(),
-                toolCall.toolKey(),
-                finalResult.status(),
-                request.approved() ? "写操作确认完成" : "写操作已取消"
-        );
+        List<TraceStep> trace = buildWriteExecutionTrace(toolCall, finalResult, request.approved());
         boolean failed = TOOL_STATUS_FAILED.equals(finalResult.status());
         aiMessageMapper.insertMessage(new AiMessageRecord(
                 newId("msg"),
@@ -1374,21 +1368,8 @@ public class DbAiCopilotService implements AiCopilotService {
                             result.summary(),
                             result.result(),
                             trace,
-                            buildToolContextFields(
-                                    result.toolSource().name(),
-                                    result.toolKey(),
-                                    result.toolKey(),
-                                    result.toolType().name(),
-                                    resolveDomainFromRoute(routePath),
-                                    routePath,
-                                    result.toolCallId(),
-                                    result.confirmationId(),
-                                    result.summary(),
-                                    "已执行"
-                            ),
-                            List.of(
-                                    new Metric("当前待办数", String.valueOf(count), null, "neutral")
-                            )
+                            buildTodoResultFields(routePath, result.result()),
+                            buildTodoResultMetrics(routePath, count, content)
                     ),
                     buildTodoStatsBlock(routePath, count)
             ));
@@ -1653,9 +1634,12 @@ public class DbAiCopilotService implements AiCopilotService {
             return List.of(
                     new Field("业务类型", stringValue(finalResult.arguments().get("businessType")), null),
                     new Field("流程编码", stringValue(finalResult.arguments().get("processKey")), null),
+                    new Field("来源页面", stringValue(finalResult.arguments().get("routePath")), null),
+                    new Field("业务摘要", buildProcessStartBusinessSummary(finalResult.arguments()), null),
                     new Field("单据编号", stringValue(result.get("billNo")), null),
                     new Field("流程实例", stringValue(result.get("instanceId")), null),
                     new Field("首个待办", describeNextTasks(result.get("activeTasks")), "发起成功后会优先进入首个待办"),
+                    new Field("发起后动作", resolveProcessStartNextAction(finalResult.arguments()), null),
                     new Field("执行状态", finalResult.status(), null)
             );
         }
@@ -1693,7 +1677,8 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         if ("process.start".equals(toolCall.toolKey())) {
             return List.of(
-                    new Metric("业务类型", stringValue(finalResult.arguments().get("businessType")), null, "neutral"),
+                    new Metric("业务域", stringValue(finalResult.arguments().get("domain")), null, "neutral"),
+                    new Metric("表单字段数", String.valueOf(mapValue(finalResult.arguments().get("formData")).size()), null, "neutral"),
                     new Metric("首个待办数", String.valueOf(countItems(mapValue(finalResult.result()).get("activeTasks"))), "发起后系统生成的当前活动任务", "positive"),
                     new Metric("执行状态", finalResult.status(), null, "positive")
             );
@@ -1771,6 +1756,27 @@ public class DbAiCopilotService implements AiCopilotService {
         );
     }
 
+    private List<TraceStep> buildWriteExecutionTrace(
+            AiToolCallRecord toolCall,
+            AiToolCallResultResponse finalResult,
+            boolean approved
+    ) {
+        if ("process.start".equals(toolCall.toolKey())) {
+            return List.of(
+                    new TraceStep("source", "来源页面", stringValue(finalResult.arguments().get("routePath")), finalResult.status()),
+                    new TraceStep("business", "业务摘要", buildProcessStartBusinessSummary(finalResult.arguments()), finalResult.status()),
+                    new TraceStep("result", "执行说明", approved ? "写操作确认完成" : "写操作已取消", finalResult.status())
+            );
+        }
+        return buildToolResultTrace(
+                toolCall.toolSource().name(),
+                toolCall.toolKey(),
+                toolCall.toolKey(),
+                finalResult.status(),
+                approved ? "写操作确认完成" : "写操作已取消"
+        );
+    }
+
     private String buildWriteFailureDetail(AiToolCallRecord toolCall, AiToolCallResultResponse finalResult) {
         if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
             String action = normalizeTaskAction(finalResult.arguments().get("action"));
@@ -1787,6 +1793,17 @@ public class DbAiCopilotService implements AiCopilotService {
             return list.size();
         }
         return 0;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> listOfMaps(Object value) {
+        if (!(value instanceof List<?> items) || items.isEmpty()) {
+            return List.of();
+        }
+        return items.stream()
+                .filter(Map.class::isInstance)
+                .map(item -> (Map<String, Object>) item)
+                .toList();
     }
 
     private String describeNextTasks(Object value) {
@@ -1995,12 +2012,18 @@ public class DbAiCopilotService implements AiCopilotService {
                         new Field("流程编码", stringValue(arguments.get("processKey")), null),
                         new Field("业务类型", stringValue(arguments.get("businessType")), null),
                         new Field("场景编码", stringValue(arguments.getOrDefault("sceneCode", "default")), null),
+                        new Field("业务摘要", buildProcessStartBusinessSummary(arguments), null),
+                        new Field("发起后动作", resolveProcessStartNextAction(arguments), null),
                         new Field("工具调用编号", toolResult.toolCallId(), null),
                         new Field("确认单编号", toolResult.confirmationId(), null),
                         new Field("状态", toolResult.status(), null),
                         new Field("用户指令", content, "确认后进入实际流程发起")
                 ),
-                List.of()
+                List.of(
+                        new Metric("业务域", domain, null, "neutral"),
+                        new Metric("表单字段数", String.valueOf(formData.size()), null, "neutral"),
+                        new Metric("确认状态", toolResult.status(), null, "warning")
+                )
         );
     }
 
@@ -2136,6 +2159,79 @@ public class DbAiCopilotService implements AiCopilotService {
                         new Metric("视图", "TODO", "来自平台待办查询", "positive")
                 )
         );
+    }
+
+    private List<Field> buildTodoResultFields(String routePath, Map<String, Object> result) {
+        String taskId = extractTaskId(routePath);
+        return List.of(
+                new Field("上下文命中", taskId.isBlank() ? "列表模式" : "当前待办", null),
+                new Field("当前待办", taskId.isBlank() ? "未绑定单条待办" : taskId, null),
+                new Field("待办摘要", summarizeTodoItems(result.get("items")), null),
+                new Field("处理路径建议", taskId.isBlank() ? "先打开待办详情，再让 Copilot 给出处理建议。" : "继续追问该待办的处理路径、退回节点或审批原因。", null),
+                new Field("下一步建议", taskId.isBlank() ? "可以继续追问审批中心统计、流程轨迹或某条待办。" : "可以继续让 Copilot 解释该待办为何到你、下一步去哪。", null)
+        );
+    }
+
+    private List<Metric> buildTodoResultMetrics(String routePath, Object count, String content) {
+        String taskId = extractTaskId(routePath);
+        boolean explainMode = content != null && (content.contains("解释") || content.contains("路径") || content.contains("为什么"));
+        return List.of(
+                new Metric("当前待办数", String.valueOf(count), null, "neutral"),
+                new Metric("上下文命中", taskId.isBlank() ? "列表模式" : "单待办", null, taskId.isBlank() ? "neutral" : "positive"),
+                new Metric("解释模式", explainMode ? "是" : "否", null, explainMode ? "positive" : "neutral")
+        );
+    }
+
+    private String summarizeTodoItems(Object items) {
+        List<Map<String, Object>> entries = listOfMaps(items);
+        if (entries.isEmpty()) {
+            return "当前没有命中的待办摘要。";
+        }
+        return entries.stream()
+                .limit(2)
+                .map(item -> {
+                    String taskId = stringValue(item.get("taskId"));
+                    String title = stringValue(item.get("title"));
+                    String nodeName = stringValue(item.get("nodeName"));
+                    if (!title.isBlank()) {
+                        return title;
+                    }
+                    if (!nodeName.isBlank()) {
+                        return nodeName + (taskId.isBlank() ? "" : "（" + taskId + "）");
+                    }
+                    return taskId.isBlank() ? "待办项" : taskId;
+                })
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("当前没有命中的待办摘要。");
+    }
+
+    private String buildProcessStartBusinessSummary(Map<String, Object> arguments) {
+        Map<String, Object> formData = mapValue(arguments.get("formData"));
+        String businessType = stringValue(arguments.get("businessType"));
+        if ("OA_LEAVE".equalsIgnoreCase(businessType)) {
+            return "请假天数 " + stringValue(formData.get("days")) + " · 原因 " + stringValue(formData.get("reason"));
+        }
+        if ("OA_EXPENSE".equalsIgnoreCase(businessType)) {
+            return "报销金额 " + stringValue(formData.get("amount")) + " · 事由 " + stringValue(formData.get("reason"));
+        }
+        if ("PLM_ECR".equalsIgnoreCase(businessType)) {
+            return "影响产品 " + stringValue(formData.get("affectedProductCode")) + " · 标题 " + stringValue(formData.get("changeTitle"));
+        }
+        if ("PLM_ECO".equalsIgnoreCase(businessType)) {
+            return "生效日期 " + stringValue(formData.get("effectiveDate")) + " · 标题 " + stringValue(formData.get("executionTitle"));
+        }
+        if ("PLM_MATERIAL".equalsIgnoreCase(businessType)) {
+            return "物料 " + stringValue(formData.get("materialCode")) + " / " + stringValue(formData.get("materialName"));
+        }
+        return formData.isEmpty() ? "未识别业务摘要" : "已填写 " + formData.size() + " 个字段";
+    }
+
+    private String resolveProcessStartNextAction(Map<String, Object> arguments) {
+        String routePath = stringValue(arguments.get("routePath"));
+        if (!routePath.isBlank()) {
+            return "发起后自动跳转到业务详情，并从详情联查审批单。";
+        }
+        return "发起后回到审批中心查看首个待办。";
     }
 
     private String buildTodoExplanation(String routePath, Map<String, Object> result) {

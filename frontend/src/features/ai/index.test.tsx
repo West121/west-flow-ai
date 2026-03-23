@@ -278,6 +278,35 @@ describe('AICopilotPage', () => {
     )
   })
 
+  it('shows contextual route hints and supports Ctrl+Enter to send quickly', async () => {
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage sourceRoute='/plm/ecr/create' />)
+
+    expect(await screen.findByText('待办分流建议')).toBeInTheDocument()
+    expect(screen.getByText('上下文：PLM / ECR 新建')).toBeInTheDocument()
+    expect(screen.getByText('Ctrl/Cmd + Enter 快速发送')).toBeInTheDocument()
+
+    const composer = screen.getByPlaceholderText(/输入一条 Copilot 指令/)
+    fireEvent.change(composer, {
+      target: { value: '请快速整理当前 ECR 的摘要' },
+    })
+    fireEvent.keyDown(composer, {
+      key: 'Enter',
+      ctrlKey: true,
+    })
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.sendAICopilotMessage).toHaveBeenCalledWith(
+        {
+          sessionId: 'session_003',
+          content: '请快速整理当前 ECR 的摘要',
+        },
+        expect.any(Object)
+      )
+    )
+  })
+
   it('renders result, failure, and trace blocks with richer tool hit metadata', async () => {
     aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
       {

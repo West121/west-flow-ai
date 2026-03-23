@@ -144,7 +144,16 @@ class AiCopilotServiceTest {
                         "process.start",
                         AiToolSource.PLATFORM,
                         "请确认是否发起流程",
-                        context -> Map.of("accepted", true)
+                        context -> Map.of(
+                                "accepted", true,
+                                "done", true,
+                                "instanceId", "proc_start_001",
+                                "billNo", "OA-LEAVE-20260323-001",
+                                "status", "STARTED",
+                                "activeTasks", List.of(
+                                        Map.of("taskId", "task_start_001", "nodeName", "直属主管审批")
+                                )
+                        )
                 ),
                 AiToolDefinition.write(
                         "task.handle",
@@ -400,7 +409,10 @@ class AiCopilotServiceTest {
                 .contains("业务域", "来源页面", "工具名称", "工具类型", "确认单编号");
         assertThat(previewBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
-                .contains("业务域", "来源页面", "流程编码", "业务类型", "场景编码", "工具调用编号", "确认单编号", "状态", "用户指令");
+                .contains("业务域", "来源页面", "流程编码", "业务类型", "场景编码", "业务摘要", "发起后动作", "工具调用编号", "确认单编号", "状态", "用户指令");
+        assertThat(previewBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("业务域", "表单字段数", "确认状态");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -521,10 +533,20 @@ class AiCopilotServiceTest {
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
                 .contains("trace", "result", "stats");
+        AiMessageBlockResponse resultBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
         AiMessageBlockResponse statsBlock = blocks.stream()
                 .filter(block -> "stats".equals(block.type()))
                 .findFirst()
                 .orElseThrow();
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("上下文命中", "当前待办", "待办摘要", "处理路径建议", "下一步建议");
+        assertThat(resultBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("当前待办数", "上下文命中", "解释模式");
         assertThat(statsBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
                 .contains("待办编号", "来源页面", "视图");
@@ -688,6 +710,76 @@ class AiCopilotServiceTest {
         assertThat(retryBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
                 .contains("待办编号", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题", "来源页面", "处理意见", "下一步建议");
+    }
+
+    @Test
+    void shouldRenderStructuredProcessStartExecutionResultAfterConfirmation() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversationWithTags("OA", "发起", "route:/oa/leave/create"));
+        java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>();
+        doAnswer(invocation -> {
+            storedMessages.add(invocation.getArgument(0, AiMessageRecord.class));
+            return null;
+        }).when(aiMessageMapper).insertMessage(any());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(0L);
+
+        AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
+                "conv_001",
+                new AiToolCallRequest(
+                        "process.start",
+                        AiToolType.WRITE,
+                        AiToolSource.PLATFORM,
+                        Map.of(
+                                "processKey", "oa_leave",
+                                "businessType", "OA_LEAVE",
+                                "sceneCode", "default",
+                                "routePath", "/oa/leave/create",
+                                "domain", "OA",
+                                "formData", Map.of(
+                                        "days", "2",
+                                        "reason", "病假",
+                                        "applicant", "张三"
+                                )
+                        )
+                )
+        );
+        when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
+                pending.toolCallId(),
+                "conv_001",
+                "process.start",
+                AiToolType.WRITE,
+                AiToolSource.PLATFORM,
+                "PENDING_CONFIRMATION",
+                true,
+                "{\"processKey\":\"oa_leave\",\"businessType\":\"OA_LEAVE\",\"sceneCode\":\"default\",\"routePath\":\"/oa/leave/create\",\"domain\":\"OA\",\"formData\":{\"days\":\"2\",\"reason\":\"病假\",\"applicant\":\"张三\"}}",
+                "{}",
+                "请确认是否发起流程",
+                pending.confirmationId(),
+                "usr_001",
+                LocalDateTime.of(2026, 3, 23, 10, 10),
+                LocalDateTime.of(2026, 3, 23, 10, 10)
+        ));
+
+        AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
+                pending.toolCallId(),
+                new AiConfirmToolCallRequest(true, "确认发起", Map.of())
+        );
+
+        assertThat(confirmed.status()).isEqualTo("CONFIRMED");
+        assertThat(storedMessages).isNotEmpty();
+        List<AiMessageBlockResponse> blocks = parseBlocks(storedMessages.get(storedMessages.size() - 1));
+        AiMessageBlockResponse resultBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务类型", "流程编码", "来源页面", "业务摘要", "单据编号", "流程实例", "首个待办", "发起后动作", "执行状态");
+        assertThat(resultBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("业务域", "表单字段数", "首个待办数", "执行状态");
+        assertThat(resultBlock.trace())
+                .extracting(AiMessageBlockResponse.TraceStep::label)
+                .contains("来源页面", "业务摘要", "执行说明");
     }
 
     @Test

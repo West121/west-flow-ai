@@ -2,6 +2,7 @@ package com.westflow.plm.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.common.error.ContractException;
+import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.plm.api.CreatePLMEcoBillRequest;
@@ -187,10 +188,11 @@ public class PlmLaunchService {
      */
     public PageResponse<PlmEcrBillListItemResponse> ecrPage(PageRequest request) {
         String keyword = normalizeKeyword(request.keyword());
+        String status = resolveStatusFilter(request.filters());
         return toPageResponse(
                 request,
-                plmEcrBillMapper.countPage(keyword),
-                plmEcrBillMapper.selectPage(keyword, request.pageSize(), offsetOf(request))
+                plmEcrBillMapper.countPage(keyword, status),
+                plmEcrBillMapper.selectPage(keyword, status, request.pageSize(), offsetOf(request))
         );
     }
 
@@ -210,10 +212,11 @@ public class PlmLaunchService {
      */
     public PageResponse<PlmEcoBillListItemResponse> ecoPage(PageRequest request) {
         String keyword = normalizeKeyword(request.keyword());
+        String status = resolveStatusFilter(request.filters());
         return toPageResponse(
                 request,
-                plmEcoBillMapper.countPage(keyword),
-                plmEcoBillMapper.selectPage(keyword, request.pageSize(), offsetOf(request))
+                plmEcoBillMapper.countPage(keyword, status),
+                plmEcoBillMapper.selectPage(keyword, status, request.pageSize(), offsetOf(request))
         );
     }
 
@@ -233,10 +236,11 @@ public class PlmLaunchService {
      */
     public PageResponse<PlmMaterialChangeBillListItemResponse> materialChangePage(PageRequest request) {
         String keyword = normalizeKeyword(request.keyword());
+        String status = resolveStatusFilter(request.filters());
         return toPageResponse(
                 request,
-                plmMaterialChangeBillMapper.countPage(keyword),
-                plmMaterialChangeBillMapper.selectPage(keyword, request.pageSize(), offsetOf(request))
+                plmMaterialChangeBillMapper.countPage(keyword, status),
+                plmMaterialChangeBillMapper.selectPage(keyword, status, request.pageSize(), offsetOf(request))
         );
     }
 
@@ -352,6 +356,24 @@ public class PlmLaunchService {
      */
     private String normalizeKeyword(String keyword) {
         return keyword == null || keyword.isBlank() ? null : keyword.trim();
+    }
+
+    /**
+     * 解析分页请求中的状态筛选。
+     */
+    private String resolveStatusFilter(List<FilterItem> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return null;
+        }
+        return filters.stream()
+                .filter(filter -> "status".equalsIgnoreCase(filter.field()))
+                .filter(filter -> "eq".equalsIgnoreCase(filter.operator()))
+                .map(FilterItem::value)
+                .filter(java.util.Objects::nonNull)
+                .map(value -> value.isTextual() ? value.asText() : null)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 
     private ContractException resourceNotFound(String message, String billId) {

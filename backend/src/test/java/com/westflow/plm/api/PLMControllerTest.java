@@ -316,6 +316,94 @@ class PLMControllerTest {
         assertThat(materialData.path("records").get(0).path("billNo").asText()).isEqualTo(material.path("billNo").asText());
     }
 
+    @Test
+    void shouldFilterEcrListByStatusAndReturnEnhancedSummaryFields() throws Exception {
+        String token = login();
+        publishDefinition("plm_ecr", "PLM ECR 变更申请");
+        seedBinding("PLM_ECR", "default", "plm_ecr", "bind_plm_ecr_default");
+
+        JsonNode runningBill = createBill(token, "/api/v1/plm/ecrs", """
+                {
+                  "sceneCode": "default",
+                  "changeTitle": "结构件替换",
+                  "changeReason": "供应替代",
+                  "affectedProductCode": "PRD-1001",
+                  "priorityLevel": "HIGH"
+                }
+                """);
+        JsonNode completedBill = createBill(token, "/api/v1/plm/ecrs", """
+                {
+                  "sceneCode": "default",
+                  "changeTitle": "停产切换",
+                  "changeReason": "生命周期调整",
+                  "affectedProductCode": "PRD-1002",
+                  "priorityLevel": "LOW"
+                }
+                """);
+        jdbcTemplate.update("UPDATE plm_ecr_change SET status = 'COMPLETED' WHERE id = ?", completedBill.path("billId").asText());
+
+        String response = mockMvc.perform(post("/api/v1/plm/ecrs/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [
+                                    {
+                                      "field": "status",
+                                      "operator": "eq",
+                                      "value": "RUNNING"
+                                    }
+                                  ],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("total").asInt()).isEqualTo(1);
+        assertThat(data.path("records").get(0).path("billNo").asText()).isEqualTo(runningBill.path("billNo").asText());
+        assertThat(data.path("records").get(0).path("detailSummary").asText()).contains("PRD-1001");
+        assertThat(data.path("records").get(0).path("approvalSummary").asText()).contains("RUNNING");
+    }
+
+    @Test
+    void shouldReturnEnhancedDetailFieldsForEcoBill() throws Exception {
+        String token = login();
+        publishDefinition("plm_eco", "PLM ECO 变更执行");
+        seedBinding("PLM_ECO", "default", "plm_eco", "bind_plm_eco_default");
+
+        JsonNode created = createBill(token, "/api/v1/plm/ecos", """
+                {
+                  "sceneCode": "default",
+                  "executionTitle": "执行新品投产",
+                  "executionPlan": "按阶段分批执行",
+                  "effectiveDate": "2026-04-01",
+                  "changeReason": "流程变更"
+                }
+                """);
+
+        String response = mockMvc.perform(get("/api/v1/plm/ecos/{billId}", created.path("billId").asText())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode detail = objectMapper.readTree(response).path("data");
+        assertThat(detail.path("detailSummary").asText()).contains("2026-04-01");
+        assertThat(detail.path("approvalSummary").asText()).contains("RUNNING");
+        assertThat(detail.path("creatorUserId").asText()).isEqualTo("usr_001");
+        assertThat(detail.path("createdAt").asText()).isNotBlank();
+        assertThat(detail.path("updatedAt").asText()).isNotBlank();
+    }
+
     private JsonNode createBill(String token, String path, String body) throws Exception {
         String response = mockMvc.perform(post(path)
                         .header("Authorization", "Bearer " + token)

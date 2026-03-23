@@ -56,4 +56,12 @@ export default defineConfig(
       'no-duplicate-imports': 'error',
     },
   }
+  ,
+  {
+    files: ['src/routes/**/*.tsx'],
+    rules: {
+      // TanStack Route 文件需要导出 Route 常量，属于路由模块模式，不适用 only-export-components 约束。
+      'react-refresh/only-export-components': 'off',
+    },
+  }
 )

@@ -62,6 +62,7 @@ export function AICopilotPage({
     null
   )
   const bootstrappedRouteRef = useRef('')
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
 
   const sessionsQuery = useQuery({
     queryKey: aiCopilotSessionsKey,
@@ -168,6 +169,14 @@ export function AICopilotPage({
   ])
 
   const activeSession = activeSessionQuery.data ?? null
+  const activeContextRoute = useMemo(
+    () => sourceRoute || extractRouteTagPath(activeSession?.contextTags ?? []),
+    [activeSession?.contextTags, sourceRoute]
+  )
+  const activeContextLabel = useMemo(
+    () => formatSourceRouteLabel(activeContextRoute),
+    [activeContextRoute]
+  )
   const filteredSessions = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase()
 
@@ -196,6 +205,14 @@ export function AICopilotPage({
     (Boolean(effectiveActiveSessionId) &&
       activeSessionQuery.isLoading &&
       !activeSession)
+
+  useEffect(() => {
+    if (!effectiveActiveSessionId || isLoading) {
+      return
+    }
+
+    composerRef.current?.focus()
+  }, [effectiveActiveSessionId, isLoading])
 
   const handleCreateSession = () => {
     if (isCreatingSession) {
@@ -227,6 +244,17 @@ export function AICopilotPage({
       sessionId: effectiveActiveSessionId,
       content,
     })
+  }
+
+  const handleComposerKeyDown = (
+    event: React.KeyboardEvent<HTMLTextAreaElement>
+  ) => {
+    if (event.key !== 'Enter' || (!event.ctrlKey && !event.metaKey)) {
+      return
+    }
+
+    event.preventDefault()
+    handleSendMessage()
   }
 
   const handleResolveConfirmation = (
@@ -385,6 +413,11 @@ export function AICopilotPage({
                     {activeSession ? (
                       <BadgePill tone='subtle'>{activeSession.status}</BadgePill>
                     ) : null}
+                    {activeContextLabel ? (
+                      <BadgePill tone='subtle'>
+                        上下文：{activeContextLabel}
+                      </BadgePill>
+                    ) : null}
                   </div>
                   <h2 className='mt-3 text-2xl font-semibold text-white'>
                     {activeSession?.title ?? '请选择一个会话'}
@@ -464,10 +497,20 @@ export function AICopilotPage({
                       </button>
                     ))}
                   </div>
+                  <div className='mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400'>
+                    <span>
+                      {activeContextLabel
+                        ? `当前会话会沿用 ${activeContextLabel} 的页面语境。`
+                        : '当前会话未绑定业务页面语境。'}
+                    </span>
+                    <span>Ctrl/Cmd + Enter 快速发送</span>
+                  </div>
                   <div className='flex flex-col gap-3 md:flex-row md:items-end'>
                     <Textarea
+                      ref={composerRef}
                       value={draft}
                       onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={handleComposerKeyDown}
                       placeholder='输入一条 Copilot 指令，例如：帮我生成一个确认卡和统计摘要'
                       className='min-h-24 flex-1 resize-none border-white/10 bg-white/5 text-sm text-white placeholder:text-slate-400 focus-visible:ring-cyan-300/60'
                     />
@@ -656,6 +699,53 @@ function buildContextualSessionTitle(sourceRoute: string) {
     return '当前系统管理 Copilot'
   }
   return '当前页面 Copilot'
+}
+
+function extractRouteTagPath(contextTags: string[]) {
+  const routeTag = contextTags.find((tag) => tag.startsWith('route:'))
+
+  return routeTag ? routeTag.slice('route:'.length) : ''
+}
+
+function formatSourceRouteLabel(sourceRoute: string) {
+  if (!sourceRoute) {
+    return ''
+  }
+  if (sourceRoute.startsWith('/plm/ecr/create')) {
+    return 'PLM / ECR 新建'
+  }
+  if (sourceRoute.startsWith('/plm/eco/create')) {
+    return 'PLM / ECO 新建'
+  }
+  if (sourceRoute.startsWith('/plm/material-master/create')) {
+    return 'PLM / 物料主数据变更'
+  }
+  if (sourceRoute.startsWith('/plm/')) {
+    return 'PLM 业务页'
+  }
+  if (sourceRoute.startsWith('/workbench/todos/')) {
+    return '工作台 / 待办详情'
+  }
+  if (sourceRoute.startsWith('/workbench/')) {
+    return '工作台'
+  }
+  if (sourceRoute.startsWith('/oa/leave/create')) {
+    return 'OA / 请假新建'
+  }
+  if (sourceRoute.startsWith('/oa/expense/create')) {
+    return 'OA / 费用新建'
+  }
+  if (sourceRoute.startsWith('/oa/')) {
+    return 'OA 业务页'
+  }
+  if (sourceRoute.startsWith('/workflow/')) {
+    return '流程设计'
+  }
+  if (sourceRoute.startsWith('/system/')) {
+    return '系统管理'
+  }
+
+  return sourceRoute
 }
 
 function SectionLabel({

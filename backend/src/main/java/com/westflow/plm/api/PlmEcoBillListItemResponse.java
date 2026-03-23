@@ -15,6 +15,8 @@ public record PlmEcoBillListItemResponse(
         String changeReason,
         String processInstanceId,
         String status,
+        String detailSummary,
+        String approvalSummary,
         String creatorUserId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

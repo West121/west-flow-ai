@@ -69,7 +69,12 @@ public interface PlmEcoBillMapper {
               effective_date AS effectiveDate,
               change_reason AS changeReason,
               process_instance_id AS processInstanceId,
-              status
+              status,
+              CONCAT('生效日期 ', COALESCE(CAST(effective_date AS VARCHAR), '--'), ' · ', COALESCE(change_reason, '--')) AS detailSummary,
+              CONCAT(status, ' · 当前节点 ', COALESCE(process_instance_id, '待同步')) AS approvalSummary,
+              creator_user_id AS creatorUserId,
+              created_at AS createdAt,
+              updated_at AS updatedAt
             FROM plm_eco_execution
             WHERE id = #{billId}
             """)
@@ -88,6 +93,8 @@ public interface PlmEcoBillMapper {
               change_reason AS changeReason,
               process_instance_id AS processInstanceId,
               status,
+              CONCAT('生效日期 ', COALESCE(CAST(effective_date AS VARCHAR), '--'), ' · ', COALESCE(change_reason, '--')) AS detailSummary,
+              CONCAT(status, ' · 当前节点 ', COALESCE(process_instance_id, '待同步')) AS approvalSummary,
               creator_user_id AS creatorUserId,
               created_at AS createdAt,
               updated_at AS updatedAt
@@ -100,11 +107,16 @@ public interface PlmEcoBillMapper {
               OR LOWER(execution_plan) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
               OR LOWER(scene_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
             )
+            AND (
+              #{status} IS NULL
+              OR status = #{status}
+            )
             ORDER BY created_at DESC
             LIMIT #{limit} OFFSET #{offset}
             """)
     java.util.List<PlmEcoBillListItemResponse> selectPage(
             @Param("keyword") String keyword,
+            @Param("status") String status,
             @Param("limit") int limit,
             @Param("offset") int offset
     );
@@ -123,6 +135,10 @@ public interface PlmEcoBillMapper {
               OR LOWER(execution_plan) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
               OR LOWER(scene_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
             )
+            AND (
+              #{status} IS NULL
+              OR status = #{status}
+            )
             """)
-    long countPage(@Param("keyword") String keyword);
+    long countPage(@Param("keyword") String keyword, @Param("status") String status);
 }

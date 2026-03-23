@@ -31,6 +31,9 @@ const {
     listPLMECOExecutions: vi.fn(),
     listPLMMaterialChangeRequests: vi.fn(),
     listPLMApprovalSheets: vi.fn(),
+    getPLMECRRequestDetail: vi.fn(),
+    getPLMECOExecutionDetail: vi.fn(),
+    getPLMMaterialChangeDetail: vi.fn(),
   },
   workbenchApiMocks: {
     getApprovalSheetDetailByBusiness: vi.fn(),
@@ -80,11 +83,13 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   ResourceListPage: ({
     title,
     createAction,
+    extraActions,
     data,
     total,
   }: {
     title: string
     createAction?: { label: string; href: string }
+    extraActions?: React.ReactNode
     total?: number
     data: Array<{
       instanceId: string
@@ -94,6 +99,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   }) => (
     <div>
       <h2>{title}</h2>
+      {extraActions}
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
       <span>total:{total ?? data.length}</span>
       {data.map((item) => (
@@ -513,7 +519,64 @@ describe('plm pages', () => {
     ).toHaveAttribute('href', '/plm/start')
   })
 
+  it('applies status quick filters on PLM list pages', async () => {
+    plmApiMocks.listPLMECRRequests.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      pages: 0,
+      groups: [],
+      records: [],
+    })
+
+    renderWithQuery(
+      <PLMECRListPage
+        search={{
+          page: 1,
+          pageSize: 20,
+          keyword: '',
+          filters: [],
+          sorts: [],
+          groups: [],
+        }}
+        navigate={navigateMock}
+      />
+    )
+
+    expect(await screen.findByText('ECR 变更申请列表')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '审批中' }))
+
+    const filterNavigateCall =
+      navigateMock.mock.calls[navigateMock.mock.calls.length - 1]?.[0]
+    expect(filterNavigateCall).toBeTruthy()
+    const nextSearch = filterNavigateCall.search({
+      page: 1,
+      pageSize: 20,
+      keyword: '',
+      filters: [],
+      sorts: [],
+      groups: [],
+    })
+    expect(nextSearch.filters).toEqual([
+      { field: 'status', operator: 'eq', value: 'RUNNING' },
+    ])
+  })
+
   it('renders the ECR business detail and approval link', async () => {
+    plmApiMocks.getPLMECRRequestDetail.mockResolvedValue({
+      billId: 'ecr_001',
+      billNo: 'ECR-20260323-000001',
+      changeTitle: '结构件变更',
+      changeReason: '供应替代',
+      affectedProductCode: 'PRD-001',
+      priorityLevel: 'HIGH',
+      status: 'RUNNING',
+      detailSummary: '影响产品 PRD-001 · 高优先级',
+      approvalSummary: 'RUNNING · 当前节点 业务负责人审批',
+      creatorUserId: 'usr_001',
+      createdAt: '2026-03-23T09:00:00+08:00',
+      updatedAt: '2026-03-23T09:10:00+08:00',
+    })
     workbenchApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
       createApprovalDetail({
         businessKey: 'ecr_001',
@@ -538,6 +601,8 @@ describe('plm pages', () => {
     expect(await screen.findByText('业务单详情')).toBeInTheDocument()
     expect(await screen.findByText('审批单联查')).toBeInTheDocument()
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()
+    expect(await screen.findByText('影响产品 PRD-001 · 高优先级')).toBeInTheDocument()
+    expect(await screen.findByText('usr_001')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '查看审批单' })).toHaveAttribute(
       'href',
       '/workbench/todos/$taskId'
@@ -545,6 +610,34 @@ describe('plm pages', () => {
   })
 
   it('renders ECO and material detail pages', async () => {
+    plmApiMocks.getPLMECOExecutionDetail.mockResolvedValue({
+      billId: 'eco_001',
+      billNo: 'ECO-20260323-000001',
+      executionTitle: 'ECO 下发',
+      executionPlan: '通知工厂执行',
+      effectiveDate: '2026-04-01',
+      changeReason: '量产切换',
+      status: 'RUNNING',
+      detailSummary: '生效日期 2026-04-01 · 量产切换',
+      approvalSummary: 'RUNNING · 当前节点 业务负责人审批',
+      creatorUserId: 'usr_001',
+      createdAt: '2026-03-23T09:00:00+08:00',
+      updatedAt: '2026-03-23T09:10:00+08:00',
+    })
+    plmApiMocks.getPLMMaterialChangeDetail.mockResolvedValue({
+      billId: 'material_001',
+      billNo: 'MAT-20260323-000001',
+      materialCode: 'MAT-001',
+      materialName: '主板总成',
+      changeReason: '替换供应商物料编码',
+      changeType: 'ATTRIBUTE_UPDATE',
+      status: 'RUNNING',
+      detailSummary: 'ATTRIBUTE_UPDATE · 替换供应商物料编码',
+      approvalSummary: 'RUNNING · 当前节点 业务负责人审批',
+      creatorUserId: 'usr_001',
+      createdAt: '2026-03-23T09:00:00+08:00',
+      updatedAt: '2026-03-23T09:10:00+08:00',
+    })
     workbenchApiMocks.getApprovalSheetDetailByBusiness
       .mockResolvedValueOnce(
         createApprovalDetail({
@@ -588,6 +681,8 @@ describe('plm pages', () => {
     expect(await screen.findByText('物料主数据变更详情')).toBeInTheDocument()
     expect(await screen.findByText('ECO 变更执行')).toBeInTheDocument()
     expect(await screen.findByText('物料主数据变更申请')).toBeInTheDocument()
+    expect(await screen.findByText('生效日期 2026-04-01 · 量产切换')).toBeInTheDocument()
+    expect(await screen.findByText('ATTRIBUTE_UPDATE · 替换供应商物料编码')).toBeInTheDocument()
     expect(screen.getAllByText('当前没有可打开的待办审批单')).toHaveLength(2)
   })
 })

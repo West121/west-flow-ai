@@ -43,6 +43,11 @@ export type PLMMaterialChangePayload = {
 export type PLMBillDetail = {
   billId: string
   billNo: string
+  detailSummary?: string
+  approvalSummary?: string
+  creatorUserId?: string
+  createdAt?: string
+  updatedAt?: string
   [key: string]: unknown
 }
 
@@ -55,6 +60,8 @@ export type PLMECRBillListItem = {
   priorityLevel: string | null
   processInstanceId: string | null
   status: string
+  detailSummary?: string
+  approvalSummary?: string
   creatorUserId: string
   createdAt: string
   updatedAt: string
@@ -69,6 +76,8 @@ export type PLMECOBillListItem = {
   changeReason: string
   processInstanceId: string | null
   status: string
+  detailSummary?: string
+  approvalSummary?: string
   creatorUserId: string
   createdAt: string
   updatedAt: string
@@ -84,6 +93,8 @@ export type PLMMaterialChangeBillListItem = {
   changeReason: string
   processInstanceId: string | null
   status: string
+  detailSummary?: string
+  approvalSummary?: string
   creatorUserId: string
   createdAt: string
   updatedAt: string

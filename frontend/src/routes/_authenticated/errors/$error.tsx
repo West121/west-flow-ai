@@ -14,8 +14,6 @@ export const Route = createFileRoute('/_authenticated/errors/$error')({
   component: RouteComponent,
 })
 
-// 保留这一条 React Refresh 忽略规则，避免开发热更新阶段误报。
-// eslint-disable-next-line react-refresh/only-export-components
 function RouteComponent() {
   const { error } = Route.useParams()
 

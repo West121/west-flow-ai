@@ -14,6 +14,8 @@ public record PlmEcrBillListItemResponse(
         String priorityLevel,
         String processInstanceId,
         String status,
+        String detailSummary,
+        String approvalSummary,
         String creatorUserId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
