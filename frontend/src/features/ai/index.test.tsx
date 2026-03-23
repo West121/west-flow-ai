@@ -51,6 +51,31 @@ function buildSession(overrides: Record<string, unknown> = {}) {
     messageCount: 3,
     contextTags:
       (overrides.contextTags as string[] | undefined) ?? ['工作台', '待办'],
+    toolCalls:
+      (overrides.toolCalls as unknown[] | undefined) ?? [
+        {
+          toolCallId: `${sessionId}_tool_001`,
+          toolKey: 'workflow.todo.list',
+          toolType: 'READ',
+          toolSource: 'PLATFORM',
+          status: 'SUCCEEDED',
+          requiresConfirmation: false,
+          summary: '读取当前用户待办列表',
+          createdAt: '2026-03-23T08:00:05.000Z',
+          completedAt: '2026-03-23T08:00:06.000Z',
+        },
+      ],
+    audit:
+      (overrides.audit as unknown[] | undefined) ?? [
+        {
+          auditId: `${sessionId}_audit_001`,
+          conversationId: sessionId,
+          toolCallId: `${sessionId}_tool_001`,
+          actionType: 'TOOL_CALL_COMPLETED',
+          summary: '已完成读取当前待办列表',
+          occurredAt: '2026-03-23T08:00:06.000Z',
+        },
+      ],
     history: [
       {
         messageId: `${sessionId}_msg_001`,
@@ -157,6 +182,11 @@ describe('AICopilotPage', () => {
         'session_001'
       )
     )
+    expect(screen.getByText('上下文摘要')).toBeInTheDocument()
+    expect(screen.getByText('工具命中')).toBeInTheDocument()
+    expect(screen.getByText('审计轨迹')).toBeInTheDocument()
+    expect(screen.getByText('workflow.todo.list')).toBeInTheDocument()
+    expect(screen.getByText('已完成执行')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /流程解释草稿/ }))
 

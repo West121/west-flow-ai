@@ -103,7 +103,23 @@ public class AiOrchestrationPlanner {
 
     private boolean looksLikeWriteAction(AiGatewayRequest request) {
         String content = request.content() == null ? "" : request.content();
-        String pageRoute = request.pageRoute() == null ? "" : request.pageRoute();
-        return content.contains("完成") || content.contains("发起") || pageRoute.contains("todo") || pageRoute.contains("待办");
+        if (content.contains("处理路径")
+                || content.contains("处理原因")
+                || content.contains("为什么")
+                || content.contains("怎么流转")
+                || content.contains("解释")) {
+            return false;
+        }
+        return content.contains("完成")
+                || content.contains("发起")
+                || content.contains("提交")
+                || content.contains("处理")
+                || content.contains("认领")
+                || content.contains("驳回")
+                || content.contains("退回")
+                || content.contains("已读")
+                || content.contains("已阅")
+                || content.contains("通过")
+                || content.contains("拒绝");
     }
 }

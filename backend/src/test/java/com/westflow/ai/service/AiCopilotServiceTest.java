@@ -12,7 +12,9 @@ import com.westflow.ai.mapper.AiToolCallMapper;
 import com.westflow.ai.model.AiConfirmToolCallRequest;
 import com.westflow.ai.model.AiConversationDetailResponse;
 import com.westflow.ai.model.AiConversationRecord;
+import com.westflow.ai.model.AiMessageBlockResponse;
 import com.westflow.ai.model.AiMessageAppendRequest;
+import com.westflow.ai.model.AiMessageResponse;
 import com.westflow.ai.model.AiMessageRecord;
 import com.westflow.ai.model.AiToolCallRequest;
 import com.westflow.ai.model.AiToolCallRecord;
@@ -30,6 +32,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,6 +49,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doAnswer;
 
 /**
  * AI Copilot 服务层测试。
@@ -102,6 +106,17 @@ class AiCopilotServiceTest {
                         context -> Map.of("summary", "当前审批轨迹正常")
                 ),
                 AiToolDefinition.read(
+                        "stats.query",
+                        AiToolSource.PLATFORM,
+                        "已返回统计摘要",
+                        context -> Map.of(
+                                "total", 12,
+                                "completed", 9,
+                                "pending", 3,
+                                "completionRate", "75%"
+                        )
+                ),
+                AiToolDefinition.read(
                         "plm.change.summary",
                         AiToolSource.SKILL,
                         "已返回 PLM 变更摘要",
@@ -152,6 +167,38 @@ class AiCopilotServiceTest {
                                 "westflow-internal-mcp",
                                 "",
                                 95,
+                                Map.of()
+                        ));
+                    }
+                    if (content != null && (content.contains("待办") || content.contains("路径"))) {
+                        return java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                "task.query",
+                                "查询待办",
+                                AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "ai:copilot:open",
+                                List.of("OA", "PLM"),
+                                List.of("待办", "路径"),
+                                List.of("/workbench/"),
+                                "westflow-internal-mcp",
+                                "",
+                                95,
+                                Map.of()
+                        ));
+                    }
+                    if (content != null && content.contains("统计")) {
+                        return java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                "stats.query",
+                                "查询统计",
+                                AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "ai:stats:query",
+                                List.of("OA", "PLM", "GENERAL"),
+                                List.of("统计"),
+                                List.of("/system/", "/workflow/"),
+                                "westflow-internal-mcp",
+                                "",
+                                90,
                                 Map.of()
                         ));
                     }
@@ -229,8 +276,7 @@ class AiCopilotServiceTest {
     @Test
     void shouldAppendWriteIntentMessageAndStageConfirmationCard() {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
-        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(2L);
-        when(aiMessageMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
         when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
         when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
 
@@ -240,6 +286,10 @@ class AiCopilotServiceTest {
         );
 
         assertThat(detail.conversationId()).isEqualTo("conv_001");
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("form-preview", "confirm");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -247,8 +297,7 @@ class AiCopilotServiceTest {
     @Test
     void shouldAppendReadIntentMessageThroughSkillRouting() {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
-        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(2L);
-        when(aiMessageMapper.selectByConversationId("conv_001")).thenReturn(List.of(
+        List<AiMessageRecord> storedMessages = mockStoredMessages(
                 new AiMessageRecord(
                         "msg_001",
                         "conv_001",
@@ -260,7 +309,7 @@ class AiCopilotServiceTest {
                         LocalDateTime.of(2026, 3, 23, 10, 12),
                         LocalDateTime.of(2026, 3, 23, 10, 12)
                 )
-        ));
+        );
         when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
         when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
 
@@ -274,18 +323,83 @@ class AiCopilotServiceTest {
         verify(aiConfirmationMapper, never()).insertConfirmation(any());
     }
 
+    @Test
+    void shouldAppendTodoExplanationWithStatsBlock() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversationWithTags("OA", "待办", "route:/workbench/todos/task_001"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我解释这个待办的处理路径")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("stats");
+    }
+
+    @Test
+    void shouldAppendStatsAnswerWithStatsBlock() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversationWithTags("OA", "统计", "route:/system/dashboard"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("给我看一下本周流程统计")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("stats");
+    }
+
     private AiConversationRecord conversation() {
+        return conversationWithTags("PLM", "审批");
+    }
+
+    private AiConversationRecord conversationWithTags(String... tags) {
         return new AiConversationRecord(
                 "conv_001",
                 "PLM 变更审批助手",
                 "用户正在追问 ECR 审批建议",
                 "active",
-                "[\"PLM\",\"审批\"]",
+                toJson(tags),
                 3,
                 "usr_001",
                 LocalDateTime.of(2026, 3, 23, 10, 0),
                 LocalDateTime.of(2026, 3, 23, 10, 0)
         );
+    }
+
+    private String toJson(String... tags) {
+        try {
+            return new ObjectMapper().writeValueAsString(List.of(tags));
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+    }
+
+    private List<AiMessageRecord> mockStoredMessages(AiMessageRecord... initialMessages) {
+        java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>(List.of(initialMessages));
+        AtomicLong initialCount = new AtomicLong(storedMessages.size());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenAnswer(invocation -> {
+            if (storedMessages.isEmpty()) {
+                return initialCount.get();
+            }
+            return (long) storedMessages.size();
+        });
+        when(aiMessageMapper.selectByConversationId("conv_001")).thenAnswer(invocation -> List.copyOf(storedMessages));
+        doAnswer(invocation -> {
+            storedMessages.add(invocation.getArgument(0, AiMessageRecord.class));
+            return null;
+        }).when(aiMessageMapper).insertMessage(any());
+        return storedMessages;
     }
 
     private com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent mockSupervisorAgent(String reply) {

@@ -11,6 +11,7 @@ public record AiToolCallDetailResponse(
         String toolKey,
         String toolType,
         String toolSource,
+        String hitSource,
         String status,
         boolean requiresConfirmation,
         String argumentsJson,
@@ -19,6 +20,8 @@ public record AiToolCallDetailResponse(
         String confirmationId,
         String operatorUserId,
         OffsetDateTime createdAt,
-        OffsetDateTime completedAt
+        OffsetDateTime completedAt,
+        Long executionDurationMillis,
+        String failureReason
 ) {
 }

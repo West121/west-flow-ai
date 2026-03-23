@@ -2,25 +2,32 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  PLMECOCreatePage,
   PLMECOExecutionBillDetailPage,
   PLMECRCreatePage,
   PLMECRRequestBillDetailPage,
   PLMHomePage,
   PLMMaterialChangeBillDetailPage,
+  PLMMaterialChangeCreatePage,
   PLMQueryPage,
 } from './pages'
 
-const { navigateMock, plmApiMocks, routeSearchMock } = vi.hoisted(() => ({
+const {
+  navigateMock,
+  plmApiMocks,
+  routeSearchMock,
+  workbenchApiMocks,
+} = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   routeSearchMock: vi.fn(),
   plmApiMocks: {
     createPLMECRRequest: vi.fn(),
     createPLMECOExecution: vi.fn(),
     createPLMMaterialChangeRequest: vi.fn(),
-    getPLMECRRequestDetail: vi.fn(),
-    getPLMECOExecutionDetail: vi.fn(),
-    getPLMMaterialChangeDetail: vi.fn(),
     listPLMApprovalSheets: vi.fn(),
+  },
+  workbenchApiMocks: {
+    getApprovalSheetDetailByBusiness: vi.fn(),
   },
 }))
 
@@ -68,9 +75,11 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
     title,
     createAction,
     data,
+    total,
   }: {
     title: string
     createAction?: { label: string; href: string }
+    total?: number
     data: Array<{
       instanceId: string
       businessTitle?: string | null
@@ -80,6 +89,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
     <div>
       <h2>{title}</h2>
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
+      <span>total:{total ?? data.length}</span>
       {data.map((item) => (
         <div key={item.instanceId}>{item.businessTitle ?? item.billNo}</div>
       ))}
@@ -87,24 +97,8 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   ),
 }))
 
-vi.mock('@/features/workbench/pages', () => ({
-  WorkbenchTodoDetailPage: ({
-    businessType,
-    businessId,
-  }: {
-    businessType: string
-    businessId: string
-  }) => (
-    <div>
-      <h2>统一审批单详情</h2>
-      <p>
-        {businessType}:{businessId}
-      </p>
-    </div>
-  ),
-}))
-
 vi.mock('@/lib/api/plm', () => plmApiMocks)
+vi.mock('@/lib/api/workbench', () => workbenchApiMocks)
 
 function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -140,7 +134,8 @@ function createLaunchResponse(taskId = 'task_plm_001') {
 
 function createApprovalSheetRecord(overrides: Record<string, unknown> = {}) {
   return {
-    instanceId: typeof overrides.instanceId === 'string' ? overrides.instanceId : 'pi_plm_001',
+    instanceId:
+      typeof overrides.instanceId === 'string' ? overrides.instanceId : 'pi_plm_001',
     processDefinitionId: 'pd_plm_001',
     processKey: 'plm_ecr',
     processName: 'ECR 变更申请',
@@ -159,6 +154,55 @@ function createApprovalSheetRecord(overrides: Record<string, unknown> = {}) {
     createdAt: '2026-03-23T09:00:00+08:00',
     updatedAt: '2026-03-23T09:10:00+08:00',
     completedAt: null,
+    ...overrides,
+  }
+}
+
+function createApprovalDetail(overrides: Record<string, unknown> = {}) {
+  return {
+    taskId: 'task_plm_001',
+    instanceId: 'pi_plm_001',
+    processDefinitionId: 'pd_plm_001',
+    processKey: 'plm_ecr',
+    processName: 'PLM ECR 变更申请',
+    businessKey: 'plm_001',
+    businessType: 'PLM_ECR',
+    applicantUserId: 'usr_001',
+    nodeId: 'approve_manager',
+    nodeName: '部门负责人审批',
+    status: 'PENDING',
+    assignmentMode: 'USER',
+    candidateUserIds: ['usr_002'],
+    assigneeUserId: 'usr_002',
+    action: null,
+    operatorUserId: null,
+    comment: null,
+    processFormKey: 'plm-ecr-start-form',
+    processFormVersion: '1.0.0',
+    effectiveFormKey: 'plm-ecr-start-form',
+    effectiveFormVersion: '1.0.0',
+    nodeFormKey: null,
+    nodeFormVersion: null,
+    fieldBindings: [],
+    taskFormData: null,
+    createdAt: '2026-03-23T09:00:00+08:00',
+    updatedAt: '2026-03-23T09:10:00+08:00',
+    completedAt: null,
+    receiveTime: '2026-03-23T09:01:00+08:00',
+    readTime: '2026-03-23T09:02:00+08:00',
+    handleStartTime: '2026-03-23T09:03:00+08:00',
+    handleEndTime: null,
+    handleDurationSeconds: null,
+    instanceStatus: 'RUNNING',
+    formData: {},
+    businessData: {},
+    flowNodes: [],
+    flowEdges: [],
+    instanceEvents: [],
+    taskTrace: [],
+    automationActionTrace: [],
+    notificationSendRecords: [],
+    activeTaskIds: ['task_plm_001'],
     ...overrides,
   }
 }
@@ -198,7 +242,7 @@ describe('plm pages', () => {
   })
 
   it('submits ECR request and jumps to the business detail page', async () => {
-    plmApiMocks.createPLMECRRequest.mockResolvedValue(createLaunchResponse())
+    plmApiMocks.createPLMECRRequest.mockResolvedValue(createLaunchResponse('ecr_001'))
 
     renderWithQuery(<PLMECRCreatePage />)
 
@@ -208,26 +252,101 @@ describe('plm pages', () => {
     fireEvent.change(screen.getByLabelText('变更原因'), {
       target: { value: '供应替代' },
     })
-    fireEvent.change(screen.getByLabelText('影响等级'), {
+    fireEvent.change(screen.getByLabelText('影响产品编码'), {
+      target: { value: 'PRD-001' },
+    })
+    fireEvent.change(screen.getByLabelText('优先级'), {
       target: { value: 'HIGH' },
     })
     fireEvent.click(screen.getByRole('button', { name: '发起 ECR 变更申请' }))
 
     await waitFor(() => {
-      expect(plmApiMocks.createPLMECRRequest).toHaveBeenCalledWith(
-        {
-          changeTitle: '结构件变更',
-          changeReason: '供应替代',
-          impactLevel: 'HIGH',
-        },
-        expect.objectContaining({
-          client: expect.any(Object),
-        })
-      )
+      expect(plmApiMocks.createPLMECRRequest).toHaveBeenCalled()
+    })
+
+    expect(plmApiMocks.createPLMECRRequest.mock.calls[0][0]).toEqual({
+      changeTitle: '结构件变更',
+      changeReason: '供应替代',
+      affectedProductCode: 'PRD-001',
+      priorityLevel: 'HIGH',
     })
     expect(navigateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: '/plm/ecr/$billId',
+        params: { billId: 'plm_001' },
+      })
+    )
+  })
+
+  it('submits ECO execution and jumps to the business detail page', async () => {
+    plmApiMocks.createPLMECOExecution.mockResolvedValue(createLaunchResponse('eco_001'))
+
+    renderWithQuery(<PLMECOCreatePage />)
+
+    fireEvent.change(screen.getByLabelText('执行标题'), {
+      target: { value: 'ECO 下发' },
+    })
+    fireEvent.change(screen.getByLabelText('执行说明'), {
+      target: { value: '通知工厂按新版图纸执行' },
+    })
+    fireEvent.change(screen.getByLabelText('生效日期'), {
+      target: { value: '2026-04-01' },
+    })
+    fireEvent.change(screen.getByLabelText('变更原因'), {
+      target: { value: '量产切换' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发起 ECO 变更执行' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.createPLMECOExecution).toHaveBeenCalled()
+    })
+    expect(plmApiMocks.createPLMECOExecution.mock.calls[0][0]).toEqual({
+      executionTitle: 'ECO 下发',
+      executionPlan: '通知工厂按新版图纸执行',
+      effectiveDate: '2026-04-01',
+      changeReason: '量产切换',
+    })
+    expect(navigateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/plm/eco/$billId',
+        params: { billId: 'plm_001' },
+      })
+    )
+  })
+
+  it('submits material change and jumps to the business detail page', async () => {
+    plmApiMocks.createPLMMaterialChangeRequest.mockResolvedValue(
+      createLaunchResponse('material_001')
+    )
+
+    renderWithQuery(<PLMMaterialChangeCreatePage />)
+
+    fireEvent.change(screen.getByLabelText('物料编码'), {
+      target: { value: 'MAT-001' },
+    })
+    fireEvent.change(screen.getByLabelText('物料名称'), {
+      target: { value: '主板总成' },
+    })
+    fireEvent.change(screen.getAllByLabelText('变更原因')[0], {
+      target: { value: '替换供应商物料编码' },
+    })
+    fireEvent.change(screen.getByLabelText('变更类型'), {
+      target: { value: 'ATTRIBUTE_UPDATE' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发起物料主数据变更申请' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.createPLMMaterialChangeRequest).toHaveBeenCalled()
+    })
+    expect(plmApiMocks.createPLMMaterialChangeRequest.mock.calls[0][0]).toEqual({
+      materialCode: 'MAT-001',
+      materialName: '主板总成',
+      changeReason: '替换供应商物料编码',
+      changeType: 'ATTRIBUTE_UPDATE',
+    })
+    expect(navigateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/plm/material-master/$billId',
         params: { billId: 'plm_001' },
       })
     )
@@ -247,156 +366,84 @@ describe('plm pages', () => {
 
     expect(await screen.findByText('PLM 流程查询')).toBeInTheDocument()
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()
+    expect(screen.getByText('total:1')).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: '发起 PLM 申请' })
     ).toHaveAttribute('href', '/plm/start')
   })
 
-  it('renders the PLM ECR detail page shell', async () => {
-    plmApiMocks.getPLMECRRequestDetail.mockResolvedValue({
-      billId: 'plm_001',
-      billNo: 'PLM-20260323-001',
-      processInstanceId: 'pi_plm_001',
-      activeTasks: [{ taskId: 'task_plm_001' }],
-      businessData: {
-        billId: 'plm_001',
-        billNo: 'PLM-20260323-001',
-        changeTitle: '结构件变更',
-        changeReason: '供应替代',
-      },
-      formData: {
-        changeTitle: '结构件变更',
-        changeReason: '供应替代',
-      },
-      processFormKey: 'plm-ecr-start-form',
-      processFormVersion: '1.0.0',
-      effectiveFormKey: 'plm-ecr-start-form',
-      effectiveFormVersion: '1.0.0',
-      nodeFormKey: null,
-      nodeFormVersion: null,
-      fieldBindings: [],
-      taskFormData: null,
-      instanceStatus: 'RUNNING',
-      status: 'PENDING',
-      assignmentMode: 'USER',
-      candidateUserIds: ['usr_002'],
-      assigneeUserId: 'usr_002',
-      nodeId: 'approve_manager',
-      nodeName: '部门负责人审批',
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      createdAt: '2026-03-23T09:00:00+08:00',
-      updatedAt: '2026-03-23T09:10:00+08:00',
-      completedAt: null,
-      receiveTime: '2026-03-23T09:00:00+08:00',
-      readTime: '2026-03-23T09:02:00+08:00',
-      handleStartTime: '2026-03-23T09:03:00+08:00',
-      handleEndTime: null,
-      handleDurationSeconds: null,
-      taskTrace: [],
-      flowNodes: [],
-      flowEdges: [],
-      instanceEvents: [],
-      automationActionTrace: [],
-      notificationSendRecords: [],
-      activeTaskIds: ['task_plm_001'],
-    })
+  it('renders the ECR business detail and approval link', async () => {
+    workbenchApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
+      createApprovalDetail({
+        businessKey: 'ecr_001',
+        businessData: {
+          billId: 'ecr_001',
+          billNo: 'ECR-20260323-000001',
+          changeTitle: '结构件变更',
+          changeReason: '供应替代',
+          affectedProductCode: 'PRD-001',
+          priorityLevel: 'HIGH',
+          status: 'RUNNING',
+        },
+      })
+    )
 
-    renderWithQuery(<PLMECRRequestBillDetailPage billId='plm_001' />)
+    renderWithQuery(<PLMECRRequestBillDetailPage billId='ecr_001' />)
 
-    expect(await screen.findByText('统一审批单详情')).toBeInTheDocument()
-    expect(await screen.findByText('PLM_ECR:plm_001')).toBeInTheDocument()
+    expect(await screen.findByText('ECR 变更申请详情')).toBeInTheDocument()
+    expect(await screen.findByText('业务单详情')).toBeInTheDocument()
+    expect(await screen.findByText('审批单联查')).toBeInTheDocument()
+    expect(await screen.findByText('结构件变更')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看审批单' })).toHaveAttribute(
+      'href',
+      '/workbench/todos/$taskId'
+    )
   })
 
-  it('renders the PLM ECO and material detail shells', async () => {
-    plmApiMocks.getPLMECOExecutionDetail.mockResolvedValue({
-      billId: 'plm_002',
-      billNo: 'PLM-ECO-002',
-      processInstanceId: 'pi_plm_002',
-      activeTasks: [],
-      businessData: { billId: 'plm_002', billNo: 'PLM-ECO-002' },
-      formData: {},
-      processFormKey: 'plm-eco-start-form',
-      processFormVersion: '1.0.0',
-      effectiveFormKey: 'plm-eco-start-form',
-      effectiveFormVersion: '1.0.0',
-      nodeFormKey: null,
-      nodeFormVersion: null,
-      fieldBindings: [],
-      taskFormData: null,
-      instanceStatus: 'RUNNING',
-      status: 'PENDING',
-      assignmentMode: 'USER',
-      candidateUserIds: [],
-      assigneeUserId: null,
-      nodeId: 'approve_manager',
-      nodeName: '部门负责人审批',
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      createdAt: '2026-03-23T09:00:00+08:00',
-      updatedAt: '2026-03-23T09:10:00+08:00',
-      completedAt: null,
-      receiveTime: null,
-      readTime: null,
-      handleStartTime: null,
-      handleEndTime: null,
-      handleDurationSeconds: null,
-      taskTrace: [],
-      flowNodes: [],
-      flowEdges: [],
-      instanceEvents: [],
-      automationActionTrace: [],
-      notificationSendRecords: [],
-      activeTaskIds: [],
-    })
-    plmApiMocks.getPLMMaterialChangeDetail.mockResolvedValue({
-      billId: 'plm_003',
-      billNo: 'PLM-MATERIAL-003',
-      processInstanceId: 'pi_plm_003',
-      activeTasks: [],
-      businessData: { billId: 'plm_003', billNo: 'PLM-MATERIAL-003' },
-      formData: {},
-      processFormKey: 'plm-material-start-form',
-      processFormVersion: '1.0.0',
-      effectiveFormKey: 'plm-material-start-form',
-      effectiveFormVersion: '1.0.0',
-      nodeFormKey: null,
-      nodeFormVersion: null,
-      fieldBindings: [],
-      taskFormData: null,
-      instanceStatus: 'RUNNING',
-      status: 'PENDING',
-      assignmentMode: 'USER',
-      candidateUserIds: [],
-      assigneeUserId: null,
-      nodeId: 'approve_manager',
-      nodeName: '部门负责人审批',
-      action: null,
-      operatorUserId: null,
-      comment: null,
-      createdAt: '2026-03-23T09:00:00+08:00',
-      updatedAt: '2026-03-23T09:10:00+08:00',
-      completedAt: null,
-      receiveTime: null,
-      readTime: null,
-      handleStartTime: null,
-      handleEndTime: null,
-      handleDurationSeconds: null,
-      taskTrace: [],
-      flowNodes: [],
-      flowEdges: [],
-      instanceEvents: [],
-      automationActionTrace: [],
-      notificationSendRecords: [],
-      activeTaskIds: [],
-    })
+  it('renders ECO and material detail pages', async () => {
+    workbenchApiMocks.getApprovalSheetDetailByBusiness
+      .mockResolvedValueOnce(
+        createApprovalDetail({
+          businessKey: 'eco_001',
+          businessType: 'PLM_ECO',
+          processName: 'ECO 变更执行',
+          activeTaskIds: [],
+          businessData: {
+            billId: 'eco_001',
+            billNo: 'ECO-20260323-000001',
+            executionTitle: 'ECO 下发',
+            executionPlan: '通知工厂执行',
+            effectiveDate: '2026-04-01',
+            changeReason: '量产切换',
+            status: 'RUNNING',
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        createApprovalDetail({
+          businessKey: 'material_001',
+          businessType: 'PLM_MATERIAL',
+          processName: '物料主数据变更申请',
+          activeTaskIds: [],
+          businessData: {
+            billId: 'material_001',
+            billNo: 'MAT-20260323-000001',
+            materialCode: 'MAT-001',
+            materialName: '主板总成',
+            changeReason: '替换供应商物料编码',
+            changeType: 'ATTRIBUTE_UPDATE',
+            status: 'RUNNING',
+          },
+        })
+      )
 
-    renderWithQuery(<PLMECOExecutionBillDetailPage billId='plm_002' />)
-    renderWithQuery(<PLMMaterialChangeBillDetailPage billId='plm_003' />)
+    renderWithQuery(<PLMECOExecutionBillDetailPage billId='eco_001' />)
+    renderWithQuery(<PLMMaterialChangeBillDetailPage billId='material_001' />)
 
-    expect(await screen.findByText('PLM_ECO:plm_002')).toBeInTheDocument()
-    expect(await screen.findByText('PLM_MATERIAL:plm_003')).toBeInTheDocument()
+    expect(await screen.findByText('ECO 变更执行详情')).toBeInTheDocument()
+    expect(await screen.findByText('物料主数据变更详情')).toBeInTheDocument()
+    expect(await screen.findByText('ECO 变更执行')).toBeInTheDocument()
+    expect(await screen.findByText('物料主数据变更申请')).toBeInTheDocument()
+    expect(screen.getAllByText('当前没有可打开的待办审批单')).toHaveLength(2)
   })
 })

@@ -48,6 +48,20 @@ export function prettyJson(value: string | null | undefined) {
   }
 }
 
+// 将毫秒耗时格式化成更容易阅读的中文文案。
+export function formatDurationMillis(value: number | null | undefined) {
+  if (value == null) {
+    return '-'
+  }
+
+  if (value < 1000) {
+    return `${value} ms`
+  }
+
+  const seconds = value / 1000
+  return `${seconds.toFixed(seconds < 10 ? 2 : 1)} s`
+}
+
 // 把逗号分隔字符串或数组展示成中文标签。
 export function renderTags(value: string[] | string | null | undefined) {
   if (!value) {

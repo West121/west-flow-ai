@@ -84,6 +84,9 @@ const businessTypeTitleMap: Record<string, string> = {
   OA_LEAVE: '请假申请',
   OA_EXPENSE: '报销申请',
   OA_COMMON: '通用申请',
+  PLM_ECR: 'ECR 变更申请',
+  PLM_ECO: 'ECO 变更执行',
+  PLM_MATERIAL: '物料主数据变更',
 }
 
 const businessDataLabelMap: Record<string, string> = {
@@ -98,6 +101,16 @@ const businessDataLabelMap: Record<string, string> = {
   amount: '报销金额',
   title: '申请标题',
   content: '申请内容',
+  changeTitle: '变更标题',
+  changeReason: '变更原因',
+  affectedProductCode: '影响产品编码',
+  priorityLevel: '优先级',
+  executionTitle: '执行标题',
+  executionPlan: '执行计划',
+  effectiveDate: '生效日期',
+  materialCode: '物料编码',
+  materialName: '物料名称',
+  changeType: '变更类型',
 }
 
 // 详情页的业务标题优先取单据自己的标题，取不到再回退到流程名称。

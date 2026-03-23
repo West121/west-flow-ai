@@ -67,6 +67,7 @@ describe('ai-copilot api', () => {
         contextTags: ['工作台', '待办', '确认卡'],
         history: [],
         toolCalls: [],
+        audit: [],
       })
     )
 
@@ -95,6 +96,8 @@ describe('ai-copilot api', () => {
       messageCount: 4,
       contextTags: ['工作台', '待办', '确认卡'],
       history: [],
+      toolCalls: [],
+      audit: [],
     })
 
     expect(postMock).toHaveBeenNthCalledWith(1, '/ai/copilot/conversations/page', {
@@ -124,6 +127,7 @@ describe('ai-copilot api', () => {
           contextTags: ['验证'],
           history: [],
           toolCalls: [],
+          audit: [],
         })
       )
       .mockResolvedValueOnce(
@@ -163,6 +167,7 @@ describe('ai-copilot api', () => {
             },
           ],
           toolCalls: [{ toolCallId: 'tool_001', confirmationId: 'confirm_001' }],
+          audit: [],
         })
       )
       .mockResolvedValueOnce(okResponse({}))
@@ -187,6 +192,7 @@ describe('ai-copilot api', () => {
             },
           ],
           toolCalls: [{ toolCallId: 'tool_001', confirmationId: 'confirm_001' }],
+          audit: [],
         })
       )
       .mockResolvedValueOnce(
@@ -227,6 +233,7 @@ describe('ai-copilot api', () => {
             },
           ],
           toolCalls: [{ toolCallId: 'tool_001', confirmationId: 'confirm_001' }],
+          audit: [],
         })
       )
 

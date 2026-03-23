@@ -28,6 +28,7 @@ import {
   AiPageErrorState,
   AiStatusBadge,
   formatDateTime,
+  formatDurationMillis,
   renderTags,
 } from './shared'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
@@ -139,8 +140,10 @@ function renderToolCallTable(toolCalls: AiToolCallRecord[]) {
         <TableRow>
           <TableHead>工具</TableHead>
           <TableHead>类型</TableHead>
-          <TableHead>来源</TableHead>
+          <TableHead>命中来源</TableHead>
           <TableHead>状态</TableHead>
+          <TableHead>耗时</TableHead>
+          <TableHead>失败原因</TableHead>
           <TableHead>摘要</TableHead>
         </TableRow>
       </TableHeader>
@@ -150,16 +153,18 @@ function renderToolCallTable(toolCalls: AiToolCallRecord[]) {
             <TableRow key={toolCall.toolCallId}>
               <TableCell>{toolCall.toolKey}</TableCell>
               <TableCell>{toolCall.toolType}</TableCell>
-              <TableCell>{toolCall.toolSource}</TableCell>
+              <TableCell>{toolCall.hitSource || toolCall.toolSource}</TableCell>
               <TableCell>
                 <Badge variant={statusVariant(toolCall.status)}>{statusLabel(toolCall.status)}</Badge>
               </TableCell>
+              <TableCell>{formatDurationMillis(toolCall.executionDurationMillis)}</TableCell>
+              <TableCell className='max-w-[260px] whitespace-pre-wrap'>{toolCall.failureReason || '-'}</TableCell>
               <TableCell>{toolCall.summary || '-'}</TableCell>
             </TableRow>
           ))
         ) : (
           <TableRow>
-            <TableCell colSpan={5} className='py-8 text-center text-muted-foreground'>
+            <TableCell colSpan={7} className='py-8 text-center text-muted-foreground'>
               暂无工具调用
             </TableCell>
           </TableRow>
@@ -363,7 +368,7 @@ export function AiToolCallListPage({ search, navigate }: PageSearchProps) {
   const columns: ColumnDef<AiToolCallRecord, unknown>[] = [
     { accessorKey: 'toolKey', header: '工具标识' },
     { accessorKey: 'toolType', header: '类型' },
-    { accessorKey: 'toolSource', header: '来源' },
+    { accessorKey: 'toolSource', header: '命中来源', cell: ({ row }) => row.original.hitSource || row.original.toolSource },
     {
       accessorKey: 'status',
       header: '状态',
@@ -373,6 +378,16 @@ export function AiToolCallListPage({ search, navigate }: PageSearchProps) {
       accessorKey: 'requiresConfirmation',
       header: '需确认',
       cell: ({ row }) => (row.original.requiresConfirmation ? '是' : '否'),
+    },
+    {
+      accessorKey: 'executionDurationMillis',
+      header: '耗时',
+      cell: ({ row }) => formatDurationMillis(row.original.executionDurationMillis),
+    },
+    {
+      accessorKey: 'failureReason',
+      header: '失败原因',
+      cell: ({ row }) => row.original.failureReason || '-',
     },
     { accessorKey: 'createdAt', header: '创建时间', cell: ({ row }) => formatDateTime(row.original.createdAt) },
   ]
@@ -437,13 +452,15 @@ export function AiToolCallDetailPage({ toolCallId }: { toolCallId: string }) {
             items={[
               { label: '工具标识', value: detail.toolKey },
               { label: '工具类型', value: detail.toolType },
-              { label: '工具来源', value: detail.toolSource },
+              { label: '命中来源', value: detail.hitSource || detail.toolSource },
               { label: '状态', value: <AiStatusBadge label={statusLabel(detail.status)} variant={statusVariant(detail.status)} /> },
               { label: '需确认', value: detail.requiresConfirmation ? '是' : '否' },
               { label: '会话 ID', value: detail.conversationId },
               { label: '确认单 ID', value: detail.confirmationId || '-' },
               { label: '创建时间', value: formatDateTime(detail.createdAt) },
               { label: '完成时间', value: formatDateTime(detail.completedAt) },
+              { label: '执行耗时', value: formatDurationMillis(detail.executionDurationMillis) },
+              { label: '失败原因', value: detail.failureReason || '-' },
             ]}
           />
           <div className='mt-4 whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm leading-6'>

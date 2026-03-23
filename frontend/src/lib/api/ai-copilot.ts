@@ -70,6 +70,28 @@ export type AICopilotMessage = {
   blocks?: AICopilotMessageBlock[]
 }
 
+export type AICopilotToolCall = {
+  toolCallId: string
+  toolKey: string
+  toolType: string
+  toolSource: string
+  status: string
+  requiresConfirmation: boolean
+  confirmationId?: string | null
+  summary: string
+  createdAt?: string | null
+  completedAt?: string | null
+}
+
+export type AICopilotAuditEntry = {
+  auditId: string
+  conversationId: string
+  toolCallId?: string | null
+  actionType: string
+  summary: string
+  occurredAt: string
+}
+
 export type AICopilotSessionSummary = {
   sessionId: string
   title: string
@@ -82,6 +104,8 @@ export type AICopilotSessionSummary = {
 
 export type AICopilotSession = AICopilotSessionSummary & {
   history: AICopilotMessage[]
+  toolCalls: AICopilotToolCall[]
+  audit: AICopilotAuditEntry[]
 }
 
 export type AICopilotSessionCreationInput = {
@@ -123,7 +147,24 @@ type BackendAICopilotMessage = {
 
 type BackendAICopilotToolCall = {
   toolCallId: string
+  toolKey: string
+  toolType: string
+  toolSource: string
+  status: string
+  requiresConfirmation: boolean
   confirmationId?: string | null
+  summary: string
+  createdAt?: string | null
+  completedAt?: string | null
+}
+
+type BackendAICopilotAuditEntry = {
+  auditId: string
+  conversationId: string
+  toolCallId?: string | null
+  actionType: string
+  summary: string
+  occurredAt: string
 }
 
 type BackendAICopilotConversationSummary = {
@@ -139,6 +180,7 @@ type BackendAICopilotConversationSummary = {
 type BackendAICopilotConversationDetail = BackendAICopilotConversationSummary & {
   history: BackendAICopilotMessage[]
   toolCalls: BackendAICopilotToolCall[]
+  audit: BackendAICopilotAuditEntry[]
 }
 
 type BackendAICopilotConversationPage = {
@@ -212,8 +254,28 @@ function mapConversationDetailToSession(
       role: message.role,
       authorName: message.authorName,
       createdAt: message.createdAt,
-      content: message.content,
-      blocks: message.blocks ?? [],
+        content: message.content,
+        blocks: message.blocks ?? [],
+    })),
+    toolCalls: (conversation.toolCalls ?? []).map((toolCall) => ({
+      toolCallId: toolCall.toolCallId,
+      toolKey: toolCall.toolKey,
+      toolType: toolCall.toolType,
+      toolSource: toolCall.toolSource,
+      status: toolCall.status,
+      requiresConfirmation: toolCall.requiresConfirmation,
+      confirmationId: toolCall.confirmationId ?? null,
+      summary: toolCall.summary,
+      createdAt: toolCall.createdAt ?? null,
+      completedAt: toolCall.completedAt ?? null,
+    })),
+    audit: (conversation.audit ?? []).map((auditEntry) => ({
+      auditId: auditEntry.auditId,
+      conversationId: auditEntry.conversationId,
+      toolCallId: auditEntry.toolCallId ?? null,
+      actionType: auditEntry.actionType,
+      summary: auditEntry.summary,
+      occurredAt: auditEntry.occurredAt,
     })),
   }
 }

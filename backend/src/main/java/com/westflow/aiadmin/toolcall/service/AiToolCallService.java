@@ -11,6 +11,8 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -25,12 +27,13 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AiToolCallService {
 
-    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "toolType", "toolSource", "requiresConfirmation");
+    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "toolType", "toolSource", "hitSource", "requiresConfirmation");
     private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "completedAt", "toolKey", "status", "toolType", "toolSource");
     private static final List<String> SUPPORTED_SORT_DIRECTIONS = List.of("asc", "desc");
 
     private final AiAdminAccessService aiAdminAccessService;
     private final AiToolCallAdminMapper aiToolCallAdminMapper;
+    private final ObjectMapper objectMapper;
 
     /**
      * 分页查询工具调用记录。
@@ -66,13 +69,16 @@ public class AiToolCallService {
                 record.toolKey(),
                 record.toolType(),
                 record.toolSource(),
+                record.toolSource(),
                 record.status(),
                 record.requiresConfirmation(),
                 record.summary(),
                 record.confirmationId(),
                 record.operatorUserId(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
-                AiAdminSupport.toOffsetDateTime(record.completedAt())
+                AiAdminSupport.toOffsetDateTime(record.completedAt()),
+                resolveExecutionDurationMillis(record),
+                resolveFailureReason(record)
         );
     }
 
@@ -83,6 +89,7 @@ public class AiToolCallService {
                 record.toolKey(),
                 record.toolType(),
                 record.toolSource(),
+                record.toolSource(),
                 record.status(),
                 record.requiresConfirmation(),
                 record.argumentsJson(),
@@ -91,7 +98,9 @@ public class AiToolCallService {
                 record.confirmationId(),
                 record.operatorUserId(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
-                AiAdminSupport.toOffsetDateTime(record.completedAt())
+                AiAdminSupport.toOffsetDateTime(record.completedAt()),
+                resolveExecutionDurationMillis(record),
+                resolveFailureReason(record)
         );
     }
 
@@ -112,6 +121,7 @@ public class AiToolCallService {
                 case "status" -> status = AiAdminSupport.normalize(value);
                 case "toolType" -> toolType = AiAdminSupport.normalize(value);
                 case "toolSource" -> toolSource = AiAdminSupport.normalize(value);
+                case "hitSource" -> toolSource = AiAdminSupport.normalize(value);
                 case "requiresConfirmation" -> requiresConfirmation = Boolean.valueOf(value);
                 default -> {
                 }
@@ -152,8 +162,38 @@ public class AiToolCallService {
                 || record.toolSource().toLowerCase().contains(normalized)
                 || record.status().toLowerCase().contains(normalized)
                 || (record.summary() != null && record.summary().toLowerCase().contains(normalized))
+                || (resolveFailureReason(record) != null && resolveFailureReason(record).toLowerCase().contains(normalized))
                 || (record.argumentsJson() != null && record.argumentsJson().toLowerCase().contains(normalized))
                 || (record.resultJson() != null && record.resultJson().toLowerCase().contains(normalized));
+    }
+
+    private Long resolveExecutionDurationMillis(AiToolCallAdminRecord record) {
+        if (record.createdAt() == null || record.completedAt() == null) {
+            return null;
+        }
+        long duration = java.time.Duration.between(record.createdAt(), record.completedAt()).toMillis();
+        return Math.max(duration, 0L);
+    }
+
+    private String resolveFailureReason(AiToolCallAdminRecord record) {
+        if (!"FAILED".equalsIgnoreCase(record.status()) || record.resultJson() == null || record.resultJson().isBlank()) {
+            return null;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(record.resultJson());
+            if (root.hasNonNull("message")) {
+                return root.path("message").asText();
+            }
+            if (root.hasNonNull("error")) {
+                return root.path("error").asText();
+            }
+            if (root.hasNonNull("reason")) {
+                return root.path("reason").asText();
+            }
+        } catch (Exception ignored) {
+            // 保持降级兼容，继续尝试从原始结果中提取失败原因。
+        }
+        return record.resultJson();
     }
 
     private AiToolCallAdminRecord requireRecord(String toolCallId) {

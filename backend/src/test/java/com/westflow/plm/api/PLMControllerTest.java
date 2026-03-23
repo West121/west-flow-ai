@@ -15,6 +15,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+import java.util.stream.StreamSupport;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -142,6 +145,70 @@ class PLMControllerTest {
         assertThat(detail.path("billNo").asText()).startsWith("MAT-");
         assertThat(detail.path("materialCode").asText()).isEqualTo("MAT-001");
         assertThat(detail.path("status").asText()).isEqualTo("RUNNING");
+    }
+
+    @Test
+    void shouldPagePlmApprovalSheetsAcrossEcrEcoAndMaterialBills() throws Exception {
+        String token = login();
+        publishDefinition("plm_ecr", "PLM ECR 变更申请");
+        publishDefinition("plm_eco", "PLM ECO 变更执行");
+        publishDefinition("plm_material_change", "PLM 物料主数据变更申请");
+        seedBinding("PLM_ECR", "default", "plm_ecr", "bind_plm_ecr_default");
+        seedBinding("PLM_ECO", "default", "plm_eco", "bind_plm_eco_default");
+        seedBinding("PLM_MATERIAL", "default", "plm_material_change", "bind_plm_material_default");
+
+        createBill(token, "/api/v1/plm/ecrs", """
+                {
+                  "sceneCode": "default",
+                  "changeTitle": "升级物料版本",
+                  "changeReason": "客户要求",
+                  "affectedProductCode": "PRD-1001",
+                  "priorityLevel": "HIGH"
+                }
+                """);
+        createBill(token, "/api/v1/plm/ecos", """
+                {
+                  "sceneCode": "default",
+                  "executionTitle": "执行新品投产",
+                  "executionPlan": "按阶段分批执行",
+                  "effectiveDate": "2026-04-01",
+                  "changeReason": "流程变更"
+                }
+                """);
+        createBill(token, "/api/v1/plm/material-master-changes", """
+                {
+                  "sceneCode": "default",
+                  "materialCode": "MAT-001",
+                  "materialName": "主料A",
+                  "changeReason": "补充属性",
+                  "changeType": "ATTRIBUTE_UPDATE"
+                }
+                """);
+
+        String response = mockMvc.perform(get("/api/v1/plm/approval-sheets")
+                        .header("Authorization", "Bearer " + token)
+                        .param("page", "1")
+                        .param("pageSize", "20")
+                        .param("keyword", ""))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("total").asInt()).isEqualTo(3);
+        List<String> businessTypes = StreamSupport.stream(data.path("records").spliterator(), false)
+                .map(node -> node.path("businessType").asText())
+                .toList();
+        List<String> billNos = StreamSupport.stream(data.path("records").spliterator(), false)
+                .map(node -> node.path("billNo").asText())
+                .toList();
+        assertThat(businessTypes)
+                .containsExactlyInAnyOrder("PLM_ECR", "PLM_ECO", "PLM_MATERIAL");
+        assertThat(billNos)
+                .allMatch(value -> value.startsWith("ECR-")
+                        || value.startsWith("ECO-")
+                        || value.startsWith("MAT-"));
     }
 
     private JsonNode createBill(String token, String path, String body) throws Exception {

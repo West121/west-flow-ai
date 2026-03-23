@@ -1330,6 +1330,26 @@ type WorkbenchTodoDetailPageProps = {
   backLabel?: string
 }
 
+function resolveBusinessBillHref(detail: WorkbenchTaskDetail) {
+  if (!detail.businessKey) {
+    return null
+  }
+
+  switch (detail.businessType) {
+    case 'PLM_ECR':
+      return { to: '/plm/ecr/$billId', params: { billId: detail.businessKey } } as const
+    case 'PLM_ECO':
+      return { to: '/plm/eco/$billId', params: { billId: detail.businessKey } } as const
+    case 'PLM_MATERIAL':
+      return {
+        to: '/plm/material-master/$billId',
+        params: { billId: detail.businessKey },
+      } as const
+    default:
+      return null
+  }
+}
+
 // 待办详情页统一承接任务详情、表单和动作办理。
 export function WorkbenchTodoDetailPage({
   taskId,
@@ -1890,18 +1910,28 @@ export function WorkbenchTodoDetailPage({
       control: rejectForm.control,
       name: 'targetStrategy',
     }) ?? 'PREVIOUS_USER_TASK'
+  const businessBillHref = detail ? resolveBusinessBillHref(detail) : null
 
   return (
     <PageShell
       title='审批单详情'
       description='统一审批单详情页，支持业务正文、流程回顾和运行态处理动作。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to={backHref} search={{}}>
-            <ArrowLeft />
-            {backLabel}
-          </Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          {businessBillHref ? (
+            <Button asChild variant='secondary'>
+              <Link to={businessBillHref.to} params={businessBillHref.params}>
+                查看业务单
+              </Link>
+            </Button>
+          ) : null}
+          <Button asChild variant='outline'>
+            <Link to={backHref} search={{}}>
+              <ArrowLeft />
+              {backLabel}
+            </Link>
+          </Button>
+        </div>
       }
     >
       {detailQuery.isError ? (

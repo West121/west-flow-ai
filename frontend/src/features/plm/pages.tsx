@@ -26,7 +26,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
-import { WorkbenchTodoDetailPage } from '@/features/workbench/pages'
 import {
   formatApprovalSheetDateTime,
   resolveApprovalSheetInstanceStatusLabel,
@@ -39,24 +38,31 @@ import {
   listPLMApprovalSheets,
   type PLMLaunchResponse,
 } from '@/lib/api/plm'
-import { type ApprovalSheetListItem } from '@/lib/api/workbench'
+import {
+  getApprovalSheetDetailByBusiness,
+  type ApprovalSheetListItem,
+  type WorkbenchTaskDetail,
+} from '@/lib/api/workbench'
 
 const ecrFormSchema = z.object({
   changeTitle: z.string().trim().min(2, '请填写变更标题'),
   changeReason: z.string().trim().min(2, '请填写变更原因'),
-  impactLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+  affectedProductCode: z.string().trim().optional(),
+  priorityLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
 })
 
 const ecoFormSchema = z.object({
-  changeTitle: z.string().trim().min(2, '请填写执行标题'),
+  executionTitle: z.string().trim().min(2, '请填写执行标题'),
   executionPlan: z.string().trim().min(2, '请填写执行说明'),
-  owner: z.string().trim().min(2, '请填写责任人'),
+  effectiveDate: z.string().optional(),
+  changeReason: z.string().trim().min(2, '请填写变更原因'),
 })
 
 const materialChangeFormSchema = z.object({
   materialCode: z.string().trim().min(2, '请填写物料编码'),
   materialName: z.string().trim().min(2, '请填写物料名称'),
   changeReason: z.string().trim().min(2, '请填写变更原因'),
+  changeType: z.enum(['ATTRIBUTE_UPDATE', 'RENAME', 'CODE_UPDATE']),
 })
 
 type ECRFormValues = z.infer<typeof ecrFormSchema>
@@ -156,7 +162,8 @@ function ECRCreateForm() {
     defaultValues: {
       changeTitle: '',
       changeReason: '',
-      impactLevel: 'MEDIUM',
+      affectedProductCode: '',
+      priorityLevel: 'MEDIUM',
     },
   })
   const launchMutation = useMutation({
@@ -181,7 +188,8 @@ function ECRCreateForm() {
               launchMutation.mutate({
                 changeTitle: values.changeTitle.trim(),
                 changeReason: values.changeReason.trim(),
-                impactLevel: values.impactLevel,
+                affectedProductCode: values.affectedProductCode?.trim() || undefined,
+                priorityLevel: values.priorityLevel,
               })
             )}
           >
@@ -215,10 +223,23 @@ function ECRCreateForm() {
 
             <FormField
               control={form.control}
-              name='impactLevel'
+              name='affectedProductCode'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>影响等级</FormLabel>
+                  <FormLabel>影响产品编码</FormLabel>
+                  <FormControl>
+                    <Input placeholder='例如：PRD-001' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='priorityLevel'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>优先级</FormLabel>
                   <FormControl>
                     <select
                       className='h-10 w-full rounded-md border border-input bg-background px-3 text-sm ring-offset-background'
@@ -261,9 +282,10 @@ function ECOCreateForm() {
   const form = useForm<ECOFormValues>({
     resolver: zodResolver(ecoFormSchema),
     defaultValues: {
-      changeTitle: '',
+      executionTitle: '',
       executionPlan: '',
-      owner: '',
+      effectiveDate: '',
+      changeReason: '',
     },
   })
   const launchMutation = useMutation({
@@ -286,15 +308,16 @@ function ECOCreateForm() {
             className='space-y-6'
             onSubmit={form.handleSubmit((values) =>
               launchMutation.mutate({
-                changeTitle: values.changeTitle.trim(),
+                executionTitle: values.executionTitle.trim(),
                 executionPlan: values.executionPlan.trim(),
-                owner: values.owner.trim(),
+                effectiveDate: values.effectiveDate?.trim() || undefined,
+                changeReason: values.changeReason.trim(),
               })
             )}
           >
             <FormField
               control={form.control}
-              name='changeTitle'
+              name='executionTitle'
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>执行标题</FormLabel>
@@ -320,12 +343,25 @@ function ECOCreateForm() {
             />
             <FormField
               control={form.control}
-              name='owner'
+              name='effectiveDate'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>责任人</FormLabel>
+                  <FormLabel>生效日期</FormLabel>
                   <FormControl>
-                    <Input placeholder='例如：研发部' {...field} />
+                    <Input type='date' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='changeReason'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>变更原因</FormLabel>
+                  <FormControl>
+                    <Input placeholder='例如：量产切换' {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -362,6 +398,7 @@ function MaterialChangeCreateForm() {
       materialCode: '',
       materialName: '',
       changeReason: '',
+      changeType: 'ATTRIBUTE_UPDATE',
     },
   })
   const launchMutation = useMutation({
@@ -391,6 +428,7 @@ function MaterialChangeCreateForm() {
                 materialCode: values.materialCode.trim(),
                 materialName: values.materialName.trim(),
                 changeReason: values.changeReason.trim(),
+                changeType: values.changeType,
               })
             )}
           >
@@ -428,6 +466,26 @@ function MaterialChangeCreateForm() {
                   <FormLabel>变更原因</FormLabel>
                   <FormControl>
                     <Input placeholder='例如：替换供应商物料编码' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name='changeType'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>变更类型</FormLabel>
+                  <FormControl>
+                    <select
+                      className='h-10 w-full rounded-md border border-input bg-background px-3 text-sm ring-offset-background'
+                      {...field}
+                    >
+                      <option value='ATTRIBUTE_UPDATE'>属性更新</option>
+                      <option value='RENAME'>名称变更</option>
+                      <option value='CODE_UPDATE'>编码调整</option>
+                    </select>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -767,24 +825,140 @@ export function PLMQueryPage() {
   )
 }
 
-export function PLMApprovalSheetDetailPage({
-  businessType,
+type PlmBusinessType = 'PLM_ECR' | 'PLM_ECO' | 'PLM_MATERIAL'
+
+type PlmBusinessField = {
+  key: string
+  label: string
+}
+
+function formatPlmBusinessValue(value: unknown) {
+  if (value === null || value === undefined || value === '') {
+    return '--'
+  }
+
+  return String(value)
+}
+
+function resolveApprovalDetailHref(detail: WorkbenchTaskDetail | undefined) {
+  const taskId = detail?.activeTaskIds[0]
+  if (!taskId) {
+    return null
+  }
+
+  return { to: '/workbench/todos/$taskId', params: { taskId } } as const
+}
+
+function PLMBusinessBillDetailPage({
   billId,
-  backHref = '/workbench/todos/list',
-  backLabel = '返回待办列表',
+  businessType,
+  title,
+  description,
+  fields,
 }: {
-  businessType: 'PLM_ECR' | 'PLM_ECO' | 'PLM_MATERIAL'
   billId: string
-  backHref?: '/workbench/todos/list'
-  backLabel?: string
+  businessType: PlmBusinessType
+  title: string
+  description: string
+  fields: PlmBusinessField[]
 }) {
+  const approvalDetailQuery = useQuery({
+    queryKey: ['plm', 'approval-detail', businessType, billId],
+    queryFn: () =>
+      getApprovalSheetDetailByBusiness({
+        businessType,
+        businessId: billId,
+      }),
+  })
+  const approvalDetail = approvalDetailQuery.data
+  const businessDetail = (approvalDetail?.businessData ?? {}) as Record<
+    string,
+    unknown
+  >
+  const approvalHref = resolveApprovalDetailHref(approvalDetail)
+
   return (
-    <WorkbenchTodoDetailPage
-      businessType={businessType}
-      businessId={billId}
-      backHref={backHref}
-      backLabel={backLabel}
-    />
+    <PageShell
+      title={title}
+      description={description}
+      actions={
+        <Button asChild variant='outline'>
+          <Link to='/plm/query'>返回 PLM 查询</Link>
+        </Button>
+      }
+    >
+      {approvalDetailQuery.isError ? (
+        <Alert variant='destructive' className='mb-4'>
+          <AlertTitle>业务单详情加载失败</AlertTitle>
+          <AlertDescription>
+            {approvalDetailQuery.error instanceof Error
+              ? approvalDetailQuery.error.message
+              : '请稍后重试'}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className='grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]'>
+        <Card>
+          <CardHeader>
+            <CardTitle>业务单详情</CardTitle>
+            <CardDescription>
+              单号 {formatPlmBusinessValue(businessDetail?.billNo)} · 状态{' '}
+              {formatPlmBusinessValue(
+                businessDetail?.status ?? approvalDetail?.instanceStatus
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className='grid gap-4 text-sm md:grid-cols-2'>
+              {fields.map((field) => (
+                <div key={field.key} className='space-y-1 rounded-lg border bg-muted/20 p-4'>
+                  <dt className='text-xs text-muted-foreground'>{field.label}</dt>
+                  <dd>{formatPlmBusinessValue(businessDetail?.[field.key])}</dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>审批单联查</CardTitle>
+            <CardDescription>业务单与审批单保持双向联查，便于在业务视角和流程视角之间切换。</CardDescription>
+          </CardHeader>
+          <CardContent className='space-y-4 text-sm'>
+            <div className='rounded-lg border bg-muted/20 p-4'>
+              <dl className='space-y-2'>
+                <div className='flex justify-between gap-3'>
+                  <dt className='text-muted-foreground'>流程名称</dt>
+                  <dd>{approvalDetail?.processName ?? '--'}</dd>
+                </div>
+                <div className='flex justify-between gap-3'>
+                  <dt className='text-muted-foreground'>当前节点</dt>
+                  <dd>{approvalDetail?.nodeName ?? '--'}</dd>
+                </div>
+                <div className='flex justify-between gap-3'>
+                  <dt className='text-muted-foreground'>实例状态</dt>
+                  <dd>{approvalDetail?.instanceStatus ?? '--'}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {approvalHref ? (
+              <Button asChild>
+                <Link to={approvalHref.to} params={approvalHref.params}>
+                  查看审批单
+                </Link>
+              </Button>
+            ) : (
+              <Button type='button' disabled>
+                当前没有可打开的待办审批单
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </PageShell>
   )
 }
 
@@ -797,11 +971,18 @@ export function PLMECRRequestBillDetailPage({
   const billId = billIdProp ?? routeParams.billId
 
   return (
-    <PLMApprovalSheetDetailPage
+    <PLMBusinessBillDetailPage
       businessType='PLM_ECR'
       billId={billId}
-      backHref='/workbench/todos/list'
-      backLabel='返回待办列表'
+      title='ECR 变更申请详情'
+      description='查看 ECR 业务单正文，并从业务视角联查当前审批单。'
+      fields={[
+        { key: 'billNo', label: '业务单号' },
+        { key: 'changeTitle', label: '变更标题' },
+        { key: 'changeReason', label: '变更原因' },
+        { key: 'affectedProductCode', label: '影响产品编码' },
+        { key: 'priorityLevel', label: '优先级' },
+      ]}
     />
   )
 }
@@ -815,11 +996,18 @@ export function PLMECOExecutionBillDetailPage({
   const billId = billIdProp ?? routeParams.billId
 
   return (
-    <PLMApprovalSheetDetailPage
+    <PLMBusinessBillDetailPage
       businessType='PLM_ECO'
       billId={billId}
-      backHref='/workbench/todos/list'
-      backLabel='返回待办列表'
+      title='ECO 变更执行详情'
+      description='查看 ECO 执行单正文，并从业务视角联查当前审批单。'
+      fields={[
+        { key: 'billNo', label: '业务单号' },
+        { key: 'executionTitle', label: '执行标题' },
+        { key: 'executionPlan', label: '执行计划' },
+        { key: 'effectiveDate', label: '生效日期' },
+        { key: 'changeReason', label: '变更原因' },
+      ]}
     />
   )
 }
@@ -833,11 +1021,18 @@ export function PLMMaterialChangeBillDetailPage({
   const billId = billIdProp ?? routeParams.billId
 
   return (
-    <PLMApprovalSheetDetailPage
+    <PLMBusinessBillDetailPage
       businessType='PLM_MATERIAL'
       billId={billId}
-      backHref='/workbench/todos/list'
-      backLabel='返回待办列表'
+      title='物料主数据变更详情'
+      description='查看物料主数据变更正文，并从业务视角联查当前审批单。'
+      fields={[
+        { key: 'billNo', label: '业务单号' },
+        { key: 'materialCode', label: '物料编码' },
+        { key: 'materialName', label: '物料名称' },
+        { key: 'changeReason', label: '变更原因' },
+        { key: 'changeType', label: '变更类型' },
+      ]}
     />
   )
 }

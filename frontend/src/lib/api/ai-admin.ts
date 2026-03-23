@@ -204,6 +204,7 @@ export type AiToolCallRecord = {
   toolKey: string
   toolType: string
   toolSource: string
+  hitSource: string
   status: AiToolCallStatus | string
   requiresConfirmation: boolean
   summary: string | null
@@ -211,6 +212,8 @@ export type AiToolCallRecord = {
   operatorUserId: string
   createdAt: string
   completedAt: string | null
+  executionDurationMillis: number | null
+  failureReason: string | null
 }
 
 export type AiConfirmationStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
@@ -247,6 +250,28 @@ export type AiToolCallDetail = AiToolCallRecord & {
   argumentsJson: string
   resultJson: string
 }
+
+export type AiMcpConnectionStatus = 'UP' | 'DOWN' | 'DISABLED' | 'INTERNAL'
+
+export type AiMcpDiagnosticRecord = {
+  mcpId: string
+  mcpCode: string
+  mcpName: string
+  endpointUrl: string | null
+  transportType: AiMcpTransportType
+  requiredCapabilityCode: string | null
+  enabled: boolean
+  registryStatus: AiRegistryStatus | string
+  connectionStatus: AiMcpConnectionStatus | string
+  responseTimeMillis: number | null
+  toolCount: number | null
+  failureReason: string | null
+  checkedAt: string
+  metadataJson: string
+}
+
+export type AiMcpDiagnosticPageResponse = BasePageResponse<AiMcpDiagnosticRecord>
+export type AiMcpDiagnosticDetail = AiMcpDiagnosticRecord
 
 export type AiConfirmationDetail = AiConfirmationRecord
 
@@ -364,6 +389,27 @@ export async function listAiMcps(
 export async function getAiMcpDetail(mcpId: string): Promise<AiMcpDetail> {
   const response = await apiClient.get<ApiSuccessResponse<AiMcpDetail>>(
     `/system/ai/mcps/${mcpId}`
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function listAiMcpDiagnostics(
+  search: ListQuerySearch
+): Promise<AiMcpDiagnosticPageResponse> {
+  const response = await apiClient.post<ApiSuccessResponse<AiMcpDiagnosticPageResponse>>(
+    '/system/ai/mcps/diagnostics/page',
+    toPaginationRequest(search)
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function getAiMcpDiagnosticDetail(
+  mcpId: string
+): Promise<AiMcpDiagnosticDetail> {
+  const response = await apiClient.get<ApiSuccessResponse<AiMcpDiagnosticDetail>>(
+    `/system/ai/mcps/diagnostics/${mcpId}`
   )
 
   return unwrapResponse(response)

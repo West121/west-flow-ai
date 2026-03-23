@@ -1234,6 +1234,46 @@ describe('workbench pages', () => {
     ).toHaveAttribute('href', '/oa/query')
   })
 
+  it('shows a business bill link for PLM approval sheets', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_plm_001',
+        processKey: 'plm_ecr',
+        processName: 'PLM ECR 变更申请',
+        businessKey: 'ecr_001',
+        businessType: 'PLM_ECR',
+        formData: {
+          changeTitle: '结构件变更',
+          changeReason: '供应替代',
+        },
+        businessData: {
+          billId: 'ecr_001',
+          billNo: 'ECR-20260323-000001',
+          changeTitle: '结构件变更',
+          changeReason: '供应替代',
+          affectedProductCode: 'PRD-001',
+          priorityLevel: 'HIGH',
+        },
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: true,
+      canReturn: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_plm_001' />)
+
+    expect(await screen.findByText('业务正文')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看业务单' })).toHaveAttribute(
+      'href',
+      '/plm/ecr/$billId'
+    )
+  })
+
   it('shows quick task actions and an action timeline in the detail page', async () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
       createWorkbenchTaskDetail({

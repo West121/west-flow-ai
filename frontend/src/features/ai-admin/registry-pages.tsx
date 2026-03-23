@@ -45,6 +45,7 @@ import {
   getAiAgentDetail,
   getAiAgentFormOptions,
   getAiMcpDetail,
+  getAiMcpDiagnosticDetail,
   getAiMcpFormOptions,
   getAiSkillDetail,
   getAiSkillFormOptions,
@@ -1370,6 +1371,10 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
     queryKey: ['ai-admin', 'mcps', mcpId],
     queryFn: () => getAiMcpDetail(mcpId),
   })
+  const diagnosticQuery = useQuery({
+    queryKey: ['ai-admin', 'mcps', 'diagnostics', mcpId],
+    queryFn: () => getAiMcpDiagnosticDetail(mcpId),
+  })
 
   if (query.isLoading) {
     return registryLoadingPage('MCP 注册表', '查看 MCP 服务注册信息。')
@@ -1407,6 +1412,27 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
       </AiInfoCard>
       <AiInfoCard title='元数据'>
         <AiJsonBlock value={detail.metadataJson} />
+      </AiInfoCard>
+      <AiInfoCard title='连通性诊断' description='展示最近一次真实连通检测结果。'>
+        {diagnosticQuery.isLoading ? (
+          <div className='space-y-3'>
+            <div className='h-8 w-1/3 rounded bg-muted' />
+            <div className='h-24 rounded bg-muted' />
+          </div>
+        ) : diagnosticQuery.isError || !diagnosticQuery.data ? (
+          <p className='text-sm text-muted-foreground'>暂无法获取连通性诊断结果。</p>
+        ) : (
+          <AiKeyValueGrid
+            items={[
+              { label: '连通状态', value: <AiStatusBadge label={diagnosticQuery.data.connectionStatus} variant={diagnosticQuery.data.connectionStatus === 'DOWN' ? 'destructive' : 'secondary'} /> },
+              { label: '工具数', value: diagnosticQuery.data.toolCount ?? '-' },
+              { label: '耗时', value: diagnosticQuery.data.responseTimeMillis ? `${diagnosticQuery.data.responseTimeMillis} ms` : '-' },
+              { label: '失败原因', value: diagnosticQuery.data.failureReason || '-' },
+              { label: '检查时间', value: formatDateTime(diagnosticQuery.data.checkedAt) },
+              { label: '注册状态', value: diagnosticQuery.data.registryStatus },
+            ]}
+          />
+        )}
       </AiInfoCard>
     </RegistryDetailPage>
   )

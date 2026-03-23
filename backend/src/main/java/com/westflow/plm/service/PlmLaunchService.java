@@ -2,6 +2,8 @@ package com.westflow.plm.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.common.error.ContractException;
+import com.westflow.common.query.PageRequest;
+import com.westflow.common.query.PageResponse;
 import com.westflow.plm.api.CreatePLMEcoBillRequest;
 import com.westflow.plm.api.CreatePLMEcrBillRequest;
 import com.westflow.plm.api.CreatePLMMaterialChangeBillRequest;
@@ -18,10 +20,15 @@ import com.westflow.plm.model.PlmMaterialChangeBillRecord;
 import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
+import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
+import com.westflow.processruntime.api.ApprovalSheetListView;
+import com.westflow.processruntime.api.ApprovalSheetPageRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.processruntime.service.FlowableRuntimeStartService;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -36,12 +43,19 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PlmLaunchService {
 
+    private static final List<String> PLM_APPROVAL_BUSINESS_TYPES = List.of(
+            "PLM_ECR",
+            "PLM_ECO",
+            "PLM_MATERIAL"
+    );
+
     private final BusinessProcessBindingService businessProcessBindingService;
     private final BusinessProcessLinkMapper businessProcessLinkMapper;
     private final PlmEcrBillMapper plmEcrBillMapper;
     private final PlmEcoBillMapper plmEcoBillMapper;
     private final PlmMaterialChangeBillMapper plmMaterialChangeBillMapper;
     private final FlowableRuntimeStartService flowableRuntimeStartService;
+    private final FlowableProcessRuntimeService flowableProcessRuntimeService;
 
     /**
      * 发起 ECR 变更申请。
@@ -185,6 +199,22 @@ public class PlmLaunchService {
             throw resourceNotFound("物料主数据变更申请不存在", billId);
         }
         return detail;
+    }
+
+    /**
+     * 查询当前登录人发起的 PLM 审批单列表。
+     */
+    public PageResponse<ApprovalSheetListItemResponse> approvalSheetPage(PageRequest request) {
+        return flowableProcessRuntimeService.pageApprovalSheets(new ApprovalSheetPageRequest(
+                ApprovalSheetListView.INITIATED,
+                PLM_APPROVAL_BUSINESS_TYPES,
+                request.page(),
+                request.pageSize(),
+                request.keyword(),
+                request.filters(),
+                request.sorts(),
+                request.groups()
+        ));
     }
 
     private StartProcessResponse startBusinessProcess(

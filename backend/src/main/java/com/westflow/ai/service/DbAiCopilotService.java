@@ -22,6 +22,8 @@ import com.westflow.ai.model.AiConversationRecord;
 import com.westflow.ai.model.AiConversationSummaryResponse;
 import com.westflow.ai.model.AiMessageAppendRequest;
 import com.westflow.ai.model.AiMessageBlockResponse;
+import com.westflow.ai.model.AiMessageBlockResponse.Field;
+import com.westflow.ai.model.AiMessageBlockResponse.Metric;
 import com.westflow.ai.model.AiMessageRecord;
 import com.westflow.ai.model.AiMessageResponse;
 import com.westflow.ai.model.AiToolCallRecord;
@@ -330,6 +332,7 @@ public class DbAiCopilotService implements AiCopilotService {
                     "我已经整理出建议动作，确认后才会真正执行写操作。",
                     List.of(
                             defaultTextBlock("当前请求已进入 Supervisor 审核流程。"),
+                            buildProcessStartPreviewBlock(content, domain, routePath),
                             confirmationBlock(toolResult)
                     )
             );
@@ -344,7 +347,10 @@ public class DbAiCopilotService implements AiCopilotService {
             );
             persistToolCall(toolResult);
             insertAudit(conversation.conversationId(), toolResult.toolCallId(), "READ", toolResult.summary());
-            return new AssistantReply(resolveRuntimeReply(content, gatewayResponse, domain, buildReadSummary(toolResult)), buildReadBlocks(toolResult, gatewayResponse));
+            return new AssistantReply(
+                    resolveRuntimeReply(content, gatewayResponse, domain, buildReadSummary(toolResult)),
+                    buildReadBlocks(content, routePath, toolResult, gatewayResponse)
+            );
         }
 
         return new AssistantReply(
@@ -377,7 +383,11 @@ public class DbAiCopilotService implements AiCopilotService {
                         "确认处理",
                         "暂不执行",
                         status,
-                        offsetNow(now) == null ? null : offsetNow(now).toString()
+                        offsetNow(now) == null ? null : offsetNow(now).toString(),
+                        currentUserId(),
+                        request.comment(),
+                        List.of(),
+                        List.of()
                 ))),
                 currentUserId(),
                 now,
@@ -482,7 +492,7 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     private AiMessageBlockResponse defaultTextBlock(String content) {
-        return new AiMessageBlockResponse("text", null, content, null, null, null, null, null, null, null);
+        return new AiMessageBlockResponse("text", null, content, null, null, null, null, null, null, null, null, null, List.of(), List.of());
     }
 
     private List<AiMessageBlockResponse> parseMessageBlocks(String blocksJson) {
@@ -701,11 +711,20 @@ public class DbAiCopilotService implements AiCopilotService {
                 "确认处理",
                 "暂不执行",
                 "pending",
-                null
+                null,
+                null,
+                null,
+                List.of(),
+                List.of()
         );
     }
 
-    private List<AiMessageBlockResponse> buildReadBlocks(AiToolCallResultResponse result, AiGatewayResponse gatewayResponse) {
+    private List<AiMessageBlockResponse> buildReadBlocks(
+            String content,
+            String routePath,
+            AiToolCallResultResponse result,
+            AiGatewayResponse gatewayResponse
+    ) {
         if ("workflow.definition.list".equals(result.toolKey())) {
             return List.of(
                     defaultTextBlock("已通过平台工具读取流程定义。"),
@@ -715,10 +734,20 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         if ("task.query".equals(result.toolKey()) || "workflow.todo.list".equals(result.toolKey())) {
             Object count = result.result().getOrDefault("count", 0);
-            return List.of(
+            java.util.ArrayList<AiMessageBlockResponse> blocks = new java.util.ArrayList<>(List.of(
                     defaultTextBlock("已通过平台内置工具读取待办数据。"),
                     defaultTextBlock("当前路由模式：" + gatewayResponse.routeMode()),
-                    defaultTextBlock("当前待办数量：" + count)
+                    buildTodoStatsBlock(routePath, count)
+            ));
+            if (content != null && (content.contains("解释") || content.contains("路径") || content.contains("为什么"))) {
+                blocks.add(defaultTextBlock(buildTodoExplanation(routePath, result.result())));
+            }
+            return List.copyOf(blocks);
+        }
+        if ("stats.query".equals(result.toolKey())) {
+            return List.of(
+                    defaultTextBlock("已通过平台统计工具生成指标摘要。"),
+                    buildStatsAnswerBlock(result.result())
             );
         }
         return List.of(
@@ -736,6 +765,9 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
             return "我已经生成当前 PLM 变更摘要，可继续追问 ECR/ECO 影响范围。";
+        }
+        if ("stats.query".equals(result.toolKey())) {
+            return "我已经整理出当前统计摘要，可继续追问时间范围或业务域。";
         }
         return "我已经完成本次只读分析。";
     }
@@ -809,6 +841,90 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("/(?:oa|plm)/[^/]+/([^/?]+)").matcher(routePath);
         return matcher.find() ? matcher.group(1) : fallbackKeyword;
+    }
+
+    private AiMessageBlockResponse buildProcessStartPreviewBlock(String content, String domain, String routePath) {
+        return new AiMessageBlockResponse(
+                "form-preview",
+                "拟发起流程预览",
+                null,
+                null,
+                null,
+                "确认前可先核对业务域、来源页面和用户指令。",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(
+                        new Field("业务域", domain, null),
+                        new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
+                        new Field("用户指令", content, "确认后进入实际流程发起")
+                ),
+                List.of()
+        );
+    }
+
+    private AiMessageBlockResponse buildTodoStatsBlock(String routePath, Object count) {
+        String taskId = extractTaskId(routePath);
+        return new AiMessageBlockResponse(
+                "stats",
+                "待办摘要",
+                null,
+                null,
+                null,
+                "当前待办和路由上下文已经同步到 Copilot。",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(
+                        new Metric("当前待办数", String.valueOf(count), null, "neutral"),
+                        new Metric("待办编号", taskId.isBlank() ? "未定位" : taskId, null, "warning"),
+                        new Metric("视图", "TODO", "来自平台待办查询", "positive")
+                )
+        );
+    }
+
+    private String buildTodoExplanation(String routePath, Map<String, Object> result) {
+        String taskId = extractTaskId(routePath);
+        Object items = result.get("items");
+        if (!taskId.isBlank()) {
+            return "待办 " + taskId + " 已命中当前上下文，Copilot 会优先围绕该事项解释处理路径。";
+        }
+        return "当前已读取待办列表，命中结果：" + (items == null ? "[]" : items);
+    }
+
+    private AiMessageBlockResponse buildStatsAnswerBlock(Map<String, Object> result) {
+        Object total = result.getOrDefault("total", 0);
+        Object completed = result.getOrDefault("completed", 0);
+        Object pending = result.getOrDefault("pending", 0);
+        Object completionRate = result.getOrDefault("completionRate", "--");
+        return new AiMessageBlockResponse(
+                "stats",
+                "统计问答结果",
+                null,
+                null,
+                null,
+                "当前回答来自平台统计工具，可继续细分到流程、OA 或 PLM 维度。",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(),
+                List.of(
+                        new Metric("总量", String.valueOf(total), null, "neutral"),
+                        new Metric("已完成", String.valueOf(completed), null, "positive"),
+                        new Metric("待处理", String.valueOf(pending), null, "warning"),
+                        new Metric("完成率", String.valueOf(completionRate), null, "positive")
+                )
+        );
     }
 
     private record AssistantReply(

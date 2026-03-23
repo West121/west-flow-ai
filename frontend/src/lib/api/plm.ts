@@ -22,19 +22,22 @@ export type PLMLaunchResponse = {
 export type PLMECRRequestPayload = {
   changeTitle: string
   changeReason: string
-  impactLevel: 'LOW' | 'MEDIUM' | 'HIGH'
+  affectedProductCode?: string
+  priorityLevel?: 'LOW' | 'MEDIUM' | 'HIGH'
 }
 
 export type PLMECOExecutionPayload = {
-  changeTitle: string
+  executionTitle: string
   executionPlan: string
-  owner: string
+  effectiveDate?: string
+  changeReason: string
 }
 
 export type PLMMaterialChangePayload = {
   materialCode: string
   materialName: string
   changeReason: string
+  changeType?: string
 }
 
 export type PLMBillDetail = {

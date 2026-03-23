@@ -72,16 +72,18 @@ describe('plm api', () => {
       createPLMECRRequest({
         changeTitle: '结构件变更',
         changeReason: '供应替代',
-        impactLevel: 'HIGH',
+        affectedProductCode: 'PRD-001',
+        priorityLevel: 'HIGH',
       })
     ).resolves.toMatchObject({
       billNo: 'PLM-ECR-001',
     })
     await expect(
       createPLMECOExecution({
-        changeTitle: 'ECO 下发',
+        executionTitle: 'ECO 下发',
         executionPlan: '通知工厂执行',
-        owner: '研发部',
+        effectiveDate: '2026-04-01',
+        changeReason: '量产切换',
       })
     ).resolves.toMatchObject({
       billNo: 'PLM-ECO-001',
@@ -91,6 +93,7 @@ describe('plm api', () => {
         materialCode: 'MAT-001',
         materialName: '主板总成',
         changeReason: '替换物料编码',
+        changeType: 'ATTRIBUTE_UPDATE',
       })
     ).resolves.toMatchObject({
       billNo: 'PLM-MATERIAL-001',
@@ -99,17 +102,20 @@ describe('plm api', () => {
     expect(postMock).toHaveBeenNthCalledWith(1, '/plm/ecrs', {
       changeTitle: '结构件变更',
       changeReason: '供应替代',
-      impactLevel: 'HIGH',
+      affectedProductCode: 'PRD-001',
+      priorityLevel: 'HIGH',
     })
     expect(postMock).toHaveBeenNthCalledWith(2, '/plm/ecos', {
-      changeTitle: 'ECO 下发',
+      executionTitle: 'ECO 下发',
       executionPlan: '通知工厂执行',
-      owner: '研发部',
+      effectiveDate: '2026-04-01',
+      changeReason: '量产切换',
     })
     expect(postMock).toHaveBeenNthCalledWith(3, '/plm/material-master-changes', {
       materialCode: 'MAT-001',
       materialName: '主板总成',
       changeReason: '替换物料编码',
+      changeType: 'ATTRIBUTE_UPDATE',
     })
   })
 
