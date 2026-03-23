@@ -1,6 +1,7 @@
 package com.westflow.plm.mapper;
 
 import com.westflow.plm.api.PlmMaterialChangeBillDetailResponse;
+import com.westflow.plm.api.PlmMaterialChangeBillListItemResponse;
 import com.westflow.plm.model.PlmMaterialChangeBillRecord;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -73,4 +74,56 @@ public interface PlmMaterialChangeBillMapper {
             WHERE id = #{billId}
             """)
     PlmMaterialChangeBillDetailResponse selectDetail(@Param("billId") String billId);
+
+    /**
+     * 查询物料主数据变更分页列表。
+     */
+    @Select("""
+            SELECT
+              id AS billId,
+              bill_no AS billNo,
+              scene_code AS sceneCode,
+              material_code AS materialCode,
+              material_name AS materialName,
+              change_type AS changeType,
+              change_reason AS changeReason,
+              process_instance_id AS processInstanceId,
+              status,
+              creator_user_id AS creatorUserId,
+              created_at AS createdAt,
+              updated_at AS updatedAt
+            FROM plm_material_change
+            WHERE (
+              #{keyword} IS NULL
+              OR #{keyword} = ''
+              OR LOWER(bill_no) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(material_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(material_name) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(scene_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+            )
+            ORDER BY created_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    java.util.List<PlmMaterialChangeBillListItemResponse> selectPage(
+            @Param("keyword") String keyword,
+            @Param("limit") int limit,
+            @Param("offset") int offset
+    );
+
+    /**
+     * 统计物料主数据变更数量。
+     */
+    @Select("""
+            SELECT COUNT(*)
+            FROM plm_material_change
+            WHERE (
+              #{keyword} IS NULL
+              OR #{keyword} = ''
+              OR LOWER(bill_no) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(material_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(material_name) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(scene_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+            )
+            """)
+    long countPage(@Param("keyword") String keyword);
 }

@@ -55,11 +55,79 @@ export type AICopilotStatsBlock = {
   }[]
 }
 
+export type AICopilotTraceStep = {
+  stage: string
+  label: string
+  detail?: string
+  status?: string
+}
+
+export type AICopilotFailureInfo = {
+  code: string
+  message: string
+  detail?: string
+}
+
+export type AICopilotResultBlock = {
+  type: 'result'
+  title: string
+  summary?: string
+  detail?: string
+  status?: string
+  sourceType?: string
+  sourceKey?: string
+  sourceName?: string
+  toolType?: string
+  result?: Record<string, unknown>
+  trace?: AICopilotTraceStep[]
+  fields?: {
+    label: string
+    value: string
+    hint?: string
+  }[]
+  metrics?: {
+    label: string
+    value: string
+    hint?: string
+    tone?: 'neutral' | 'positive' | 'warning'
+  }[]
+}
+
+export type AICopilotFailureBlock = {
+  type: 'failure'
+  title: string
+  summary?: string
+  detail?: string
+  status?: string
+  sourceType?: string
+  sourceKey?: string
+  sourceName?: string
+  toolType?: string
+  failure?: AICopilotFailureInfo
+  trace?: AICopilotTraceStep[]
+}
+
+export type AICopilotTraceBlock = {
+  type: 'trace'
+  title: string
+  summary?: string
+  detail?: string
+  status?: string
+  sourceType?: string
+  sourceKey?: string
+  sourceName?: string
+  toolType?: string
+  trace?: AICopilotTraceStep[]
+}
+
 export type AICopilotMessageBlock =
   | AICopilotTextBlock
   | AICopilotConfirmBlock
   | AICopilotFormPreviewBlock
   | AICopilotStatsBlock
+  | AICopilotResultBlock
+  | AICopilotFailureBlock
+  | AICopilotTraceBlock
 
 export type AICopilotMessage = {
   messageId: string

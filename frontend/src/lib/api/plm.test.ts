@@ -168,6 +168,159 @@ describe('plm api', () => {
     )
   })
 
+  it('loads PLM business list pages from dedicated endpoints', async () => {
+    getMock
+      .mockResolvedValueOnce(
+        okResponse({
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          pages: 1,
+          groups: [],
+          records: [
+            {
+              billId: 'ecr_001',
+              billNo: 'PLM-ECR-001',
+              sceneCode: 'default',
+              changeTitle: '结构件替换',
+              affectedProductCode: 'PRD-001',
+              priorityLevel: 'HIGH',
+              processInstanceId: 'pi_ecr_001',
+              status: 'RUNNING',
+              creatorUserId: 'usr_001',
+              createdAt: '2026-03-23T09:00:00+08:00',
+              updatedAt: '2026-03-23T09:10:00+08:00',
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          pages: 1,
+          groups: [],
+          records: [
+            {
+              billId: 'eco_001',
+              billNo: 'PLM-ECO-001',
+              sceneCode: 'default',
+              executionTitle: 'ECO 执行',
+              effectiveDate: '2026-04-01',
+              changeReason: '量产切换',
+              processInstanceId: 'pi_eco_001',
+              status: 'RUNNING',
+              creatorUserId: 'usr_001',
+              createdAt: '2026-03-23T09:00:00+08:00',
+              updatedAt: '2026-03-23T09:10:00+08:00',
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          pages: 1,
+          groups: [],
+          records: [
+            {
+              billId: 'material_001',
+              billNo: 'PLM-MATERIAL-001',
+              sceneCode: 'default',
+              materialCode: 'MAT-001',
+              materialName: '主板总成',
+              changeType: 'ATTRIBUTE_UPDATE',
+              changeReason: '替换物料编码',
+              processInstanceId: 'pi_material_001',
+              status: 'RUNNING',
+              creatorUserId: 'usr_001',
+              createdAt: '2026-03-23T09:00:00+08:00',
+              updatedAt: '2026-03-23T09:10:00+08:00',
+            },
+          ],
+        })
+      )
+
+    const { listPLMECRRequests, listPLMECOExecutions, listPLMMaterialChangeRequests } =
+      await import('./plm')
+
+    await expect(
+      listPLMECRRequests({
+        page: 1,
+        pageSize: 20,
+        keyword: '结构件',
+        filters: [],
+        sorts: [],
+        groups: [],
+      })
+    ).resolves.toMatchObject({
+      total: 1,
+      records: [{ billNo: 'PLM-ECR-001', changeTitle: '结构件替换' }],
+    })
+
+    await expect(
+      listPLMECOExecutions({
+        page: 1,
+        pageSize: 20,
+        keyword: 'ECO',
+        filters: [],
+        sorts: [],
+        groups: [],
+      })
+    ).resolves.toMatchObject({
+      total: 1,
+      records: [{ billNo: 'PLM-ECO-001', executionTitle: 'ECO 执行' }],
+    })
+
+    await expect(
+      listPLMMaterialChangeRequests({
+        page: 1,
+        pageSize: 20,
+        keyword: 'MAT-001',
+        filters: [],
+        sorts: [],
+        groups: [],
+      })
+    ).resolves.toMatchObject({
+      total: 1,
+      records: [{ billNo: 'PLM-MATERIAL-001', materialCode: 'MAT-001' }],
+    })
+
+    expect(getMock).toHaveBeenNthCalledWith(1, '/plm/ecrs', {
+      params: {
+        page: 1,
+        pageSize: 20,
+        keyword: '结构件',
+        filters: [],
+        sorts: [],
+        groups: [],
+      },
+    })
+    expect(getMock).toHaveBeenNthCalledWith(2, '/plm/ecos', {
+      params: {
+        page: 1,
+        pageSize: 20,
+        keyword: 'ECO',
+        filters: [],
+        sorts: [],
+        groups: [],
+      },
+    })
+    expect(getMock).toHaveBeenNthCalledWith(3, '/plm/material-master-changes', {
+      params: {
+        page: 1,
+        pageSize: 20,
+        keyword: 'MAT-001',
+        filters: [],
+        sorts: [],
+        groups: [],
+      },
+    })
+  })
+
   it('loads PLM approval sheet records from dedicated endpoint', async () => {
     getMock.mockResolvedValueOnce(
       okResponse({

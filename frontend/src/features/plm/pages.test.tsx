@@ -2,11 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  PLMECOListPage,
   PLMECOCreatePage,
   PLMECOExecutionBillDetailPage,
+  PLMECRListPage,
   PLMECRCreatePage,
   PLMECRRequestBillDetailPage,
   PLMHomePage,
+  PLMMaterialChangeListPage,
   PLMMaterialChangeBillDetailPage,
   PLMMaterialChangeCreatePage,
   PLMQueryPage,
@@ -24,6 +27,9 @@ const {
     createPLMECRRequest: vi.fn(),
     createPLMECOExecution: vi.fn(),
     createPLMMaterialChangeRequest: vi.fn(),
+    listPLMECRRequests: vi.fn(),
+    listPLMECOExecutions: vi.fn(),
+    listPLMMaterialChangeRequests: vi.fn(),
     listPLMApprovalSheets: vi.fn(),
   },
   workbenchApiMocks: {
@@ -239,6 +245,121 @@ describe('plm pages', () => {
     expect(
       screen.getByRole('link', { name: '发起物料变更' })
     ).toHaveAttribute('href', '/plm/material-master/create')
+  })
+
+  it('renders PLM business list pages', async () => {
+    plmApiMocks.listPLMECRRequests.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          billId: 'ecr_001',
+          billNo: 'PLM-ECR-001',
+          sceneCode: 'default',
+          changeTitle: '结构件替换',
+          affectedProductCode: 'PRD-001',
+          priorityLevel: 'HIGH',
+          processInstanceId: 'pi_ecr_001',
+          status: 'RUNNING',
+          creatorUserId: 'usr_001',
+          createdAt: '2026-03-23T09:00:00+08:00',
+          updatedAt: '2026-03-23T09:10:00+08:00',
+        },
+      ],
+    })
+    plmApiMocks.listPLMECOExecutions.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          billId: 'eco_001',
+          billNo: 'PLM-ECO-001',
+          sceneCode: 'default',
+          executionTitle: 'ECO 执行',
+          effectiveDate: '2026-04-01',
+          changeReason: '量产切换',
+          processInstanceId: 'pi_eco_001',
+          status: 'RUNNING',
+          creatorUserId: 'usr_001',
+          createdAt: '2026-03-23T09:00:00+08:00',
+          updatedAt: '2026-03-23T09:10:00+08:00',
+        },
+      ],
+    })
+    plmApiMocks.listPLMMaterialChangeRequests.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          billId: 'material_001',
+          billNo: 'PLM-MATERIAL-001',
+          sceneCode: 'default',
+          materialCode: 'MAT-001',
+          materialName: '主板总成',
+          changeType: 'ATTRIBUTE_UPDATE',
+          changeReason: '替换物料编码',
+          processInstanceId: 'pi_material_001',
+          status: 'RUNNING',
+          creatorUserId: 'usr_001',
+          createdAt: '2026-03-23T09:00:00+08:00',
+          updatedAt: '2026-03-23T09:10:00+08:00',
+        },
+      ],
+    })
+
+    renderWithQuery(
+      <>
+        <PLMECRListPage
+          search={{
+            page: 1,
+            pageSize: 20,
+            keyword: '',
+            filters: [],
+            sorts: [],
+            groups: [],
+          }}
+          navigate={navigateMock}
+        />
+        <PLMECOListPage
+          search={{
+            page: 1,
+            pageSize: 20,
+            keyword: '',
+            filters: [],
+            sorts: [],
+            groups: [],
+          }}
+          navigate={navigateMock}
+        />
+        <PLMMaterialChangeListPage
+          search={{
+            page: 1,
+            pageSize: 20,
+            keyword: '',
+            filters: [],
+            sorts: [],
+            groups: [],
+          }}
+          navigate={navigateMock}
+        />
+      </>
+    )
+
+    expect(await screen.findByText('ECR 变更申请列表')).toBeInTheDocument()
+    expect(await screen.findByText('ECO 变更执行列表')).toBeInTheDocument()
+    expect(await screen.findByText('物料主数据变更列表')).toBeInTheDocument()
+    expect(await screen.findByText('PLM-ECR-001')).toBeInTheDocument()
+    expect(await screen.findByText('PLM-ECO-001')).toBeInTheDocument()
+    expect(await screen.findByText('PLM-MATERIAL-001')).toBeInTheDocument()
   })
 
   it('submits ECR request and jumps to the business detail page', async () => {

@@ -76,6 +76,7 @@ const columns: ColumnDef<AiMcpDiagnosticRecord, unknown>[] = [
   },
   { accessorKey: 'toolCount', header: '工具数', cell: ({ row }) => row.original.toolCount ?? '-' },
   { accessorKey: 'responseTimeMillis', header: '耗时', cell: ({ row }) => formatDurationMillis(row.original.responseTimeMillis) },
+  { accessorKey: 'failureStage', header: '失败阶段', cell: ({ row }) => row.original.failureStage || '-' },
   { accessorKey: 'failureReason', header: '失败原因', cell: ({ row }) => row.original.failureReason || '-' },
   { accessorKey: 'checkedAt', header: '检查时间', cell: ({ row }) => formatDateTime(row.original.checkedAt) },
 ]
@@ -94,7 +95,7 @@ export function AiMcpDiagnosticsPage({ search, navigate }: PageSearchProps) {
   return (
     <ResourceListPage
       title='MCP 连通性诊断'
-      description='查看外部 MCP 的连通性、响应耗时、工具数量和失败原因。'
+      description='查看外部 MCP 的连通性、响应耗时、工具数量、失败阶段和失败原因。'
       endpoint='/system/ai/mcps/diagnostics/page'
       searchPlaceholder='搜索 MCP 编码、名称、地址或失败原因'
       search={search}

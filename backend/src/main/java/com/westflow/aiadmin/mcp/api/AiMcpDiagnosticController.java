@@ -40,4 +40,12 @@ public class AiMcpDiagnosticController {
     public ApiResponse<AiMcpDiagnosticResponse> detail(@PathVariable String mcpId) {
         return ApiResponse.success(aiMcpDiagnosticService.detail(mcpId));
     }
+
+    /**
+     * 重新执行单个 MCP 的连通性诊断。
+     */
+    @PostMapping("/{mcpId}/recheck")
+    public ApiResponse<AiMcpDiagnosticResponse> recheck(@PathVariable String mcpId) {
+        return ApiResponse.success(aiMcpDiagnosticService.recheck(mcpId));
+    }
 }

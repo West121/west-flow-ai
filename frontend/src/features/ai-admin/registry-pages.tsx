@@ -7,12 +7,19 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, type Resolver } from 'react-hook-form'
 import {
   ArrowLeft,
+  ChevronDown,
   Loader2,
+  RefreshCw,
   Save,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Card,
   CardContent,
@@ -59,9 +66,11 @@ import {
   updateAiMcp,
   updateAiSkill,
   updateAiTool,
+  recheckAiMcpDiagnostic,
   type AiAgentDetail,
   type AiAgentRecord,
   type AiMcpDetail,
+  type AiMcpDiagnosticStep,
   type AiMcpRecord,
   type AiRegistryOption,
   type AiRegistryStatus,
@@ -97,6 +106,31 @@ function resolveStatusLabel(status: AiRegistryStatus) {
 
 function resolveStatusVariant(status: AiRegistryStatus) {
   return status === 'ENABLED' ? 'secondary' : 'outline'
+}
+
+function diagnosticStepVariant(status: AiMcpDiagnosticStep['status']) {
+  switch (status) {
+    case 'PASS':
+    case 'INFO':
+      return 'secondary' as const
+    case 'FAIL':
+      return 'destructive' as const
+    default:
+      return 'outline' as const
+  }
+}
+
+function diagnosticStepLabel(status: AiMcpDiagnosticStep['status']) {
+  switch (status) {
+    case 'PASS':
+      return '通过'
+    case 'FAIL':
+      return '失败'
+    case 'WARN':
+      return '警告'
+    default:
+      return '信息'
+  }
 }
 
 function emptyPage(search: ListQuerySearch) {
@@ -1367,13 +1401,23 @@ export function AiMcpListPage({ search, navigate }: PageSearchProps) {
 }
 
 export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
+  const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['ai-admin', 'mcps', mcpId],
     queryFn: () => getAiMcpDetail(mcpId),
   })
+  const diagnosticQueryKey = ['ai-admin', 'mcps', 'diagnostics', mcpId] as const
   const diagnosticQuery = useQuery({
-    queryKey: ['ai-admin', 'mcps', 'diagnostics', mcpId],
+    queryKey: diagnosticQueryKey,
     queryFn: () => getAiMcpDiagnosticDetail(mcpId),
+  })
+  const recheckMutation = useMutation({
+    mutationFn: () => recheckAiMcpDiagnostic(mcpId),
+    onSuccess: (result) => {
+      queryClient.setQueryData(diagnosticQueryKey, result)
+      toast.success('已重新检测 MCP 连通性')
+    },
+    onError: (error) => handleServerError(error),
   })
 
   if (query.isLoading) {
@@ -1392,6 +1436,16 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
       description='查看 MCP 服务连接、传输方式和扩展元数据。'
       detail={detail}
       backHref='/system/ai/mcps/list'
+      actions={
+        <Button
+          variant='outline'
+          onClick={() => recheckMutation.mutate()}
+          disabled={recheckMutation.isPending}
+        >
+          {recheckMutation.isPending ? <Loader2 className='animate-spin' /> : <RefreshCw />}
+          重新检测
+        </Button>
+      }
     >
       <AiInfoCard title='基础信息'>
         <AiKeyValueGrid
@@ -1413,7 +1467,10 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
       <AiInfoCard title='元数据'>
         <AiJsonBlock value={detail.metadataJson} />
       </AiInfoCard>
-      <AiInfoCard title='连通性诊断' description='展示最近一次真实连通检测结果。'>
+      <AiInfoCard
+        title='连通性诊断'
+        description='展示最近一次真实连通检测结果、失败阶段和可展开的诊断步骤。'
+      >
         {diagnosticQuery.isLoading ? (
           <div className='space-y-3'>
             <div className='h-8 w-1/3 rounded bg-muted' />
@@ -1422,16 +1479,94 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
         ) : diagnosticQuery.isError || !diagnosticQuery.data ? (
           <p className='text-sm text-muted-foreground'>暂无法获取连通性诊断结果。</p>
         ) : (
-          <AiKeyValueGrid
-            items={[
-              { label: '连通状态', value: <AiStatusBadge label={diagnosticQuery.data.connectionStatus} variant={diagnosticQuery.data.connectionStatus === 'DOWN' ? 'destructive' : 'secondary'} /> },
-              { label: '工具数', value: diagnosticQuery.data.toolCount ?? '-' },
-              { label: '耗时', value: diagnosticQuery.data.responseTimeMillis ? `${diagnosticQuery.data.responseTimeMillis} ms` : '-' },
-              { label: '失败原因', value: diagnosticQuery.data.failureReason || '-' },
-              { label: '检查时间', value: formatDateTime(diagnosticQuery.data.checkedAt) },
-              { label: '注册状态', value: diagnosticQuery.data.registryStatus },
-            ]}
-          />
+          <div className='space-y-4'>
+            <AiKeyValueGrid
+              items={[
+                {
+                  label: '连通状态',
+                  value: (
+                    <AiStatusBadge
+                      label={diagnosticQuery.data.connectionStatus}
+                      variant={diagnosticQuery.data.connectionStatus === 'DOWN' ? 'destructive' : 'secondary'}
+                    />
+                  ),
+                },
+                { label: '工具数', value: diagnosticQuery.data.toolCount ?? '-' },
+                { label: '耗时', value: diagnosticQuery.data.responseTimeMillis ? `${diagnosticQuery.data.responseTimeMillis} ms` : '-' },
+                { label: '检查时间', value: formatDateTime(diagnosticQuery.data.checkedAt) },
+                { label: '注册状态', value: diagnosticQuery.data.registryStatus },
+                { label: '失败阶段', value: diagnosticQuery.data.failureStage || '-' },
+              ]}
+            />
+
+            {diagnosticQuery.data.failureReason || diagnosticQuery.data.failureDetail ? (
+              <Collapsible>
+                <div className='rounded-lg border bg-muted/20 p-4'>
+                  <div className='flex items-center justify-between gap-4'>
+                    <div className='space-y-1'>
+                      <div className='text-sm font-medium'>失败原因展开</div>
+                      <div className='text-xs text-muted-foreground'>
+                        查看失败摘要、详细上下文和错误定位信息。
+                      </div>
+                    </div>
+                    <CollapsibleTrigger asChild>
+                      <Button variant='ghost' size='sm'>
+                        <ChevronDown />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                  <CollapsibleContent>
+                    <div className='mt-4 grid gap-4'>
+                      <AiKeyValueGrid
+                        items={[
+                          { label: '失败原因', value: diagnosticQuery.data.failureReason || '-' },
+                          { label: '失败阶段', value: diagnosticQuery.data.failureStage || '-' },
+                        ]}
+                      />
+                      <pre className='whitespace-pre-wrap rounded-lg border bg-background p-4 text-xs leading-6'>
+                        {diagnosticQuery.data.failureDetail || '-'}
+                      </pre>
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            ) : (
+              <p className='text-sm text-muted-foreground'>
+                当前诊断已通过，无失败详情可展开。
+              </p>
+            )}
+
+            <div className='space-y-3'>
+              <div>
+                <div className='text-sm font-medium'>诊断步骤</div>
+                <div className='text-xs text-muted-foreground'>
+                  按执行顺序展示记录读取、客户端创建、初始化和工具列表读取结果。
+                </div>
+              </div>
+              <div className='space-y-3'>
+                {(diagnosticQuery.data.diagnosticSteps ?? []).length > 0 ? (
+                  (diagnosticQuery.data.diagnosticSteps ?? []).map((step) => (
+                    <div key={`${step.step}-${step.status}-${step.message}`} className='rounded-lg border p-4'>
+                      <div className='flex flex-wrap items-center gap-2'>
+                        <AiStatusBadge label={diagnosticStepLabel(step.status)} variant={diagnosticStepVariant(step.status)} />
+                        <div className='text-sm font-medium'>{step.step}</div>
+                        {step.durationMillis != null ? (
+                          <div className='text-xs text-muted-foreground'>
+                            {step.durationMillis} ms
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className='mt-2 text-sm leading-6 text-muted-foreground'>
+                        {step.message}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className='text-sm text-muted-foreground'>暂无诊断步骤。</p>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </AiInfoCard>
     </RegistryDetailPage>

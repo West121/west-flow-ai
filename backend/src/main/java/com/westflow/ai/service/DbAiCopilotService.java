@@ -23,7 +23,9 @@ import com.westflow.ai.model.AiConversationSummaryResponse;
 import com.westflow.ai.model.AiMessageAppendRequest;
 import com.westflow.ai.model.AiMessageBlockResponse;
 import com.westflow.ai.model.AiMessageBlockResponse.Field;
+import com.westflow.ai.model.AiMessageBlockResponse.Failure;
 import com.westflow.ai.model.AiMessageBlockResponse.Metric;
+import com.westflow.ai.model.AiMessageBlockResponse.TraceStep;
 import com.westflow.ai.model.AiMessageRecord;
 import com.westflow.ai.model.AiMessageResponse;
 import com.westflow.ai.model.AiToolCallRecord;
@@ -278,14 +280,7 @@ public class DbAiCopilotService implements AiCopilotService {
                 summary,
                 now
         );
-        insertAudit(
-                toolCall.conversationId(),
-                toolCallId,
-                "WRITE",
-                request.approved() ? (TOOL_STATUS_FAILED.equals(status) ? "确认写操作失败" : "确认写操作") : "取消写操作"
-        );
-        appendConfirmationResultMessage(toolCall, confirmation, request, now);
-        return new AiToolCallResultResponse(
+        AiToolCallResultResponse finalResult = new AiToolCallResultResponse(
                 toolCallId,
                 toolCall.conversationId(),
                 toolCall.toolKey(),
@@ -300,6 +295,14 @@ public class DbAiCopilotService implements AiCopilotService {
                 offsetNow(now),
                 offsetNow(now)
         );
+        insertAudit(
+                toolCall.conversationId(),
+                toolCallId,
+                "WRITE",
+                request.approved() ? (TOOL_STATUS_FAILED.equals(status) ? "确认写操作失败" : "确认写操作") : "取消写操作"
+        );
+        appendConfirmationResultMessage(toolCall, confirmation, request, now, finalResult);
+        return finalResult;
     }
 
     private AssistantReply buildAssistantReply(AiConversationRecord conversation, String content, LocalDateTime now) {
@@ -332,7 +335,32 @@ public class DbAiCopilotService implements AiCopilotService {
                     "我已经整理出建议动作，确认后才会真正执行写操作。",
                     List.of(
                             defaultTextBlock("当前请求已进入 Supervisor 审核流程。"),
+                            traceBlock(
+                                    gatewayResponse.routeMode(),
+                                    gatewayResponse.agentId(),
+                                    gatewayResponse.agentKey(),
+                                    "已完成写操作路由规划，等待用户确认后执行。",
+                                    "pending",
+                                    buildRouteTrace(gatewayResponse, domain, routePath, toolResult.toolCallId())
+                            ),
                             buildProcessStartPreviewBlock(content, domain, routePath),
+                            resultBlock(
+                                    toolResult.toolSource().name(),
+                                    toolResult.toolKey(),
+                                    toolResult.toolKey(),
+                                    toolResult.toolType().name(),
+                                    toolResult.summary(),
+                                    Map.of(
+                                            "toolCallId", toolResult.toolCallId(),
+                                            "confirmationId", toolResult.confirmationId(),
+                                            "status", toolResult.status(),
+                                            "requiresConfirmation", toolResult.requiresConfirmation(),
+                                            "arguments", toolResult.arguments()
+                                    ),
+                                    buildToolResultTrace(gatewayResponse, toolResult, "waiting-confirmation"),
+                                    List.of(),
+                                    List.of()
+                            ),
                             confirmationBlock(toolResult)
                     )
             );
@@ -347,15 +375,27 @@ public class DbAiCopilotService implements AiCopilotService {
             );
             persistToolCall(toolResult);
             insertAudit(conversation.conversationId(), toolResult.toolCallId(), "READ", toolResult.summary());
+            List<TraceStep> trace = buildToolResultTrace(gatewayResponse, toolResult, "executed");
             return new AssistantReply(
                     resolveRuntimeReply(content, gatewayResponse, domain, buildReadSummary(toolResult)),
-                    buildReadBlocks(content, routePath, toolResult, gatewayResponse)
+                    buildReadBlocks(content, routePath, toolResult, gatewayResponse, trace)
             );
         }
 
+        String runtimeReply = resolveRuntimeReply(content, gatewayResponse, domain, buildAssistantSummary(gatewayResponse, domain));
         return new AssistantReply(
-                resolveRuntimeReply(content, gatewayResponse, domain, buildAssistantSummary(gatewayResponse, domain)),
-                List.of(defaultTextBlock(resolveRuntimeReply(content, gatewayResponse, domain, buildAssistantSummary(gatewayResponse, domain))))
+                runtimeReply,
+                List.of(
+                        defaultTextBlock(runtimeReply),
+                        traceBlock(
+                                gatewayResponse.routeMode(),
+                                gatewayResponse.agentId(),
+                                gatewayResponse.agentKey(),
+                                buildAssistantSummary(gatewayResponse, domain),
+                                "executed",
+                                buildRouteTrace(gatewayResponse, domain, routePath, null)
+                        )
+                )
         );
     }
 
@@ -363,32 +403,80 @@ public class DbAiCopilotService implements AiCopilotService {
             AiToolCallRecord toolCall,
             AiConfirmationRecord confirmation,
             AiConfirmToolCallRequest request,
-            LocalDateTime now
+            LocalDateTime now,
+            AiToolCallResultResponse finalResult
     ) {
         String status = request.approved() ? "confirmed" : "cancelled";
         String content = request.approved() ? "操作确认成功，系统已记录执行结果。" : "已取消本次操作，流程状态保持不变。";
+        List<TraceStep> trace = buildToolResultTrace(
+                toolCall.toolSource().name(),
+                toolCall.toolKey(),
+                toolCall.toolKey(),
+                finalResult.status(),
+                request.approved() ? "写操作确认完成" : "写操作已取消"
+        );
+        boolean failed = TOOL_STATUS_FAILED.equals(finalResult.status());
         aiMessageMapper.insertMessage(new AiMessageRecord(
                 newId("msg"),
                 toolCall.conversationId(),
                 "assistant",
                 "AI Copilot",
                 content,
-                toJson(List.of(new AiMessageBlockResponse(
-                        "confirm",
-                        "操作确认结果",
-                        null,
-                        confirmation.confirmationId(),
-                        request.approved() ? "写操作已确认执行" : "写操作已取消",
-                        request.comment(),
-                        "确认处理",
-                        "暂不执行",
-                        status,
-                        offsetNow(now) == null ? null : offsetNow(now).toString(),
-                        currentUserId(),
-                        request.comment(),
-                        List.of(),
-                        List.of()
-                ))),
+                toJson(List.of(
+                        traceBlock(
+                                toolCall.toolSource().name(),
+                                toolCall.toolKey(),
+                                toolCall.toolKey(),
+                                request.approved() ? "写操作确认成功" : "写操作已取消",
+                                status,
+                                trace
+                        ),
+                        failed
+                                ? failureBlock(
+                                toolCall.toolSource().name(),
+                                toolCall.toolKey(),
+                                toolCall.toolKey(),
+                                toolCall.toolType().name(),
+                                "写操作执行失败",
+                                "AI.TOOL_EXECUTE_FAILED",
+                                "写操作执行失败",
+                                finalResult.summary(),
+                                trace
+                        )
+                                : resultBlock(
+                                toolCall.toolSource().name(),
+                                toolCall.toolKey(),
+                                toolCall.toolKey(),
+                                toolCall.toolType().name(),
+                                finalResult.summary(),
+                                Map.of(
+                                        "approved", request.approved(),
+                                        "comment", request.comment(),
+                                        "status", finalResult.status(),
+                                        "result", finalResult.result(),
+                                        "confirmationId", confirmation.confirmationId()
+                                ),
+                                trace,
+                                List.of(),
+                                List.of()
+                        ),
+                        new AiMessageBlockResponse(
+                                "confirm",
+                                "操作确认结果",
+                                null,
+                                confirmation.confirmationId(),
+                                request.approved() ? "写操作已确认执行" : "写操作已取消",
+                                request.comment(),
+                                "确认处理",
+                                "暂不执行",
+                                status,
+                                offsetNow(now) == null ? null : offsetNow(now).toString(),
+                                currentUserId(),
+                                request.comment(),
+                                List.of(),
+                                List.of()
+                        )
+                )),
                 currentUserId(),
                 now,
                 now
@@ -493,6 +581,120 @@ public class DbAiCopilotService implements AiCopilotService {
 
     private AiMessageBlockResponse defaultTextBlock(String content) {
         return new AiMessageBlockResponse("text", null, content, null, null, null, null, null, null, null, null, null, List.of(), List.of());
+    }
+
+    /**
+     * 构建工具/智能体命中轨迹块。
+     */
+    private AiMessageBlockResponse traceBlock(
+            String sourceType,
+            String sourceKey,
+            String sourceName,
+            String detail,
+            String status,
+            List<TraceStep> trace
+    ) {
+        return new AiMessageBlockResponse(
+                "trace",
+                "命中轨迹",
+                null,
+                null,
+                status,
+                detail,
+                null,
+                null,
+                status,
+                null,
+                currentUserId(),
+                null,
+                sourceType,
+                sourceKey,
+                sourceName,
+                null,
+                Map.of(),
+                null,
+                trace,
+                List.of(),
+                List.of()
+        );
+    }
+
+    /**
+     * 构建工具执行结果块。
+     */
+    private AiMessageBlockResponse resultBlock(
+            String sourceType,
+            String sourceKey,
+            String sourceName,
+            String toolType,
+            String summary,
+            Map<String, Object> result,
+            List<TraceStep> trace,
+            List<Field> fields,
+            List<Metric> metrics
+    ) {
+        return new AiMessageBlockResponse(
+                "result",
+                "执行结果",
+                null,
+                null,
+                summary,
+                summary,
+                null,
+                null,
+                "ok",
+                null,
+                currentUserId(),
+                null,
+                sourceType,
+                sourceKey,
+                sourceName,
+                toolType,
+                result,
+                null,
+                trace,
+                fields,
+                metrics
+        );
+    }
+
+    /**
+     * 构建失败块。
+     */
+    private AiMessageBlockResponse failureBlock(
+            String sourceType,
+            String sourceKey,
+            String sourceName,
+            String toolType,
+            String summary,
+            String code,
+            String message,
+            String detail,
+            List<TraceStep> trace
+    ) {
+        return new AiMessageBlockResponse(
+                "failure",
+                "执行失败",
+                null,
+                null,
+                summary,
+                detail,
+                null,
+                null,
+                "failed",
+                null,
+                currentUserId(),
+                null,
+                sourceType,
+                sourceKey,
+                sourceName,
+                toolType,
+                Map.of(),
+                new Failure(code, message, detail),
+                trace,
+                List.of(),
+                List.of()
+        );
     }
 
     private List<AiMessageBlockResponse> parseMessageBlocks(String blocksJson) {
@@ -723,12 +925,31 @@ public class DbAiCopilotService implements AiCopilotService {
             String content,
             String routePath,
             AiToolCallResultResponse result,
-            AiGatewayResponse gatewayResponse
+            AiGatewayResponse gatewayResponse,
+            List<TraceStep> trace
     ) {
         if ("workflow.definition.list".equals(result.toolKey())) {
             return List.of(
                     defaultTextBlock("已通过平台工具读取流程定义。"),
-                    defaultTextBlock("当前路由模式：" + gatewayResponse.routeMode()),
+                    traceBlock(
+                            gatewayResponse.routeMode(),
+                            gatewayResponse.agentId(),
+                            gatewayResponse.agentKey(),
+                            "已命中平台流程定义查询工具。",
+                            "executed",
+                            trace
+                    ),
+                    resultBlock(
+                            result.toolSource().name(),
+                            result.toolKey(),
+                            result.toolKey(),
+                            result.toolType().name(),
+                            result.summary(),
+                            result.result(),
+                            trace,
+                            List.of(),
+                            List.of()
+                    ),
                     defaultTextBlock("你可以继续追问某条流程的设计和发布状态。")
             );
         }
@@ -736,7 +957,27 @@ public class DbAiCopilotService implements AiCopilotService {
             Object count = result.result().getOrDefault("count", 0);
             java.util.ArrayList<AiMessageBlockResponse> blocks = new java.util.ArrayList<>(List.of(
                     defaultTextBlock("已通过平台内置工具读取待办数据。"),
-                    defaultTextBlock("当前路由模式：" + gatewayResponse.routeMode()),
+                    traceBlock(
+                            gatewayResponse.routeMode(),
+                            gatewayResponse.agentId(),
+                            gatewayResponse.agentKey(),
+                            "已命中待办查询链路。",
+                            "executed",
+                            trace
+                    ),
+                    resultBlock(
+                            result.toolSource().name(),
+                            result.toolKey(),
+                            result.toolKey(),
+                            result.toolType().name(),
+                            result.summary(),
+                            result.result(),
+                            trace,
+                            List.of(),
+                            List.of(
+                                    new Metric("当前待办数", String.valueOf(count), null, "neutral")
+                            )
+                    ),
                     buildTodoStatsBlock(routePath, count)
             ));
             if (content != null && (content.contains("解释") || content.contains("路径") || content.contains("为什么"))) {
@@ -747,11 +988,54 @@ public class DbAiCopilotService implements AiCopilotService {
         if ("stats.query".equals(result.toolKey())) {
             return List.of(
                     defaultTextBlock("已通过平台统计工具生成指标摘要。"),
+                    traceBlock(
+                            gatewayResponse.routeMode(),
+                            gatewayResponse.agentId(),
+                            gatewayResponse.agentKey(),
+                            "已命中统计查询链路。",
+                            "executed",
+                            trace
+                    ),
+                    resultBlock(
+                            result.toolSource().name(),
+                            result.toolKey(),
+                            result.toolKey(),
+                            result.toolType().name(),
+                            result.summary(),
+                            result.result(),
+                            trace,
+                            List.of(),
+                            List.of(
+                                    new Metric("总量", String.valueOf(result.result().getOrDefault("total", 0)), null, "neutral"),
+                                    new Metric("已完成", String.valueOf(result.result().getOrDefault("completed", 0)), null, "positive"),
+                                    new Metric("待处理", String.valueOf(result.result().getOrDefault("pending", 0)), null, "warning"),
+                                    new Metric("完成率", String.valueOf(result.result().getOrDefault("completionRate", "--")), null, "positive")
+                            )
+                    ),
                     buildStatsAnswerBlock(result.result())
             );
         }
         return List.of(
                 defaultTextBlock("已通过 " + gatewayResponse.routeMode() + " 路由完成只读分析。"),
+                traceBlock(
+                        gatewayResponse.routeMode(),
+                        gatewayResponse.agentId(),
+                        gatewayResponse.agentKey(),
+                        buildReadSummary(result),
+                        "executed",
+                        trace
+                ),
+                resultBlock(
+                        result.toolSource().name(),
+                        result.toolKey(),
+                        result.toolKey(),
+                        result.toolType().name(),
+                        result.summary(),
+                        result.result(),
+                        trace,
+                        List.of(),
+                        List.of()
+                ),
                 defaultTextBlock(buildReadSummary(result))
         );
     }
@@ -924,6 +1208,69 @@ public class DbAiCopilotService implements AiCopilotService {
                         new Metric("待处理", String.valueOf(pending), null, "warning"),
                         new Metric("完成率", String.valueOf(completionRate), null, "positive")
                 )
+        );
+    }
+
+    /**
+     * 构建路由轨迹。
+     */
+    private List<TraceStep> buildRouteTrace(
+            AiGatewayResponse gatewayResponse,
+            String domain,
+            String routePath,
+            String toolCallId
+    ) {
+        java.util.ArrayList<TraceStep> trace = new java.util.ArrayList<>();
+        trace.add(new TraceStep("route", "路由模式", gatewayResponse.routeMode(), "executed"));
+        trace.add(new TraceStep("agent", "命中智能体", gatewayResponse.agentId(), "executed"));
+        if (gatewayResponse.skillIds() != null && !gatewayResponse.skillIds().isEmpty()) {
+            trace.add(new TraceStep("skill", "命中技能", String.join(",", gatewayResponse.skillIds()), "executed"));
+        }
+        trace.add(new TraceStep("context", "业务域", domain, "executed"));
+        if (routePath != null && !routePath.isBlank()) {
+            trace.add(new TraceStep("context", "页面路径", routePath, "executed"));
+        }
+        if (toolCallId != null && !toolCallId.isBlank()) {
+            trace.add(new TraceStep("tool", "预生成工具调用", toolCallId, "pending"));
+        }
+        return List.copyOf(trace);
+    }
+
+    /**
+     * 构建工具执行轨迹。
+     */
+    private List<TraceStep> buildToolResultTrace(
+            AiGatewayResponse gatewayResponse,
+            AiToolCallResultResponse result,
+            String phase
+    ) {
+        java.util.ArrayList<TraceStep> trace = new java.util.ArrayList<>();
+        trace.add(new TraceStep("route", "路由模式", gatewayResponse.routeMode(), "executed"));
+        trace.add(new TraceStep("agent", "命中智能体", gatewayResponse.agentId(), "executed"));
+        if (gatewayResponse.skillIds() != null && !gatewayResponse.skillIds().isEmpty()) {
+            trace.add(new TraceStep("skill", "命中技能", String.join(",", gatewayResponse.skillIds()), "executed"));
+        }
+        trace.add(new TraceStep("tool", "工具编码", result.toolKey(), result.status()));
+        trace.add(new TraceStep("result", "执行阶段", phase, result.status()));
+        return List.copyOf(trace);
+    }
+
+    /**
+     * 构建确认后的工具执行轨迹。
+     */
+    private List<TraceStep> buildToolResultTrace(
+            String sourceType,
+            String sourceKey,
+            String sourceName,
+            String status,
+            String detail
+    ) {
+        return List.of(
+                new TraceStep("source", "来源类型", sourceType, status),
+                new TraceStep("source", "来源编码", sourceKey, status),
+                new TraceStep("source", "来源名称", sourceName, status),
+                new TraceStep("result", "执行状态", status, status),
+                new TraceStep("result", "执行说明", detail, status)
         );
     }
 

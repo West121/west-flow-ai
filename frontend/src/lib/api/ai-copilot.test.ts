@@ -320,4 +320,121 @@ describe('ai-copilot api', () => {
       '/ai/copilot/conversations/session_002'
     )
   })
+
+  it('maps result, failure, and trace blocks from the backend contract', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        conversationId: 'session_rich_001',
+        title: 'AI 执行轨迹演示',
+        preview: '我已经整理出本次执行结果与失败信息。',
+        status: 'active',
+        updatedAt: '2026-03-23T09:10:00.000Z',
+        messageCount: 1,
+        contextTags: ['PLM', 'AI Copilot'],
+        history: [
+          {
+            messageId: 'msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-23T09:10:00.000Z',
+            content: '这里是结构化输出。',
+            blocks: [
+              {
+                type: 'trace',
+                title: '命中轨迹',
+                summary: 'Supervisor -> Skill',
+                sourceType: 'SKILL',
+                sourceKey: 'plm-assistant',
+                sourceName: 'PLM 助手',
+                trace: [
+                  {
+                    stage: 'SUPERVISOR',
+                    label: 'Supervisor',
+                    detail: '命中 PLM 分析意图',
+                    status: 'SUCCEEDED',
+                  },
+                ],
+              },
+              {
+                type: 'result',
+                title: '执行结果',
+                summary: '已完成 PLM 摘要汇总。',
+                sourceType: 'SKILL',
+                sourceKey: 'plm.change.summary',
+                sourceName: 'PLM 变更摘要',
+                toolType: 'READ',
+                result: {
+                  impactedCount: 4,
+                },
+                fields: [
+                  {
+                    label: '变更单号',
+                    value: 'ECR-001',
+                  },
+                ],
+                metrics: [
+                  {
+                    label: '影响对象数',
+                    value: '4',
+                    tone: 'warning',
+                  },
+                ],
+              },
+              {
+                type: 'failure',
+                title: '执行失败',
+                summary: '外部 MCP 检索失败。',
+                sourceType: 'MCP',
+                sourceKey: 'external.mcp.search',
+                sourceName: '外部知识库检索',
+                toolType: 'READ',
+                failure: {
+                  code: 'MCP_TIMEOUT',
+                  message: 'MCP 请求超时',
+                  detail: '远端服务未响应。',
+                },
+              },
+            ],
+          },
+        ],
+        toolCalls: [],
+        audit: [],
+      })
+    )
+
+    const { getAICopilotSession } = await import('./ai-copilot')
+
+    await expect(getAICopilotSession('session_rich_001')).resolves.toMatchObject({
+      sessionId: 'session_rich_001',
+      history: [
+        expect.objectContaining({
+          blocks: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'trace',
+              sourceType: 'SKILL',
+              sourceName: 'PLM 助手',
+              trace: expect.arrayContaining([
+                expect.objectContaining({
+                  stage: 'SUPERVISOR',
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              type: 'result',
+              toolType: 'READ',
+              result: expect.objectContaining({
+                impactedCount: 4,
+              }),
+            }),
+            expect.objectContaining({
+              type: 'failure',
+              failure: expect.objectContaining({
+                code: 'MCP_TIMEOUT',
+              }),
+            }),
+          ]),
+        }),
+      ],
+    })
+  })
 })

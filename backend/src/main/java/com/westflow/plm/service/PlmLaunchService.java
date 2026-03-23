@@ -8,9 +8,12 @@ import com.westflow.plm.api.CreatePLMEcoBillRequest;
 import com.westflow.plm.api.CreatePLMEcrBillRequest;
 import com.westflow.plm.api.CreatePLMMaterialChangeBillRequest;
 import com.westflow.plm.api.PlmEcoBillDetailResponse;
+import com.westflow.plm.api.PlmEcoBillListItemResponse;
 import com.westflow.plm.api.PlmEcrBillDetailResponse;
+import com.westflow.plm.api.PlmEcrBillListItemResponse;
 import com.westflow.plm.api.PlmLaunchResponse;
 import com.westflow.plm.api.PlmMaterialChangeBillDetailResponse;
+import com.westflow.plm.api.PlmMaterialChangeBillListItemResponse;
 import com.westflow.plm.mapper.PlmEcoBillMapper;
 import com.westflow.plm.mapper.PlmEcrBillMapper;
 import com.westflow.plm.mapper.PlmMaterialChangeBillMapper;
@@ -180,6 +183,18 @@ public class PlmLaunchService {
     }
 
     /**
+     * 查询 ECR 业务单分页列表。
+     */
+    public PageResponse<PlmEcrBillListItemResponse> ecrPage(PageRequest request) {
+        String keyword = normalizeKeyword(request.keyword());
+        return toPageResponse(
+                request,
+                plmEcrBillMapper.countPage(keyword),
+                plmEcrBillMapper.selectPage(keyword, request.pageSize(), offsetOf(request))
+        );
+    }
+
+    /**
      * 查询 ECO 详情。
      */
     public PlmEcoBillDetailResponse ecoDetail(String billId) {
@@ -191,6 +206,18 @@ public class PlmLaunchService {
     }
 
     /**
+     * 查询 ECO 业务单分页列表。
+     */
+    public PageResponse<PlmEcoBillListItemResponse> ecoPage(PageRequest request) {
+        String keyword = normalizeKeyword(request.keyword());
+        return toPageResponse(
+                request,
+                plmEcoBillMapper.countPage(keyword),
+                plmEcoBillMapper.selectPage(keyword, request.pageSize(), offsetOf(request))
+        );
+    }
+
+    /**
      * 查询物料主数据变更详情。
      */
     public PlmMaterialChangeBillDetailResponse materialChangeDetail(String billId) {
@@ -199,6 +226,18 @@ public class PlmLaunchService {
             throw resourceNotFound("物料主数据变更申请不存在", billId);
         }
         return detail;
+    }
+
+    /**
+     * 查询物料主数据变更分页列表。
+     */
+    public PageResponse<PlmMaterialChangeBillListItemResponse> materialChangePage(PageRequest request) {
+        String keyword = normalizeKeyword(request.keyword());
+        return toPageResponse(
+                request,
+                plmMaterialChangeBillMapper.countPage(keyword),
+                plmMaterialChangeBillMapper.selectPage(keyword, request.pageSize(), offsetOf(request))
+        );
     }
 
     /**
@@ -284,6 +323,35 @@ public class PlmLaunchService {
 
     private String buildBillNo(String prefix) {
         return prefix + "-" + java.time.LocalDate.now() + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+    }
+
+    /**
+     * 将分页查询结果统一转换成分页响应。
+     */
+    private <T> PageResponse<T> toPageResponse(PageRequest request, long total, List<T> records) {
+        long pages = total == 0 ? 0 : (long) Math.ceil((double) total / request.pageSize());
+        return new PageResponse<>(
+                request.page(),
+                request.pageSize(),
+                total,
+                pages,
+                records,
+                List.of()
+        );
+    }
+
+    /**
+     * 将分页页码转换成数据库 offset。
+     */
+    private int offsetOf(PageRequest request) {
+        return Math.max(0, (request.page() - 1) * request.pageSize());
+    }
+
+    /**
+     * 关键字为空时统一转成 null，方便 SQL 复用。
+     */
+    private String normalizeKeyword(String keyword) {
+        return keyword == null || keyword.isBlank() ? null : keyword.trim();
     }
 
     private ContractException resourceNotFound(String message, String billId) {

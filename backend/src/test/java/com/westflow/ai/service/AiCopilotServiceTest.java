@@ -142,6 +142,14 @@ class AiCopilotServiceTest {
                         AiToolSource.AGENT,
                         "请确认是否完成当前待办",
                         context -> Map.of("accepted", true, "done", true)
+                ),
+                AiToolDefinition.write(
+                        "workflow.task.fail",
+                        AiToolSource.PLATFORM,
+                        "请确认是否执行失败示例",
+                        context -> {
+                            throw new IllegalStateException("执行失败");
+                        }
                 )
         ));
         ChatClient chatClient = org.mockito.Mockito.mock(ChatClient.class);
@@ -289,7 +297,7 @@ class AiCopilotServiceTest {
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
         assertThat(assistantMessage.blocks())
                 .extracting(AiMessageBlockResponse::type)
-                .contains("form-preview", "confirm");
+                .contains("trace", "result", "form-preview", "confirm");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -319,6 +327,10 @@ class AiCopilotServiceTest {
         );
 
         assertThat(detail.conversationId()).isEqualTo("conv_001");
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "result");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiConfirmationMapper, never()).insertConfirmation(any());
     }
@@ -338,7 +350,7 @@ class AiCopilotServiceTest {
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
         assertThat(assistantMessage.blocks())
                 .extracting(AiMessageBlockResponse::type)
-                .contains("stats");
+                .contains("trace", "result", "stats");
     }
 
     @Test
@@ -356,7 +368,57 @@ class AiCopilotServiceTest {
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
         assertThat(assistantMessage.blocks())
                 .extracting(AiMessageBlockResponse::type)
-                .contains("stats");
+                .contains("trace", "result", "stats");
+    }
+
+    @Test
+    void shouldRenderFailureBlockWhenConfirmedWriteExecutionFails() throws Exception {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+        java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>();
+        doAnswer(invocation -> {
+            storedMessages.add(invocation.getArgument(0, AiMessageRecord.class));
+            return null;
+        }).when(aiMessageMapper).insertMessage(any());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(0L);
+
+        AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
+                "conv_001",
+                new AiToolCallRequest("workflow.task.fail", AiToolType.WRITE, AiToolSource.PLATFORM, Map.of("taskId", "task_002"))
+        );
+        when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
+                pending.toolCallId(),
+                "conv_001",
+                "workflow.task.fail",
+                AiToolType.WRITE,
+                AiToolSource.PLATFORM,
+                "PENDING_CONFIRMATION",
+                true,
+                "{\"taskId\":\"task_002\"}",
+                "{}",
+                "请确认是否执行失败示例",
+                pending.confirmationId(),
+                "usr_001",
+                LocalDateTime.of(2026, 3, 23, 10, 10),
+                LocalDateTime.of(2026, 3, 23, 10, 10)
+        ));
+
+        AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
+                pending.toolCallId(),
+                new AiConfirmToolCallRequest(true, "确认执行")
+        );
+
+        assertThat(confirmed.status()).isEqualTo("FAILED");
+        assertThat(storedMessages).isNotEmpty();
+        List<AiMessageBlockResponse> blocks = new ObjectMapper().readValue(
+                storedMessages.get(storedMessages.size() - 1).blocksJson(),
+                new com.fasterxml.jackson.core.type.TypeReference<List<AiMessageBlockResponse>>() { }
+        );
+        assertThat(blocks).extracting(AiMessageBlockResponse::type).contains("trace", "failure", "confirm");
+        assertThat(blocks.stream().filter(block -> "failure".equals(block.type())).findFirst())
+                .isPresent()
+                .get()
+                .extracting(AiMessageBlockResponse::failure)
+                .isNotNull();
     }
 
     private AiConversationRecord conversation() {

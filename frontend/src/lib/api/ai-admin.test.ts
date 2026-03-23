@@ -497,4 +497,136 @@ describe('ai admin api', () => {
       status: 'APPROVED',
     })
   })
+
+  it('loads and rechecks mcp diagnostics with failure detail', async () => {
+    postMock
+      .mockResolvedValueOnce(
+        okResponse({
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          pages: 1,
+          groups: [],
+          records: [
+            {
+              mcpId: 'mcp_001',
+              mcpCode: 'broken-diagnostic-mcp',
+              mcpName: '故障 MCP',
+              endpointUrl: null,
+              transportType: 'STREAMABLE_HTTP',
+              requiredCapabilityCode: 'ai:copilot:open',
+              enabled: true,
+              registryStatus: 'ENABLED',
+              connectionStatus: 'DOWN',
+              responseTimeMillis: 12,
+              toolCount: null,
+              failureReason: 'MCP 地址不能为空',
+              failureDetail: 'message=MCP 地址不能为空',
+              failureStage: 'TRANSPORT_CONFIG',
+              diagnosticSteps: [
+                {
+                  step: 'registry',
+                  status: 'INFO',
+                  message: '已读取 MCP 注册记录',
+                  durationMillis: 0,
+                },
+              ],
+              checkedAt: '2026-03-23T09:00:00+08:00',
+              metadataJson: '{}',
+            },
+          ],
+        })
+      )
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        mcpId: 'mcp_001',
+        mcpCode: 'broken-diagnostic-mcp',
+        mcpName: '故障 MCP',
+        endpointUrl: null,
+        transportType: 'STREAMABLE_HTTP',
+        requiredCapabilityCode: 'ai:copilot:open',
+        enabled: true,
+        registryStatus: 'ENABLED',
+        connectionStatus: 'DOWN',
+        responseTimeMillis: 12,
+        toolCount: null,
+        failureReason: 'MCP 地址不能为空',
+        failureDetail: 'message=MCP 地址不能为空',
+        failureStage: 'TRANSPORT_CONFIG',
+        diagnosticSteps: [],
+        checkedAt: '2026-03-23T09:01:00+08:00',
+        metadataJson: '{}',
+      })
+    )
+    postMock.mockResolvedValueOnce(
+      okResponse({
+        mcpId: 'mcp_001',
+        mcpCode: 'broken-diagnostic-mcp',
+        mcpName: '故障 MCP',
+        endpointUrl: null,
+        transportType: 'STREAMABLE_HTTP',
+        requiredCapabilityCode: 'ai:copilot:open',
+        enabled: true,
+        registryStatus: 'ENABLED',
+        connectionStatus: 'DOWN',
+        responseTimeMillis: 8,
+        toolCount: null,
+        failureReason: 'MCP 地址不能为空',
+        failureDetail: 'message=MCP 地址不能为空\ncode=VALIDATION.REQUEST_INVALID',
+        failureStage: 'TRANSPORT_CONFIG',
+        diagnosticSteps: [
+          {
+            step: 'registry',
+            status: 'INFO',
+            message: '已读取 MCP 注册记录',
+            durationMillis: 0,
+          },
+          {
+            step: 'transport',
+            status: 'FAIL',
+            message: 'MCP 地址不能为空',
+            durationMillis: 1,
+          },
+        ],
+        checkedAt: '2026-03-23T09:02:00+08:00',
+        metadataJson: '{}',
+      })
+    )
+
+    const aiAdminApi = await import('./ai-admin')
+
+    await expect(
+      aiAdminApi.listAiMcpDiagnostics({
+        page: 1,
+        pageSize: 20,
+        keyword: 'broken',
+        filters: [],
+        sorts: [],
+        groups: [],
+      })
+    ).resolves.toMatchObject({
+      records: [{ mcpCode: 'broken-diagnostic-mcp', failureStage: 'TRANSPORT_CONFIG' }],
+    })
+
+    await expect(aiAdminApi.getAiMcpDiagnosticDetail('mcp_001')).resolves.toMatchObject({
+      mcpId: 'mcp_001',
+      failureReason: 'MCP 地址不能为空',
+    })
+
+    const recheckedDiagnostic = await aiAdminApi.recheckAiMcpDiagnostic('mcp_001')
+    expect(recheckedDiagnostic).toMatchObject({
+      connectionStatus: 'DOWN',
+      failureStage: 'TRANSPORT_CONFIG',
+    })
+    const diagnosticSteps = recheckedDiagnostic.diagnosticSteps ?? []
+    expect(diagnosticSteps).toHaveLength(2)
+    expect(diagnosticSteps[0]).toMatchObject({
+      step: 'registry',
+      status: 'INFO',
+    })
+    expect(diagnosticSteps[1]).toMatchObject({
+      step: 'transport',
+      status: 'FAIL',
+    })
+  })
 })

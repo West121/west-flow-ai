@@ -3,6 +3,7 @@ package com.westflow.aiadmin.mcp.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.aiadmin.mcp.api.AiMcpDiagnosticResponse;
+import com.westflow.aiadmin.mcp.api.AiMcpDiagnosticStepResponse;
 import com.westflow.aiadmin.mcp.mapper.AiMcpRegistryMapper;
 import com.westflow.aiadmin.mcp.model.AiMcpRegistryRecord;
 import com.westflow.aiadmin.support.AiAdminAccessService;
@@ -81,85 +82,164 @@ public class AiMcpDiagnosticService {
         return inspect(record).response();
     }
 
+    /**
+     * 重新执行单个 MCP 的连通性诊断。
+     */
+    public AiMcpDiagnosticResponse recheck(String mcpId) {
+        aiAdminAccessService.ensureAiAdminAccess();
+        AiMcpRegistryRecord record = requireRecord(mcpId);
+        return inspect(record).response();
+    }
+
     private DiagnosticSnapshot inspect(AiMcpRegistryRecord record) {
         OffsetDateTime checkedAt = OffsetDateTime.now(Clock.system(ZONE_ID));
+        List<AiMcpDiagnosticStepResponse> steps = new ArrayList<>();
+        steps.add(diagnosticStep(
+                "registry",
+                "INFO",
+                "已读取 MCP 注册记录",
+                0L
+        ));
         if (!record.enabled()) {
-            return new DiagnosticSnapshot(new AiMcpDiagnosticResponse(
-                    record.mcpId(),
-                    record.mcpCode(),
-                    record.mcpName(),
-                    record.endpointUrl(),
-                    record.transportType(),
-                    record.requiredCapabilityCode(),
-                    false,
-                    AiAdminSupport.toStatus(false),
+            steps.add(diagnosticStep(
+                    "registry-status",
+                    "WARN",
+                    "MCP 已停用，跳过真实连通检测",
+                    0L
+            ));
+            return buildSnapshot(
+                    record,
+                    checkedAt,
                     "DISABLED",
                     0L,
                     0,
                     "MCP 已停用",
-                    checkedAt,
-                    record.metadataJson()
-            ));
+                    "注册状态为 DISABLED，已跳过真实连通检测。",
+                    "REGISTRY_DISABLED",
+                    steps
+            );
         }
 
-        if ("INTERNAL".equalsIgnoreCase(normalizeTransport(record.transportType()))) {
-            return new DiagnosticSnapshot(new AiMcpDiagnosticResponse(
-                    record.mcpId(),
-                    record.mcpCode(),
-                    record.mcpName(),
-                    record.endpointUrl(),
-                    record.transportType(),
-                    record.requiredCapabilityCode(),
-                    true,
-                    AiAdminSupport.toStatus(true),
+        String transportType = normalizeTransport(record.transportType());
+        if ("INTERNAL".equalsIgnoreCase(transportType)) {
+            steps.add(diagnosticStep(
+                    "transport",
+                    "INFO",
+                    "平台内置 MCP，跳过外部网络连通检测",
+                    0L
+            ));
+            return buildSnapshot(
+                    record,
+                    checkedAt,
                     "INTERNAL",
                     0L,
                     null,
                     null,
-                    checkedAt,
-                    record.metadataJson()
-            ));
+                    null,
+                    null,
+                    steps
+            );
         }
 
         Instant start = Instant.now();
         try (McpSyncClient client = createClient(record)) {
-            client.initialize();
-            int toolCount = client.listTools().tools().size();
-            long responseTimeMillis = Math.max(Duration.between(start, Instant.now()).toMillis(), 1L);
-            return new DiagnosticSnapshot(new AiMcpDiagnosticResponse(
-                    record.mcpId(),
-                    record.mcpCode(),
-                    record.mcpName(),
-                    record.endpointUrl(),
-                    record.transportType(),
-                    record.requiredCapabilityCode(),
-                    true,
-                    AiAdminSupport.toStatus(true),
-                    "UP",
-                    responseTimeMillis,
-                    toolCount,
-                    null,
-                    checkedAt,
-                    record.metadataJson()
+            steps.add(diagnosticStep(
+                    "transport",
+                    "PASS",
+                    "MCP 客户端创建成功",
+                    elapsedMillis(start)
             ));
+
+            Instant initializeStart = Instant.now();
+            try {
+                client.initialize();
+                steps.add(diagnosticStep(
+                        "initialize",
+                        "PASS",
+                        "MCP 客户端初始化成功",
+                        elapsedMillis(initializeStart)
+                ));
+            } catch (RuntimeException exception) {
+                long responseTimeMillis = elapsedMillis(start);
+                steps.add(diagnosticStep(
+                        "initialize",
+                        "FAIL",
+                        resolveFailureReason(exception),
+                        elapsedMillis(initializeStart)
+                ));
+                return buildSnapshot(
+                        record,
+                        checkedAt,
+                        "DOWN",
+                        responseTimeMillis,
+                        null,
+                        resolveFailureReason(exception),
+                        describeFailure(exception),
+                        "INITIALIZE",
+                        steps
+                );
+            }
+
+            Instant listToolsStart = Instant.now();
+            try {
+                int toolCount = client.listTools().tools().size();
+                steps.add(diagnosticStep(
+                        "list-tools",
+                        "PASS",
+                        "读取工具列表成功，共 %d 个工具".formatted(toolCount),
+                        elapsedMillis(listToolsStart)
+                ));
+                long responseTimeMillis = elapsedMillis(start);
+                return buildSnapshot(
+                        record,
+                        checkedAt,
+                        "UP",
+                        responseTimeMillis,
+                        toolCount,
+                        null,
+                        null,
+                        null,
+                        steps
+                );
+            } catch (RuntimeException exception) {
+                long responseTimeMillis = elapsedMillis(start);
+                steps.add(diagnosticStep(
+                        "list-tools",
+                        "FAIL",
+                        resolveFailureReason(exception),
+                        elapsedMillis(listToolsStart)
+                ));
+                return buildSnapshot(
+                        record,
+                        checkedAt,
+                        "DOWN",
+                        responseTimeMillis,
+                        null,
+                        resolveFailureReason(exception),
+                        describeFailure(exception),
+                        "LIST_TOOLS",
+                        steps
+                );
+            }
         } catch (RuntimeException exception) {
             long responseTimeMillis = Math.max(Duration.between(start, Instant.now()).toMillis(), 1L);
-            return new DiagnosticSnapshot(new AiMcpDiagnosticResponse(
-                    record.mcpId(),
-                    record.mcpCode(),
-                    record.mcpName(),
-                    record.endpointUrl(),
-                    record.transportType(),
-                    record.requiredCapabilityCode(),
-                    true,
-                    AiAdminSupport.toStatus(true),
+            steps.add(diagnosticStep(
+                    "transport",
+                    "FAIL",
+                    resolveFailureReason(exception),
+                    responseTimeMillis
+            ));
+            return buildSnapshot(
+                    record,
+                    checkedAt,
                     "DOWN",
                     responseTimeMillis,
                     null,
                     resolveFailureReason(exception),
-                    checkedAt,
-                    record.metadataJson()
-            ));
+                    describeFailure(exception),
+                    "TRANSPORT_CONFIG",
+                    steps
+            );
         }
     }
 
@@ -236,7 +316,9 @@ public class AiMcpDiagnosticService {
                 || snapshot.response().transportType().toLowerCase().contains(normalized)
                 || snapshot.response().registryStatus().toLowerCase().contains(normalized)
                 || snapshot.response().connectionStatus().toLowerCase().contains(normalized)
-                || (snapshot.response().failureReason() != null && snapshot.response().failureReason().toLowerCase().contains(normalized));
+                || (snapshot.response().failureReason() != null && snapshot.response().failureReason().toLowerCase().contains(normalized))
+                || (snapshot.response().failureStage() != null && snapshot.response().failureStage().toLowerCase().contains(normalized))
+                || (snapshot.response().failureDetail() != null && snapshot.response().failureDetail().toLowerCase().contains(normalized));
     }
 
     private Comparator<DiagnosticSnapshot> resolveComparator(List<SortItem> sorts) {
@@ -395,6 +477,51 @@ public class AiMcpDiagnosticService {
         return defaultValue;
     }
 
+    private AiMcpDiagnosticStepResponse diagnosticStep(
+            String step,
+            String status,
+            String message,
+            Long durationMillis
+    ) {
+        return new AiMcpDiagnosticStepResponse(step, status, message, durationMillis);
+    }
+
+    private DiagnosticSnapshot buildSnapshot(
+            AiMcpRegistryRecord record,
+            OffsetDateTime checkedAt,
+            String connectionStatus,
+            Long responseTimeMillis,
+            Integer toolCount,
+            String failureReason,
+            String failureDetail,
+            String failureStage,
+            List<AiMcpDiagnosticStepResponse> diagnosticSteps
+    ) {
+        return new DiagnosticSnapshot(new AiMcpDiagnosticResponse(
+                record.mcpId(),
+                record.mcpCode(),
+                record.mcpName(),
+                record.endpointUrl(),
+                record.transportType(),
+                record.requiredCapabilityCode(),
+                record.enabled(),
+                AiAdminSupport.toStatus(record.enabled()),
+                connectionStatus,
+                responseTimeMillis,
+                toolCount,
+                failureReason,
+                failureDetail,
+                failureStage,
+                diagnosticSteps,
+                checkedAt,
+                record.metadataJson()
+        ));
+    }
+
+    private long elapsedMillis(Instant start) {
+        return Math.max(Duration.between(start, Instant.now()).toMillis(), 1L);
+    }
+
     private String resolveFailureReason(Exception exception) {
         if (exception.getMessage() != null && !exception.getMessage().isBlank()) {
             return exception.getMessage();
@@ -403,6 +530,44 @@ public class AiMcpDiagnosticService {
             return exception.getCause().getMessage();
         }
         return exception.getClass().getSimpleName();
+    }
+
+    private String describeFailure(Exception exception) {
+        String message = resolveFailureReason(exception);
+        if (exception instanceof ContractException contractException) {
+            return """
+                    message=%s
+                    code=%s
+                    status=%s
+                    details=%s
+                    """.formatted(
+                    message,
+                    contractException.getCode(),
+                    contractException.getStatus().value(),
+                    formatDetails(contractException.getDetails())
+            ).trim();
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.append(exception.getClass().getSimpleName()).append(": ").append(message);
+        if (exception.getCause() != null && exception.getCause().getMessage() != null && !exception.getCause().getMessage().isBlank()) {
+            builder.append("\nCause: ")
+                    .append(exception.getCause().getClass().getSimpleName())
+                    .append(": ")
+                    .append(exception.getCause().getMessage());
+        }
+        return builder.toString();
+    }
+
+    private String formatDetails(Map<String, Object> details) {
+        if (details == null || details.isEmpty()) {
+            return "{}";
+        }
+        try {
+            return objectMapper.writeValueAsString(details);
+        } catch (Exception exception) {
+            return details.toString();
+        }
     }
 
     private String normalizeTransport(String transportType) {

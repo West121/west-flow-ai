@@ -1,6 +1,7 @@
 package com.westflow.plm.mapper;
 
 import com.westflow.plm.api.PlmEcrBillDetailResponse;
+import com.westflow.plm.api.PlmEcrBillListItemResponse;
 import com.westflow.plm.model.PlmEcrBillRecord;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -73,4 +74,55 @@ public interface PlmEcrBillMapper {
             WHERE id = #{billId}
             """)
     PlmEcrBillDetailResponse selectDetail(@Param("billId") String billId);
+
+    /**
+     * 查询 ECR 业务单分页列表。
+     */
+    @Select("""
+            SELECT
+              id AS billId,
+              bill_no AS billNo,
+              scene_code AS sceneCode,
+              change_title AS changeTitle,
+              affected_product_code AS affectedProductCode,
+              priority_level AS priorityLevel,
+              process_instance_id AS processInstanceId,
+              status,
+              creator_user_id AS creatorUserId,
+              created_at AS createdAt,
+              updated_at AS updatedAt
+            FROM plm_ecr_change
+            WHERE (
+              #{keyword} IS NULL
+              OR #{keyword} = ''
+              OR LOWER(bill_no) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(change_title) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(change_reason) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(scene_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+            )
+            ORDER BY created_at DESC
+            LIMIT #{limit} OFFSET #{offset}
+            """)
+    java.util.List<PlmEcrBillListItemResponse> selectPage(
+            @Param("keyword") String keyword,
+            @Param("limit") int limit,
+            @Param("offset") int offset
+    );
+
+    /**
+     * 统计 ECR 业务单数量。
+     */
+    @Select("""
+            SELECT COUNT(*)
+            FROM plm_ecr_change
+            WHERE (
+              #{keyword} IS NULL
+              OR #{keyword} = ''
+              OR LOWER(bill_no) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(change_title) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(change_reason) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+              OR LOWER(scene_code) LIKE LOWER(CONCAT('%', #{keyword}, '%'))
+            )
+            """)
+    long countPage(@Param("keyword") String keyword);
 }

@@ -2,17 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
+  BadgeCheck,
   BarChart3,
   Bot,
   CheckCircle2,
   CircleAlert,
   Clock3,
+  GitBranch,
   Plus,
   RefreshCw,
   Search,
   SendHorizontal,
   Sparkles,
   SquareStack,
+  TriangleAlert,
   UserRound,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -36,6 +39,7 @@ import {
   type AICopilotMessageBlock,
   type AICopilotSession,
   type AICopilotSessionSummary,
+  type AICopilotTraceStep,
   type AICopilotToolCall,
 } from '@/lib/api/ai-copilot'
 
@@ -493,7 +497,9 @@ export function AICopilotPage({
                         富消息块
                       </h3>
                     </div>
-                    <BadgePill tone='subtle'>text / confirm / form / stats</BadgePill>
+                    <BadgePill tone='subtle'>
+                      text / confirm / form / stats / result / failure / trace
+                    </BadgePill>
                   </div>
                 </div>
 
@@ -754,6 +760,7 @@ function ToolCallRow({ toolCall }: { toolCall: AICopilotToolCall }) {
       <div className='mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400'>
         <span>类型：{toolCall.toolType}</span>
         <span>来源：{toolCall.toolSource}</span>
+        {toolCall.confirmationId ? <span>确认单：{toolCall.confirmationId}</span> : null}
         {toolCall.requiresConfirmation ? <span>写操作确认</span> : <span>读操作直执</span>}
       </div>
       <div className='mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500'>
@@ -1029,6 +1036,142 @@ function BlockCard({
           </CardContent>
         </Card>
       )
+    case 'trace':
+      return (
+        <Card className='border-sky-300/20 bg-sky-300/10 text-slate-50 shadow-none'>
+          <CardHeader className='space-y-2 pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <GitBranch className='size-4 text-sky-200' />
+              {block.title}
+            </CardTitle>
+            {block.summary ? (
+              <p className='text-sm leading-6 text-sky-50/85'>{block.summary}</p>
+            ) : null}
+            {block.detail ? (
+              <p className='text-xs leading-5 text-sky-50/70'>{block.detail}</p>
+            ) : null}
+            <TraceMeta block={block} />
+          </CardHeader>
+          <CardContent className='space-y-2 pt-0'>
+            <TraceTimeline trace={block.trace ?? []} />
+          </CardContent>
+        </Card>
+      )
+    case 'result':
+      return (
+        <Card className='border-emerald-300/20 bg-emerald-300/10 text-slate-50 shadow-none'>
+          <CardHeader className='space-y-2 pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <BadgeCheck className='size-4 text-emerald-200' />
+              {block.title}
+            </CardTitle>
+            {block.summary ? (
+              <p className='text-sm leading-6 text-emerald-50/85'>{block.summary}</p>
+            ) : null}
+            {block.detail ? (
+              <p className='text-xs leading-5 text-emerald-50/70'>{block.detail}</p>
+            ) : null}
+            <TraceMeta block={block} />
+          </CardHeader>
+          <CardContent className='space-y-3 pt-0'>
+            {block.fields?.length ? (
+              <div className='space-y-2'>
+                {block.fields.map((field) => (
+                  <div
+                    key={field.label}
+                    className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2'
+                  >
+                    <div className='flex items-center justify-between gap-3'>
+                      <span className='text-xs text-slate-300'>{field.label}</span>
+                      <span className='text-sm font-medium text-white'>
+                        {field.value}
+                      </span>
+                    </div>
+                    {field.hint ? (
+                      <p className='mt-1 text-[11px] text-slate-400'>{field.hint}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {block.metrics?.length ? (
+              <div className='grid gap-2 sm:grid-cols-2'>
+                {block.metrics.map((metric) => (
+                  <div
+                    key={metric.label}
+                    className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'
+                  >
+                    <div className='flex items-center gap-2'>
+                      <span className='text-[11px] text-slate-400'>{metric.label}</span>
+                      {metric.tone ? (
+                        <span
+                          className={cn(
+                            'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]',
+                            metric.tone === 'positive'
+                              ? 'bg-emerald-300/15 text-emerald-100'
+                              : metric.tone === 'warning'
+                                ? 'bg-amber-300/15 text-amber-100'
+                                : 'bg-white/10 text-slate-200'
+                          )}
+                        >
+                          {metric.tone}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className='mt-2 text-lg font-semibold text-white'>{metric.value}</p>
+                    {metric.hint ? (
+                      <p className='mt-1 text-[11px] text-slate-400'>{metric.hint}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {block.result && Object.keys(block.result).length ? (
+              <pre className='overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-3 text-xs leading-5 text-slate-200'>
+                {JSON.stringify(block.result, null, 2)}
+              </pre>
+            ) : null}
+            {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
+          </CardContent>
+        </Card>
+      )
+    case 'failure':
+      return (
+        <Card className='border-rose-300/20 bg-rose-300/10 text-slate-50 shadow-none'>
+          <CardHeader className='space-y-2 pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <TriangleAlert className='size-4 text-rose-200' />
+              {block.title}
+            </CardTitle>
+            {block.summary ? (
+              <p className='text-sm leading-6 text-rose-50/85'>{block.summary}</p>
+            ) : null}
+            {block.detail ? (
+              <p className='text-xs leading-5 text-rose-50/70'>{block.detail}</p>
+            ) : null}
+            <TraceMeta block={block} />
+          </CardHeader>
+          <CardContent className='space-y-3 pt-0'>
+            {block.failure ? (
+              <div className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'>
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-xs text-slate-300'>错误码</span>
+                  <span className='text-sm font-medium text-white'>
+                    {block.failure.code}
+                  </span>
+                </div>
+                <p className='mt-2 text-sm text-white'>{block.failure.message}</p>
+                {block.failure.detail ? (
+                  <p className='mt-1 text-[11px] leading-5 text-slate-300'>
+                    {block.failure.detail}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
+          </CardContent>
+        </Card>
+      )
     case 'text':
     default:
       return (
@@ -1045,6 +1188,60 @@ function BlockCard({
         </Card>
       )
   }
+}
+
+function TraceMeta({
+  block,
+}: {
+  block: Extract<
+    AICopilotMessageBlock,
+    { sourceType?: string; sourceKey?: string; sourceName?: string; toolType?: string }
+  >
+}) {
+  if (!block.sourceType && !block.sourceName && !block.sourceKey && !block.toolType) {
+    return null
+  }
+
+  return (
+    <div className='flex flex-wrap gap-2 pt-1'>
+      {block.sourceType ? <BadgePill tone='subtle'>来源：{block.sourceType}</BadgePill> : null}
+      {block.toolType ? <BadgePill tone='subtle'>工具：{block.toolType}</BadgePill> : null}
+      {block.sourceName ? (
+        <span className='text-xs text-slate-300'>命中：{block.sourceName}</span>
+      ) : null}
+      {block.sourceKey ? (
+        <span className='text-xs text-slate-400'>键：{block.sourceKey}</span>
+      ) : null}
+    </div>
+  )
+}
+
+function TraceTimeline({ trace }: { trace: AICopilotTraceStep[] }) {
+  if (!trace.length) {
+    return null
+  }
+
+  return (
+    <div className='space-y-2'>
+      {trace.map((step, index) => (
+        <div
+          key={`${step.stage}-${step.label}-${index}`}
+          className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'
+        >
+          <div className='flex items-center justify-between gap-3'>
+            <p className='text-sm font-medium text-white'>{step.label}</p>
+            <span className='text-[11px] uppercase tracking-[0.18em] text-slate-400'>
+              {step.status ?? step.stage}
+            </span>
+          </div>
+          <p className='mt-1 text-[11px] text-slate-400'>{step.stage}</p>
+          {step.detail ? (
+            <p className='mt-2 text-xs leading-5 text-slate-200'>{step.detail}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function EmptyState() {

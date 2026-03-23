@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
+import { type ColumnDef } from '@tanstack/react-table'
 import { Loader2, Send } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -26,6 +27,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import { type NavigateFn } from '@/hooks/use-table-url-state'
 import {
   formatApprovalSheetDateTime,
   resolveApprovalSheetInstanceStatusLabel,
@@ -35,8 +38,15 @@ import {
   createPLMECOExecution,
   createPLMECRRequest,
   createPLMMaterialChangeRequest,
+  listPLMECOExecutions,
+  listPLMECRRequests,
   listPLMApprovalSheets,
+  listPLMMaterialChangeRequests,
+  type PLMBillPage,
   type PLMLaunchResponse,
+  type PLMECOBillListItem,
+  type PLMECRBillListItem,
+  type PLMMaterialChangeBillListItem,
 } from '@/lib/api/plm'
 import {
   getApprovalSheetDetailByBusiness,
@@ -1033,6 +1043,272 @@ export function PLMMaterialChangeBillDetailPage({
         { key: 'changeReason', label: '变更原因' },
         { key: 'changeType', label: '变更类型' },
       ]}
+    />
+  )
+}
+
+type PlmListSearchProps = {
+  search: ListQuerySearch
+  navigate: NavigateFn
+}
+
+function emptyPlmPage<T>(search: ListQuerySearch): PLMBillPage<T> {
+  return {
+    page: search.page,
+    pageSize: search.pageSize,
+    total: 0,
+    pages: 0,
+    groups: [],
+    records: [],
+  }
+}
+
+function resolvePlmStatusLabel(status: string) {
+  switch (status) {
+    case 'DRAFT':
+      return '草稿'
+    case 'RUNNING':
+      return '审批中'
+    case 'COMPLETED':
+      return '已完成'
+    case 'REJECTED':
+      return '已驳回'
+    case 'CANCELLED':
+      return '已取消'
+    default:
+      return status
+  }
+}
+
+function resolvePlmStatusVariant(status: string) {
+  switch (status) {
+    case 'COMPLETED':
+      return 'secondary' as const
+    case 'REJECTED':
+    case 'CANCELLED':
+      return 'destructive' as const
+    default:
+      return 'outline' as const
+  }
+}
+
+function plmSummaryItems(total: number, search: ListQuerySearch) {
+  return [
+    {
+      label: '总条数',
+      value: String(total),
+      hint: `当前查询页：${search.page} / ${search.pageSize}`,
+    },
+    {
+      label: '筛选项',
+      value: String(search.filters?.length ?? 0),
+      hint: '支持关键字、排序与分组协议',
+    },
+    {
+      label: '分组项',
+      value: String(search.groups?.length ?? 0),
+      hint: '列表查询协议已保留分组能力',
+    },
+  ]
+}
+
+function PlmBillListPage<T>({
+  title,
+  description,
+  search,
+  navigate,
+  endpoint,
+  columns,
+  records,
+  total,
+  createHref,
+  createLabel,
+}: {
+  title: string
+  description: string
+  search: ListQuerySearch
+  navigate: NavigateFn
+  endpoint: string
+  columns: ColumnDef<T, unknown>[]
+  records: T[]
+  total: number
+  createHref: string
+  createLabel: string
+}) {
+  return (
+    <ResourceListPage
+      title={title}
+      description={description}
+      endpoint={endpoint}
+      searchPlaceholder='搜索业务标题、单号、物料编码或当前节点'
+      search={search}
+      navigate={navigate}
+      columns={columns}
+      data={records}
+      total={total}
+      summaries={plmSummaryItems(total, search)}
+      createAction={{
+        label: createLabel,
+        href: createHref,
+      }}
+    />
+  )
+}
+
+export function PLMECRListPage({ search, navigate }: PlmListSearchProps) {
+  const query = useQuery({
+    queryKey: ['plm', 'ecr-list', search],
+    queryFn: () => listPLMECRRequests(search),
+  })
+
+  const pageData = query.data ?? emptyPlmPage<PLMECRBillListItem>(search)
+  const columns = useMemo<ColumnDef<PLMECRBillListItem, unknown>[]>(
+    () => [
+      {
+        accessorKey: 'billNo',
+        header: '业务单号',
+        cell: ({ row }) => (
+          <Link
+            className='font-medium text-primary hover:underline'
+            to='/plm/ecr/$billId'
+            params={{ billId: row.original.billId }}
+          >
+            {row.original.billNo}
+          </Link>
+        ),
+      },
+      { accessorKey: 'changeTitle', header: '变更标题' },
+      { accessorKey: 'affectedProductCode', header: '影响产品' },
+      { accessorKey: 'priorityLevel', header: '优先级' },
+      {
+        accessorKey: 'status',
+        header: '状态',
+        cell: ({ row }) => (
+          <Badge variant={resolvePlmStatusVariant(row.original.status)}>
+            {resolvePlmStatusLabel(row.original.status)}
+          </Badge>
+        ),
+      },
+      { accessorKey: 'updatedAt', header: '更新时间', cell: ({ row }) => formatApprovalSheetDateTime(row.original.updatedAt) },
+    ],
+    []
+  )
+
+  return (
+    <PlmBillListPage
+      title='ECR 变更申请列表'
+      description='按业务台账查看 ECR 申请，支持单号、标题和优先级查询。'
+      search={search}
+      navigate={navigate}
+      endpoint='/api/v1/plm/ecrs'
+      columns={columns}
+      records={pageData.records}
+      total={pageData.total}
+      createHref='/plm/ecr/create'
+      createLabel='发起 ECR'
+    />
+  )
+}
+
+export function PLMECOListPage({ search, navigate }: PlmListSearchProps) {
+  const query = useQuery({
+    queryKey: ['plm', 'eco-list', search],
+    queryFn: () => listPLMECOExecutions(search),
+  })
+
+  const pageData = query.data ?? emptyPlmPage<PLMECOBillListItem>(search)
+  const columns = useMemo<ColumnDef<PLMECOBillListItem, unknown>[]>(
+    () => [
+      {
+        accessorKey: 'billNo',
+        header: '业务单号',
+        cell: ({ row }) => (
+          <Link className='font-medium text-primary hover:underline' to='/plm/eco/$billId' params={{ billId: row.original.billId }}>
+            {row.original.billNo}
+          </Link>
+        ),
+      },
+      { accessorKey: 'executionTitle', header: '执行标题' },
+      { accessorKey: 'effectiveDate', header: '生效日期', cell: ({ row }) => row.original.effectiveDate || '--' },
+      { accessorKey: 'changeReason', header: '变更原因' },
+      {
+        accessorKey: 'status',
+        header: '状态',
+        cell: ({ row }) => (
+          <Badge variant={resolvePlmStatusVariant(row.original.status)}>
+            {resolvePlmStatusLabel(row.original.status)}
+          </Badge>
+        ),
+      },
+      { accessorKey: 'updatedAt', header: '更新时间', cell: ({ row }) => formatApprovalSheetDateTime(row.original.updatedAt) },
+    ],
+    []
+  )
+
+  return (
+    <PlmBillListPage
+      title='ECO 变更执行列表'
+      description='按业务台账查看 ECO 执行单，支持单号、标题和生效日期查询。'
+      search={search}
+      navigate={navigate}
+      endpoint='/api/v1/plm/ecos'
+      columns={columns}
+      records={pageData.records}
+      total={pageData.total}
+      createHref='/plm/eco/create'
+      createLabel='发起 ECO'
+    />
+  )
+}
+
+export function PLMMaterialChangeListPage({ search, navigate }: PlmListSearchProps) {
+  const query = useQuery({
+    queryKey: ['plm', 'material-list', search],
+    queryFn: () => listPLMMaterialChangeRequests(search),
+  })
+
+  const pageData = query.data ?? emptyPlmPage<PLMMaterialChangeBillListItem>(search)
+  const columns = useMemo<ColumnDef<PLMMaterialChangeBillListItem, unknown>[]>(
+    () => [
+      {
+        accessorKey: 'billNo',
+        header: '业务单号',
+        cell: ({ row }) => (
+          <Link className='font-medium text-primary hover:underline' to='/plm/material-master/$billId' params={{ billId: row.original.billId }}>
+            {row.original.billNo}
+          </Link>
+        ),
+      },
+      { accessorKey: 'materialCode', header: '物料编码' },
+      { accessorKey: 'materialName', header: '物料名称' },
+      { accessorKey: 'changeType', header: '变更类型', cell: ({ row }) => row.original.changeType || '--' },
+      { accessorKey: 'changeReason', header: '变更原因' },
+      {
+        accessorKey: 'status',
+        header: '状态',
+        cell: ({ row }) => (
+          <Badge variant={resolvePlmStatusVariant(row.original.status)}>
+            {resolvePlmStatusLabel(row.original.status)}
+          </Badge>
+        ),
+      },
+      { accessorKey: 'updatedAt', header: '更新时间', cell: ({ row }) => formatApprovalSheetDateTime(row.original.updatedAt) },
+    ],
+    []
+  )
+
+  return (
+    <PlmBillListPage
+      title='物料主数据变更列表'
+      description='按业务台账查看物料主数据变更单，支持物料编码、名称和变更类型查询。'
+      search={search}
+      navigate={navigate}
+      endpoint='/api/v1/plm/material-master-changes'
+      columns={columns}
+      records={pageData.records}
+      total={pageData.total}
+      createHref='/plm/material-master/create'
+      createLabel='发起物料变更'
     />
   )
 }

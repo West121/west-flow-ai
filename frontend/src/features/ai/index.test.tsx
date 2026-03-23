@@ -76,34 +76,35 @@ function buildSession(overrides: Record<string, unknown> = {}) {
           occurredAt: '2026-03-23T08:00:06.000Z',
         },
       ],
-    history: [
-      {
-        messageId: `${sessionId}_msg_001`,
-        role: 'user',
-        authorName: '你',
-        createdAt: '2026-03-23T08:00:00.000Z',
-        content: '请帮我看看这个待办。',
-      },
-      {
-        messageId: `${sessionId}_msg_002`,
-        role: 'assistant',
-        authorName: 'AI Copilot',
-        createdAt: '2026-03-23T08:00:10.000Z',
-        content: '我先给出一个确认卡。',
-        blocks: [
-          {
-            type: 'confirm',
-            confirmationId: `${sessionId}_confirm_001`,
-            title: '是否立即执行？',
-            summary: '确认后将记录审计并继续后续流程。',
-            confirmLabel: '确认处理',
-            cancelLabel: '稍后再说',
-            status:
-              (overrides.confirmationStatus as string | undefined) ?? 'pending',
-          },
-        ],
-      },
-    ],
+    history:
+      (overrides.history as unknown[] | undefined) ?? [
+        {
+          messageId: `${sessionId}_msg_001`,
+          role: 'user',
+          authorName: '你',
+          createdAt: '2026-03-23T08:00:00.000Z',
+          content: '请帮我看看这个待办。',
+        },
+        {
+          messageId: `${sessionId}_msg_002`,
+          role: 'assistant',
+          authorName: 'AI Copilot',
+          createdAt: '2026-03-23T08:00:10.000Z',
+          content: '我先给出一个确认卡。',
+          blocks: [
+            {
+              type: 'confirm',
+              confirmationId: `${sessionId}_confirm_001`,
+              title: '是否立即执行？',
+              summary: '确认后将记录审计并继续后续流程。',
+              confirmLabel: '确认处理',
+              cancelLabel: '稍后再说',
+              status:
+                (overrides.confirmationStatus as string | undefined) ?? 'pending',
+            },
+          ],
+        },
+      ],
   }
 }
 
@@ -274,5 +275,166 @@ describe('AICopilotPage', () => {
         expect.any(Object)
       )
     )
+  })
+
+  it('renders result, failure, and trace blocks with richer tool hit metadata', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_rich_001',
+        title: 'AI 执行轨迹演示',
+        preview: '我已经整理出本次执行结果与失败信息。',
+        status: 'active',
+        updatedAt: '2026-03-23T09:00:10.000Z',
+        messageCount: 1,
+        contextTags: ['PLM', 'AI Copilot', 'route:/plm/ecr/query'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(
+      async () =>
+        buildSession({
+          sessionId: 'session_rich_001',
+          title: 'AI 执行轨迹演示',
+          contextTags: ['PLM', 'AI Copilot', 'route:/plm/ecr/query'],
+          toolCalls: [
+            {
+              toolCallId: 'tool_skill_001',
+              toolKey: 'plm.change.summary',
+              toolType: 'READ',
+              toolSource: 'SKILL',
+              status: 'SUCCEEDED',
+              requiresConfirmation: false,
+              summary: '通过技能链路汇总当前变更影响范围',
+              createdAt: '2026-03-23T09:00:00.000Z',
+              completedAt: '2026-03-23T09:00:02.000Z',
+            },
+            {
+              toolCallId: 'tool_mcp_001',
+              toolKey: 'external.mcp.search',
+              toolType: 'READ',
+              toolSource: 'MCP',
+              status: 'FAILED',
+              requiresConfirmation: false,
+              summary: '访问外部 MCP 检索服务失败',
+              createdAt: '2026-03-23T09:00:03.000Z',
+              completedAt: '2026-03-23T09:00:05.000Z',
+            },
+          ],
+          history: [
+            {
+              messageId: 'session_rich_001_msg_001',
+              role: 'assistant',
+              authorName: 'AI Copilot',
+              createdAt: '2026-03-23T09:00:10.000Z',
+              content: '我已经整理出本次执行结果与失败信息。',
+              blocks: [
+                {
+                  type: 'trace',
+                  title: '命中轨迹',
+                  summary: 'Supervisor -> Routing -> PLM Skill',
+                  detail: '本次优先命中 PLM 技能，再回到平台聚合结果。',
+                  status: 'SUCCEEDED',
+                  sourceType: 'SKILL',
+                  sourceKey: 'plm-assistant',
+                  sourceName: 'PLM 助手',
+                  trace: [
+                    {
+                      stage: 'SUPERVISOR',
+                      label: 'Supervisor',
+                      detail: '判定为只读 PLM 分析请求',
+                      status: 'SUCCEEDED',
+                    },
+                    {
+                      stage: 'SKILL',
+                      label: 'PLM Skill',
+                      detail: '读取 ECR 与 ECO 关联数据',
+                      status: 'SUCCEEDED',
+                    },
+                  ],
+                },
+                {
+                  type: 'result',
+                  title: '执行结果',
+                  summary: '已生成本次 PLM 变更摘要。',
+                  detail: '结果来自技能链路与平台工具聚合。',
+                  sourceType: 'SKILL',
+                  sourceKey: 'plm.change.summary',
+                  sourceName: 'PLM 变更摘要',
+                  toolType: 'READ',
+                  result: {
+                    billNo: 'ECR-20260323-001',
+                    impactedCount: 4,
+                  },
+                  fields: [
+                    {
+                      label: '变更单号',
+                      value: 'ECR-20260323-001',
+                    },
+                  ],
+                  metrics: [
+                    {
+                      label: '影响对象数',
+                      value: '4',
+                      tone: 'warning',
+                    },
+                  ],
+                  trace: [
+                    {
+                      stage: 'PLM',
+                      label: '业务聚合',
+                      detail: '已整合 ECR 与 ECO 影响范围',
+                      status: 'SUCCEEDED',
+                    },
+                  ],
+                },
+                {
+                  type: 'failure',
+                  title: '执行失败',
+                  summary: '外部 MCP 检索失败。',
+                  detail: '请检查 MCP 连通性或稍后重试。',
+                  sourceType: 'MCP',
+                  sourceKey: 'external.mcp.search',
+                  sourceName: '外部知识库检索',
+                  toolType: 'READ',
+                  failure: {
+                    code: 'MCP_TIMEOUT',
+                    message: 'MCP 请求超时',
+                    detail: '远端 MCP 服务 5 秒未返回。',
+                  },
+                  trace: [
+                    {
+                      stage: 'MCP',
+                      label: '外部 MCP',
+                      detail: '连接外部检索端点超时',
+                      status: 'FAILED',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('AI 执行轨迹演示')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.getAICopilotSession).toHaveBeenCalledWith(
+        'session_rich_001'
+      )
+    )
+    expect(screen.getAllByText('命中轨迹').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('命中：PLM 助手').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('执行结果').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('变更单号').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('ECR-20260323-001').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('影响对象数').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('执行失败').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('MCP 请求超时').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('命中：外部知识库检索').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('来源：SKILL').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('来源：MCP').length).toBeGreaterThan(0)
   })
 })

@@ -253,6 +253,13 @@ export type AiToolCallDetail = AiToolCallRecord & {
 
 export type AiMcpConnectionStatus = 'UP' | 'DOWN' | 'DISABLED' | 'INTERNAL'
 
+export type AiMcpDiagnosticStep = {
+  step: string
+  status: 'INFO' | 'PASS' | 'FAIL' | 'WARN'
+  message: string
+  durationMillis: number | null
+}
+
 export type AiMcpDiagnosticRecord = {
   mcpId: string
   mcpCode: string
@@ -266,6 +273,9 @@ export type AiMcpDiagnosticRecord = {
   responseTimeMillis: number | null
   toolCount: number | null
   failureReason: string | null
+  failureDetail?: string | null
+  failureStage?: string | null
+  diagnosticSteps?: AiMcpDiagnosticStep[]
   checkedAt: string
   metadataJson: string
 }
@@ -410,6 +420,16 @@ export async function getAiMcpDiagnosticDetail(
 ): Promise<AiMcpDiagnosticDetail> {
   const response = await apiClient.get<ApiSuccessResponse<AiMcpDiagnosticDetail>>(
     `/system/ai/mcps/diagnostics/${mcpId}`
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function recheckAiMcpDiagnostic(
+  mcpId: string
+): Promise<AiMcpDiagnosticDetail> {
+  const response = await apiClient.post<ApiSuccessResponse<AiMcpDiagnosticDetail>>(
+    `/system/ai/mcps/diagnostics/${mcpId}/recheck`
   )
 
   return unwrapResponse(response)

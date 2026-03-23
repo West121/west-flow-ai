@@ -1,5 +1,6 @@
 package com.westflow.aiadmin.mcp.api;
 
+import java.util.List;
 import java.time.OffsetDateTime;
 
 /**
@@ -18,6 +19,9 @@ public record AiMcpDiagnosticResponse(
         Long responseTimeMillis,
         Integer toolCount,
         String failureReason,
+        String failureDetail,
+        String failureStage,
+        List<AiMcpDiagnosticStepResponse> diagnosticSteps,
         OffsetDateTime checkedAt,
         String metadataJson
 ) {

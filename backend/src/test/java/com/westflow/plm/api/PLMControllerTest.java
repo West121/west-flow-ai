@@ -54,6 +54,9 @@ class PLMControllerTest {
     @BeforeEach
     void resetRuntime() {
         createPlmTables();
+        jdbcTemplate.execute("DELETE FROM plm_ecr_change");
+        jdbcTemplate.execute("DELETE FROM plm_eco_execution");
+        jdbcTemplate.execute("DELETE FROM plm_material_change");
         repositoryService.createDeploymentQuery().list()
                 .forEach(deployment -> repositoryService.deleteDeployment(deployment.getId(), true));
     }
@@ -209,6 +212,84 @@ class PLMControllerTest {
                 .allMatch(value -> value.startsWith("ECR-")
                         || value.startsWith("ECO-")
                         || value.startsWith("MAT-"));
+    }
+
+    @Test
+    void shouldPageEachPlmBusinessList() throws Exception {
+        String token = login();
+        publishDefinition("plm_ecr", "PLM ECR 变更申请");
+        publishDefinition("plm_eco", "PLM ECO 变更执行");
+        publishDefinition("plm_material_change", "PLM 物料主数据变更申请");
+        seedBinding("PLM_ECR", "default", "plm_ecr", "bind_plm_ecr_default");
+        seedBinding("PLM_ECO", "default", "plm_eco", "bind_plm_eco_default");
+        seedBinding("PLM_MATERIAL", "default", "plm_material_change", "bind_plm_material_default");
+
+        JsonNode ecr = createBill(token, "/api/v1/plm/ecrs", """
+                {
+                  "sceneCode": "default",
+                  "changeTitle": "结构件替换",
+                  "changeReason": "供应替代",
+                  "affectedProductCode": "PRD-1001",
+                  "priorityLevel": "HIGH"
+                }
+                """);
+        JsonNode eco = createBill(token, "/api/v1/plm/ecos", """
+                {
+                  "sceneCode": "default",
+                  "executionTitle": "ECO 执行",
+                  "executionPlan": "通知工厂执行",
+                  "effectiveDate": "2026-04-01",
+                  "changeReason": "量产切换"
+                }
+                """);
+        JsonNode material = createBill(token, "/api/v1/plm/material-master-changes", """
+                {
+                  "sceneCode": "default",
+                  "materialCode": "MAT-001",
+                  "materialName": "主板总成",
+                  "changeReason": "替换物料编码",
+                  "changeType": "ATTRIBUTE_UPDATE"
+                }
+                """);
+
+        String ecrResponse = mockMvc.perform(get("/api/v1/plm/ecrs")
+                        .header("Authorization", "Bearer " + token)
+                        .param("page", "1")
+                        .param("pageSize", "20")
+                        .param("keyword", "结构件"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode ecrData = objectMapper.readTree(ecrResponse).path("data");
+        assertThat(ecrData.path("total").asInt()).isEqualTo(1);
+        assertThat(ecrData.path("records").get(0).path("billNo").asText()).isEqualTo(ecr.path("billNo").asText());
+
+        String ecoResponse = mockMvc.perform(get("/api/v1/plm/ecos")
+                        .header("Authorization", "Bearer " + token)
+                        .param("page", "1")
+                        .param("pageSize", "20")
+                        .param("keyword", "执行"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode ecoData = objectMapper.readTree(ecoResponse).path("data");
+        assertThat(ecoData.path("total").asInt()).isEqualTo(1);
+        assertThat(ecoData.path("records").get(0).path("billNo").asText()).isEqualTo(eco.path("billNo").asText());
+
+        String materialResponse = mockMvc.perform(get("/api/v1/plm/material-master-changes")
+                        .header("Authorization", "Bearer " + token)
+                        .param("page", "1")
+                        .param("pageSize", "20")
+                        .param("keyword", "MAT-001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode materialData = objectMapper.readTree(materialResponse).path("data");
+        assertThat(materialData.path("total").asInt()).isEqualTo(1);
+        assertThat(materialData.path("records").get(0).path("billNo").asText()).isEqualTo(material.path("billNo").asText());
     }
 
     private JsonNode createBill(String token, String path, String body) throws Exception {

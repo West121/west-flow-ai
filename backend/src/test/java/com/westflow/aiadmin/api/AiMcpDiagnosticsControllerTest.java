@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.aiadmin.AiAdminTestApplication;
 import com.westflow.aiadmin.AiAdminTestSupport;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -85,5 +86,49 @@ class AiMcpDiagnosticsControllerTest {
         assertThat(first.path("toolCount").asInt()).isGreaterThanOrEqualTo(2);
         assertThat(first.path("responseTimeMillis").asLong()).isGreaterThan(0L);
         assertThat(first.path("failureReason").isMissingNode() || first.path("failureReason").isNull()).isTrue();
+        assertThat(first.path("failureDetail").isMissingNode() || first.path("failureDetail").isNull()).isTrue();
+        assertThat(first.path("diagnosticSteps").isArray()).isTrue();
+        assertThat(first.path("diagnosticSteps").size()).isGreaterThanOrEqualTo(3);
+    }
+
+    /**
+     * 手动重检应暴露失败阶段、失败详情和诊断步骤。
+     */
+    @Test
+    void shouldRecheckAndExposeFailureDiagnosticsForBrokenConfiguration() throws Exception {
+        String mcpId = "mcp_diag_" + UUID.randomUUID().toString().substring(0, 8);
+        jdbcTemplate.update("""
+                INSERT INTO wf_ai_mcp_registry (
+                    id, mcp_code, mcp_name, endpoint_url, transport_type,
+                    required_capability_code, enabled, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                mcpId,
+                "broken-diagnostic-mcp",
+                "故障 MCP",
+                null,
+                "STREAMABLE_HTTP",
+                "ai:copilot:open",
+                true,
+                "{\"requestTimeoutSeconds\": 5, \"connectTimeoutSeconds\": 1}"
+        );
+
+        String token = AiAdminTestSupport.loginAdmin(mockMvc, objectMapper);
+
+        String response = mockMvc.perform(AiAdminTestSupport.withBearer(post("/api/v1/system/ai/mcps/diagnostics/" + mcpId + "/recheck")
+                        .contentType(MediaType.APPLICATION_JSON), token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("mcpCode").asText()).isEqualTo("broken-diagnostic-mcp");
+        assertThat(data.path("connectionStatus").asText()).isEqualTo("DOWN");
+        assertThat(data.path("failureReason").asText()).isEqualTo("MCP 地址不能为空");
+        assertThat(data.path("failureStage").asText()).isEqualTo("TRANSPORT_CONFIG");
+        assertThat(data.path("failureDetail").asText()).contains("MCP 地址不能为空");
+        assertThat(data.path("diagnosticSteps").isArray()).isTrue();
+        assertThat(data.path("diagnosticSteps").size()).isGreaterThanOrEqualTo(2);
     }
 }
