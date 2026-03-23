@@ -154,12 +154,10 @@ public class SystemMenuService {
         }
 
         Set<String> visibleNodeIds = new HashSet<>();
-        for (String grantedMenuId : grantedMenuIds) {
-            SidebarMenuNodeResponse cursor = nodeMap.get(grantedMenuId);
-            while (cursor != null && visibleNodeIds.add(cursor.menuId())) {
-                cursor = cursor.parentMenuId() == null ? null : nodeMap.get(cursor.parentMenuId());
-            }
-        }
+        grantedMenuIds.stream()
+                .map(nodeMap::get)
+                .filter(node -> node != null)
+                .forEach(node -> visibleNodeIds.add(node.menuId()));
 
         List<SidebarMenuNodeResponse> filteredNodes = flatNodes.stream()
                 .filter(node -> visibleNodeIds.contains(node.menuId()))

@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,6 +42,23 @@ public class ProcessDslValidator {
             "RETURN_TO_PARENT",
             "TERMINATE_PARENT"
     );
+    private static final List<String> SUPPORTED_DYNAMIC_BUILDER_BUILD_MODES = List.of(
+            "APPROVER_TASKS",
+            "SUBPROCESS_CALLS"
+    );
+    private static final List<String> SUPPORTED_DYNAMIC_BUILDER_SOURCE_MODES = List.of(
+            "RULE",
+            "MANUAL_TEMPLATE"
+    );
+    private static final List<String> SUPPORTED_DYNAMIC_BUILDER_APPEND_POLICIES = List.of(
+            "SERIAL_AFTER_CURRENT",
+            "PARALLEL_WITH_CURRENT",
+            "SERIAL_BEFORE_NEXT"
+    );
+    private static final List<String> SUPPORTED_DYNAMIC_BUILDER_TERMINATE_POLICIES = List.of(
+            "TERMINATE_GENERATED_ONLY",
+            "TERMINATE_PARENT_AND_GENERATED"
+    );
     private static final List<String> SUPPORTED_APPROVAL_MODES = List.of(
             "SINGLE",
             "SEQUENTIAL",
@@ -65,6 +83,7 @@ public class ProcessDslValidator {
         validateStartConfig(nodeById.values());
         validateApproverAssignments(nodeById.values());
         validateSubprocessNodes(nodeById.values());
+        validateDynamicBuilderNodes(nodeById.values());
         validateCcTargets(nodeById.values());
         validateTimerNodes(nodeById.values());
         validateTriggerNodes(nodeById.values());
@@ -229,6 +248,48 @@ public class ProcessDslValidator {
 
             validateTimeoutPolicy(node);
             validateReminderPolicy(node);
+        }
+    }
+
+    // 校验动态构建节点的运行时生成规则和终止策略。
+    private void validateDynamicBuilderNodes(Collection<ProcessDslPayload.Node> nodes) {
+        for (ProcessDslPayload.Node node : nodes) {
+            if (!"dynamic-builder".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> config = safeConfig(node);
+
+            String buildMode = asString(config.get("buildMode"));
+            if (buildMode == null || !SUPPORTED_DYNAMIC_BUILDER_BUILD_MODES.contains(buildMode)) {
+                throw invalid("dynamic-builder 节点 buildMode 不合法", details("nodeId", node.id(), "buildMode", buildMode));
+            }
+
+            String sourceMode = asString(config.get("sourceMode"));
+            if (sourceMode == null || !SUPPORTED_DYNAMIC_BUILDER_SOURCE_MODES.contains(sourceMode)) {
+                throw invalid("dynamic-builder 节点 sourceMode 不合法", details("nodeId", node.id(), "sourceMode", sourceMode));
+            }
+
+            if ("RULE".equals(sourceMode) && asString(config.get("ruleExpression")) == null) {
+                throw invalid("dynamic-builder 节点 ruleExpression 不能为空", details("nodeId", node.id()));
+            }
+            if ("MANUAL_TEMPLATE".equals(sourceMode) && asString(config.get("manualTemplateCode")) == null) {
+                throw invalid("dynamic-builder 节点 manualTemplateCode 不能为空", details("nodeId", node.id()));
+            }
+
+            String appendPolicy = asString(config.get("appendPolicy"));
+            if (appendPolicy == null || !SUPPORTED_DYNAMIC_BUILDER_APPEND_POLICIES.contains(appendPolicy)) {
+                throw invalid("dynamic-builder 节点 appendPolicy 不合法", details("nodeId", node.id(), "appendPolicy", appendPolicy));
+            }
+
+            Integer maxGeneratedCount = integerValue(config.get("maxGeneratedCount"));
+            if (maxGeneratedCount == null || maxGeneratedCount < 1) {
+                throw invalid("dynamic-builder 节点 maxGeneratedCount 必须大于 0", details("nodeId", node.id()));
+            }
+
+            String terminatePolicy = asString(config.get("terminatePolicy"));
+            if (terminatePolicy == null || !SUPPORTED_DYNAMIC_BUILDER_TERMINATE_POLICIES.contains(terminatePolicy)) {
+                throw invalid("dynamic-builder 节点 terminatePolicy 不合法", details("nodeId", node.id(), "terminatePolicy", terminatePolicy));
+            }
         }
     }
 
@@ -617,6 +678,19 @@ public class ProcessDslValidator {
     }
 
     // 统一把节点配置转成可读写的 Map。
+
+    private Map<String, Object> details(Object... keyValues) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < keyValues.length; i += 2) {
+            Object key = keyValues[i];
+            if (key == null) {
+                continue;
+            }
+            details.put(String.valueOf(key), keyValues[i + 1]);
+        }
+        return details;
+    }
+
     private Map<String, Object> safeConfig(ProcessDslPayload.Node node) {
         return node.config() == null ? Map.of() : node.config();
     }

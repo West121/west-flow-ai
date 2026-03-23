@@ -307,6 +307,79 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectDynamicBuilderWithoutBuildMode() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("sourceMode", "RULE");
+        dynamicConfig.put("ruleExpression", "days > 3");
+        dynamicConfig.put("appendPolicy", "SERIAL_AFTER_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 3);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_GENERATED_ONLY");
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "dynamic-builder 节点 buildMode 不合法");
+    }
+
+    @Test
+    void shouldRejectDynamicBuilderWithoutRuleExpressionForRuleMode() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("buildMode", "APPROVER_TASKS");
+        dynamicConfig.put("sourceMode", "RULE");
+        dynamicConfig.put("appendPolicy", "SERIAL_AFTER_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 3);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_GENERATED_ONLY");
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "dynamic-builder 节点 ruleExpression 不能为空");
+    }
+
+    @Test
+    void shouldAcceptValidDynamicBuilderDsl() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("buildMode", "APPROVER_TASKS");
+        dynamicConfig.put("sourceMode", "MANUAL_TEMPLATE");
+        dynamicConfig.put("manualTemplateCode", "tmpl_append_001");
+        dynamicConfig.put("appendPolicy", "PARALLEL_WITH_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 5);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_PARENT_AND_GENERATED");
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
     void shouldRejectTimerNodeWithoutScheduleConfig() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),

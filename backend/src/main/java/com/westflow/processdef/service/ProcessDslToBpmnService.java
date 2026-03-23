@@ -34,6 +34,7 @@ public class ProcessDslToBpmnService {
     private static final String WESTFLOW_NS = "https://westflow.dev/schema/bpmn";
     private static final String WESTFLOW_PREFIX = "westflow";
     private static final String DEFAULT_TRIGGER_DELEGATE = "${flowableTriggerDelegate}";
+    private static final String DEFAULT_DYNAMIC_BUILDER_DELEGATE = "${flowableDynamicBuilderDelegate}";
 
     public String convert(ProcessDslPayload payload, String processDefinitionId, int version) {
         BpmnModel model = new BpmnModel();
@@ -67,6 +68,7 @@ public class ProcessDslToBpmnService {
             case "start" -> buildStartEvent(node, config);
             case "approver" -> buildApproverTask(node, config);
             case "subprocess" -> buildSubprocessCallActivity(node, config);
+            case "dynamic-builder" -> buildDynamicBuilderPlaceholder(node, config);
             case "cc" -> buildCcTask(node, config);
             case "condition" -> buildExclusiveGateway(node, config);
             case "parallel_split" -> buildParallelGateway(node, "split");
@@ -181,6 +183,17 @@ public class ProcessDslToBpmnService {
         return task;
     }
 
+    // 动态构建节点先映射为平台钩子的占位服务任务，后续由运行态服务补充附属结构。
+    private ServiceTask buildDynamicBuilderPlaceholder(ProcessDslPayload.Node node, Map<String, Object> config) {
+        ServiceTask task = new ServiceTask();
+        task.setId(node.id());
+        task.setName(node.name());
+        task.setImplementationType(ImplementationType.IMPLEMENTATION_TYPE_DELEGATEEXPRESSION);
+        task.setImplementation(DEFAULT_DYNAMIC_BUILDER_DELEGATE);
+        addExtensionAttribute(task, "taskKind", "DYNAMIC_BUILDER");
+        return task;
+    }
+
     // 结束节点映射为结束事件。
     private EndEvent buildEndEvent(ProcessDslPayload.Node node) {
         EndEvent event = new EndEvent();
@@ -253,6 +266,12 @@ public class ProcessDslToBpmnService {
         attrs.put("businessBindingMode", stringValue(config.get("businessBindingMode")));
         attrs.put("terminatePolicy", stringValue(config.get("terminatePolicy")));
         attrs.put("childFinishPolicy", stringValue(config.get("childFinishPolicy")));
+        attrs.put("buildMode", stringValue(config.get("buildMode")));
+        attrs.put("sourceMode", stringValue(config.get("sourceMode")));
+        attrs.put("ruleExpression", stringValue(config.get("ruleExpression")));
+        attrs.put("manualTemplateCode", stringValue(config.get("manualTemplateCode")));
+        attrs.put("appendPolicy", stringValue(config.get("appendPolicy")));
+        attrs.put("maxGeneratedCount", stringValue(config.get("maxGeneratedCount")));
         attrs.put("inputMappings", serializeMappings(config.get("inputMappings")));
         attrs.put("outputMappings", serializeMappings(config.get("outputMappings")));
 

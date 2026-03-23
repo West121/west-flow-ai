@@ -300,6 +300,51 @@ class ProcessDslToBpmnServiceTest {
         );
     }
 
+    @Test
+    void shouldConvertDynamicBuilderNodeIntoPlaceholderServiceTask() {
+        ProcessDslPayload payload = new ProcessDslPayload(
+                "1.0.0",
+                "oa_dynamic",
+                "动态构建流程",
+                "OA",
+                "oa-dynamic-form",
+                "1.0.0",
+                List.of(),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of(
+                                "initiatorEditable", true
+                        )),
+                        node("dynamic_1", "dynamic-builder", "追加构建", Map.of(
+                                "buildMode", "APPROVER_TASKS",
+                                "sourceMode", "RULE",
+                                "ruleExpression", "days > 3",
+                                "appendPolicy", "SERIAL_AFTER_CURRENT",
+                                "maxGeneratedCount", 4,
+                                "terminatePolicy", "TERMINATE_GENERATED_ONLY"
+                        )),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1", 1, null),
+                        edge("edge_2", "dynamic_1", "end_1", 2, null)
+                )
+        );
+
+        String xml = service.convert(payload, "oa_dynamic:1", 1);
+
+        assertThat(xml).contains(
+                "<serviceTask",
+                "id=\"dynamic_1\"",
+                "name=\"追加构建\"",
+                "flowable:delegateExpression=\"${flowableDynamicBuilderDelegate}\""
+        );
+    }
+
     private ProcessDslPayload.Node node(
             String id,
             String type,

@@ -1807,6 +1807,29 @@ CREATE TABLE IF NOT EXISTS wf_process_link (
     finished_at TIMESTAMP NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS wf_runtime_append_link (
+    id VARCHAR(64) PRIMARY KEY,
+    root_instance_id VARCHAR(64) NOT NULL,
+    parent_instance_id VARCHAR(64) NOT NULL,
+    source_task_id VARCHAR(64) NOT NULL,
+    source_node_id VARCHAR(128) NOT NULL,
+    append_type VARCHAR(32) NOT NULL,
+    runtime_link_type VARCHAR(32) NOT NULL,
+    policy VARCHAR(64) NOT NULL,
+    target_task_id VARCHAR(64),
+    target_instance_id VARCHAR(64),
+    target_user_id VARCHAR(64),
+    called_process_key VARCHAR(128),
+    called_definition_id VARCHAR(128),
+    status VARCHAR(32) NOT NULL,
+    trigger_mode VARCHAR(32) NOT NULL,
+    operator_user_id VARCHAR(64),
+    comment_text TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 
 CREATE TABLE IF NOT EXISTS wf_workflow_operation_log (
     id VARCHAR(64) PRIMARY KEY,
