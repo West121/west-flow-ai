@@ -2,7 +2,7 @@
 
 > **Scope:** Freeze the next executable batch after the current M0 baseline. This plan covers node form configuration expansion in the process designer and the first collaboration-oriented runtime actions: `claim`, `transfer`, and `return-to-previous`.
 >
-> **Archive note (2026-03-23):** 本计划中的 `/api/v1/process-runtime/demo/*` 仅表示当时冻结时的历史路径草案，当前正式接口已统一为 `/api/v1/process-runtime/*`。
+> **Archive note (2026-03-23):** 本计划中的旧 demo 运行态路径仅表示当时冻结时的历史路径草案，当前正式接口已统一为 `/api/v1/process-runtime/*`。
 
 **Goal:** Extend the current process definition and runtime demo into a more realistic OA collaboration loop without introducing full rejection strategy, revoke semantics, or visual form design.
 
@@ -52,10 +52,10 @@ Document:
 
 Document:
 
-- `POST /api/v1/process-runtime/demo/tasks/{taskId}/claim`
-- `POST /api/v1/process-runtime/demo/tasks/{taskId}/transfer`
-- `POST /api/v1/process-runtime/demo/tasks/{taskId}/return`
-- `GET /api/v1/process-runtime/demo/tasks/{taskId}/actions`
+- `POST /api/v1/process-runtime/tasks/{taskId}/claim`
+- `POST /api/v1/process-runtime/tasks/{taskId}/transfer`
+- `POST /api/v1/process-runtime/tasks/{taskId}/return`
+- `GET /api/v1/process-runtime/tasks/{taskId}/actions`
 
 - [ ] **Step 5: Commit**
 
@@ -149,7 +149,7 @@ Expected: PASS
 
 **Files:**
 - Modify: `backend/src/test/java/com/westflow/processruntime/api/ProcessRuntimeControllerTest.java`
-- Create: `backend/src/test/java/com/westflow/processruntime/service/ProcessDemoServiceTest.java`
+- Create: `backend/src/test/java/com/westflow/processruntime/service/<legacy-runtime-service-test>.java`
 
 - [ ] **Step 1: Add a failing claim test**
 
@@ -180,7 +180,7 @@ Assert:
 Run:
 
 ```bash
-mvn -f backend/pom.xml -Dtest=ProcessRuntimeControllerTest,ProcessDemoServiceTest test
+mvn -f backend/pom.xml -Dtest=ProcessRuntimeControllerTest,<legacy-runtime-service-test> test
 ```
 
 Expected: FAIL
@@ -189,7 +189,7 @@ Expected: FAIL
 
 **Files:**
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessRuntimeController.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/<legacy-runtime-service>.java`
 - Create or modify: `backend/src/main/java/com/westflow/processruntime/api/*Request.java`
 - Create or modify: `backend/src/main/java/com/westflow/processruntime/api/*Response.java`
 
@@ -218,7 +218,7 @@ Use an in-memory runtime structure for this batch if needed, but keep the model 
 Run:
 
 ```bash
-mvn -f backend/pom.xml -Dtest=ProcessRuntimeControllerTest,ProcessDemoServiceTest test
+mvn -f backend/pom.xml -Dtest=ProcessRuntimeControllerTest,<legacy-runtime-service-test> test
 ```
 
 Expected: PASS

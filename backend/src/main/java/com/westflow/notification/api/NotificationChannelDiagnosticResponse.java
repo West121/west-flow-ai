@@ -10,7 +10,6 @@ public record NotificationChannelDiagnosticResponse(
         String channelType,
         String channelName,
         Boolean enabled,
-        Boolean mockMode,
         Boolean configurationComplete,
         List<String> missingConfigFields,
         String healthStatus,

@@ -59,7 +59,6 @@ class NotificationChannelControllerTest {
                                   "channelType": "EMAIL",
                                   "channelName": "HR 邮件通知",
                                   "enabled": true,
-                                  "mockMode": false,
                                   "config": {
                                     "smtpHost": "smtp.example.com",
                                     "smtpPort": 25,
@@ -92,7 +91,7 @@ class NotificationChannelControllerTest {
         assertThat(detailBody.path("channelType").asText()).isEqualTo("EMAIL");
         assertThat(detailBody.path("channelName").asText()).isEqualTo("HR 邮件通知");
         assertThat(detailBody.path("enabled").asBoolean()).isTrue();
-        assertThat(detailBody.path("mockMode").asBoolean()).isFalse();
+        assertThat(detailBody.path("mockMode").isMissingNode()).isTrue();
         assertThat(detailBody.path("config").path("smtpHost").asText()).isEqualTo("smtp.example.com");
 
         String updateResponse = mockMvc.perform(put("/api/v1/notification/channels/" + channelId)
@@ -104,7 +103,6 @@ class NotificationChannelControllerTest {
                                   "channelType": "EMAIL",
                                   "channelName": "HR 邮件通知（更新）",
                                   "enabled": true,
-                                  "mockMode": true,
                                   "config": {
                                     "smtpHost": "smtp.example.com",
                                     "smtpPort": 25,
@@ -170,7 +168,7 @@ class NotificationChannelControllerTest {
     }
 
     @Test
-    void shouldRejectRealSmsChannelWithoutRequiredConfigAndAllowMockMode() throws Exception {
+    void shouldRejectSmsChannelWithoutRequiredRealConfigAndAllowLocalDiagnosticFallback() throws Exception {
         String token = login();
 
         mockMvc.perform(post("/api/v1/notification/channels")
@@ -182,7 +180,6 @@ class NotificationChannelControllerTest {
                                   "channelType": "SMS",
                                   "channelName": "真实短信",
                                   "enabled": true,
-                                  "mockMode": false,
                                   "config": {
                                     "templateCode": "SMS_001"
                                   },
@@ -191,20 +188,21 @@ class NotificationChannelControllerTest {
                                 """))
                 .andExpect(status().isBadRequest());
 
-        String createMockResponse = mockMvc.perform(post("/api/v1/notification/channels")
+        String createDiagnosticResponse = mockMvc.perform(post("/api/v1/notification/channels")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "channelCode": "sms_mock_ok",
+                                  "channelCode": "sms_diag_local",
                                   "channelType": "SMS",
-                                  "channelName": "短信 mock",
+                                  "channelName": "短信本地诊断",
                                   "enabled": true,
-                                  "mockMode": true,
                                   "config": {
-                                    "mockResponseMessage": "本地 mock"
+                                    "endpoint": "http://127.0.0.1:65535/sms",
+                                    "diagnosticMockEnabled": true,
+                                    "mockResponseMessage": "本地诊断降级"
                                   },
-                                  "remark": "允许 mock 联调"
+                                  "remark": "仅本地调试允许"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -212,7 +210,7 @@ class NotificationChannelControllerTest {
                 .getResponse()
                 .getContentAsString();
 
-        assertThat(objectMapper.readTree(createMockResponse).path("data").path("channelId").asText()).isNotBlank();
+        assertThat(objectMapper.readTree(createDiagnosticResponse).path("data").path("channelId").asText()).isNotBlank();
     }
 
     @Test
@@ -242,7 +240,7 @@ class NotificationChannelControllerTest {
 
         JsonNode data = objectMapper.readTree(response).path("data");
         assertThat(data.path("channelId").asText()).isEqualTo(channelId);
-        assertThat(data.path("mockMode").asBoolean()).isFalse();
+        assertThat(data.path("mockMode").isMissingNode()).isTrue();
         assertThat(data.path("configurationComplete").asBoolean()).isFalse();
         assertThat(data.path("healthStatus").asText()).isEqualTo("CONFIG_INVALID");
         assertThat(data.path("missingConfigFields").isArray()).isTrue();

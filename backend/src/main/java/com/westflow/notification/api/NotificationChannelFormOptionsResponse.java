@@ -10,8 +10,7 @@ public record NotificationChannelFormOptionsResponse(
     public record ChannelTypeOption(
             String code,
             String label,
-            boolean realSend,
-            boolean mockProvider
+            boolean realSend
     ) {
     }
 }

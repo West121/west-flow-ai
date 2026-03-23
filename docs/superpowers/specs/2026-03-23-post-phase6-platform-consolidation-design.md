@@ -78,7 +78,7 @@ Phase 7 聚焦三类工作：
 
 重点：
 
-- 显式废弃 `/process-runtime/demo/*` 和 `ProcessDemoService` 的旧口径
+- 显式废弃旧 demo 运行态路径和旧内存运行态服务口径
 - 刷新 `task-actions`、`auth`、`ai-rich-response`、`plm-assistant-tools`
 - 验证契约文档完整性
 

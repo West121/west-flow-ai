@@ -14,8 +14,6 @@ public record SaveNotificationChannelRequest(
         String channelName,
         @NotNull(message = "启用状态不能为空")
         Boolean enabled,
-        @NotNull(message = "mock 模式不能为空")
-        Boolean mockMode,
         Map<String, Object> config,
         String remark
 ) {

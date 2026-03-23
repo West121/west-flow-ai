@@ -32,13 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
 // 管理通知渠道的查询、配置校验和保存。
 public class NotificationChannelService {
 
-    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "channelType", "mockMode");
+    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "channelType");
     private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "updatedAt", "channelCode", "channelName", "lastSentAt");
 
     private final NotificationChannelMapper notificationChannelMapper;
     private final NotificationLogMapper notificationLogMapper;
 
-    // 通知渠道列表支持关键字、状态、渠道类型和 mock 模式筛选。
+    // 通知渠道列表支持关键字、状态和渠道类型筛选。
     public PageResponse<NotificationChannelListItemResponse> page(PageRequest request) {
         // 渠道列表先走内存过滤，后续接数据库时只替换 mapper 即可。
         Filters filters = resolveFilters(request.filters());
@@ -47,7 +47,6 @@ public class NotificationChannelService {
                 .filter(record -> matchesKeyword(record, request.keyword()))
                 .filter(record -> filters.enabled() == null || filters.enabled().equals(record.enabled()))
                 .filter(record -> filters.channelType() == null || filters.channelType().equals(record.channelType()))
-                .filter(record -> filters.mockMode() == null || filters.mockMode().equals(record.mockMode()))
                 .sorted(comparator)
                 .map(this::toListItem)
                 .toList();
@@ -71,7 +70,7 @@ public class NotificationChannelService {
         return toDetail(record);
     }
 
-    // 聚合配置、mock 状态与最近发送结果，供诊断页直接展示。
+    // 聚合配置与最近发送结果，供诊断页直接展示。
     public NotificationChannelDiagnosticResponse diagnostic(String channelId) {
         NotificationChannelRecord channel = requireChannel(channelId);
         NotificationChannelType type = resolveType(channel.channelType());
@@ -88,7 +87,6 @@ public class NotificationChannelService {
                 channel.channelType(),
                 channel.channelName(),
                 channel.enabled(),
-                channel.mockMode(),
                 missingConfigFields.isEmpty(),
                 missingConfigFields,
                 resolveHealthStatus(channel, missingConfigFields, latestLog),
@@ -110,8 +108,7 @@ public class NotificationChannelService {
                         .map(type -> new NotificationChannelFormOptionsResponse.ChannelTypeOption(
                                 type.name(),
                                 type.label(),
-                                type.realSend(),
-                                type.mockProvider()
+                                type.realSend()
                         ))
                         .toList()
         );
@@ -122,10 +119,11 @@ public class NotificationChannelService {
     public NotificationChannelMutationResponse create(SaveNotificationChannelRequest request) {
         validateChannelCode(request.channelCode(), null);
         NotificationChannelType type = resolveType(request.channelType());
-        validateConfig(type, request.config(), Boolean.TRUE.equals(request.mockMode()));
+        boolean diagnosticMockMode = resolveDiagnosticMockMode(type, request.config());
+        validateConfig(type, request.config(), diagnosticMockMode);
         String channelId = buildId("nch");
         Instant now = Instant.now();
-        notificationChannelMapper.upsert(buildRecord(channelId, request, now, now, null));
+        notificationChannelMapper.upsert(buildRecord(channelId, request, now, now, null, diagnosticMockMode));
         return new NotificationChannelMutationResponse(channelId);
     }
 
@@ -135,7 +133,8 @@ public class NotificationChannelService {
         requireChannel(channelId);
         validateChannelCode(request.channelCode(), channelId);
         NotificationChannelType type = resolveType(request.channelType());
-        validateConfig(type, request.config(), Boolean.TRUE.equals(request.mockMode()));
+        boolean diagnosticMockMode = resolveDiagnosticMockMode(type, request.config());
+        validateConfig(type, request.config(), diagnosticMockMode);
         NotificationChannelRecord existing = requireChannel(channelId);
         Instant now = Instant.now();
         notificationChannelMapper.upsert(new NotificationChannelRecord(
@@ -144,7 +143,7 @@ public class NotificationChannelService {
                 type.name(),
                 request.channelName().trim(),
                 Boolean.TRUE.equals(request.enabled()),
-                Boolean.TRUE.equals(request.mockMode()),
+                diagnosticMockMode,
                 normalizeConfig(request.config()),
                 normalizeNullable(request.remark()),
                 existing.createdAt(),
@@ -174,7 +173,8 @@ public class NotificationChannelService {
             SaveNotificationChannelRequest request,
             Instant createdAt,
             Instant updatedAt,
-            Instant lastSentAt
+            Instant lastSentAt,
+            boolean diagnosticMockMode
     ) {
         return new NotificationChannelRecord(
                 channelId,
@@ -182,7 +182,7 @@ public class NotificationChannelService {
                 resolveType(request.channelType()).name(),
                 request.channelName().trim(),
                 Boolean.TRUE.equals(request.enabled()),
-                Boolean.TRUE.equals(request.mockMode()),
+                diagnosticMockMode,
                 normalizeConfig(request.config()),
                 normalizeNullable(request.remark()),
                 createdAt,
@@ -225,7 +225,6 @@ public class NotificationChannelService {
     private Filters resolveFilters(List<FilterItem> filters) {
         Boolean enabled = null;
         String channelType = null;
-        Boolean mockMode = null;
         for (FilterItem filter : filters) {
             if (!SUPPORTED_FILTER_FIELDS.contains(filter.field())) {
                 throw unsupported("不支持的筛选字段", filter.field(), SUPPORTED_FILTER_FIELDS);
@@ -237,12 +236,11 @@ public class NotificationChannelService {
             switch (filter.field()) {
                 case "status" -> enabled = resolveBoolean(value, "状态筛选值不合法");
                 case "channelType" -> channelType = resolveType(value).name();
-                case "mockMode" -> mockMode = resolveBoolean(value, "mock 模式筛选值不合法");
                 default -> {
                 }
             }
         }
-        return new Filters(enabled, channelType, mockMode);
+        return new Filters(enabled, channelType);
     }
 
     // 把前端状态值归一成布尔值。
@@ -298,8 +296,8 @@ public class NotificationChannelService {
     }
 
     // 校验渠道配置是否满足类型要求。
-    private void validateConfig(NotificationChannelType type, Map<String, Object> config, boolean mockMode) {
-        List<String> missingFields = findMissingRequiredFields(type, config, mockMode);
+    private void validateConfig(NotificationChannelType type, Map<String, Object> config, boolean diagnosticMockMode) {
+        List<String> missingFields = findMissingRequiredFields(type, config, diagnosticMockMode);
         if (!missingFields.isEmpty()) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
@@ -311,8 +309,8 @@ public class NotificationChannelService {
     }
 
     // 复用创建/更新校验规则，给诊断视图返回缺失字段列表。
-    private List<String> findMissingRequiredFields(NotificationChannelType type, Map<String, Object> config, boolean mockMode) {
-        if (mockMode) {
+    private List<String> findMissingRequiredFields(NotificationChannelType type, Map<String, Object> config, boolean diagnosticMockMode) {
+        if (diagnosticMockMode) {
             return List.of();
         }
         Map<String, Object> normalized = normalizeConfig(config);
@@ -387,7 +385,6 @@ public class NotificationChannelService {
                 record.channelType(),
                 record.channelName(),
                 record.enabled(),
-                record.mockMode(),
                 record.lastSentAt(),
                 record.createdAt(),
                 record.updatedAt()
@@ -402,7 +399,6 @@ public class NotificationChannelService {
                 record.channelType(),
                 record.channelName(),
                 record.enabled(),
-                record.mockMode(),
                 record.config(),
                 record.remark(),
                 record.createdAt(),
@@ -423,12 +419,33 @@ public class NotificationChannelService {
             return "CONFIG_INVALID";
         }
         if (Boolean.TRUE.equals(record.mockMode())) {
-            return "MOCK_READY";
+            return "DIAGNOSTIC_MOCK";
         }
         if (latestLog == null) {
             return "READY";
         }
         return latestLog.success() ? "HEALTHY" : "DEGRADED";
+    }
+
+    private boolean resolveDiagnosticMockMode(NotificationChannelType type, Map<String, Object> config) {
+        if (!List.of(NotificationChannelType.SMS, NotificationChannelType.WECHAT, NotificationChannelType.DINGTALK).contains(type)) {
+            return false;
+        }
+        Map<String, Object> normalized = normalizeConfig(config);
+        Object enabled = normalized.get("diagnosticMockEnabled");
+        if (!(enabled instanceof Boolean enabledValue) || !enabledValue) {
+            return false;
+        }
+        Object endpointValue = normalized.containsKey("endpoint") ? normalized.get("endpoint") : normalized.get("url");
+        String endpoint = endpointValue == null ? null : normalizeNullable(String.valueOf(endpointValue));
+        return endpoint != null && isLocalEndpoint(endpoint);
+    }
+
+    private boolean isLocalEndpoint(String endpoint) {
+        return endpoint.startsWith("http://127.0.0.1")
+                || endpoint.startsWith("http://localhost")
+                || endpoint.startsWith("https://127.0.0.1")
+                || endpoint.startsWith("https://localhost");
     }
 
     // 统一构造请求非法异常。
@@ -448,8 +465,7 @@ public class NotificationChannelService {
 
     private record Filters(
             Boolean enabled,
-            String channelType,
-            Boolean mockMode
+            String channelType
     ) {
     }
 }

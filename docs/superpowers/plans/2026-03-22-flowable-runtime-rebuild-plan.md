@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Archive note (2026-03-23):** 本计划记录从 demo 运行态切换到真实 `Flowable` 的执行步骤；文中 `/process-runtime/demo/*` 仅表示迁移前的历史起点。
+> **Archive note (2026-03-23):** 本计划记录从 demo 运行态切换到真实 `Flowable` 的执行步骤；文中旧 demo 运行态路径仅表示迁移前的历史起点。
 
-**Goal:** 将当前基于 `ProcessDemoService` 的内存态运行替换为真实 `Flowable BPMN` 运行态，并完成流程主链路、现有中国式动作能力、自动化能力和工作台前端的真实闭环。
+**Goal:** 将当前基于旧内存运行态服务的内存态运行替换为真实 `Flowable BPMN` 运行态，并完成流程主链路、现有中国式动作能力、自动化能力和工作台前端的真实闭环。
 
-**Architecture:** 后端新增 `flowable helper/facade` 封装层与真实运行态服务层，统一接管 BPMN 部署、实例查询、任务动作、历史轨迹、变量和评论；前端工作台和审批单详情切换到真实实例/任务/历史接口；最终删除 `/process-runtime/demo/*` 与 `ProcessDemoService`。实现按 `3A 引擎接线`、`3B 工作台重建`、`3C 自动化与轨迹重接` 三个子闭环推进，但整体仍属于同一个 Phase 3 闭环。
+**Architecture:** 后端新增 `flowable helper/facade` 封装层与真实运行态服务层，统一接管 BPMN 部署、实例查询、任务动作、历史轨迹、变量和评论；前端工作台和审批单详情切换到真实实例/任务/历史接口；最终删除旧 demo 运行态路径与旧内存运行态服务。实现按 `3A 引擎接线`、`3B 工作台重建`、`3C 自动化与轨迹重接` 三个子闭环推进，但整体仍属于同一个 Phase 3 闭环。
 
 **Tech Stack:** Spring Boot 3.4, Java 21, Flowable 7 BPMN Engine, MyBatis-Plus, PostgreSQL/H2, Sa-Token, React, TanStack Query, React Hook Form, Zod, React Flow, pnpm, Maven
 
@@ -32,7 +32,7 @@
 - Modify: `backend/src/main/resources/application.yml`
 - Modify: `backend/src/main/resources/application-test.yml`
 - Modify: `backend/src/main/resources/db/migration/V1__init.sql`
-- Delete: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Delete: `backend/src/main/java/com/westflow/processruntime/service/<legacy-runtime-service>.java`
 
 ### 后端测试
 
@@ -267,7 +267,7 @@ Run:
 ### Task 9: 删除 demo 运行态残留并完成正式 API 切换
 
 **Files:**
-- Delete: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Delete: `backend/src/main/java/com/westflow/processruntime/service/<legacy-runtime-service>.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessRuntimeController.java`
 - Modify: `docs/contracts/task-actions.md`
 - Modify: `docs/contracts/process-dsl.md`

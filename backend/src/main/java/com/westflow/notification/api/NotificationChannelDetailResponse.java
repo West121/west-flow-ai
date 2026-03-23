@@ -10,7 +10,6 @@ public record NotificationChannelDetailResponse(
         String channelType,
         String channelName,
         Boolean enabled,
-        Boolean mockMode,
         Map<String, Object> config,
         String remark,
         Instant createdAt,

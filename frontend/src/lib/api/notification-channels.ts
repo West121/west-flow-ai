@@ -5,7 +5,13 @@ import {
 import { apiClient, unwrapResponse, type ApiSuccessResponse } from './client'
 
 export type NotificationChannelStatus = 'ENABLED' | 'DISABLED'
-export type NotificationChannelType = 'EMAIL' | 'WEBHOOK' | 'WECHAT_WORK' | 'DINGTALK'
+export type NotificationChannelType =
+  | 'IN_APP'
+  | 'EMAIL'
+  | 'WEBHOOK'
+  | 'SMS'
+  | 'WECHAT_WORK'
+  | 'DINGTALK'
 
 type BasePageResponse<T> = {
   page: number
@@ -42,7 +48,6 @@ export type NotificationChannelDiagnostic = {
   channelType: NotificationChannelType | string
   channelName: string
   enabled: boolean
-  mockMode: boolean
   configurationComplete: boolean
   missingConfigFields: string[]
   healthStatus: string | null

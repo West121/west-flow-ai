@@ -166,7 +166,6 @@ class SystemMessageControllerTest {
                         "IN_APP",
                         "站内消息渠道",
                         true,
-                        false,
                         Map.of("senderUserId", "usr_system"),
                         "站内通知"
                 )

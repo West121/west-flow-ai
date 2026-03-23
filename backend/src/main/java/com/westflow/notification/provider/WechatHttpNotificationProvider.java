@@ -9,7 +9,7 @@ import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
- * 企业微信通知适配器，默认走真实发送，mockMode=true 时回退到显式 mock。
+ * 企业微信通知适配器，默认走真实发送，仅允许本地诊断场景降级为 mock。
  */
 @Component
 public class WechatHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
@@ -71,7 +71,7 @@ public class WechatHttpNotificationProvider extends AbstractConfigurableHttpNoti
 
     @Override
     protected String mockProviderName() {
-        return "WECHAT_MOCK";
+        return "WECHAT_DIAGNOSTIC_MOCK";
     }
 
     @Override

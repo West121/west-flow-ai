@@ -26,7 +26,7 @@ abstract class AbstractConfigurableHttpNotificationProvider implements Notificat
     @Override
     public NotificationSendResult send(NotificationChannelRecord channel, NotificationDispatchRequest request) {
         Map<String, Object> config = channel.config() == null ? Map.of() : channel.config();
-        if (Boolean.TRUE.equals(channel.mockMode())) {
+        if (allowDiagnosticMock(channel, config)) {
             return new NotificationSendResult(
                     true,
                     mockProviderName(),
@@ -92,6 +92,21 @@ abstract class AbstractConfigurableHttpNotificationProvider implements Notificat
 
     protected String endpointField() {
         return "endpoint";
+    }
+
+    private boolean allowDiagnosticMock(NotificationChannelRecord channel, Map<String, Object> config) {
+        if (!Boolean.TRUE.equals(channel.mockMode())) {
+            return false;
+        }
+        Object endpointValue = config.getOrDefault("endpoint", config.get("url"));
+        if (endpointValue == null) {
+            return false;
+        }
+        String endpoint = String.valueOf(endpointValue).trim();
+        return endpoint.startsWith("http://127.0.0.1")
+                || endpoint.startsWith("http://localhost")
+                || endpoint.startsWith("https://127.0.0.1")
+                || endpoint.startsWith("https://localhost");
     }
 
     protected abstract Map<String, Object> buildRequestBody(

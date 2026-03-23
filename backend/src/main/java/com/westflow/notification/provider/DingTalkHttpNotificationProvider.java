@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 /**
- * 钉钉渠道适配器，默认走真实发送，mockMode=true 时回退到显式 mock。
+ * 钉钉渠道适配器，默认走真实发送，仅允许本地诊断场景降级为 mock。
  */
 public class DingTalkHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
 
@@ -71,7 +71,7 @@ public class DingTalkHttpNotificationProvider extends AbstractConfigurableHttpNo
 
     @Override
     protected String mockProviderName() {
-        return "DINGTALK_MOCK";
+        return "DINGTALK_DIAGNOSTIC_MOCK";
     }
 
     @Override

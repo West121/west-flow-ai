@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Archive note (2026-03-23):** 本计划保留自动化能力接入 demo 运行态时期的实现顺序；文中 `processruntime` demo 模型与 `ProcessDemoService` 仅表示历史前提，不代表当前正式平台。
+> **Archive note (2026-03-23):** 本计划保留自动化能力接入 demo 运行态时期的实现顺序；文中 `processruntime` demo 模型与“旧内存运行态服务”仅表示历史前提，不代表当前正式平台。
 
 **Goal:** 打通超时审批、自动提醒、定时节点、触发节点从设计器配置到运行态执行再到详情展示的完整闭环。
 
@@ -79,7 +79,7 @@
 ### Task 6: 实现超时审批与自动提醒执行
 
 **Files:**
-- Modify: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Modify: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/processruntime/api/*.java`
 - Modify: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/orchestrator/service/OrchestratorService.java`
 
@@ -91,7 +91,7 @@
 ### Task 7: 实现定时节点与触发节点执行
 
 **Files:**
-- Modify: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Modify: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/processdef/service/ProcessDslValidator.java`
 - Create: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/orchestrator/service/TriggerExecutionService.java`
 

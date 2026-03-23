@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Archive note (2026-03-23):** 本计划是切换真实 `Flowable` 前的历史执行稿；文中 `DemoTask`、`ProcessDemoService` 和相关 demo 运行态表述仅代表当时实现起点，不代表当前正式接口或运行时现状。
+> **Archive note (2026-03-23):** 本计划是切换真实 `Flowable` 前的历史执行稿；文中“旧 demo 任务模型”“旧内存运行态服务”和相关表述仅代表当时实现起点，不代表当前正式接口或运行时现状。
 
 **Goal:** 打通委派、代理、离职转办与转办链路增强的运行态闭环，不新增系统配置后台。
 
-**Architecture:** 继续复用当前 `processruntime` 内存态运行模型，在 `DemoTask` 和实例事件层增加委派、代理、离职转办语义；前端继续收敛到流程中心与审批单详情页，不新增独立配置模块。代理关系复用现有鉴权 fixture 数据，离职转办只作为平台批量动作落在运行态接口和流程中心待办工具栏。
+**Architecture:** 继续复用当时的 `processruntime` 内存态运行模型，在旧任务模型和实例事件层增加委派、代理、离职转办语义；前端继续收敛到流程中心与审批单详情页，不新增独立配置模块。代理关系复用现有鉴权 fixture 数据，离职转办只作为平台批量动作落在运行态接口和流程中心待办工具栏。
 
 **Tech Stack:** Spring Boot, Sa-Token, MyBatis-Plus fixture auth, React, TanStack Query, React Hook Form, Zod, shadcn/ui
 
@@ -58,7 +58,7 @@
 ### Task 5: 实现运行态语义
 
 **Files:**
-- Modify: `/Users/west/dev/code/west/west-flow-ai/.worktrees/codex-m0-foundation/backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 
 - [ ] Step 1: 增加 `DELEGATED`、`HANDOVERED` 与代理代办可见性语义
 - [ ] Step 2: 实现 `delegate` 与 `handover` 动作

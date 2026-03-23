@@ -1,5 +1,9 @@
 package com.westflow.processruntime.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.notification.mapper.NotificationLogMapper;
+import com.westflow.notification.model.NotificationLogRecord;
+import com.westflow.orchestrator.repository.OrchestratorExecutionRepository;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
@@ -9,6 +13,8 @@ import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
 import com.westflow.orchestrator.model.OrchestratorScanExecutionRecord;
 import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
 import com.westflow.orchestrator.service.OrchestratorRuntimeBridge;
+import com.westflow.workflowadmin.mapper.WorkflowOperationLogMapper;
+import com.westflow.workflowadmin.model.WorkflowOperationLogRecord;
 import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -19,6 +25,8 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class FlowableProcessRuntimeTraceStoreTest {
 
@@ -35,6 +43,59 @@ class FlowableProcessRuntimeTraceStoreTest {
 
         List<ProcessInstanceEventResponse> events = store.queryInstanceEvents("instance_1");
         assertThat(events).extracting(ProcessInstanceEventResponse::eventId).containsExactly("evt_1", "evt_2");
+    }
+
+    @Test
+    void shouldPreferPersistedWorkflowOperationLogsOverRuntimeCache() {
+        WorkflowOperationLogMapper workflowOperationLogMapper = mock(WorkflowOperationLogMapper.class);
+        when(workflowOperationLogMapper.selectByProcessInstanceId("instance_1"))
+                .thenReturn(List.of(new WorkflowOperationLogRecord(
+                        "log_001",
+                        "instance_1",
+                        "pd_001",
+                        "flowable_pd_001",
+                        "OA_LEAVE",
+                        "biz_001",
+                        "task_001",
+                        "approve_manager",
+                        "TASK_APPROVED",
+                        "任务已审批",
+                        "APPROVAL",
+                        "usr_002",
+                        null,
+                        null,
+                        null,
+                        null,
+                        "{\"actingMode\":\"DIRECT\"}",
+                        Instant.parse("2026-03-23T01:00:00Z")
+                )));
+        FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore(
+                null,
+                workflowOperationLogMapper,
+                null,
+                null,
+                new ObjectMapper()
+        );
+        store.appendInstanceEvent(event(
+                "evt_cache_001",
+                "instance_1",
+                "task_cache_001",
+                "node_cache_001",
+                "TASK_CREATED",
+                "缓存事件",
+                "usr_cache",
+                OffsetDateTime.parse("2026-03-23T09:10:00+08:00")
+        ));
+
+        List<ProcessInstanceEventResponse> events = store.queryInstanceEvents("instance_1");
+
+        assertThat(events)
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.eventId()).isEqualTo("log_001");
+                    assertThat(item.eventType()).isEqualTo("TASK_APPROVED");
+                    assertThat(item.operatorUserId()).isEqualTo("usr_002");
+                });
     }
 
     @Test
@@ -206,6 +267,75 @@ class FlowableProcessRuntimeTraceStoreTest {
         assertThat(notificationRecords)
                 .extracting(ProcessNotificationSendRecordResponse::sentAt)
                 .containsOnly(urgedAt);
+    }
+
+    @Test
+    void shouldPreferPersistedNotificationAndAutomationHistoryOverDslFallback() {
+        NotificationLogMapper notificationLogMapper = mock(NotificationLogMapper.class);
+        OrchestratorExecutionRepository orchestratorExecutionRepository = mock(OrchestratorExecutionRepository.class);
+        when(notificationLogMapper.selectByInstanceId("instance_1"))
+                .thenReturn(List.of(new NotificationLogRecord(
+                        "notify_001",
+                        "channel_001",
+                        "wechat_ops",
+                        "WECHAT",
+                        "wechat:usr_001",
+                        "审批提醒",
+                        "请及时处理",
+                        "WechatProvider",
+                        true,
+                        "SUCCESS",
+                        "ok",
+                        Map.of("instanceId", "instance_1"),
+                        Instant.parse("2026-03-23T01:15:00Z")
+                )));
+        when(orchestratorExecutionRepository.selectByInstanceId("instance_1"))
+                .thenReturn(List.of(new OrchestratorScanExecutionRecord(
+                        "exec_001",
+                        "run_001",
+                        "orc_target_instance_1_approve_manager_auto_reminder",
+                        OrchestratorAutomationType.AUTO_REMINDER,
+                        OrchestratorExecutionStatus.SUCCEEDED,
+                        "已发送提醒",
+                        Instant.parse("2026-03-23T01:05:00Z")
+                )));
+        FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore(
+                null,
+                null,
+                notificationLogMapper,
+                orchestratorExecutionRepository,
+                new ObjectMapper()
+        );
+
+        List<ProcessAutomationTraceItemResponse> traces = store.queryAutomationTraces(
+                "instance_1",
+                "PENDING",
+                "usr_001",
+                automationPayload(),
+                OffsetDateTime.parse("2026-03-23T09:00:00+08:00")
+        );
+        List<ProcessNotificationSendRecordResponse> records = store.queryNotificationSendRecords(
+                "instance_1",
+                "PENDING",
+                "usr_001",
+                automationPayload(),
+                OffsetDateTime.parse("2026-03-23T09:00:00+08:00")
+        );
+
+        assertThat(traces)
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.traceId()).isEqualTo("exec_001");
+                    assertThat(item.traceType()).isEqualTo("AUTO_REMINDER");
+                    assertThat(item.status()).isEqualTo("SUCCEEDED");
+                });
+        assertThat(records)
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.recordId()).isEqualTo("notify_001");
+                    assertThat(item.channelType()).isEqualTo("WECHAT");
+                    assertThat(item.status()).isEqualTo("SUCCESS");
+                });
     }
 
     @Test

@@ -677,9 +677,6 @@ function NotificationChannelDiagnosticCard({
           >
             {diagnostic.configurationComplete ? '配置完整' : '配置缺失'}
           </Badge>
-          <Badge variant={diagnostic.mockMode ? 'outline' : 'secondary'}>
-            {diagnostic.mockMode ? 'Mock 模式' : '真实 Provider'}
-          </Badge>
         </div>
         <div className='grid gap-3 text-sm'>
           <div className='flex items-center justify-between gap-3'>

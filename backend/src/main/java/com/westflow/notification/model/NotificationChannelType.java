@@ -4,21 +4,19 @@ import java.util.List;
 
 // 通知渠道类型及其发送能力标记。
 public enum NotificationChannelType {
-    IN_APP("站内通知", true, false),
-    EMAIL("邮件", true, false),
-    WEBHOOK("回调", true, false),
-    SMS("短信", true, false),
-    WECHAT("微信", true, false),
-    DINGTALK("钉钉", true, false);
+    IN_APP("站内通知", true),
+    EMAIL("邮件", true),
+    WEBHOOK("回调", true),
+    SMS("短信", true),
+    WECHAT("微信", true),
+    DINGTALK("钉钉", true);
 
     private final String label;
     private final boolean realSend;
-    private final boolean mockProvider;
 
-    NotificationChannelType(String label, boolean realSend, boolean mockProvider) {
+    NotificationChannelType(String label, boolean realSend) {
         this.label = label;
         this.realSend = realSend;
-        this.mockProvider = mockProvider;
     }
 
     // 返回渠道展示名称。
@@ -29,11 +27,6 @@ public enum NotificationChannelType {
     // 是否支持真实发送。
     public boolean realSend() {
         return realSend;
-    }
-
-    // 是否仅提供 mock provider。
-    public boolean mockProvider() {
-        return mockProvider;
     }
 
     // 按编码字符串转换成渠道类型。

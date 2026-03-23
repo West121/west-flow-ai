@@ -8,6 +8,7 @@ import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import java.util.List;
+import java.util.Map;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
@@ -51,6 +53,9 @@ class FlowableRuntimeStartServiceTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private ApplicationContext applicationContext;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -69,6 +74,17 @@ class FlowableRuntimeStartServiceTest {
         jdbcTemplate.update("DELETE FROM wf_task_vote_snapshot");
         jdbcTemplate.update("DELETE FROM wf_task_group_member");
         jdbcTemplate.update("DELETE FROM wf_task_group");
+    }
+
+    @Test
+    void shouldOnlyExposeFlowableTraceStoreAsRuntimeBean() {
+        Map<String, ProcessRuntimeTraceStore> traceStores = applicationContext.getBeansOfType(ProcessRuntimeTraceStore.class);
+
+        assertThat(traceStores)
+                .hasSize(1)
+                .containsKey("flowableProcessRuntimeTraceStore");
+        assertThat(traceStores.get("flowableProcessRuntimeTraceStore"))
+                .isInstanceOf(FlowableProcessRuntimeTraceStore.class);
     }
 
     @Test

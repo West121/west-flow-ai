@@ -82,7 +82,6 @@ describe('notification channels api', () => {
           channelType: 'WECHAT_WORK',
           channelName: '企业微信通知',
           enabled: true,
-          mockMode: false,
           configurationComplete: true,
           missingConfigFields: [],
           healthStatus: 'HEALTHY',

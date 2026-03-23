@@ -4,7 +4,7 @@
 >
 > **Status note (2026-03-22):** M0 基线仍然有效；流程管理后续建设顺序与模块边界请以 `docs/superpowers/specs/2026-03-22-workflow-management-replan.md` 和 `docs/superpowers/plans/2026-03-22-workflow-management-replan-plan.md` 为准，不再执行独立表单管理方向。
 >
-> **Archive note (2026-03-23):** 文中若出现 `/api/v1/process-runtime/demo/*`，仅代表当时 M0 计划阶段的历史接口草案，不代表当前正式运行态现状。
+> **Archive note (2026-03-23):** 文中若出现旧 demo 运行态路径，仅代表当时 M0 计划阶段的历史接口草案，不代表当前正式运行态现状。
 
 **Goal:** Build the M0 engineering baseline for `west-flow-ai`: import the `shadcn-admin` frontend foundation, scaffold the single-app Spring Boot backend, freeze the shared M0 contracts in code, and deliver a minimal approval demo that can start parallel M1 work.
 
@@ -624,7 +624,7 @@ git commit -m "feat: implement m0 api query and auth contracts"
 - Create: `backend/src/main/java/com/westflow/processruntime/api/ProcessRuntimeController.java`
 - Create: `backend/src/main/java/com/westflow/processdef/service/ProcessDslValidator.java`
 - Create: `backend/src/main/java/com/westflow/processdef/service/ProcessDslToBpmnService.java`
-- Create: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Create: `backend/src/main/java/com/westflow/processruntime/service/<legacy-runtime-service>.java`
 - Test: `backend/src/test/java/com/westflow/processdef/service/ProcessDslValidatorTest.java`
 - Test: `backend/src/test/java/com/westflow/processruntime/api/ProcessRuntimeControllerTest.java`
 
@@ -661,8 +661,8 @@ The adapter may initially support only the M0 node set defined in the contract d
 Create:
 
 - `POST /api/v1/process-definitions/publish`
-- `POST /api/v1/process-runtime/demo/start`
-- `POST /api/v1/process-runtime/demo/tasks/{taskId}/complete`
+- 旧运行态发起接口（现已归档）
+- 旧运行态任务完成接口（现已归档）
 
 - [ ] **Step 6: Run backend tests**
 

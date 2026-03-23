@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Archive note (2026-03-23):** 本重排计划形成于真实 `Flowable` 切换之前；若下文仍出现 `ProcessDemoService` 等旧文件路径，只表示历史执行上下文，不代表当前正式实现。
+> **Archive note (2026-03-23):** 本重排计划形成于真实 `Flowable` 切换之前；若下文仍出现“旧内存运行态服务”等历史文件占位描述，只表示历史执行上下文，不代表当前正式实现。
 
 **Goal:** Replan and implement workflow management as one coherent product slice: dual entry (`OA` + `流程管理`), one shared process center, business-direct launch, approval-sheet detail pages, property-panel form selection, and business-process binding without introducing standalone form management.
 
@@ -322,7 +322,7 @@ git commit -m "feat: add business process binding and oa launch flow"
 - Modify: `frontend/src/components/layout/data/sidebar-data.ts`
 - Modify: `frontend/src/lib/api/workbench.ts`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessRuntimeController.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Test: `frontend/src/features/workbench/pages.test.tsx`
 - Test: `backend/src/test/java/com/westflow/processruntime/api/ProcessRuntimeControllerTest.java`
 
@@ -374,7 +374,7 @@ git commit -m "feat: build shared process center"
 - Modify: `frontend/src/features/forms/runtime/node-form-renderer.tsx`
 - Modify: `frontend/src/features/workbench/pages.tsx`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskDetailResponse.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Create: `backend/src/main/java/com/westflow/approval/*`
 - Create: `backend/src/test/java/com/westflow/approval/*`
 - Modify: `backend/src/main/resources/db/migration/V1__init.sql`

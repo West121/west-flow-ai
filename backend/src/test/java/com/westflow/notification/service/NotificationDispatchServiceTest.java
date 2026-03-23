@@ -79,8 +79,17 @@ class NotificationDispatchServiceTest {
     }
 
     @Test
-    void shouldDispatchSmsThroughMockProviderAndPersistLog() {
-        createChannel("sms_ops", "SMS", true, Map.of("mockResponseMessage", "短信 mock 发送成功"));
+    void shouldAllowDiagnosticSmsMockOnlyForLocalhostChannel() {
+        createChannel(
+                "sms_ops",
+                "SMS",
+                true,
+                Map.of(
+                        "endpoint", "http://127.0.0.1:65535/sms",
+                        "accessToken", "dev-token",
+                        "mockResponseMessage", "短信诊断 mock 发送成功"
+                )
+        );
 
         var result = notificationDispatchService.dispatchByChannelCode(
                 "sms_ops",
@@ -88,10 +97,10 @@ class NotificationDispatchServiceTest {
         );
 
         assertThat(result.success()).isTrue();
-        assertThat(result.providerName()).isEqualTo("SMS_MOCK");
+        assertThat(result.providerName()).isEqualTo("SMS_DIAGNOSTIC_MOCK");
         assertThat(notificationLogMapper.selectAll()).hasSize(1);
         assertThat(notificationLogMapper.selectAll().get(0).status()).isEqualTo("SUCCESS");
-        assertThat(notificationLogMapper.selectAll().get(0).providerName()).isEqualTo("SMS_MOCK");
+        assertThat(notificationLogMapper.selectAll().get(0).providerName()).isEqualTo("SMS_DIAGNOSTIC_MOCK");
     }
 
     @Test
@@ -170,14 +179,17 @@ class NotificationDispatchServiceTest {
     }
 
     private void createChannel(String channelCode, String channelType, boolean mockMode, Map<String, Object> config) {
+        Map<String, Object> requestConfig = new java.util.LinkedHashMap<>(config);
+        if (mockMode) {
+            requestConfig.put("diagnosticMockEnabled", true);
+        }
         NotificationChannelMutationResponse response = notificationChannelService.create(
                 new SaveNotificationChannelRequest(
                         channelCode,
                         channelType,
                         channelCode + " 渠道",
                         true,
-                        mockMode,
-                        config,
+                        requestConfig,
                         "测试渠道"
                 )
         );

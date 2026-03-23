@@ -11,9 +11,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+/**
+ * 显式按属性开启的内存轨迹实现，用于测试或局部诊断，不作为正式主链默认依赖。
+ */
 @Component
+@ConditionalOnProperty(name = "westflow.process-runtime.trace-store", havingValue = "in-memory")
 public class InMemoryProcessRuntimeTraceStore implements ProcessRuntimeTraceStore {
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");

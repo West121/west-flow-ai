@@ -38,7 +38,7 @@
 ### Task 1: 收口任务视图命名
 
 **Files:**
-- Modify: `backend/src/main/java/com/westflow/processruntime/api/DemoTaskView.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskSnapshot.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/service/FlowableProcessRuntimeService.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/service/FlowableRuntimeStartService.java`
 - Modify: `backend/src/main/java/com/westflow/oa/api/OALaunchResponse.java`
@@ -58,7 +58,7 @@
 - Modify: `docs/contracts/task-actions.md`
 - Test: `frontend/src/features/oa/pages.test.tsx`
 
-- [ ] Step 1: 搜索 `/process-runtime/demo/*` 的代码与契约残留
+- [ ] Step 1: 搜索旧 demo 运行态路径的代码与契约残留
 - [ ] Step 2: 改为正式路径或标记废弃说明
 - [ ] Step 3: 跑对应前端和契约验证
 - [ ] Step 4: 提交本任务改动

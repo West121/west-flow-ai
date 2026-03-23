@@ -7,13 +7,13 @@ import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-// 运行时轨迹与通知记录抽象，当前默认走演示态内存实现，未来可接 Flowable 历史表。
+// 运行时轨迹与通知记录抽象。正式链路优先读取真实历史、日志和执行记录，内存实现仅作为显式启用的测试 / 诊断兜底。
 public interface ProcessRuntimeTraceStore {
 
     // 记录实例事件（用于 detail 的 events 与 trace 列表）。
     void appendInstanceEvent(ProcessInstanceEventResponse event);
 
-    // 清理测试和人工调试使用的内存快照。
+    // 清理实现内部的临时缓存，主要供测试和局部调试使用。
     void reset();
 
     // 查询实例事件轨迹。

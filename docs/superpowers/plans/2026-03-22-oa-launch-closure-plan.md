@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Archive note (2026-03-23):** 本计划形成于业务发起闭环接入真实 `Flowable` 之前；若后文引用 `ProcessDemoService` 或 demo 运行态文件路径，只表示当时历史上下文。
+> **Archive note (2026-03-23):** 本计划形成于业务发起闭环接入真实 `Flowable` 之前；若后文引用“旧内存运行态服务”或 demo 运行态文件路径，只表示当时历史上下文。
 
 **Goal:** 打通 `OA` 业务发起闭环，让用户可以从 `OA` 菜单或 `流程中心 > 发起流程` 进入业务表单，保存业务单据、匹配流程绑定、自动发起流程实例，并在流程中心里看到对应待办。
 
@@ -41,7 +41,7 @@
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/StartProcessRequest.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskListItemResponse.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskDetailResponse.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Test: `backend/src/test/java/com/westflow/oa/api/OAControllerTest.java`
 - Test: `backend/src/test/java/com/westflow/processbinding/service/BusinessProcessBindingServiceTest.java`
 - Test: `backend/src/test/java/com/westflow/processruntime/api/ProcessRuntimeControllerTest.java`

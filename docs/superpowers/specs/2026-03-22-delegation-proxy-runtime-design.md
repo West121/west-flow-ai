@@ -71,8 +71,8 @@
 
 ### 当时新增动作草案
 
-- `POST /api/v1/process-runtime/demo/tasks/{taskId}/delegate`
-- `POST /api/v1/process-runtime/demo/users/{sourceUserId}/handover`
+- `POST /api/v1/process-runtime/tasks/{taskId}/delegate`
+- `POST /api/v1/process-runtime/users/{sourceUserId}/handover`
 
 当前真实接口对应为：
 

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
-> **Archive note (2026-03-23):** 本计划是 demo 运行态阶段的历史实现稿；其中 `ProcessDemoService` 和 “single in-memory runtime backbone” 仅表示当时设计前提，当前正式运行态已统一到真实 `Flowable`。
+> **Archive note (2026-03-23):** 本计划是 demo 运行态阶段的历史实现稿；其中“旧内存运行态服务”和 “single in-memory runtime backbone” 仅表示当时设计前提，当前正式运行态已统一到真实 `Flowable`。
 
 **Goal:** Implement one coherent runtime slice covering reject routing strategies, jump, take-back, wake-up, and richer approval-sheet trajectory data.
 
@@ -19,7 +19,7 @@ This batch stays inside the current runtime seams:
 ```text
 backend/src/main/java/com/westflow/processruntime/
 ├─ api/*
-└─ service/ProcessDemoService.java
+└─ service/legacy-runtime-service.java（历史 demo 运行态实现，占位说明）
 
 backend/src/test/java/com/westflow/processruntime/
 └─ api/ProcessRuntimeControllerTest.java
@@ -94,7 +94,7 @@ git commit -m "docs: freeze reject return runtime scope"
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskDetailResponse.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskTraceItemResponse.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessInstanceEventResponse.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Test: `backend/src/test/java/com/westflow/processruntime/api/ProcessRuntimeControllerTest.java`
 
 - [ ] **Step 1: Write failing controller tests for reject routing**
@@ -161,7 +161,7 @@ git commit -m "feat: add reject routing and jump runtime actions"
 - Create: `backend/src/main/java/com/westflow/processruntime/api/WakeUpInstanceRequest.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessRuntimeController.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/TaskActionAvailabilityResponse.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskTraceItemResponse.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessInstanceEventResponse.java`
 - Test: `backend/src/test/java/com/westflow/processruntime/api/ProcessRuntimeControllerTest.java`

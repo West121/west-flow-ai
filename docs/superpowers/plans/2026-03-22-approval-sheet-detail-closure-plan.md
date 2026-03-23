@@ -27,7 +27,7 @@ frontend/src/
 
 backend/src/main/java/com/westflow/
 ├─ processruntime/api/*
-├─ processruntime/service/ProcessDemoService.java
+├─ processruntime/service/legacy-runtime-service.java（历史 demo 运行态实现，占位说明）
 └─ approval/service/ApprovalSheetQueryService.java
 ```
 
@@ -93,7 +93,7 @@ Expected: FAIL
 - Create: `backend/src/main/java/com/westflow/processruntime/api/ProcessInstanceEventResponse.java`
 - Create: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskTraceItemResponse.java`
 - Modify: `backend/src/main/java/com/westflow/processruntime/api/ProcessTaskDetailResponse.java`
-- Modify: `backend/src/main/java/com/westflow/processruntime/service/ProcessDemoService.java`
+- Modify: `backend/src/main/java/com/westflow/processruntime/service/legacy-runtime-service.java`（历史 demo 运行态实现，占位说明）
 - Modify: `backend/src/main/java/com/westflow/oa/mapper/OALeaveBillMapper.java`
 - Modify: `backend/src/main/java/com/westflow/oa/mapper/OAExpenseBillMapper.java`
 - Modify: `backend/src/main/java/com/westflow/oa/mapper/OACommonRequestBillMapper.java`

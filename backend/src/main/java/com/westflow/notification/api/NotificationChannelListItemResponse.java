@@ -9,7 +9,6 @@ public record NotificationChannelListItemResponse(
         String channelType,
         String channelName,
         Boolean enabled,
-        Boolean mockMode,
         Instant lastSentAt,
         Instant createdAt,
         Instant updatedAt

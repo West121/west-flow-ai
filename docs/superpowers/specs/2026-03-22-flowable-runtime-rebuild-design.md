@@ -4,14 +4,14 @@
 > 日期：2026-03-22
 > 适用范围：`codex/m0-foundation` Phase 3 历史重构设计
 
-> 历史说明：本文件记录从 demo 运行态迁移到真实 `Flowable` 的设计背景。迁移现已完成；文中 `/api/v1/process-runtime/demo/*` 和 `ProcessDemoService` 仅用于描述当时起点，不再代表当前接口现状。
+> 历史说明：本文件记录从旧 demo 运行态迁移到真实 `Flowable` 的设计背景。迁移现已完成；下文如提到旧 demo 路径或旧内存运行态服务，只用于描述当时起点，不再代表当前接口现状。
 
 ## 1. 背景
 
 当前平台已经具备流程设计、发布、OA 发起、流程中心、审批单详情、运行态动作、自动化配置等完整产品骨架，但运行态核心仍然建立在：
 
-- `/api/v1/process-runtime/demo/*`
-- `ProcessDemoService`
+- 旧 demo 运行态路径
+- 旧内存运行态服务
 - 内存态实例、任务、轨迹、事件拼装
 
 这意味着当前平台虽然页面和动作已经齐全，但底层不是真实 BPMN 引擎，无法作为后续流程管理后台、高级审批能力、AI 审批和 PLM 案例的稳定基础。
@@ -23,7 +23,7 @@ Phase 3 的目标不是继续增强 demo，而是直接切换到真实 `Flowable
 本阶段完成后，平台需要满足以下目标：
 
 - 所有流程实例、任务、历史、变量、动作、评论、轨迹均建立在真实 `Flowable` 引擎之上
-- 废弃 `/api/v1/process-runtime/demo/*` 语义
+- 废弃旧 demo 运行态路径语义
 - 保留当前已经具备的流程主链路功能，并全部迁移到真实引擎运行
 - 只保留 `Flowable BPMN/Process Engine` 必需能力，禁用无关模块，避免多余表和功能扩散
 - 为后续 `Phase 4 流程管理后台` 与 `Phase 5 高级审批能力` 提供稳定基础
@@ -235,7 +235,7 @@ Phase 3 的目标不是继续增强 demo，而是直接切换到真实 `Flowable
 
 ### 7.1 基本原则
 
-- 废弃 `/api/v1/process-runtime/demo/*`
+- 废弃旧 demo 运行态路径
 - 启用正式 `/api/v1/process-runtime/*`
 - 接口模型更贴近真实引擎语义
 - 但仍保留平台页面所需的中文产品视图字段
@@ -373,8 +373,8 @@ Phase 3 的目标不是继续增强 demo，而是直接切换到真实 `Flowable
 
 本阶段收尾时应删除或停用以下内容：
 
-- `ProcessDemoService`
-- `/api/v1/process-runtime/demo/*`
+- 旧内存运行态服务
+- 旧 demo 运行态路径
 - demo 内存实例/任务/事件模型
 - 测试环境中禁用 Flowable 的配置
 - 仅为 demo projection 存在的运行态拼装逻辑

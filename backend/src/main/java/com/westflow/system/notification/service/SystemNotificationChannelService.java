@@ -104,7 +104,7 @@ public class SystemNotificationChannelService {
                 resolveInternalType(request.channelType()).name(),
                 normalize(request.channelName(), "channelName"),
                 Boolean.TRUE.equals(request.enabled()),
-                isMockChannel(request.channelType()),
+                false,
                 buildConfig(request),
                 normalizeNullable(request.remark()),
                 now,
@@ -129,7 +129,7 @@ public class SystemNotificationChannelService {
                 resolveInternalType(request.channelType()).name(),
                 normalize(request.channelName(), "channelName"),
                 Boolean.TRUE.equals(request.enabled()),
-                isMockChannel(request.channelType()),
+                false,
                 buildConfig(request),
                 normalizeNullable(request.remark()),
                 existing.createdAt(),
@@ -265,11 +265,6 @@ public class SystemNotificationChannelService {
             case "WECHAT" -> "WECHAT_WORK";
             default -> internalType;
         };
-    }
-
-    private boolean isMockChannel(String channelType) {
-        NotificationChannelType type = resolveInternalType(channelType);
-        return type.mockProvider();
     }
 
     private Map<String, Object> buildConfig(SaveSystemNotificationChannelRequest request) {
