@@ -380,7 +380,6 @@ describe('plm pages', () => {
     expect(
       screen.getByRole('link', { name: '用 AI 辅助填写 ECR' })
     ).toHaveAttribute('href', '/ai')
-
     fireEvent.change(screen.getByLabelText('变更标题'), {
       target: { value: '结构件变更' },
     })
@@ -420,7 +419,6 @@ describe('plm pages', () => {
     expect(
       screen.getByRole('link', { name: '用 AI 辅助填写 ECO' })
     ).toHaveAttribute('href', '/ai')
-
     fireEvent.change(screen.getByLabelText('执行标题'), {
       target: { value: 'ECO 下发' },
     })
@@ -461,7 +459,6 @@ describe('plm pages', () => {
     expect(
       screen.getByRole('link', { name: '用 AI 辅助填写物料变更' })
     ).toHaveAttribute('href', '/ai')
-
     fireEvent.change(screen.getByLabelText('物料编码'), {
       target: { value: 'MAT-001' },
     })

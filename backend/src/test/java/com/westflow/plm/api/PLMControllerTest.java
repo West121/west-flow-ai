@@ -252,11 +252,19 @@ class PLMControllerTest {
                 }
                 """);
 
-        String ecrResponse = mockMvc.perform(get("/api/v1/plm/ecrs")
+        String ecrResponse = mockMvc.perform(post("/api/v1/plm/ecrs/page")
                         .header("Authorization", "Bearer " + token)
-                        .param("page", "1")
-                        .param("pageSize", "20")
-                        .param("keyword", "结构件"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "结构件",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -265,11 +273,19 @@ class PLMControllerTest {
         assertThat(ecrData.path("total").asInt()).isEqualTo(1);
         assertThat(ecrData.path("records").get(0).path("billNo").asText()).isEqualTo(ecr.path("billNo").asText());
 
-        String ecoResponse = mockMvc.perform(get("/api/v1/plm/ecos")
+        String ecoResponse = mockMvc.perform(post("/api/v1/plm/ecos/page")
                         .header("Authorization", "Bearer " + token)
-                        .param("page", "1")
-                        .param("pageSize", "20")
-                        .param("keyword", "执行"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "执行",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -278,11 +294,19 @@ class PLMControllerTest {
         assertThat(ecoData.path("total").asInt()).isEqualTo(1);
         assertThat(ecoData.path("records").get(0).path("billNo").asText()).isEqualTo(eco.path("billNo").asText());
 
-        String materialResponse = mockMvc.perform(get("/api/v1/plm/material-master-changes")
+        String materialResponse = mockMvc.perform(post("/api/v1/plm/material-master-changes/page")
                         .header("Authorization", "Bearer " + token)
-                        .param("page", "1")
-                        .param("pageSize", "20")
-                        .param("keyword", "MAT-001"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "MAT-001",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

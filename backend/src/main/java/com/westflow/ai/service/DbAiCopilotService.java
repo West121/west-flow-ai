@@ -497,6 +497,37 @@ public class DbAiCopilotService implements AiCopilotService {
                                 ),
                                 List.of()
                         ),
+                        failed
+                                ? retryBlock(
+                                toolCall.toolSource().name(),
+                                toolCall.toolKey(),
+                                toolCall.toolKey(),
+                                toolCall.toolType().name(),
+                                finalResult.summary(),
+                                "当前写操作执行失败，可以在修正参数后重新确认并重试。",
+                                Map.of(
+                                        "toolCallId", toolCall.toolCallId(),
+                                        "confirmationId", confirmation.confirmationId(),
+                                        "retryable", true,
+                                        "toolType", toolCall.toolType().name(),
+                                        "toolKey", toolCall.toolKey(),
+                                        "arguments", finalResult.arguments()
+                                ),
+                                trace,
+                                buildToolContextFields(
+                                        toolCall.toolSource().name(),
+                                        toolCall.toolKey(),
+                                        toolCall.toolKey(),
+                                        toolCall.toolType().name(),
+                                        null,
+                                        null,
+                                        toolCall.toolCallId(),
+                                        confirmation.confirmationId(),
+                                        finalResult.summary(),
+                                        "建议重试"
+                                )
+                        )
+                                : defaultTextBlock("本次写操作已完成，可继续查看流程状态或发起下一步操作。"),
                         confirmationBlock(toolCall, confirmation, request, finalResult, status, now)
                 )),
                 currentUserId(),
@@ -717,6 +748,45 @@ public class DbAiCopilotService implements AiCopilotService {
                 trace,
                 List.of(),
                 List.of()
+        );
+    }
+
+    /**
+     * 构建失败后的重试建议块。
+     */
+    private AiMessageBlockResponse retryBlock(
+            String sourceType,
+            String sourceKey,
+            String sourceName,
+            String toolType,
+            String summary,
+            String detail,
+            Map<String, Object> result,
+            List<TraceStep> trace,
+            List<Field> fields
+    ) {
+        return new AiMessageBlockResponse(
+                "retry",
+                "重试建议",
+                null,
+                null,
+                summary,
+                detail,
+                null,
+                null,
+                "retryable",
+                null,
+                currentUserId(),
+                null,
+                sourceType,
+                sourceKey,
+                sourceName,
+                toolType,
+                result,
+                null,
+                trace,
+                fields,
+                List.of(new Metric("可重试", "是", null, "warning"))
         );
     }
 
@@ -1496,6 +1566,10 @@ public class DbAiCopilotService implements AiCopilotService {
                         new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
                         new Field("流程编码", stringValue(arguments.get("processKey")), null),
                         new Field("业务类型", stringValue(arguments.get("businessType")), null),
+                        new Field("场景编码", stringValue(arguments.getOrDefault("sceneCode", "default")), null),
+                        new Field("工具调用编号", toolResult.toolCallId(), null),
+                        new Field("确认单编号", toolResult.confirmationId(), null),
+                        new Field("状态", toolResult.status(), null),
                         new Field("用户指令", content, "确认后进入实际流程发起")
                 ),
                 List.of()

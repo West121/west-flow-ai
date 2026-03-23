@@ -169,7 +169,7 @@ describe('plm api', () => {
   })
 
   it('loads PLM business list pages from dedicated endpoints', async () => {
-    getMock
+    postMock
       .mockResolvedValueOnce(
         okResponse({
           page: 1,
@@ -289,35 +289,29 @@ describe('plm api', () => {
       records: [{ billNo: 'PLM-MATERIAL-001', materialCode: 'MAT-001' }],
     })
 
-    expect(getMock).toHaveBeenNthCalledWith(1, '/plm/ecrs', {
-      params: {
-        page: 1,
-        pageSize: 20,
-        keyword: '结构件',
-        filters: [],
-        sorts: [],
-        groups: [],
-      },
+    expect(postMock).toHaveBeenNthCalledWith(1, '/plm/ecrs/page', {
+      page: 1,
+      pageSize: 20,
+      keyword: '结构件',
+      filters: [],
+      sorts: [],
+      groups: [],
     })
-    expect(getMock).toHaveBeenNthCalledWith(2, '/plm/ecos', {
-      params: {
-        page: 1,
-        pageSize: 20,
-        keyword: 'ECO',
-        filters: [],
-        sorts: [],
-        groups: [],
-      },
+    expect(postMock).toHaveBeenNthCalledWith(2, '/plm/ecos/page', {
+      page: 1,
+      pageSize: 20,
+      keyword: 'ECO',
+      filters: [],
+      sorts: [],
+      groups: [],
     })
-    expect(getMock).toHaveBeenNthCalledWith(3, '/plm/material-master-changes', {
-      params: {
-        page: 1,
-        pageSize: 20,
-        keyword: 'MAT-001',
-        filters: [],
-        sorts: [],
-        groups: [],
-      },
+    expect(postMock).toHaveBeenNthCalledWith(3, '/plm/material-master-changes/page', {
+      page: 1,
+      pageSize: 20,
+      keyword: 'MAT-001',
+      filters: [],
+      sorts: [],
+      groups: [],
     })
   })
 

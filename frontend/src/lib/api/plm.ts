@@ -174,14 +174,12 @@ export async function getPLMECRRequestDetail(
 export async function listPLMECRRequests(
   search: ListQuerySearch
 ): Promise<PLMBillPage<PLMECRBillListItem>> {
-  const response = await apiClient.get<{
+  const response = await apiClient.post<{
     code: 'OK'
     message: string
     data: PLMBillPage<PLMECRBillListItem>
     requestId: string
-  }>('/plm/ecrs', {
-    params: toPaginationRequest(search),
-  })
+  }>('/plm/ecrs/page', toPaginationRequest(search))
 
   return unwrapResponse(response)
 }
@@ -195,14 +193,12 @@ export async function getPLMECOExecutionDetail(
 export async function listPLMECOExecutions(
   search: ListQuerySearch
 ): Promise<PLMBillPage<PLMECOBillListItem>> {
-  const response = await apiClient.get<{
+  const response = await apiClient.post<{
     code: 'OK'
     message: string
     data: PLMBillPage<PLMECOBillListItem>
     requestId: string
-  }>('/plm/ecos', {
-    params: toPaginationRequest(search),
-  })
+  }>('/plm/ecos/page', toPaginationRequest(search))
 
   return unwrapResponse(response)
 }
@@ -216,14 +212,12 @@ export async function getPLMMaterialChangeDetail(
 export async function listPLMMaterialChangeRequests(
   search: ListQuerySearch
 ): Promise<PLMBillPage<PLMMaterialChangeBillListItem>> {
-  const response = await apiClient.get<{
+  const response = await apiClient.post<{
     code: 'OK'
     message: string
     data: PLMBillPage<PLMMaterialChangeBillListItem>
     requestId: string
-  }>('/plm/material-master-changes', {
-    params: toPaginationRequest(search),
-  })
+  }>('/plm/material-master-changes/page', toPaginationRequest(search))
 
   return unwrapResponse(response)
 }

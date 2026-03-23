@@ -303,6 +303,10 @@ class AiCopilotServiceTest {
                 .filter(block -> "confirm".equals(block.type()))
                 .findFirst()
                 .orElseThrow();
+        AiMessageBlockResponse previewBlock = blocks.stream()
+                .filter(block -> "form-preview".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
         assertThat(confirmBlock.sourceType()).isEqualTo("PLATFORM");
         assertThat(confirmBlock.sourceKey()).isEqualTo("process.start");
         assertThat(confirmBlock.toolType()).isEqualTo("WRITE");
@@ -311,6 +315,9 @@ class AiCopilotServiceTest {
         assertThat(confirmBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
                 .contains("业务域", "来源页面", "工具名称", "工具类型", "确认单编号");
+        assertThat(previewBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务域", "来源页面", "流程编码", "业务类型", "场景编码", "工具调用编号", "确认单编号", "状态", "用户指令");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -463,6 +470,19 @@ class AiCopilotServiceTest {
         assertThat(confirmBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
                 .contains("工具名称", "工具类型", "确认人", "确认意见");
+        assertThat(blocks)
+                .extracting(AiMessageBlockResponse::type)
+                .contains("retry");
+        AiMessageBlockResponse retryBlock = blocks.stream()
+                .filter(block -> "retry".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(retryBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("可重试");
+        assertThat(retryBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("工具名称", "工具类型", "工具调用编号", "确认单编号", "摘要", "状态");
     }
 
     @Test

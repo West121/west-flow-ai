@@ -49,20 +49,9 @@ public class PLMController {
     /**
      * 查询 ECR 变更申请列表。
      */
-    @GetMapping("/ecrs")
-    public ApiResponse<PageResponse<PlmEcrBillListItemResponse>> ecrPage(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(required = false) String keyword
-    ) {
-        return ApiResponse.success(plmLaunchService.ecrPage(new PageRequest(
-                page,
-                pageSize,
-                keyword,
-                java.util.List.of(),
-                java.util.List.of(),
-                java.util.List.of()
-        )));
+    @PostMapping("/ecrs/page")
+    public ApiResponse<PageResponse<PlmEcrBillListItemResponse>> ecrPage(@Valid @RequestBody PageRequest request) {
+        return ApiResponse.success(plmLaunchService.ecrPage(request));
     }
 
     /**
@@ -84,20 +73,9 @@ public class PLMController {
     /**
      * 查询 ECO 变更执行列表。
      */
-    @GetMapping("/ecos")
-    public ApiResponse<PageResponse<PlmEcoBillListItemResponse>> ecoPage(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(required = false) String keyword
-    ) {
-        return ApiResponse.success(plmLaunchService.ecoPage(new PageRequest(
-                page,
-                pageSize,
-                keyword,
-                java.util.List.of(),
-                java.util.List.of(),
-                java.util.List.of()
-        )));
+    @PostMapping("/ecos/page")
+    public ApiResponse<PageResponse<PlmEcoBillListItemResponse>> ecoPage(@Valid @RequestBody PageRequest request) {
+        return ApiResponse.success(plmLaunchService.ecoPage(request));
     }
 
     /**
@@ -119,20 +97,9 @@ public class PLMController {
     /**
      * 查询物料主数据变更申请列表。
      */
-    @GetMapping("/material-master-changes")
-    public ApiResponse<PageResponse<PlmMaterialChangeBillListItemResponse>> materialChangePage(
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int pageSize,
-            @RequestParam(required = false) String keyword
-    ) {
-        return ApiResponse.success(plmLaunchService.materialChangePage(new PageRequest(
-                page,
-                pageSize,
-                keyword,
-                java.util.List.of(),
-                java.util.List.of(),
-                java.util.List.of()
-        )));
+    @PostMapping("/material-master-changes/page")
+    public ApiResponse<PageResponse<PlmMaterialChangeBillListItemResponse>> materialChangePage(@Valid @RequestBody PageRequest request) {
+        return ApiResponse.success(plmLaunchService.materialChangePage(request));
     }
 
     /**

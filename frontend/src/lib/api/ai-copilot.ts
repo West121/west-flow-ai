@@ -131,6 +131,31 @@ export type AICopilotFailureBlock = {
   trace?: AICopilotTraceStep[]
 }
 
+export type AICopilotRetryBlock = {
+  type: 'retry'
+  title: string
+  summary?: string
+  detail?: string
+  status?: string
+  sourceType?: string
+  sourceKey?: string
+  sourceName?: string
+  toolType?: string
+  result?: Record<string, unknown>
+  trace?: AICopilotTraceStep[]
+  fields?: {
+    label: string
+    value: string
+    hint?: string
+  }[]
+  metrics?: {
+    label: string
+    value: string
+    hint?: string
+    tone?: 'neutral' | 'positive' | 'warning'
+  }[]
+}
+
 export type AICopilotTraceBlock = {
   type: 'trace'
   title: string
@@ -151,6 +176,7 @@ export type AICopilotMessageBlock =
   | AICopilotStatsBlock
   | AICopilotResultBlock
   | AICopilotFailureBlock
+  | AICopilotRetryBlock
   | AICopilotTraceBlock
 
 export type AICopilotMessage = {

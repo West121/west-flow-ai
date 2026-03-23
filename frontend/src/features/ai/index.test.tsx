@@ -538,14 +538,16 @@ describe('AICopilotPage', () => {
     await waitFor(() =>
       expect(screen.queryAllByTestId('ai-form-preview-editor').length).toBeGreaterThan(0)
     )
+    expect(screen.getAllByText('请假天数').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('请假原因').length).toBeGreaterThan(0)
     const editableFormSection = screen
       .queryAllByTestId('ai-form-preview-editor')
       .find((section) => !within(section).getByTestId('ai-form-preview-submit').hasAttribute('disabled'))!
-    const editableInputs = within(editableFormSection).getAllByRole('textbox')
-    fireEvent.change(editableInputs[1], {
+    const reasonInput = within(editableFormSection).getByLabelText('请假原因')
+    fireEvent.change(reasonInput, {
       target: { value: '参加客户评审' },
     })
-    expect(editableInputs[1]).toHaveValue('参加客户评审')
+    expect(reasonInput).toHaveValue('参加客户评审')
     expect(
       screen
         .queryAllByTestId('ai-form-preview-submit')
@@ -563,6 +565,100 @@ describe('AICopilotPage', () => {
         {
           sessionId: 'session_form_001',
           confirmationId: 'session_form_001_confirm_002',
+          decision: 'confirm',
+          argumentsOverride: undefined,
+        },
+        expect.any(Object)
+      )
+    )
+  })
+
+  it('renders retry blocks with confirmation and tool call context', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_retry_001',
+        title: 'AI 重试链路',
+        preview: '失败后给出明确重试建议。',
+        status: 'active',
+        updatedAt: '2026-03-23T10:10:00.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot', 'route:/workbench/todos/task_001'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(async () =>
+      buildSession({
+        sessionId: 'session_retry_001',
+        title: 'AI 重试链路',
+        contextTags: ['AI Copilot', 'route:/workbench/todos/task_001'],
+        history: [
+          {
+            messageId: 'session_retry_001_msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-23T10:10:10.000Z',
+            content: '本次写操作失败，但已经给出可直接重试的建议。',
+            blocks: [
+              {
+                type: 'retry',
+                title: '重试建议',
+                summary: '当前写操作执行失败，可以在修正参数后重新确认并重试。',
+                detail: '建议优先检查处理意见和当前任务状态。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  confirmationId: 'session_retry_001_confirm_001',
+                  toolCallId: 'session_retry_001_tool_001',
+                  retryable: true,
+                },
+                fields: [
+                  { label: '工具名称', value: 'task.handle' },
+                  { label: '确认单编号', value: 'session_retry_001_confirm_001' },
+                ],
+                metrics: [
+                  { label: '可重试', value: '是', tone: 'warning' },
+                ],
+                trace: [
+                  {
+                    stage: 'TASK',
+                    label: '任务处理',
+                    detail: '执行处理动作失败，可修正参数后重试。',
+                    status: 'FAILED',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+    )
+    aiCopilotApiMocks.confirmAICopilotConfirmation.mockResolvedValue(
+      buildSession({
+        sessionId: 'session_retry_001',
+        title: 'AI 重试链路',
+        contextTags: ['AI Copilot', 'route:/workbench/todos/task_001'],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('AI 重试链路')).toBeInTheDocument()
+    const retryButtons = await screen.findAllByRole('button', {
+      name: '按当前参数重试',
+    })
+    expect(screen.getAllByText('调用：session_retry_001_tool_001').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('确认单：session_retry_001_confirm_001').length).toBeGreaterThan(0)
+
+    fireEvent.click(retryButtons[0])
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.confirmAICopilotConfirmation).toHaveBeenCalledWith(
+        {
+          sessionId: 'session_retry_001',
+          confirmationId: 'session_retry_001_confirm_001',
           decision: 'confirm',
           argumentsOverride: undefined,
         },

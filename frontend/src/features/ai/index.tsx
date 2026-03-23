@@ -569,6 +569,14 @@ export function AICopilotPage({
                     {activeSession?.history.flatMap((message) =>
                       (message.blocks ?? []).map((block, index) => {
                         const confirmBlock = block.type === 'confirm' ? block : null
+                        const blockConfirmationId =
+                          block.type === 'form-preview' ||
+                          block.type === 'failure' ||
+                          block.type === 'retry'
+                            ? typeof block.result?.confirmationId === 'string'
+                              ? block.result.confirmationId
+                              : null
+                            : null
 
                         return (
                           <BlockCard
@@ -577,7 +585,9 @@ export function AICopilotPage({
                             isPending={
                               confirmBlock
                                 ? pendingConfirmationId === confirmBlock.confirmationId
-                                : false
+                                : blockConfirmationId
+                                  ? pendingConfirmationId === blockConfirmationId
+                                  : false
                             }
                             onConfirm={
                               confirmBlock
@@ -586,6 +596,13 @@ export function AICopilotPage({
                                       confirmBlock.confirmationId,
                                       'confirm'
                                     )
+                                : block.type === 'form-preview' && blockConfirmationId
+                                  ? (argumentsOverride) =>
+                                      handleResolveConfirmation(
+                                        blockConfirmationId,
+                                        'confirm',
+                                        argumentsOverride
+                                      )
                                 : undefined
                             }
                             onCancel={
@@ -594,6 +611,16 @@ export function AICopilotPage({
                                     handleResolveConfirmation(
                                       confirmBlock.confirmationId,
                                       'cancel'
+                                    )
+                                : undefined
+                            }
+                            onRetry={
+                              (block.type === 'failure' || block.type === 'retry') &&
+                                  blockConfirmationId
+                                ? () =>
+                                    handleResolveConfirmation(
+                                      blockConfirmationId,
+                                      'confirm'
                                     )
                                 : undefined
                             }
@@ -848,7 +875,9 @@ function MessageBubble({
                 isPending={
                   block.type === 'confirm'
                     ? pendingConfirmationId === block.confirmationId
-                    : (block.type === 'form-preview' || block.type === 'failure') &&
+                    : (block.type === 'form-preview' ||
+                        block.type === 'failure' ||
+                        block.type === 'retry') &&
                         typeof block.result?.confirmationId === 'string'
                       ? pendingConfirmationId === block.result.confirmationId
                     : false
@@ -860,7 +889,10 @@ function MessageBubble({
                         typeof block.result?.confirmationId === 'string'
                       ? (argumentsOverride) =>
                           onConfirm(block.result?.confirmationId as string, argumentsOverride)
-                      : block.type === 'failure' &&
+                    : block.type === 'failure' &&
+                          typeof block.result?.confirmationId === 'string'
+                        ? () => onConfirm(block.result?.confirmationId as string)
+                    : block.type === 'retry' &&
                           typeof block.result?.confirmationId === 'string'
                         ? () => onConfirm(block.result?.confirmationId as string)
                     : undefined
@@ -872,7 +904,7 @@ function MessageBubble({
                 }
                 linkedConfirmBlock={confirmBlock}
                 onRetry={
-                  block.type === 'failure' &&
+                  (block.type === 'failure' || block.type === 'retry') &&
                       typeof block.result?.confirmationId === 'string'
                     ? () => onConfirm(block.result?.confirmationId as string)
                     : undefined
@@ -916,6 +948,8 @@ function EditableFormPreviewCard({
 
   const confirmationSummary =
     linkedConfirmBlock?.summary ?? '确认后会按当前表单参数执行真实业务发起。'
+  const formSchema = resolveBusinessFormSchema(block.result)
+  const groupedFields = groupEditableFields(formData, formSchema)
 
   return (
     <Card className='border-cyan-300/20 bg-cyan-300/10 text-slate-50 shadow-none'>
@@ -953,32 +987,59 @@ function EditableFormPreviewCard({
             <p className='text-xs uppercase tracking-[0.18em] text-cyan-100/80'>
               可编辑业务表单
             </p>
-            {Object.entries(formData).map(([key, value]) => (
-              <div key={key} className='space-y-1'>
-                <label className='text-xs text-slate-300'>{key}</label>
-                {value.length > 40 ? (
-                  <Textarea
-                    value={value}
-                    onChange={(event) =>
-                      setFormData((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                    className='min-h-24 border-white/10 bg-slate-950/50 text-white'
-                  />
-                ) : (
-                  <Input
-                    value={value}
-                    onChange={(event) =>
-                      setFormData((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                    className='border-white/10 bg-slate-950/50 text-white'
-                  />
-                )}
+            {groupedFields.map((group) => (
+              <div key={group.title} className='space-y-3'>
+                <div className='flex items-center justify-between gap-3'>
+                  <p className='text-xs font-medium text-white'>{group.title}</p>
+                  {group.description ? (
+                    <span className='text-[11px] text-slate-400'>
+                      {group.description}
+                    </span>
+                  ) : null}
+                </div>
+                <div className='grid gap-3 md:grid-cols-2'>
+                  {group.fields.map((field) => (
+                    <div key={field.key} className='space-y-1'>
+                      <label
+                        htmlFor={`ai-form-${field.key}`}
+                        className='text-xs text-slate-300'
+                      >
+                        {field.label}
+                      </label>
+                      {field.multiline ? (
+                        <Textarea
+                          id={`ai-form-${field.key}`}
+                          value={formData[field.key] ?? ''}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              [field.key]: event.target.value,
+                            }))
+                          }
+                          className='min-h-24 border-white/10 bg-slate-950/50 text-white'
+                        />
+                      ) : (
+                        <Input
+                          id={`ai-form-${field.key}`}
+                          type={field.inputType}
+                          value={formData[field.key] ?? ''}
+                          onChange={(event) =>
+                            setFormData((current) => ({
+                              ...current,
+                              [field.key]: event.target.value,
+                            }))
+                          }
+                          className='border-white/10 bg-slate-950/50 text-white'
+                        />
+                      )}
+                      {field.hint ? (
+                        <p className='text-[11px] leading-5 text-slate-400'>
+                          {field.hint}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
             <p className='text-xs leading-5 text-slate-300'>{confirmationSummary}</p>
@@ -1194,58 +1255,13 @@ function BlockCard({
             <TraceMeta block={block} />
           </CardHeader>
           <CardContent className='space-y-3 pt-0'>
-            {block.fields?.length ? (
-              <div className='space-y-2'>
-                {block.fields.map((field) => (
-                  <div
-                    key={field.label}
-                    className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2'
-                  >
-                    <div className='flex items-center justify-between gap-3'>
-                      <span className='text-xs text-slate-300'>{field.label}</span>
-                      <span className='text-sm font-medium text-white'>
-                        {field.value}
-                      </span>
-                    </div>
-                    {field.hint ? (
-                      <p className='mt-1 text-[11px] text-slate-400'>{field.hint}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {block.metrics?.length ? (
-              <div className='grid gap-2 sm:grid-cols-2'>
-                {block.metrics.map((metric) => (
-                  <div
-                    key={metric.label}
-                    className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'
-                  >
-                    <div className='flex items-center gap-2'>
-                      <span className='text-[11px] text-slate-400'>{metric.label}</span>
-                      {metric.tone ? (
-                        <span
-                          className={cn(
-                            'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]',
-                            metric.tone === 'positive'
-                              ? 'bg-emerald-300/15 text-emerald-100'
-                              : metric.tone === 'warning'
-                                ? 'bg-amber-300/15 text-amber-100'
-                                : 'bg-white/10 text-slate-200'
-                          )}
-                        >
-                          {metric.tone}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className='mt-2 text-lg font-semibold text-white'>{metric.value}</p>
-                    {metric.hint ? (
-                      <p className='mt-1 text-[11px] text-slate-400'>{metric.hint}</p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            <ExecutionSummaryBanner
+              tone='success'
+              block={block}
+              defaultLabel='执行结果'
+            />
+            <FieldList fields={block.fields} />
+            <MetricGrid metrics={block.metrics} />
             {block.result && Object.keys(block.result).length ? (
               <pre className='overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-3 text-xs leading-5 text-slate-200'>
                 {JSON.stringify(block.result, null, 2)}
@@ -1272,6 +1288,11 @@ function BlockCard({
             <TraceMeta block={block} />
           </CardHeader>
           <CardContent className='space-y-3 pt-0'>
+            <ExecutionSummaryBanner
+              tone='danger'
+              block={block}
+              defaultLabel='失败原因'
+            />
             {block.failure ? (
               <div className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'>
                 <div className='flex items-center justify-between gap-3'>
@@ -1305,6 +1326,45 @@ function BlockCard({
           </CardContent>
         </Card>
       )
+    case 'retry':
+      return (
+        <Card className='border-amber-300/20 bg-amber-300/10 text-slate-50 shadow-none'>
+          <CardHeader className='space-y-2 pb-3'>
+            <CardTitle className='flex items-center gap-2 text-base'>
+              <RefreshCw className='size-4 text-amber-200' />
+              {block.title}
+            </CardTitle>
+            {block.summary ? (
+              <p className='text-sm leading-6 text-amber-50/85'>{block.summary}</p>
+            ) : null}
+            {block.detail ? (
+              <p className='text-xs leading-5 text-amber-50/70'>{block.detail}</p>
+            ) : null}
+            <TraceMeta block={block} />
+          </CardHeader>
+          <CardContent className='space-y-3 pt-0'>
+            <ExecutionSummaryBanner
+              tone='warning'
+              block={block}
+              defaultLabel='重试信息'
+            />
+            <FieldList fields={block.fields} />
+            <MetricGrid metrics={block.metrics} />
+            <div className='flex gap-2'>
+              <Button
+                type='button'
+                size='sm'
+                className='bg-amber-200 text-slate-950 hover:bg-amber-100'
+                onClick={onRetry}
+                disabled={!onRetry || isPending}
+              >
+                {isPending ? '重试中…' : '按当前参数重试'}
+              </Button>
+            </div>
+            {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
+          </CardContent>
+        </Card>
+      )
     case 'text':
     default:
       return (
@@ -1321,6 +1381,136 @@ function BlockCard({
         </Card>
       )
   }
+}
+
+function ExecutionSummaryBanner({
+  tone,
+  block,
+  defaultLabel,
+}: {
+  tone: 'success' | 'warning' | 'danger'
+  block:
+    | Extract<AICopilotMessageBlock, { type: 'result' }>
+    | Extract<AICopilotMessageBlock, { type: 'failure' }>
+    | Extract<AICopilotMessageBlock, { type: 'retry' }>
+  defaultLabel: string
+}) {
+  const result = block.result ?? {}
+  const confirmationId =
+    typeof result.confirmationId === 'string'
+      ? result.confirmationId
+      : null
+  const toolCallId =
+    typeof result.toolCallId === 'string' ? result.toolCallId : null
+  const bannerClass =
+    tone === 'success'
+      ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-50'
+      : tone === 'danger'
+        ? 'border-rose-300/20 bg-rose-300/10 text-rose-50'
+        : 'border-amber-300/20 bg-amber-300/10 text-amber-50'
+
+  if (
+    !confirmationId &&
+    !toolCallId &&
+    !block.sourceName &&
+    !block.sourceKey &&
+    !block.toolType
+  ) {
+    return null
+  }
+
+  return (
+    <div className={cn('rounded-2xl border px-3 py-3', bannerClass)}>
+      <div className='flex flex-wrap gap-3 text-xs'>
+        <span>{defaultLabel}</span>
+        {block.sourceName ? <span>命中：{block.sourceName}</span> : null}
+        {block.toolType ? <span>动作：{block.toolType}</span> : null}
+        {toolCallId ? <span>调用：{toolCallId}</span> : null}
+        {confirmationId ? <span>确认单：{confirmationId}</span> : null}
+      </div>
+    </div>
+  )
+}
+
+function FieldList({
+  fields,
+}: {
+  fields?: {
+    label: string
+    value: string
+    hint?: string
+  }[]
+}) {
+  if (!fields?.length) {
+    return null
+  }
+
+  return (
+    <div className='space-y-2'>
+      {fields.map((field) => (
+        <div
+          key={field.label}
+          className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2'
+        >
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-xs text-slate-300'>{field.label}</span>
+            <span className='text-sm font-medium text-white'>{field.value}</span>
+          </div>
+          {field.hint ? (
+            <p className='mt-1 text-[11px] text-slate-400'>{field.hint}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MetricGrid({
+  metrics,
+}: {
+  metrics?: {
+    label: string
+    value: string
+    hint?: string
+    tone?: 'neutral' | 'positive' | 'warning'
+  }[]
+}) {
+  if (!metrics?.length) {
+    return null
+  }
+
+  return (
+    <div className='grid gap-2 sm:grid-cols-2'>
+      {metrics.map((metric) => (
+        <div
+          key={metric.label}
+          className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'
+        >
+          <div className='flex items-center gap-2'>
+            <span className='text-[11px] text-slate-400'>{metric.label}</span>
+            {metric.tone ? (
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]',
+                  metric.tone === 'positive'
+                    ? 'bg-emerald-300/15 text-emerald-100'
+                    : metric.tone === 'warning'
+                      ? 'bg-amber-300/15 text-amber-100'
+                      : 'bg-white/10 text-slate-200'
+                )}
+              >
+                {metric.tone}
+              </span>
+            ) : null}
+          </div>
+          <p className='mt-2 text-lg font-semibold text-white'>{metric.value}</p>
+          {metric.hint ? (
+            <p className='mt-1 text-[11px] text-slate-400'>{metric.hint}</p>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function TraceMeta({
@@ -1460,6 +1650,141 @@ function toEditableFormData(value: unknown) {
       item == null ? '' : String(item),
     ])
   )
+}
+
+type FormFieldSchema = {
+  key: string
+  label: string
+  hint?: string
+  multiline?: boolean
+  inputType?: 'text' | 'number' | 'date'
+}
+
+type FormFieldGroup = {
+  title: string
+  description?: string
+  fields: FormFieldSchema[]
+}
+
+function resolveBusinessFormSchema(result: Record<string, unknown> | null | undefined) {
+  const businessType = String(result?.businessType ?? '')
+  const processKey = String(result?.processKey ?? '')
+
+  const schemaByBusinessType: Record<string, FormFieldGroup[]> = {
+    OA_LEAVE: [
+      {
+        title: '请假信息',
+        description: '先确认请假时长和请假原因。',
+        fields: [
+          { key: 'days', label: '请假天数', inputType: 'number', hint: '支持半天或多天场景时可再扩展。' },
+          { key: 'reason', label: '请假原因', multiline: true, hint: '建议写清具体事项和时间安排。' },
+        ],
+      },
+    ],
+    OA_EXPENSE: [
+      {
+        title: '报销信息',
+        description: '确认金额和报销事由后再发起。',
+        fields: [
+          { key: 'amount', label: '报销金额', inputType: 'number', hint: '当前使用文本输入承接金额。' },
+          { key: 'reason', label: '报销事由', multiline: true, hint: '建议补充票据和费用背景。' },
+        ],
+      },
+    ],
+    OA_COMMON: [
+      {
+        title: '通用申请',
+        description: '通用场景会保留标题和正文两块。',
+        fields: [
+          { key: 'title', label: '申请标题', hint: '概括本次申请主题。' },
+          { key: 'content', label: '申请内容', multiline: true, hint: '补充详细背景和诉求。' },
+        ],
+      },
+    ],
+    PLM_ECR: [
+      {
+        title: 'ECR 变更申请',
+        description: '围绕变更标题、原因和影响产品补齐信息。',
+        fields: [
+          { key: 'changeTitle', label: '变更标题' },
+          { key: 'affectedProductCode', label: '影响产品编码', hint: '可填写单个或多个产品编码。' },
+          { key: 'priorityLevel', label: '优先级', hint: '如需更高优先级，可直接调整。' },
+          { key: 'changeReason', label: '变更原因', multiline: true },
+        ],
+      },
+    ],
+    PLM_ECO: [
+      {
+        title: 'ECO 执行单',
+        description: '确认执行标题、生效日期和执行计划。',
+        fields: [
+          { key: 'executionTitle', label: '执行标题' },
+          { key: 'effectiveDate', label: '生效日期', inputType: 'date' },
+          { key: 'changeReason', label: '变更原因', multiline: true },
+          { key: 'executionPlan', label: '执行计划', multiline: true },
+        ],
+      },
+    ],
+    PLM_MATERIAL: [
+      {
+        title: '物料主数据变更',
+        description: '确认物料编码、名称和变更类型。',
+        fields: [
+          { key: 'materialCode', label: '物料编码' },
+          { key: 'materialName', label: '物料名称' },
+          { key: 'changeType', label: '变更类型' },
+          { key: 'changeReason', label: '变更原因', multiline: true },
+        ],
+      },
+    ],
+  }
+
+  return schemaByBusinessType[businessType] ?? schemaByBusinessType[processKey.toUpperCase()] ?? []
+}
+
+function groupEditableFields(
+  formData: Record<string, string>,
+  schemaGroups: FormFieldGroup[]
+) {
+  const remainingKeys = new Set(Object.keys(formData))
+  const groups = schemaGroups.map((group) => {
+    const fields = group.fields
+      .filter((field) => field.key in formData)
+      .map((field) => {
+        remainingKeys.delete(field.key)
+        return field
+      })
+
+    return {
+      ...group,
+      fields,
+    }
+  }).filter((group) => group.fields.length > 0)
+
+  if (remainingKeys.size > 0) {
+    groups.push({
+      title: '扩展参数',
+      description: '这些字段暂未映射到业务卡片，仍然可以直接编辑。',
+      fields: Array.from(remainingKeys).map((key) => ({
+        key,
+        label: key,
+        multiline: (formData[key] ?? '').length > 40,
+      })),
+    })
+  }
+
+  if (!groups.length) {
+    groups.push({
+      title: '业务参数',
+      fields: Object.keys(formData).map((key) => ({
+        key,
+        label: key,
+        multiline: (formData[key] ?? '').length > 40,
+      })),
+    })
+  }
+
+  return groups
 }
 
 function upsertSessionSummary(
