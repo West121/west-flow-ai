@@ -83,6 +83,9 @@ class AiRegistryControllerTest {
                 .getResponse()
                 .getContentAsString();
         assertThat(objectMapper.readTree(detailResponse).path("data").path("agentCode").asText()).isEqualTo(code);
+        assertThat(objectMapper.readTree(detailResponse).path("data").path("routeMode").asText()).isEqualTo("SUPERVISOR");
+        assertThat(objectMapper.readTree(detailResponse).path("data").path("linkedTools").isArray()).isTrue();
+        assertThat(objectMapper.readTree(detailResponse).path("data").path("observability").path("totalToolCalls").isNumber()).isTrue();
 
         String pageResponse = mockMvc.perform(AiAdminTestSupport.withBearer(post("/api/v1/system/ai/agents/page")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -163,11 +166,14 @@ class AiRegistryControllerTest {
                 .getContentAsString();
         String toolId = objectMapper.readTree(toolCreateResponse).path("data").path("toolId").asText();
         assertThat(toolId).startsWith("ai_tool_");
-        assertThat(mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/tools/" + toolId), token))
+        String toolDetailResponse = mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/tools/" + toolId), token))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString()).contains(toolCode);
+                .getContentAsString();
+        assertThat(toolDetailResponse).contains(toolCode);
+        assertThat(objectMapper.readTree(toolDetailResponse).path("data").path("description").asText()).isNotBlank();
+        assertThat(objectMapper.readTree(toolDetailResponse).path("data").path("observability").path("totalToolCalls").isNumber()).isTrue();
 
         String toolPageResponse = mockMvc.perform(AiAdminTestSupport.withBearer(post("/api/v1/system/ai/tools/page")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -210,11 +216,14 @@ class AiRegistryControllerTest {
                 .getResponse()
                 .getContentAsString();
         String mcpId = objectMapper.readTree(mcpCreateResponse).path("data").path("mcpId").asText();
-        assertThat(mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/mcps/" + mcpId), token))
+        String mcpDetailResponse = mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/mcps/" + mcpId), token))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
-                .getContentAsString()).contains(mcpCode);
+                .getContentAsString();
+        assertThat(mcpDetailResponse).contains(mcpCode);
+        assertThat(objectMapper.readTree(mcpDetailResponse).path("data").path("description").asText()).isNotBlank();
+        assertThat(objectMapper.readTree(mcpDetailResponse).path("data").path("observability").path("totalToolCalls").isNumber()).isTrue();
 
         String mcpOptionsResponse = mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/mcps/options"), token))
                 .andExpect(status().isOk())
@@ -239,6 +248,14 @@ class AiRegistryControllerTest {
                 .getResponse()
                 .getContentAsString();
         String skillId = objectMapper.readTree(skillCreateResponse).path("data").path("skillId").asText();
+        String skillDetailResponse = mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/skills/" + skillId), token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(skillDetailResponse).contains(skillCode);
+        assertThat(objectMapper.readTree(skillDetailResponse).path("data").path("description").asText()).isNotBlank();
+        assertThat(objectMapper.readTree(skillDetailResponse).path("data").path("observability").path("totalToolCalls").isNumber()).isTrue();
         assertThat(mockMvc.perform(AiAdminTestSupport.withBearer(get("/api/v1/system/ai/skills/" + skillId), token))
                 .andExpect(status().isOk())
                 .andReturn()

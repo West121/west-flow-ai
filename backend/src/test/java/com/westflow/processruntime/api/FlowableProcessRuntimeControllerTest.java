@@ -350,6 +350,36 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeSuccessfulReminderNotificationHistoryAfterUrge() throws Exception {
+        String applicantToken = login("zhangsan");
+        publishAutomationLeaveProcess();
+        seedLeaveBill("leave_021b");
+
+        String taskId = startProcess(applicantToken, "leave_021b").path("activeTasks").get(0).path("taskId").asText();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/urge", taskId)
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "请尽快审批"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(detailBody.path("notificationSendRecords").isArray()).isTrue();
+        assertThat(detailBody.path("notificationSendRecords").size()).isEqualTo(2);
+        assertThat(detailBody.path("notificationSendRecords").toString()).contains("\"status\":\"SUCCESS\"");
+        assertThat(detailBody.path("notificationSendRecords").toString()).contains("2026");
+    }
+
+    @Test
     void shouldTransferTaskOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");

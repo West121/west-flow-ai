@@ -6,6 +6,7 @@ import com.westflow.orchestrator.model.OrchestratorAutomationType;
 import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
 import com.westflow.orchestrator.model.OrchestratorScanExecutionRecord;
 import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
+import com.westflow.orchestrator.repository.OrchestratorExecutionRepository;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
@@ -58,13 +59,16 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final OrchestratorScanMapper orchestratorScanMapper;
+    private final OrchestratorExecutionRepository orchestratorExecutionRepository;
 
     public FlowableOrchestratorRuntimeBridge(
             FlowableEngineFacade flowableEngineFacade,
-            OrchestratorScanMapper orchestratorScanMapper
+            OrchestratorScanMapper orchestratorScanMapper,
+            OrchestratorExecutionRepository orchestratorExecutionRepository
     ) {
         this.flowableEngineFacade = flowableEngineFacade;
         this.orchestratorScanMapper = orchestratorScanMapper;
+        this.orchestratorExecutionRepository = orchestratorExecutionRepository;
     }
 
     @Override
@@ -98,6 +102,11 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
             orchestratorScanMapper.insertExecutionRecord(executionRecord);
         } catch (Exception ignored) {
             // 预研阶段保留落库契约，执行失败不影响扫描流程。
+        }
+        try {
+            orchestratorExecutionRepository.insert(executionRecord);
+        } catch (Exception ignored) {
+            // 不阻塞主流程。
         }
         return executionRecord;
     }

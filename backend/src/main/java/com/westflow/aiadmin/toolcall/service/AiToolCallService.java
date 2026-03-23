@@ -1,6 +1,7 @@
 package com.westflow.aiadmin.toolcall.service;
 
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.aiadmin.toolcall.api.AiToolCallDetailResponse;
 import com.westflow.aiadmin.toolcall.api.AiToolCallListItemResponse;
@@ -33,6 +34,7 @@ public class AiToolCallService {
 
     private final AiAdminAccessService aiAdminAccessService;
     private final AiToolCallAdminMapper aiToolCallAdminMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -83,6 +85,7 @@ public class AiToolCallService {
     }
 
     private AiToolCallDetailResponse toDetail(AiToolCallAdminRecord record) {
+        AiAdminObservabilityService.ToolCallDiagnostics diagnostics = aiAdminObservabilityService.describeToolCall(record);
         return new AiToolCallDetailResponse(
                 record.toolCallId(),
                 record.conversationId(),
@@ -100,7 +103,17 @@ public class AiToolCallService {
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
                 AiAdminSupport.toOffsetDateTime(record.completedAt()),
                 resolveExecutionDurationMillis(record),
-                resolveFailureReason(record)
+                diagnostics.failureReason(),
+                diagnostics.failureCode(),
+                diagnostics.conversationTitle(),
+                diagnostics.confirmationStatus(),
+                diagnostics.confirmationApproved(),
+                diagnostics.confirmationResolvedBy(),
+                diagnostics.confirmationComment(),
+                diagnostics.linkedTool(),
+                diagnostics.linkedSkill(),
+                diagnostics.linkedMcp(),
+                diagnostics.linkedAgents()
         );
     }
 

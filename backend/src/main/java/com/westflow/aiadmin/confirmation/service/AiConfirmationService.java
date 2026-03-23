@@ -5,6 +5,7 @@ import com.westflow.aiadmin.confirmation.api.AiConfirmationListItemResponse;
 import com.westflow.aiadmin.confirmation.mapper.AiConfirmationAdminMapper;
 import com.westflow.aiadmin.confirmation.model.AiConfirmationAdminRecord;
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
@@ -31,6 +32,7 @@ public class AiConfirmationService {
 
     private final AiAdminAccessService aiAdminAccessService;
     private final AiConfirmationAdminMapper aiConfirmationAdminMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
 
     /**
      * 分页查询确认记录。
@@ -72,6 +74,7 @@ public class AiConfirmationService {
     }
 
     private AiConfirmationDetailResponse toDetail(AiConfirmationAdminRecord record) {
+        AiAdminObservabilityService.ConfirmationDiagnostics diagnostics = aiAdminObservabilityService.describeConfirmation(record);
         return new AiConfirmationDetailResponse(
                 record.confirmationId(),
                 record.toolCallId(),
@@ -81,7 +84,16 @@ public class AiConfirmationService {
                 record.resolvedBy(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
                 AiAdminSupport.toOffsetDateTime(record.resolvedAt()),
-                AiAdminSupport.toOffsetDateTime(record.updatedAt())
+                AiAdminSupport.toOffsetDateTime(record.updatedAt()),
+                diagnostics.toolKey(),
+                diagnostics.toolType(),
+                diagnostics.toolSource(),
+                diagnostics.hitSource(),
+                diagnostics.toolCallStatus(),
+                diagnostics.conversationTitle(),
+                diagnostics.failureReason(),
+                diagnostics.linkedTool(),
+                diagnostics.linkedAgents()
         );
     }
 

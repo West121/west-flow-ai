@@ -9,6 +9,7 @@ import com.westflow.aiadmin.mcp.api.SaveAiMcpRequest;
 import com.westflow.aiadmin.mcp.mapper.AiMcpRegistryMapper;
 import com.westflow.aiadmin.mcp.model.AiMcpRegistryRecord;
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
@@ -40,6 +41,7 @@ public class AiMcpRegistryService {
     private final AiAdminAccessService aiAdminAccessService;
     private final AiMcpRegistryMapper aiMcpRegistryMapper;
     private final AiCapabilityOptionMapper aiCapabilityOptionMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
 
     /**
      * 分页查询 MCP 注册表。
@@ -164,6 +166,7 @@ public class AiMcpRegistryService {
     }
 
     private AiMcpDetailResponse toDetail(AiMcpRegistryRecord record) {
+        AiAdminObservabilityService.RegistryDiagnostics diagnostics = aiAdminObservabilityService.describeMcp(record);
         return new AiMcpDetailResponse(
                 record.mcpId(),
                 record.mcpCode(),
@@ -173,7 +176,12 @@ public class AiMcpRegistryService {
                 record.requiredCapabilityCode(),
                 record.enabled(),
                 AiAdminSupport.toStatus(record.enabled()),
+                diagnostics.description(),
                 record.metadataJson(),
+                diagnostics.observability(),
+                diagnostics.linkedAgents(),
+                diagnostics.linkedTools(),
+                diagnostics.linkedSkills(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
                 AiAdminSupport.toOffsetDateTime(record.updatedAt())
         );

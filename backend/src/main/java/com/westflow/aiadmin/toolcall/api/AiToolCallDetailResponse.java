@@ -1,6 +1,8 @@
 package com.westflow.aiadmin.toolcall.api;
 
+import com.westflow.aiadmin.support.AiRegistryLinkResponse;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * AI 工具调用详情。
@@ -22,6 +24,16 @@ public record AiToolCallDetailResponse(
         OffsetDateTime createdAt,
         OffsetDateTime completedAt,
         Long executionDurationMillis,
-        String failureReason
+        String failureReason,
+        String failureCode,
+        String conversationTitle,
+        String confirmationStatus,
+        boolean confirmationApproved,
+        String confirmationResolvedBy,
+        String confirmationComment,
+        AiRegistryLinkResponse linkedTool,
+        AiRegistryLinkResponse linkedSkill,
+        AiRegistryLinkResponse linkedMcp,
+        List<AiRegistryLinkResponse> linkedAgents
 ) {
 }

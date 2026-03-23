@@ -2,6 +2,7 @@ package com.westflow.aiadmin.tool.service;
 
 import com.westflow.aiadmin.mapper.AiCapabilityOptionMapper;
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.aiadmin.tool.api.AiToolDetailResponse;
 import com.westflow.aiadmin.tool.api.AiToolFormOptionsResponse;
@@ -41,6 +42,7 @@ public class AiToolRegistryService {
     private final AiAdminAccessService aiAdminAccessService;
     private final AiToolRegistryMapper aiToolRegistryMapper;
     private final AiCapabilityOptionMapper aiCapabilityOptionMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
 
     /**
      * 分页查询工具注册表。
@@ -172,6 +174,7 @@ public class AiToolRegistryService {
     }
 
     private AiToolDetailResponse toDetail(AiToolRegistryRecord record) {
+        AiAdminObservabilityService.RegistryDiagnostics diagnostics = aiAdminObservabilityService.describeTool(record);
         return new AiToolDetailResponse(
                 record.toolId(),
                 record.toolCode(),
@@ -181,7 +184,12 @@ public class AiToolRegistryService {
                 record.requiredCapabilityCode(),
                 record.enabled(),
                 AiAdminSupport.toStatus(record.enabled()),
+                diagnostics.description(),
                 record.metadataJson(),
+                diagnostics.observability(),
+                diagnostics.linkedAgents(),
+                diagnostics.linkedResource(),
+                diagnostics.linkedMcp(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
                 AiAdminSupport.toOffsetDateTime(record.updatedAt())
         );

@@ -87,11 +87,12 @@ import {
   AiInfoCard,
   AiKeyValueGrid,
   AiJsonBlock,
+  AiObservabilityGrid,
   AiPageErrorState,
+  AiRegistryLinkList,
   AiStatusBadge,
-  formatDateTime,
-  renderTags,
 } from './shared'
+import { formatDateTime, renderTags } from './shared-formatters'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import { handleServerError } from '@/lib/handle-server-error'
 
@@ -544,6 +545,16 @@ export function AiAgentDetailPage({ agentId }: { agentId: string }) {
         <pre className='whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm leading-6'>
           {detail.systemPrompt || '-'}
         </pre>
+      </AiInfoCard>
+      <AiInfoCard title='可观测性' description='查看该 Agent 实际参与 ToolCall 的运行态摘要。'>
+        <AiObservabilityGrid value={detail.observability} />
+      </AiInfoCard>
+      <AiInfoCard title='关联资源' description='按能力码关联当前 Agent 可调度的 Tool / Skill / MCP。'>
+        <div className='grid gap-4 md:grid-cols-3'>
+          <AiRegistryLinkList title='Tool' links={detail.linkedTools} />
+          <AiRegistryLinkList title='Skill' links={detail.linkedSkills} />
+          <AiRegistryLinkList title='MCP' links={detail.linkedMcps} />
+        </div>
       </AiInfoCard>
       <AiInfoCard title='元数据' description='保留扩展配置，方便后续技能编排。'>
         <AiJsonBlock value={detail.metadataJson} />
@@ -1065,6 +1076,16 @@ export function AiToolDetailPage({ toolId }: { toolId: string }) {
       <AiInfoCard title='说明'>
         <p className='text-sm leading-6'>{detail.description || '-'}</p>
       </AiInfoCard>
+      <AiInfoCard title='可观测性' description='查看该 Tool 在真实运行态里的调用结果和失败分布。'>
+        <AiObservabilityGrid value={detail.observability} />
+      </AiInfoCard>
+      <AiInfoCard title='关联链路' description='确认当前 Tool 被哪些 Agent 使用，以及是否映射到 Skill / MCP。'>
+        <div className='grid gap-4 md:grid-cols-3'>
+          <AiRegistryLinkList title='Agent' links={detail.linkedAgents} />
+          <AiRegistryLinkList title='Skill' links={detail.linkedSkill ? [detail.linkedSkill] : []} />
+          <AiRegistryLinkList title='MCP' links={detail.linkedMcp ? [detail.linkedMcp] : []} />
+        </div>
+      </AiInfoCard>
       <AiInfoCard title='元数据'>
         <AiJsonBlock value={detail.metadataJson} />
       </AiInfoCard>
@@ -1464,6 +1485,16 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
       <AiInfoCard title='说明'>
         <p className='text-sm leading-6'>{detail.description || '-'}</p>
       </AiInfoCard>
+      <AiInfoCard title='可观测性' description='补充 MCP 实际承接 ToolCall 的运行态数据。'>
+        <AiObservabilityGrid value={detail.observability} />
+      </AiInfoCard>
+      <AiInfoCard title='关联链路' description='查看当前 MCP 绑定的 Agent、Tool 和 Skill。'>
+        <div className='grid gap-4 md:grid-cols-3'>
+          <AiRegistryLinkList title='Agent' links={detail.linkedAgents} />
+          <AiRegistryLinkList title='Tool' links={detail.linkedTools} />
+          <AiRegistryLinkList title='Skill' links={detail.linkedSkills} />
+        </div>
+      </AiInfoCard>
       <AiInfoCard title='元数据'>
         <AiJsonBlock value={detail.metadataJson} />
       </AiInfoCard>
@@ -1496,6 +1527,8 @@ export function AiMcpDetailPage({ mcpId }: { mcpId: string }) {
                 { label: '检查时间', value: formatDateTime(diagnosticQuery.data.checkedAt) },
                 { label: '注册状态', value: diagnosticQuery.data.registryStatus },
                 { label: '失败阶段', value: diagnosticQuery.data.failureStage || '-' },
+                { label: '累计 ToolCall', value: diagnosticQuery.data.observability?.totalToolCalls ?? '-' },
+                { label: '最近失败', value: diagnosticQuery.data.observability?.latestFailureReason || '-' },
               ]}
             />
 
@@ -1873,6 +1906,16 @@ export function AiSkillDetailPage({ skillId }: { skillId: string }) {
       </AiInfoCard>
       <AiInfoCard title='说明'>
         <p className='text-sm leading-6'>{detail.description || '-'}</p>
+      </AiInfoCard>
+      <AiInfoCard title='可观测性' description='查看该 Skill 在实际 ToolCall 链路中的命中次数和失败情况。'>
+        <AiObservabilityGrid value={detail.observability} />
+      </AiInfoCard>
+      <AiInfoCard title='关联链路' description='确认当前 Skill 对应的 Agent、Tool 和 MCP。'>
+        <div className='grid gap-4 md:grid-cols-3'>
+          <AiRegistryLinkList title='Agent' links={detail.linkedAgents} />
+          <AiRegistryLinkList title='Tool' links={detail.linkedTool ? [detail.linkedTool] : []} />
+          <AiRegistryLinkList title='MCP' links={detail.linkedMcp ? [detail.linkedMcp] : []} />
+        </div>
       </AiInfoCard>
       <AiInfoCard title='元数据'>
         <AiJsonBlock value={detail.metadataJson} />

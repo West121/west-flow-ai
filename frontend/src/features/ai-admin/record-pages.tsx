@@ -26,11 +26,14 @@ import {
   AiKeyValueGrid,
   AiJsonBlock,
   AiPageErrorState,
+  AiRegistryLinkList,
   AiStatusBadge,
+} from './shared'
+import {
   formatDateTime,
   formatDurationMillis,
   renderTags,
-} from './shared'
+} from './shared-formatters'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 
 type PageSearchProps = {
@@ -456,15 +459,33 @@ export function AiToolCallDetailPage({ toolCallId }: { toolCallId: string }) {
               { label: '状态', value: <AiStatusBadge label={statusLabel(detail.status)} variant={statusVariant(detail.status)} /> },
               { label: '需确认', value: detail.requiresConfirmation ? '是' : '否' },
               { label: '会话 ID', value: detail.conversationId },
+              { label: '会话标题', value: detail.conversationTitle || '-' },
               { label: '确认单 ID', value: detail.confirmationId || '-' },
               { label: '创建时间', value: formatDateTime(detail.createdAt) },
               { label: '完成时间', value: formatDateTime(detail.completedAt) },
               { label: '执行耗时', value: formatDurationMillis(detail.executionDurationMillis) },
               { label: '失败原因', value: detail.failureReason || '-' },
+              { label: '失败码', value: detail.failureCode || '-' },
             ]}
           />
           <div className='mt-4 whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm leading-6'>
             {detail.summary || '-'}
+          </div>
+        </AiInfoCard>
+        <AiInfoCard title='诊断链路' description='把 ToolCall、确认单、Agent/Tool/Skill/MCP 关联起来查看。'>
+          <AiKeyValueGrid
+            items={[
+              { label: '确认状态', value: detail.confirmationStatus || '-' },
+              { label: '确认结论', value: detail.confirmationStatus ? (detail.confirmationApproved ? '通过' : '拒绝') : '-' },
+              { label: '确认处理人', value: detail.confirmationResolvedBy || '-' },
+              { label: '确认备注', value: detail.confirmationComment || '-' },
+              { label: 'Tool 链接', value: detail.linkedTool?.entityCode || '-' },
+              { label: 'Skill 链接', value: detail.linkedSkill?.entityCode || '-' },
+              { label: 'MCP 链接', value: detail.linkedMcp?.entityCode || '-' },
+            ]}
+          />
+          <div className='mt-4'>
+            <AiRegistryLinkList title='命中 Agent' links={detail.linkedAgents} />
           </div>
         </AiInfoCard>
         <AiInfoCard title='参数 JSON'>
@@ -565,16 +586,33 @@ export function AiConfirmationDetailPage({ confirmationId }: { confirmationId: s
             items={[
               { label: '确认单 ID', value: detail.confirmationId },
               { label: '工具调用 ID', value: detail.toolCallId },
+              { label: '工具标识', value: detail.toolKey || '-' },
+              { label: '工具类型', value: detail.toolType || '-' },
+              { label: '命中来源', value: detail.hitSource || detail.toolSource || '-' },
+              { label: 'ToolCall 状态', value: detail.toolCallStatus ? <AiStatusBadge label={statusLabel(detail.toolCallStatus)} variant={statusVariant(detail.toolCallStatus)} /> : '-' },
+              { label: '会话标题', value: detail.conversationTitle || '-' },
               { label: '状态', value: <AiStatusBadge label={statusLabel(detail.status)} variant={statusVariant(detail.status)} /> },
               { label: '是否通过', value: detail.approved ? '是' : '否' },
               { label: '处理人', value: detail.resolvedBy || '-' },
               { label: '创建时间', value: formatDateTime(detail.createdAt) },
               { label: '处理时间', value: formatDateTime(detail.resolvedAt) },
               { label: '更新时间', value: formatDateTime(detail.updatedAt) },
+              { label: '失败原因', value: detail.failureReason || '-' },
             ]}
           />
           <div className='mt-4 whitespace-pre-wrap rounded-lg border bg-muted/20 p-4 text-sm leading-6'>
             {detail.comment || '-'}
+          </div>
+        </AiInfoCard>
+        <AiInfoCard title='关联执行链' description='确认单关联的 ToolCall、Tool 和 Agent。'>
+          <AiKeyValueGrid
+            items={[
+              { label: '关联 Tool', value: detail.linkedTool?.entityCode || '-' },
+              { label: '关联 Tool 名称', value: detail.linkedTool?.entityName || '-' },
+            ]}
+          />
+          <div className='mt-4'>
+            <AiRegistryLinkList title='候选 Agent' links={detail.linkedAgents} />
           </div>
         </AiInfoCard>
       </div>

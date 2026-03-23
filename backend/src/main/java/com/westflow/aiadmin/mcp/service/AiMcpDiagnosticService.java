@@ -7,6 +7,7 @@ import com.westflow.aiadmin.mcp.api.AiMcpDiagnosticStepResponse;
 import com.westflow.aiadmin.mcp.mapper.AiMcpRegistryMapper;
 import com.westflow.aiadmin.mcp.model.AiMcpRegistryRecord;
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
@@ -52,6 +53,7 @@ public class AiMcpDiagnosticService {
 
     private final AiAdminAccessService aiAdminAccessService;
     private final AiMcpRegistryMapper aiMcpRegistryMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -513,6 +515,7 @@ public class AiMcpDiagnosticService {
                 failureDetail,
                 failureStage,
                 diagnosticSteps,
+                aiAdminObservabilityService.summarizeToolCallsForMcp(record.mcpCode(), record.requiredCapabilityCode()),
                 checkedAt,
                 record.metadataJson()
         ));

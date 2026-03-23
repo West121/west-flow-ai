@@ -5,10 +5,7 @@ import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import { listAiMcpDiagnostics, type AiMcpDiagnosticRecord } from '@/lib/api/ai-admin'
-import {
-  formatDateTime,
-  formatDurationMillis,
-} from './shared'
+import { formatDateTime, formatDurationMillis } from './shared-formatters'
 
 type PageSearchProps = {
   search: ListQuerySearch
@@ -75,9 +72,11 @@ const columns: ColumnDef<AiMcpDiagnosticRecord, unknown>[] = [
     ),
   },
   { accessorKey: 'toolCount', header: '工具数', cell: ({ row }) => row.original.toolCount ?? '-' },
+  { accessorKey: 'runtimeToolCalls', header: '运行调用', cell: ({ row }) => row.original.observability?.totalToolCalls ?? '-' },
   { accessorKey: 'responseTimeMillis', header: '耗时', cell: ({ row }) => formatDurationMillis(row.original.responseTimeMillis) },
   { accessorKey: 'failureStage', header: '失败阶段', cell: ({ row }) => row.original.failureStage || '-' },
   { accessorKey: 'failureReason', header: '失败原因', cell: ({ row }) => row.original.failureReason || '-' },
+  { accessorKey: 'latestFailureReason', header: '最近运行失败', cell: ({ row }) => row.original.observability?.latestFailureReason || '-' },
   { accessorKey: 'checkedAt', header: '检查时间', cell: ({ row }) => formatDateTime(row.original.checkedAt) },
 ]
 

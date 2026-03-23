@@ -25,6 +25,26 @@ export type AiRegistryOption = {
   label: string
 }
 
+export type AiRegistryLink = {
+  entityType: 'AGENT' | 'TOOL' | 'SKILL' | 'MCP' | string
+  entityId: string
+  entityCode: string
+  entityName: string
+  capabilityCode: string | null
+  status: string
+}
+
+export type AiObservabilitySummary = {
+  totalToolCalls: number
+  successfulToolCalls: number
+  failedToolCalls: number
+  pendingConfirmations: number
+  averageDurationMillis: number | null
+  latestToolCallId: string | null
+  latestToolCallAt: string | null
+  latestFailureReason: string | null
+}
+
 export type AiRegistryStatusOption = {
   value: AiRegistryStatus
   label: string
@@ -47,7 +67,13 @@ export type AiAgentRecord = {
 }
 
 export type AiAgentPageResponse = BasePageResponse<AiAgentRecord>
-export type AiAgentDetail = AiAgentRecord
+export type AiAgentDetail = AiAgentRecord & {
+  description: string | null
+  observability: AiObservabilitySummary
+  linkedTools: AiRegistryLink[]
+  linkedSkills: AiRegistryLink[]
+  linkedMcps: AiRegistryLink[]
+}
 
 export type AiAgentFormOptions = {
   statusOptions: AiRegistryStatusOption[]
@@ -85,6 +111,10 @@ export type AiToolRecord = {
 export type AiToolPageResponse = BasePageResponse<AiToolRecord>
 export type AiToolDetail = AiToolRecord & {
   description: string | null
+  observability: AiObservabilitySummary
+  linkedAgents: AiRegistryLink[]
+  linkedSkill: AiRegistryLink | null
+  linkedMcp: AiRegistryLink | null
 }
 
 export type AiToolFormOptions = {
@@ -120,6 +150,10 @@ export type AiMcpRecord = {
 export type AiMcpPageResponse = BasePageResponse<AiMcpRecord>
 export type AiMcpDetail = AiMcpRecord & {
   description: string | null
+  observability: AiObservabilitySummary
+  linkedAgents: AiRegistryLink[]
+  linkedTools: AiRegistryLink[]
+  linkedSkills: AiRegistryLink[]
 }
 
 export type AiMcpFormOptions = {
@@ -153,6 +187,10 @@ export type AiSkillRecord = {
 export type AiSkillPageResponse = BasePageResponse<AiSkillRecord>
 export type AiSkillDetail = AiSkillRecord & {
   description: string | null
+  observability: AiObservabilitySummary
+  linkedAgents: AiRegistryLink[]
+  linkedTool: AiRegistryLink | null
+  linkedMcp: AiRegistryLink | null
 }
 
 export type AiSkillFormOptions = {
@@ -249,6 +287,16 @@ export type AiConversationDetail = AiConversationRecord & {
 export type AiToolCallDetail = AiToolCallRecord & {
   argumentsJson: string
   resultJson: string
+  failureCode: string | null
+  conversationTitle: string | null
+  confirmationStatus: string | null
+  confirmationApproved: boolean
+  confirmationResolvedBy: string | null
+  confirmationComment: string | null
+  linkedTool: AiRegistryLink | null
+  linkedSkill: AiRegistryLink | null
+  linkedMcp: AiRegistryLink | null
+  linkedAgents: AiRegistryLink[]
 }
 
 export type AiMcpConnectionStatus = 'UP' | 'DOWN' | 'DISABLED' | 'INTERNAL'
@@ -276,6 +324,7 @@ export type AiMcpDiagnosticRecord = {
   failureDetail?: string | null
   failureStage?: string | null
   diagnosticSteps?: AiMcpDiagnosticStep[]
+  observability?: AiObservabilitySummary
   checkedAt: string
   metadataJson: string
 }
@@ -283,7 +332,17 @@ export type AiMcpDiagnosticRecord = {
 export type AiMcpDiagnosticPageResponse = BasePageResponse<AiMcpDiagnosticRecord>
 export type AiMcpDiagnosticDetail = AiMcpDiagnosticRecord
 
-export type AiConfirmationDetail = AiConfirmationRecord
+export type AiConfirmationDetail = AiConfirmationRecord & {
+  toolKey: string | null
+  toolType: string | null
+  toolSource: string | null
+  hitSource: string | null
+  toolCallStatus: string | null
+  conversationTitle: string | null
+  failureReason: string | null
+  linkedTool: AiRegistryLink | null
+  linkedAgents: AiRegistryLink[]
+}
 
 export async function listAiAgents(
   search: ListQuerySearch

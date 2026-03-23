@@ -9,6 +9,7 @@ import com.westflow.aiadmin.skill.api.SaveAiSkillRequest;
 import com.westflow.aiadmin.skill.mapper.AiSkillRegistryMapper;
 import com.westflow.aiadmin.skill.model.AiSkillRegistryRecord;
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
@@ -39,6 +40,7 @@ public class AiSkillRegistryService {
     private final AiAdminAccessService aiAdminAccessService;
     private final AiSkillRegistryMapper aiSkillRegistryMapper;
     private final AiCapabilityOptionMapper aiCapabilityOptionMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
 
     /**
      * 分页查询 Skill 注册表。
@@ -152,6 +154,7 @@ public class AiSkillRegistryService {
     }
 
     private AiSkillDetailResponse toDetail(AiSkillRegistryRecord record) {
+        AiAdminObservabilityService.RegistryDiagnostics diagnostics = aiAdminObservabilityService.describeSkill(record);
         return new AiSkillDetailResponse(
                 record.skillId(),
                 record.skillCode(),
@@ -160,7 +163,12 @@ public class AiSkillRegistryService {
                 record.requiredCapabilityCode(),
                 record.enabled(),
                 AiAdminSupport.toStatus(record.enabled()),
+                diagnostics.description(),
                 record.metadataJson(),
+                diagnostics.observability(),
+                diagnostics.linkedAgents(),
+                diagnostics.linkedResource(),
+                diagnostics.linkedMcp(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
                 AiAdminSupport.toOffsetDateTime(record.updatedAt())
         );

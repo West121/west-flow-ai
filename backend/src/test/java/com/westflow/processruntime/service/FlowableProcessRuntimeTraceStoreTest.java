@@ -4,10 +4,16 @@ import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
+import com.westflow.orchestrator.model.OrchestratorAutomationType;
+import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
+import com.westflow.orchestrator.model.OrchestratorScanExecutionRecord;
+import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
+import com.westflow.orchestrator.service.OrchestratorRuntimeBridge;
 import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -117,6 +123,92 @@ class FlowableProcessRuntimeTraceStoreTest {
     }
 
     @Test
+    void shouldPreferDueTargetsFromOrchestratorBridgeForAutomationTrace() {
+        Instant reminderDueAt = Instant.parse("2026-03-23T01:10:00Z");
+        OrchestratorRuntimeBridge orchestratorRuntimeBridge = new OrchestratorRuntimeBridge() {
+            @Override
+            public List<OrchestratorScanTargetRecord> loadDueScanTargets(Instant asOf) {
+                return List.of(
+                        new OrchestratorScanTargetRecord(
+                                "orc_target_instance_1_task_approve_001_auto_reminder",
+                                OrchestratorAutomationType.AUTO_REMINDER,
+                                "审批人自动提醒",
+                                "approve_manager",
+                                "biz_leave_001",
+                                reminderDueAt,
+                                "审批节点自动提醒策略"
+                        )
+                );
+            }
+
+            @Override
+            public OrchestratorScanExecutionRecord executeTarget(String runId, OrchestratorScanTargetRecord target) {
+                return new OrchestratorScanExecutionRecord(
+                        "exec_001",
+                        runId,
+                        target.targetId(),
+                        target.automationType(),
+                        OrchestratorExecutionStatus.SKIPPED,
+                        "ignored",
+                        Instant.now()
+                );
+            }
+        };
+        FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore(orchestratorRuntimeBridge);
+
+        List<ProcessAutomationTraceItemResponse> traces = store.queryAutomationTraces(
+                "instance_1",
+                "PENDING",
+                "usr_001",
+                automationPayload(),
+                OffsetDateTime.parse("2026-03-23T09:00:00+08:00")
+        );
+
+        ProcessAutomationTraceItemResponse reminderTrace = traces.stream()
+                .filter(item -> "AUTO_REMINDER".equals(item.traceType()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(reminderTrace.status()).isEqualTo("READY");
+        assertThat(reminderTrace.occurredAt()).isEqualTo(reminderDueAt.atZone(TIME_ZONE).toOffsetDateTime());
+        assertThat(reminderTrace.detail()).contains("审批节点自动提醒策略");
+    }
+
+    @Test
+    void shouldProjectNotificationSendHistoryFromUrgeEvents() {
+        FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore();
+        OffsetDateTime urgedAt = OffsetDateTime.parse("2026-03-23T09:15:00+08:00");
+        store.appendInstanceEvent(event(
+                "evt_urge_1",
+                "instance_1",
+                "task_approve_001",
+                "approve_manager",
+                "TASK_URGED",
+                "任务已催办",
+                "usr_001",
+                urgedAt
+        ));
+
+        List<ProcessNotificationSendRecordResponse> notificationRecords = store.queryNotificationSendRecords(
+                "instance_1",
+                "PENDING",
+                "usr_001",
+                automationPayload(),
+                OffsetDateTime.parse("2026-03-23T09:00:00+08:00")
+        );
+
+        assertThat(notificationRecords).hasSize(2);
+        assertThat(notificationRecords)
+                .extracting(ProcessNotificationSendRecordResponse::status)
+                .containsOnly("SUCCESS");
+        assertThat(notificationRecords)
+                .extracting(ProcessNotificationSendRecordResponse::attemptCount)
+                .containsOnly(1);
+        assertThat(notificationRecords)
+                .extracting(ProcessNotificationSendRecordResponse::sentAt)
+                .containsOnly(urgedAt);
+    }
+
+    @Test
     void shouldClearEventsWhenReset() {
         FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore();
         store.appendInstanceEvent(event("evt_1", "instance_1", null, null, "INSTANCE", "实例启动", "usr_001", OffsetDateTime.now(TIME_ZONE)));
@@ -184,5 +276,58 @@ class FlowableProcessRuntimeTraceStoreTest {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Unable to create ProcessInstanceEventResponse for test", e);
         }
+    }
+
+    private ProcessDslPayload automationPayload() {
+        return new ProcessDslPayload(
+                "1.0.0",
+                "demo",
+                "演示流程",
+                "OA",
+                "form_key",
+                "1.0.0",
+                List.of(),
+                Map.of(),
+                List.of(
+                        new ProcessDslPayload.Node(
+                                "approve_manager",
+                                "approver",
+                                "部门负责人审批",
+                                null,
+                                Map.of(),
+                                Map.of(
+                                        "timeoutPolicy", Map.of("enabled", true, "durationMinutes", 30, "action", "AUTO_APPROVE"),
+                                        "reminderPolicy", Map.of(
+                                                "enabled", true,
+                                                "firstReminderAfterMinutes", 10,
+                                                "channels", List.of("IN_APP", "EMAIL")
+                                        )
+                                ),
+                                Map.of()
+                        ),
+                        new ProcessDslPayload.Node(
+                                "n_timer",
+                                "timer",
+                                "定时节点",
+                                null,
+                                Map.of(),
+                                Map.of("delayMinutes", 15),
+                                Map.of()
+                        ),
+                        new ProcessDslPayload.Node(
+                                "n_trigger",
+                                "trigger",
+                                "触发节点",
+                                null,
+                                Map.of(),
+                                Map.of("triggerKey", "demo.trigger"),
+                                Map.of()
+                        )
+                ),
+                List.of(
+                        new ProcessDslPayload.Edge("e1", "approve_manager", "n_timer", 1, "to timer", Map.of()),
+                        new ProcessDslPayload.Edge("e2", "n_timer", "n_trigger", 1, "to trigger", Map.of())
+                )
+        );
     }
 }

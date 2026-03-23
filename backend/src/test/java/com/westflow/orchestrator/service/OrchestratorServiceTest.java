@@ -7,6 +7,7 @@ import com.westflow.orchestrator.mapper.OrchestratorScanMapper;
 import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
 import com.westflow.orchestrator.model.OrchestratorAutomationType;
 import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
+import com.westflow.orchestrator.repository.OrchestratorExecutionRepository;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
@@ -86,6 +87,7 @@ class OrchestratorServiceTest {
     @Test
     void shouldCollectDueTargetsFromFlowableBpmnRuntime() {
         OrchestratorScanMapper orchestratorScanMapper = mock(OrchestratorScanMapper.class);
+        OrchestratorExecutionRepository orchestratorExecutionRepository = mock(OrchestratorExecutionRepository.class);
         FlowableEngineFacade flowableEngineFacade = mock(FlowableEngineFacade.class);
         RuntimeService mockedRuntimeService = mock(RuntimeService.class);
         RepositoryService mockedRepositoryService = mock(RepositoryService.class);
@@ -133,7 +135,8 @@ class OrchestratorServiceTest {
 
         FlowableOrchestratorRuntimeBridge flowableBridge = new FlowableOrchestratorRuntimeBridge(
                 flowableEngineFacade,
-                orchestratorScanMapper
+                orchestratorScanMapper,
+                orchestratorExecutionRepository
         );
 
         List<OrchestratorScanTargetRecord> targets = flowableBridge.loadDueScanTargets(scannedAt);
@@ -152,6 +155,7 @@ class OrchestratorServiceTest {
         var execRecord = flowableBridge.executeTarget("run_001", targets.get(0));
         assertThat(execRecord.status()).isEqualTo(OrchestratorExecutionStatus.SKIPPED);
         verify(orchestratorScanMapper).insertExecutionRecord(any());
+        verify(orchestratorExecutionRepository).insert(any());
     }
 
     private FlowElement approverElement() {

@@ -9,6 +9,7 @@ import com.westflow.aiadmin.agent.mapper.AiAgentRegistryMapper;
 import com.westflow.aiadmin.agent.model.AiAgentRegistryRecord;
 import com.westflow.aiadmin.mapper.AiCapabilityOptionMapper;
 import com.westflow.aiadmin.support.AiAdminAccessService;
+import com.westflow.aiadmin.support.AiAdminObservabilityService;
 import com.westflow.aiadmin.support.AiAdminSupport;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
@@ -39,6 +40,7 @@ public class AiAgentRegistryService {
     private final AiAdminAccessService aiAdminAccessService;
     private final AiAgentRegistryMapper aiAgentRegistryMapper;
     private final AiCapabilityOptionMapper aiCapabilityOptionMapper;
+    private final AiAdminObservabilityService aiAdminObservabilityService;
 
     /**
      * 分页查询智能体注册表。
@@ -153,15 +155,25 @@ public class AiAgentRegistryService {
     }
 
     private AiAgentDetailResponse toDetail(AiAgentRegistryRecord record) {
+        AiAdminObservabilityService.AgentDiagnostics diagnostics = aiAdminObservabilityService.describeAgent(record);
         return new AiAgentDetailResponse(
                 record.agentId(),
                 record.agentCode(),
                 record.agentName(),
                 record.capabilityCode(),
+                diagnostics.routeMode(),
+                diagnostics.supervisor(),
+                diagnostics.priority(),
                 record.enabled(),
                 AiAdminSupport.toStatus(record.enabled()),
+                diagnostics.contextTags(),
                 record.systemPrompt(),
+                diagnostics.description(),
                 record.metadataJson(),
+                diagnostics.observability(),
+                diagnostics.linkedTools(),
+                diagnostics.linkedSkills(),
+                diagnostics.linkedMcps(),
                 AiAdminSupport.toOffsetDateTime(record.createdAt()),
                 AiAdminSupport.toOffsetDateTime(record.updatedAt())
         );

@@ -102,6 +102,32 @@ public interface WorkflowOperationLogMapper {
               detail_json AS detailJson,
               created_at AS createdAt
             FROM wf_workflow_operation_log
+            WHERE process_instance_id = #{processInstanceId}
+            ORDER BY created_at ASC, id ASC
+            """)
+    List<WorkflowOperationLogRecord> selectByProcessInstanceId(@Param("processInstanceId") String processInstanceId);
+
+    @Select("""
+            SELECT
+              id AS logId,
+              process_instance_id AS processInstanceId,
+              process_definition_id AS processDefinitionId,
+              flowable_definition_id AS flowableDefinitionId,
+              business_type AS businessType,
+              business_id AS businessId,
+              task_id AS taskId,
+              node_id AS nodeId,
+              action_type AS actionType,
+              action_name AS actionName,
+              action_category AS actionCategory,
+              operator_user_id AS operatorUserId,
+              target_user_id AS targetUserId,
+              source_task_id AS sourceTaskId,
+              target_task_id AS targetTaskId,
+              comment_text AS commentText,
+              detail_json AS detailJson,
+              created_at AS createdAt
+            FROM wf_workflow_operation_log
             WHERE id = #{logId}
             """)
     WorkflowOperationLogRecord selectById(@Param("logId") String logId);

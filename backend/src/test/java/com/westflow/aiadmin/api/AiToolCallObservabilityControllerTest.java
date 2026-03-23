@@ -43,9 +43,69 @@ class AiToolCallObservabilityControllerTest {
         jdbcTemplate.update("DELETE FROM wf_ai_tool_call");
         jdbcTemplate.update("DELETE FROM wf_ai_message");
         jdbcTemplate.update("DELETE FROM wf_ai_conversation");
+        jdbcTemplate.update("DELETE FROM wf_ai_agent_registry");
+        jdbcTemplate.update("DELETE FROM wf_ai_tool_registry");
+        jdbcTemplate.update("DELETE FROM wf_ai_skill_registry");
+        jdbcTemplate.update("DELETE FROM wf_ai_mcp_registry");
 
         String conversationId = "conv_" + UUID.randomUUID().toString().substring(0, 8);
         toolCallId = "call_" + UUID.randomUUID().toString().substring(0, 8);
+        String confirmationId = "confirm_" + UUID.randomUUID().toString().substring(0, 8);
+
+        jdbcTemplate.update("""
+                INSERT INTO wf_ai_agent_registry (
+                    id, agent_code, agent_name, capability_code, enabled, system_prompt, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "ai_agent_obs_001",
+                "task-handle-agent",
+                "待办处理智能体",
+                "ai:task:handle",
+                true,
+                "负责待办处理",
+                "{\"routeMode\":\"SPECIALIST\",\"priority\":80,\"supervisor\":false,\"contextTags\":[\"OA\",\"Task\"],\"description\":\"处理待办操作卡\"}"
+        );
+        jdbcTemplate.update("""
+                INSERT INTO wf_ai_tool_registry (
+                    id, tool_code, tool_name, tool_category, action_mode, required_capability_code, enabled, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "ai_tool_obs_001",
+                "workflow.trace.summary",
+                "流程轨迹摘要",
+                "MCP",
+                "READ",
+                "ai:task:handle",
+                true,
+                "{\"description\":\"查询流程轨迹\"}"
+        );
+        jdbcTemplate.update("""
+                INSERT INTO wf_ai_skill_registry (
+                    id, skill_code, skill_name, skill_path, required_capability_code, enabled, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "ai_skill_obs_001",
+                "workflow.trace.summary",
+                "流程轨迹技能",
+                "/opt/skills/workflow-trace/SKILL.md",
+                "ai:task:handle",
+                true,
+                "{\"description\":\"流程轨迹诊断技能\"}"
+        );
+        jdbcTemplate.update("""
+                INSERT INTO wf_ai_mcp_registry (
+                    id, mcp_code, mcp_name, endpoint_url, transport_type, required_capability_code, enabled, metadata_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "ai_mcp_obs_001",
+                "workflow",
+                "流程中心 MCP",
+                "http://localhost:18080/mcp",
+                "STREAMABLE_HTTP",
+                "ai:task:handle",
+                true,
+                "{\"description\":\"流程中心工具链\"}"
+        );
 
         jdbcTemplate.update("""
                 INSERT INTO wf_ai_conversation (
@@ -74,12 +134,24 @@ class AiToolCallObservabilityControllerTest {
                 "READ",
                 "MCP",
                 "FAILED",
-                false,
+                true,
                 "{\"processKey\":\"oa_leave\"}",
-                "{\"error\":\"MCP_TIMEOUT\",\"message\":\"远端 MCP 请求超时\"}",
+                "{\"error\":\"MCP_TIMEOUT\",\"message\":\"远端 MCP 请求超时\",\"reason\":\"socket read timed out\"}",
                 "查询流程轨迹失败",
-                null,
+                confirmationId,
                 "usr_admin"
+        );
+        jdbcTemplate.update("""
+                INSERT INTO wf_ai_confirmation (
+                    id, tool_call_id, status, approved, comment, resolved_by, created_at, resolved_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                confirmationId,
+                toolCallId,
+                "REJECTED",
+                false,
+                "风险较高，暂不执行",
+                "usr_reviewer"
         );
     }
 
@@ -99,6 +171,15 @@ class AiToolCallObservabilityControllerTest {
         assertThat(objectMapper.readTree(response).path("data").path("executionDurationMillis").isNumber()).isTrue();
         assertThat(objectMapper.readTree(response).path("data").path("executionDurationMillis").asLong()).isGreaterThan(0L);
         assertThat(objectMapper.readTree(response).path("data").path("failureReason").asText()).isEqualTo("远端 MCP 请求超时");
+        assertThat(objectMapper.readTree(response).path("data").path("failureCode").asText()).isEqualTo("MCP_TIMEOUT");
         assertThat(objectMapper.readTree(response).path("data").path("hitSource").asText()).isEqualTo("MCP");
+        assertThat(objectMapper.readTree(response).path("data").path("conversationTitle").asText()).isEqualTo("流程设计助手对话");
+        assertThat(objectMapper.readTree(response).path("data").path("confirmationStatus").asText()).isEqualTo("REJECTED");
+        assertThat(objectMapper.readTree(response).path("data").path("confirmationResolvedBy").asText()).isEqualTo("usr_reviewer");
+        assertThat(objectMapper.readTree(response).path("data").path("linkedTool").path("entityCode").asText()).isEqualTo("workflow.trace.summary");
+        assertThat(objectMapper.readTree(response).path("data").path("linkedSkill").path("entityCode").asText()).isEqualTo("workflow.trace.summary");
+        assertThat(objectMapper.readTree(response).path("data").path("linkedMcp").path("entityCode").asText()).isEqualTo("workflow");
+        assertThat(objectMapper.readTree(response).path("data").path("linkedAgents").isArray()).isTrue();
+        assertThat(objectMapper.readTree(response).path("data").path("linkedAgents").get(0).path("entityCode").asText()).isEqualTo("task-handle-agent");
     }
 }

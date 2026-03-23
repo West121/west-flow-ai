@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { AlertCircle } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,73 +12,15 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { PageShell } from '@/features/shared/page-shell'
-import { Link } from '@tanstack/react-router'
-
-// AI 管理页统一的时间格式，保证注册表和运行记录展示风格一致。
-export function formatDateTime(value: string | null | undefined) {
-  if (!value) {
-    return '-'
-  }
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-// 将 JSON 字符串尽量转成可读块，坏数据则原样展示。
-export function prettyJson(value: string | null | undefined) {
-  if (!value) {
-    return '-'
-  }
-
-  try {
-    return JSON.stringify(JSON.parse(value), null, 2)
-  } catch {
-    return value
-  }
-}
-
-// 将毫秒耗时格式化成更容易阅读的中文文案。
-export function formatDurationMillis(value: number | null | undefined) {
-  if (value == null) {
-    return '-'
-  }
-
-  if (value < 1000) {
-    return `${value} ms`
-  }
-
-  const seconds = value / 1000
-  return `${seconds.toFixed(seconds < 10 ? 2 : 1)} s`
-}
-
-// 把逗号分隔字符串或数组展示成中文标签。
-export function renderTags(value: string[] | string | null | undefined) {
-  if (!value) {
-    return '-'
-  }
-
-  if (Array.isArray(value)) {
-    return value.length > 0 ? value.join('，') : '-'
-  }
-
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .join('，') || '-'
-}
+import {
+  formatDateTime,
+  formatDurationMillis,
+  prettyJson,
+} from './shared-formatters'
+import {
+  type AiObservabilitySummary,
+  type AiRegistryLink,
+} from '@/lib/api/ai-admin'
 
 export function AiPageErrorState({
   title,
@@ -169,6 +112,56 @@ export function AiStatusBadge({
 
 export function AiPageHeaderBadge({ children }: { children: ReactNode }) {
   return <Badge variant='secondary'>{children}</Badge>
+}
+
+export function AiRegistryLinkList({
+  title,
+  links,
+}: {
+  title: string
+  links: AiRegistryLink[]
+}) {
+  return (
+    <div className='space-y-2'>
+      <div className='text-xs text-muted-foreground'>{title}</div>
+      {links.length > 0 ? (
+        <div className='flex flex-wrap gap-2'>
+          {links.map((link) => (
+            <Badge key={`${link.entityType}-${link.entityId}`} variant='outline'>
+              {link.entityCode}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <div className='text-sm text-muted-foreground'>-</div>
+      )}
+    </div>
+  )
+}
+
+export function AiObservabilityGrid({
+  value,
+}: {
+  value: AiObservabilitySummary | null | undefined
+}) {
+  if (!value) {
+    return <div className='text-sm text-muted-foreground'>暂无运行态观测数据。</div>
+  }
+
+  return (
+    <AiKeyValueGrid
+      items={[
+        { label: '累计调用', value: value.totalToolCalls },
+        { label: '成功调用', value: value.successfulToolCalls },
+        { label: '失败调用', value: value.failedToolCalls },
+        { label: '待确认', value: value.pendingConfirmations },
+        { label: '平均耗时', value: formatDurationMillis(value.averageDurationMillis) },
+        { label: '最近 ToolCall', value: value.latestToolCallId || '-' },
+        { label: '最近调用时间', value: formatDateTime(value.latestToolCallAt) },
+        { label: '最近失败原因', value: value.latestFailureReason || '-' },
+      ]}
+    />
+  )
 }
 
 export function AiEntityPageShell({

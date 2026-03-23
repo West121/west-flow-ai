@@ -55,8 +55,7 @@ export default defineConfig(
       // Prevent duplicate imports from the same module
       'no-duplicate-imports': 'error',
     },
-  }
-  ,
+  },
   {
     files: ['src/routes/**/*.tsx'],
     rules: {
