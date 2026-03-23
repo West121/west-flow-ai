@@ -32,13 +32,37 @@ const {
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    params,
+    search,
     children,
     ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    to?: string
+    params?: Record<string, string>
+    search?: Record<string, unknown>
+  }) => {
+    const resolvedPath = Object.entries(params ?? {}).reduce(
+      (path, [key, value]) => path.replace(`$${key}`, value),
+      to ?? ''
+    )
+    const query =
+      search && Object.keys(search).length > 0
+        ? `?${new URLSearchParams(
+            Object.entries(search).reduce<Record<string, string>>((acc, [key, value]) => {
+              if (value != null) {
+                acc[key] = String(value)
+              }
+              return acc
+            }, {})
+          ).toString()}`
+        : ''
+
+    return (
+      <a href={`${resolvedPath}${query}`} {...props}>
+        {children}
+      </a>
+    )
+  },
   useNavigate: () => navigateMock,
   getRouteApi: () => ({
     useSearch: useSearchMock,
@@ -259,6 +283,9 @@ describe('automation pages', () => {
     expect(screen.getByText('HEALTHY')).toBeInTheDocument()
     expect(screen.getByText('WechatWorkNotificationProvider')).toBeInTheDocument()
     expect(screen.getByText('ok')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '查看健康监控详情' })
+    ).toHaveAttribute('href', '/system/monitor/notification-channels/health/chn_001')
 
     renderWithQuery(<NotificationChannelCreatePage />)
     fireEvent.change(await screen.findByLabelText('渠道名称'), {

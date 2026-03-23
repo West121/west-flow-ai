@@ -640,16 +640,32 @@ function resolveBooleanLabel(
 
 function NotificationChannelDiagnosticCard({
   diagnostic,
+  channelId,
 }: {
   diagnostic: NotificationChannelDiagnostic
+  channelId?: string
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>渠道诊断</CardTitle>
-        <CardDescription>
-          查看当前渠道配置完整性、最近发送状态和 provider 回执。
-        </CardDescription>
+        <div className='flex flex-wrap items-start justify-between gap-3'>
+          <div className='space-y-1'>
+            <CardTitle>渠道诊断</CardTitle>
+            <CardDescription>
+              查看当前渠道配置完整性、最近发送状态和 provider 回执。
+            </CardDescription>
+          </div>
+          {channelId ? (
+            <Button asChild variant='outline' size='sm'>
+              <Link
+                to='/system/monitor/notification-channels/health/$channelId'
+                params={{ channelId }}
+              >
+                查看健康监控详情
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </CardHeader>
       <CardContent className='grid gap-4'>
         <div className='flex flex-wrap items-center gap-2'>
@@ -882,7 +898,10 @@ export function NotificationChannelDetailPage({ channelId }: { channelId: string
               </AlertDescription>
             </Alert>
           ) : (
-            <NotificationChannelDiagnosticCard diagnostic={diagnosticQuery.data} />
+            <NotificationChannelDiagnosticCard
+              diagnostic={diagnosticQuery.data}
+              channelId={channelId}
+            />
           )}
         </div>
 
