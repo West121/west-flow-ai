@@ -9,6 +9,11 @@ import {
   type WorkflowNodeConfigMap,
   type WorkflowNodeKind,
   type WorkflowNodeTone,
+  type WorkflowDynamicBuilderAppendPolicy,
+  type WorkflowDynamicBuilderNodeConfig,
+  type WorkflowDynamicBuilderSourceMode,
+  type WorkflowDynamicBuilderTerminatePolicy,
+  type WorkflowDynamicBuildMode,
   type WorkflowStartNodeConfig,
   type WorkflowReminderChannel,
   type WorkflowSubprocessNodeConfig,
@@ -25,6 +30,7 @@ export type WorkflowNodeConfigRecord = {
   start: WorkflowStartNodeConfig
   approver: WorkflowApproverNodeConfig
   subprocess: WorkflowSubprocessNodeConfig
+  dynamicBuilder: WorkflowDynamicBuilderNodeConfig
   condition: WorkflowConditionNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
@@ -125,6 +131,16 @@ const defaultSubprocessConfig: WorkflowSubprocessNodeConfig = {
   outputMappings: [],
 }
 
+const defaultDynamicBuilderConfig: WorkflowDynamicBuilderNodeConfig = {
+  buildMode: 'APPROVER_TASKS',
+  sourceMode: 'RULE',
+  ruleExpression: '',
+  manualTemplateCode: '',
+  appendPolicy: 'SERIAL_AFTER_CURRENT',
+  maxGeneratedCount: 1,
+  terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+}
+
 const defaultStartConfig: WorkflowStartNodeConfig = {
   initiatorEditable: true,
 }
@@ -202,6 +218,36 @@ function normalizeReminderChannels(value: unknown): WorkflowReminderChannel[] {
   return channels.length > 0 ? channels : [...defaultApproverConfig.reminderPolicy.channels]
 }
 
+function normalizeDynamicBuilderBuildMode(
+  value: unknown
+): WorkflowDynamicBuildMode {
+  return value === 'SUBPROCESS_CALLS' ? 'SUBPROCESS_CALLS' : 'APPROVER_TASKS'
+}
+
+function normalizeDynamicBuilderSourceMode(
+  value: unknown
+): WorkflowDynamicBuilderSourceMode {
+  return value === 'MANUAL_TEMPLATE' ? 'MANUAL_TEMPLATE' : 'RULE'
+}
+
+function normalizeDynamicBuilderAppendPolicy(
+  value: unknown
+): WorkflowDynamicBuilderAppendPolicy {
+  if (value === 'PARALLEL_WITH_CURRENT' || value === 'SERIAL_BEFORE_NEXT') {
+    return value
+  }
+
+  return 'SERIAL_AFTER_CURRENT'
+}
+
+function normalizeDynamicBuilderTerminatePolicy(
+  value: unknown
+): WorkflowDynamicBuilderTerminatePolicy {
+  return value === 'TERMINATE_PARENT_AND_GENERATED'
+    ? 'TERMINATE_PARENT_AND_GENERATED'
+    : 'TERMINATE_GENERATED_ONLY'
+}
+
 // 根据节点类型返回默认配置，设计器初始化会用到。
 export function defaultNodeConfig<K extends WorkflowNodeKind>(
   kind: K
@@ -213,6 +259,8 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
       return defaultApproverConfig as WorkflowNodeConfigMap[K]
     case 'subprocess':
       return defaultSubprocessConfig as WorkflowNodeConfigMap[K]
+    case 'dynamic-builder':
+      return defaultDynamicBuilderConfig as WorkflowNodeConfigMap[K]
     case 'condition':
       return defaultConditionConfig as WorkflowNodeConfigMap[K]
     case 'cc':
@@ -236,6 +284,8 @@ export function toneForKind(kind: WorkflowNodeKind): WorkflowNodeTone {
       return 'brand'
     case 'subprocess':
       return 'brand'
+    case 'dynamic-builder':
+      return 'brand'
     case 'condition':
       return 'warning'
     case 'timer':
@@ -256,6 +306,8 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
       return '审批节点'
     case 'subprocess':
       return '主流程调用已发布子流程'
+    case 'dynamic-builder':
+      return '运行时动态生成审批链路'
     case 'condition':
       return '条件分支节点'
     case 'cc':
@@ -280,6 +332,8 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
       return '审批'
     case 'subprocess':
       return '子流程'
+    case 'dynamic-builder':
+      return '动态构建'
     case 'condition':
       return '条件'
     case 'cc':
@@ -437,6 +491,22 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
             }))
             .filter((item) => item.source && item.target)
         : [],
+    } as WorkflowNodeConfigMap[K]
+  }
+
+  if (kind === 'dynamic-builder') {
+    const value = config as Partial<WorkflowDynamicBuilderNodeConfig> | null | undefined
+    return {
+      buildMode: normalizeDynamicBuilderBuildMode(value?.buildMode),
+      sourceMode: normalizeDynamicBuilderSourceMode(value?.sourceMode),
+      ruleExpression: value?.ruleExpression ? String(value.ruleExpression) : '',
+      manualTemplateCode: value?.manualTemplateCode ? String(value.manualTemplateCode) : '',
+      appendPolicy: normalizeDynamicBuilderAppendPolicy(value?.appendPolicy),
+      maxGeneratedCount: normalizeNumber(
+        value?.maxGeneratedCount,
+        defaultDynamicBuilderConfig.maxGeneratedCount
+      ),
+      terminatePolicy: normalizeDynamicBuilderTerminatePolicy(value?.terminatePolicy),
     } as WorkflowNodeConfigMap[K]
   }
 

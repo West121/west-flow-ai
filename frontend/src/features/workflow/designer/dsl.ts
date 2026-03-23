@@ -19,6 +19,7 @@ export type ProcessDefinitionDslNodeType =
   | 'start'
   | 'approver'
   | 'subprocess'
+  | 'dynamic_builder'
   | 'cc'
   | 'timer'
   | 'trigger'
@@ -97,6 +98,8 @@ function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
     case 'condition':
     case 'end':
       return kind
+    case 'dynamic-builder':
+      return 'dynamic_builder'
     case 'parallel':
       return 'parallel_split'
     default:
@@ -115,6 +118,8 @@ function nodeKindFor(type: ProcessDefinitionDslNodeType) {
     case 'timer':
     case 'trigger':
       return type
+    case 'dynamic_builder':
+      return 'dynamic-builder'
     default:
       return type
   }
@@ -127,6 +132,7 @@ function toneFor(type: ProcessDefinitionDslNodeType) {
       return 'success'
     case 'approver':
     case 'subprocess':
+    case 'dynamic_builder':
       return 'brand'
     case 'condition':
       return 'warning'

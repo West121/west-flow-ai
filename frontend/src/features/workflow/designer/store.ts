@@ -35,17 +35,17 @@ import {
 function createInitialSnapshot(): WorkflowSnapshot {
   // 设计器默认先放一个最小可编辑链路，方便直接进入配置。
   const start = createWorkflowNode(
-    workflowNodeTemplates[0],
+    findTemplate('start'),
     'node-start',
     { x: 220, y: 48 }
   )
   const approver = createWorkflowNode(
-    workflowNodeTemplates[1],
+    findTemplate('approver'),
     'node-approver',
     { x: 220, y: 220 }
   )
   const end = createWorkflowNode(
-    workflowNodeTemplates[5],
+    findTemplate('end'),
     'node-end',
     { x: 220, y: 392 }
   )
@@ -112,6 +112,16 @@ function resolveNextNodeSequence(nodes: WorkflowNode[]) {
   }
 
   return nextSequence + 1
+}
+
+// 按 kind 查模板，避免模板顺序变化后拿错默认节点。
+function findTemplate(kind: WorkflowNodeTemplate['kind']) {
+  const template = workflowNodeTemplates.find((item) => item.kind === kind)
+  if (!template) {
+    throw new Error(`Missing workflow node template: ${kind}`)
+  }
+
+  return template
 }
 
 type WorkflowDesignerState = {

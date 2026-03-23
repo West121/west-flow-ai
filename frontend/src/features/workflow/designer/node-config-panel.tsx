@@ -31,6 +31,10 @@ import {
   type WorkflowApproverApprovalPolicyType,
   type WorkflowApproverAssignmentMode,
   type WorkflowCcTargetMode,
+  type WorkflowDynamicBuilderAppendPolicy,
+  type WorkflowDynamicBuilderSourceMode,
+  type WorkflowDynamicBuilderTerminatePolicy,
+  type WorkflowDynamicBuildMode,
   type WorkflowEdge,
   type WorkflowNode,
   type WorkflowReapprovePolicy,
@@ -102,6 +106,27 @@ const subprocessChildFinishPolicies = [
   { value: 'TERMINATE_PARENT', label: '子流程完成后终止父流程' },
 ] satisfies Array<{ value: WorkflowSubprocessChildFinishPolicy; label: string }>
 
+const dynamicBuilderBuildModes = [
+  { value: 'APPROVER_TASKS', label: '生成审批任务' },
+  { value: 'SUBPROCESS_CALLS', label: '生成子流程调用' },
+] satisfies Array<{ value: WorkflowDynamicBuildMode; label: string }>
+
+const dynamicBuilderSourceModes = [
+  { value: 'RULE', label: '规则生成' },
+  { value: 'MANUAL_TEMPLATE', label: '人工模板' },
+] satisfies Array<{ value: WorkflowDynamicBuilderSourceMode; label: string }>
+
+const dynamicBuilderAppendPolicies = [
+  { value: 'SERIAL_AFTER_CURRENT', label: '当前节点后串行追加' },
+  { value: 'PARALLEL_WITH_CURRENT', label: '与当前节点并行追加' },
+  { value: 'SERIAL_BEFORE_NEXT', label: '当前节点前串行插入' },
+] satisfies Array<{ value: WorkflowDynamicBuilderAppendPolicy; label: string }>
+
+const dynamicBuilderTerminatePolicies = [
+  { value: 'TERMINATE_GENERATED_ONLY', label: '仅终止生成结构' },
+  { value: 'TERMINATE_PARENT_AND_GENERATED', label: '级联终止父节点与生成结构' },
+] satisfies Array<{ value: WorkflowDynamicBuilderTerminatePolicy; label: string }>
+
 const reminderChannels = [
   { value: 'IN_APP', label: '站内信' },
   { value: 'EMAIL', label: '邮件' },
@@ -136,6 +161,7 @@ const nodeConfigFormSchema = z
       'start',
       'approver',
       'subprocess',
+      'dynamic-builder',
       'condition',
       'cc',
       'timer',
@@ -202,6 +228,22 @@ const nodeConfigFormSchema = z
       childFinishPolicy: z.enum(['RETURN_TO_PARENT', 'TERMINATE_PARENT']),
       inputMappingsJson: z.string(),
       outputMappingsJson: z.string(),
+    }),
+    dynamicBuilder: z.object({
+      buildMode: z.enum(['APPROVER_TASKS', 'SUBPROCESS_CALLS']),
+      sourceMode: z.enum(['RULE', 'MANUAL_TEMPLATE']),
+      ruleExpression: z.string(),
+      manualTemplateCode: z.string(),
+      appendPolicy: z.enum([
+        'SERIAL_AFTER_CURRENT',
+        'PARALLEL_WITH_CURRENT',
+        'SERIAL_BEFORE_NEXT',
+      ]),
+      maxGeneratedCount: z.string(),
+      terminatePolicy: z.enum([
+        'TERMINATE_GENERATED_ONLY',
+        'TERMINATE_PARENT_AND_GENERATED',
+      ]),
     }),
     cc: z.object({
       targetMode: z.enum(['USER', 'ROLE', 'DEPARTMENT']),
@@ -519,6 +561,44 @@ const nodeConfigFormSchema = z
       }
     }
 
+    if (values.kind === 'dynamic-builder') {
+      if (values.dynamicBuilder.sourceMode === 'RULE' && !values.dynamicBuilder.ruleExpression.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '规则生成需要填写规则表达式',
+          path: ['dynamicBuilder', 'ruleExpression'],
+        })
+      }
+
+      if (
+        values.dynamicBuilder.sourceMode === 'MANUAL_TEMPLATE' &&
+        !values.dynamicBuilder.manualTemplateCode.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '人工模板需要填写模板编码',
+          path: ['dynamicBuilder', 'manualTemplateCode'],
+        })
+      }
+
+      if (!values.dynamicBuilder.maxGeneratedCount.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '请输入最大生成数量',
+          path: ['dynamicBuilder', 'maxGeneratedCount'],
+        })
+      } else {
+        const maxGeneratedCount = Number(values.dynamicBuilder.maxGeneratedCount)
+        if (!Number.isFinite(maxGeneratedCount) || maxGeneratedCount <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '最大生成数量必须是大于 0 的数字',
+            path: ['dynamicBuilder', 'maxGeneratedCount'],
+          })
+        }
+      }
+    }
+
     if (values.kind === 'timer') {
       if (values.timer.scheduleType === 'ABSOLUTE_TIME' && !values.timer.runAt.trim()) {
         ctx.addIssue({
@@ -785,6 +865,26 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
         2
       ),
     },
+    dynamicBuilder: {
+      buildMode:
+        config.buildMode === 'SUBPROCESS_CALLS' ? 'SUBPROCESS_CALLS' : 'APPROVER_TASKS',
+      sourceMode: config.sourceMode === 'MANUAL_TEMPLATE' ? 'MANUAL_TEMPLATE' : 'RULE',
+      ruleExpression: String(config.ruleExpression ?? ''),
+      manualTemplateCode: String(config.manualTemplateCode ?? ''),
+      appendPolicy:
+        config.appendPolicy === 'PARALLEL_WITH_CURRENT' ||
+        config.appendPolicy === 'SERIAL_BEFORE_NEXT'
+          ? config.appendPolicy
+          : 'SERIAL_AFTER_CURRENT',
+      maxGeneratedCount:
+        config.maxGeneratedCount === null || config.maxGeneratedCount === undefined
+          ? '1'
+          : String(config.maxGeneratedCount),
+      terminatePolicy:
+        config.terminatePolicy === 'TERMINATE_PARENT_AND_GENERATED'
+          ? 'TERMINATE_PARENT_AND_GENERATED'
+          : 'TERMINATE_GENERATED_ONLY',
+    },
     cc: {
       targetMode: (targets.mode as WorkflowCcTargetMode) ?? 'USER',
       userIds: joinListValue(
@@ -998,6 +1098,18 @@ function buildNodePatch(values: NodeConfigFormValues) {
           outputMappings: parseVariableMappings(values.subprocess.outputMappingsJson),
         },
       }
+    case 'dynamic-builder':
+      return {
+        config: {
+          buildMode: values.dynamicBuilder.buildMode,
+          sourceMode: values.dynamicBuilder.sourceMode,
+          ruleExpression: values.dynamicBuilder.ruleExpression.trim(),
+          manualTemplateCode: values.dynamicBuilder.manualTemplateCode.trim(),
+          appendPolicy: values.dynamicBuilder.appendPolicy,
+          maxGeneratedCount: parseNumber(values.dynamicBuilder.maxGeneratedCount),
+          terminatePolicy: values.dynamicBuilder.terminatePolicy,
+        },
+      }
     case 'cc':
       return {
         config: {
@@ -1138,6 +1250,15 @@ export function NodeConfigPanel({
             inputMappingsJson: '[]',
             outputMappingsJson: '[]',
           },
+          dynamicBuilder: {
+            buildMode: 'APPROVER_TASKS',
+            sourceMode: 'RULE',
+            ruleExpression: '',
+            manualTemplateCode: '',
+            appendPolicy: 'SERIAL_AFTER_CURRENT',
+            maxGeneratedCount: '1',
+            terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+          },
           cc: {
             targetMode: 'USER',
             userIds: '',
@@ -1196,6 +1317,10 @@ export function NodeConfigPanel({
   const selectedNodeFormVersion = useWatch({
     control: form.control,
     name: 'approver.nodeFormVersion',
+  })
+  const selectedDynamicBuilderSourceMode = useWatch({
+    control: form.control,
+    name: 'dynamicBuilder.sourceMode',
   })
   const selectedCcMode = useWatch({ control: form.control, name: 'cc.targetMode' })
   const selectedBranches = useWatch({
@@ -1513,6 +1638,165 @@ export function NodeConfigPanel({
                   <FormLabel>输出映射 JSON</FormLabel>
                   <FormControl>
                     <Textarea {...field} rows={4} placeholder='[{\"source\":\"approvedResult\",\"target\":\"purchaseResult\"}]' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        ) : null}
+
+        {selectedKind === 'dynamic-builder' ? (
+          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
+            <div className='flex items-center gap-2 text-sm font-medium'>
+              <Check className='size-4 text-primary' />
+              动态构建节点
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.buildMode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>构建模式</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择构建模式' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dynamicBuilderBuildModes.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.sourceMode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>来源模式</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择来源模式' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dynamicBuilderSourceModes.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {selectedDynamicBuilderSourceMode === 'RULE' ? (
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.ruleExpression'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>规则表达式</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} rows={4} placeholder='${amount > 1000}' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+
+            {selectedDynamicBuilderSourceMode === 'MANUAL_TEMPLATE' ? (
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.manualTemplateCode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>模板编码</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='append_leave_audit' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.appendPolicy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>追加策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择追加策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dynamicBuilderAppendPolicies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.maxGeneratedCount'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>最大生成数量</FormLabel>
+                    <FormControl>
+                      <Input {...field} type='number' min='1' placeholder='1' />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name='dynamicBuilder.terminatePolicy'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>终止策略</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue placeholder='请选择终止策略' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {dynamicBuilderTerminatePolicies.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

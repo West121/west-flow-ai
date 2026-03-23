@@ -52,6 +52,14 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
     icon: GitPullRequestArrow,
   },
   {
+    kind: 'dynamic-builder',
+    label: '动态构建',
+    description: '运行时按规则生成追加审批链路',
+    tone: 'brand',
+    accent: 'from-fuchsia-500/20 to-fuchsia-500/5',
+    icon: GitBranch,
+  },
+  {
     kind: 'condition',
     label: '条件分支',
     description: '金额、部门、字段表达式路由',

@@ -101,11 +101,37 @@ function buildSubprocessNode(): WorkflowNode {
   }
 }
 
+function buildDynamicBuilderNode(): WorkflowNode {
+  return {
+    id: 'dynamic_1',
+    type: 'workflow',
+    position: { x: 100, y: 100 },
+    data: {
+      kind: 'dynamic-builder',
+      label: '动态构建',
+      description: '运行时生成追加审批链路',
+      tone: 'brand',
+      config: {
+        buildMode: 'APPROVER_TASKS',
+        sourceMode: 'MANUAL_TEMPLATE',
+        ruleExpression: '',
+        manualTemplateCode: 'append_purchase_review',
+        appendPolicy: 'SERIAL_AFTER_CURRENT',
+        maxGeneratedCount: 1,
+        terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+      } as never,
+    },
+  }
+}
+
 const edges: WorkflowEdge[] = []
 
 describe('workflow designer node config panel', () => {
   it('exposes subprocess node template in the palette', () => {
     expect(workflowNodeTemplates.some((template) => template.kind === 'subprocess')).toBe(true)
+    expect(
+      workflowNodeTemplates.some((template) => template.kind === 'dynamic-builder')
+    ).toBe(true)
   })
 
   it('submits timer node automation settings', async () => {
@@ -211,6 +237,42 @@ describe('workflow designer node config panel', () => {
           businessBindingMode: 'OVERRIDE',
           terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
           childFinishPolicy: 'TERMINATE_PARENT',
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('hydrates and submits dynamic builder fields back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(<NodeConfigPanel node={buildDynamicBuilderNode()} edges={edges} onApply={onApply} />)
+
+    expect(screen.getByText('动态构建节点')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('append_purchase_review')).toBeInTheDocument()
+    expect(screen.getByRole('spinbutton', { name: '最大生成数量' })).toHaveValue(1)
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: '最大生成数量' }), {
+      target: { value: '2' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: '模板编码' }), {
+      target: { value: 'append_leave_chain' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'dynamic_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          buildMode: 'APPROVER_TASKS',
+          sourceMode: 'MANUAL_TEMPLATE',
+          ruleExpression: '',
+          manualTemplateCode: 'append_leave_chain',
+          appendPolicy: 'SERIAL_AFTER_CURRENT',
+          maxGeneratedCount: 2,
+          terminatePolicy: 'TERMINATE_GENERATED_ONLY',
         }),
       }),
       undefined

@@ -5,6 +5,7 @@ export type WorkflowNodeKind =
   | 'start'
   | 'approver'
   | 'subprocess'
+  | 'dynamic-builder'
   | 'condition'
   | 'cc'
   | 'timer'
@@ -61,6 +62,26 @@ export type WorkflowSubprocessTerminatePolicy =
 export type WorkflowSubprocessChildFinishPolicy =
   | 'RETURN_TO_PARENT'
   | 'TERMINATE_PARENT'
+
+export type WorkflowDynamicBuildMode = 'APPROVER_TASKS' | 'SUBPROCESS_CALLS'
+export type WorkflowDynamicBuilderSourceMode = 'RULE' | 'MANUAL_TEMPLATE'
+export type WorkflowDynamicBuilderAppendPolicy =
+  | 'SERIAL_AFTER_CURRENT'
+  | 'PARALLEL_WITH_CURRENT'
+  | 'SERIAL_BEFORE_NEXT'
+export type WorkflowDynamicBuilderTerminatePolicy =
+  | 'TERMINATE_GENERATED_ONLY'
+  | 'TERMINATE_PARENT_AND_GENERATED'
+
+export type WorkflowDynamicBuilderNodeConfig = {
+  buildMode: WorkflowDynamicBuildMode
+  sourceMode: WorkflowDynamicBuilderSourceMode
+  ruleExpression: string
+  manualTemplateCode: string
+  appendPolicy: WorkflowDynamicBuilderAppendPolicy
+  maxGeneratedCount: number | null
+  terminatePolicy: WorkflowDynamicBuilderTerminatePolicy
+}
 
 export type WorkflowCcTargetMode = 'USER' | 'ROLE' | 'DEPARTMENT'
 export type WorkflowConditionExpressionMode = 'EXPRESSION' | 'FIELD_COMPARE'
@@ -182,6 +203,7 @@ export type WorkflowNodeConfigMap = {
   start: WorkflowStartNodeConfig
   approver: WorkflowApproverNodeConfig
   subprocess: WorkflowSubprocessNodeConfig
+  'dynamic-builder': WorkflowDynamicBuilderNodeConfig
   condition: WorkflowConditionNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig

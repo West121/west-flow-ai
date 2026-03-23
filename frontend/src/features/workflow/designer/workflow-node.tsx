@@ -44,6 +44,8 @@ function renderIcon(kind: WorkflowNodeData['kind']) {
       return <UserRoundCheck className='size-5' />
     case 'condition':
       return <GitBranch className='size-5' />
+    case 'dynamic-builder':
+      return <GitBranch className='size-5' />
     case 'parallel':
       return <GitMerge className='size-5' />
     case 'cc':

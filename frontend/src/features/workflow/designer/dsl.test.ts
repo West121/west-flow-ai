@@ -90,6 +90,29 @@ const snapshot: WorkflowSnapshot = {
   selectedNodeId: 'approve_1',
 }
 
+function buildDynamicBuilderNode(): WorkflowNode {
+  return {
+    id: 'dynamic_1',
+    type: 'workflow',
+    position: { x: 320, y: 100 },
+    data: {
+      kind: 'dynamic-builder',
+      label: '动态构建',
+      description: '运行时生成追加审批链路',
+      tone: 'brand',
+      config: {
+        buildMode: 'SUBPROCESS_CALLS',
+        sourceMode: 'MANUAL_TEMPLATE',
+        ruleExpression: '',
+        manualTemplateCode: 'append_purchase_review',
+        appendPolicy: 'PARALLEL_WITH_CURRENT',
+        maxGeneratedCount: 2,
+        terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
+      } as never,
+    },
+  }
+}
+
 describe('workflow designer dsl mapping', () => {
   it('maps the canvas snapshot to the frozen process definition DSL', () => {
     const dsl = workflowSnapshotToProcessDefinitionDsl(snapshot, {
@@ -252,6 +275,34 @@ describe('workflow designer dsl mapping', () => {
     })
   })
 
+  it('persists dynamic builder fields in the DSL config', () => {
+    const snapshotWithDynamicBuilder = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1' ? buildDynamicBuilderNode() : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithDynamicBuilder, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[1]?.type).toBe('dynamic_builder')
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      buildMode: 'SUBPROCESS_CALLS',
+      sourceMode: 'MANUAL_TEMPLATE',
+      manualTemplateCode: 'append_purchase_review',
+      appendPolicy: 'PARALLEL_WITH_CURRENT',
+      maxGeneratedCount: 2,
+      terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
+    })
+  })
+
   it('hydrates the designer snapshot from the persisted process definition detail', () => {
     const hydrated = processDefinitionDetailToWorkflowSnapshot({
       processDefinitionId: 'oa_leave:1',
@@ -361,6 +412,68 @@ describe('workflow designer dsl mapping', () => {
         mode: 'ROLE',
         roleCodes: ['role_dept_manager'],
       },
+    })
+  })
+
+  it('hydrates dynamic builder nodes from the persisted process definition detail', () => {
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:3',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 3,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl: {
+        dslVersion: '1.0.0',
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        category: 'OA',
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
+        formFields: [],
+        settings: {
+          allowWithdraw: true,
+          allowUrge: true,
+          allowTransfer: true,
+        },
+        nodes: [
+          {
+            id: 'dynamic_1',
+            type: 'dynamic_builder',
+            name: '动态构建',
+            description: '运行时生成追加审批链路',
+            position: { x: 320, y: 100 },
+            config: {
+              buildMode: 'APPROVER_TASKS',
+              sourceMode: 'RULE',
+              ruleExpression: '${amount > 1000}',
+              manualTemplateCode: '',
+              appendPolicy: 'SERIAL_AFTER_CURRENT',
+              maxGeneratedCount: 1,
+              terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+            },
+            ui: {
+              width: 220,
+              height: 96,
+            },
+          },
+        ],
+        edges: [],
+      },
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.nodes).toHaveLength(1)
+    expect(hydrated.nodes[0]?.data.kind).toBe('dynamic-builder')
+    expect(hydrated.nodes[0]?.data.config).toMatchObject({
+      buildMode: 'APPROVER_TASKS',
+      sourceMode: 'RULE',
+      ruleExpression: '${amount > 1000}',
+      appendPolicy: 'SERIAL_AFTER_CURRENT',
+      maxGeneratedCount: 1,
+      terminatePolicy: 'TERMINATE_GENERATED_ONLY',
     })
   })
 
