@@ -66,6 +66,7 @@ public class DbAiCopilotService implements AiCopilotService {
     private final AiGatewayService aiGatewayService;
     private final AiToolExecutionService aiToolExecutionService;
     private final AiCopilotRuntimeService aiCopilotRuntimeService;
+    private final AiRegistryCatalogService aiRegistryCatalogService;
 
     public DbAiCopilotService(
             AiConversationMapper aiConversationMapper,
@@ -76,7 +77,8 @@ public class DbAiCopilotService implements AiCopilotService {
             ObjectMapper objectMapper,
             AiGatewayService aiGatewayService,
             AiToolExecutionService aiToolExecutionService,
-            AiCopilotRuntimeService aiCopilotRuntimeService
+            AiCopilotRuntimeService aiCopilotRuntimeService,
+            AiRegistryCatalogService aiRegistryCatalogService
     ) {
         this.aiConversationMapper = aiConversationMapper;
         this.aiMessageMapper = aiMessageMapper;
@@ -87,6 +89,7 @@ public class DbAiCopilotService implements AiCopilotService {
         this.aiGatewayService = aiGatewayService;
         this.aiToolExecutionService = aiToolExecutionService;
         this.aiCopilotRuntimeService = aiCopilotRuntimeService;
+        this.aiRegistryCatalogService = aiRegistryCatalogService;
     }
 
     /**
@@ -651,43 +654,40 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     private AiToolCallRequest buildReadToolCall(String content, String domain, List<String> skillIds, String routePath) {
-        String normalizedContent = content == null ? "" : content;
-        if (normalizedContent.contains("流程定义") || normalizedContent.contains("流程列表")) {
-            return new AiToolCallRequest(
-                    "workflow.definition.list",
-                    AiToolType.READ,
-                    AiToolSource.PLATFORM,
-                    Map.of("keyword", normalizedContent)
-            );
-        }
-        if (normalizedContent.contains("统计") || normalizedContent.contains("报表") || normalizedContent.contains("指标")) {
-            return new AiToolCallRequest(
-                    "stats.query",
-                    AiToolType.READ,
-                    AiToolSource.PLATFORM,
-                    Map.of("keyword", normalizedContent, "domain", domain)
-            );
-        }
-        if (skillIds.contains("approval-trace") || normalizedContent.contains("轨迹") || normalizedContent.contains("路径")
-                || normalizedContent.contains("待办") || routePath.contains("/workbench/todos/")) {
-            return new AiToolCallRequest(
-                    "task.query",
-                    AiToolType.READ,
-                    AiToolSource.PLATFORM,
-                    Map.of("keyword", extractTaskKeyword(routePath, normalizedContent), "domain", domain, "view", "TODO")
-            );
-        }
-        if (skillIds.contains("plm-change-summary") || "PLM".equalsIgnoreCase(domain)
-                || normalizedContent.contains("PLM") || normalizedContent.contains("ECR") || normalizedContent.contains("ECO")
-                || normalizedContent.contains("物料") || routePath.startsWith("/plm/")) {
-            return new AiToolCallRequest(
-                    "plm.bill.query",
-                    AiToolType.READ,
-                    AiToolSource.PLATFORM,
-                    Map.of("keyword", extractBillKeyword(routePath, normalizedContent), "domain", domain)
-            );
-        }
-        return null;
+        return aiRegistryCatalogService.matchReadTool(
+                        currentUserId(),
+                        content,
+                        domain,
+                        skillIds,
+                        routePath
+                )
+                .map(tool -> switch (tool.toolCode()) {
+                    case "workflow.definition.list" -> new AiToolCallRequest(
+                            tool.toolCode(),
+                            tool.toolType(),
+                            tool.toolSource(),
+                            Map.of("keyword", content == null ? "" : content)
+                    );
+                    case "stats.query" -> new AiToolCallRequest(
+                            tool.toolCode(),
+                            tool.toolType(),
+                            tool.toolSource(),
+                            Map.of("keyword", content == null ? "" : content, "domain", domain)
+                    );
+                    case "plm.bill.query", "plm.change.summary" -> new AiToolCallRequest(
+                            tool.toolCode(),
+                            tool.toolType(),
+                            tool.toolSource(),
+                            Map.of("keyword", extractBillKeyword(routePath, content == null ? "" : content), "domain", domain)
+                    );
+                    default -> new AiToolCallRequest(
+                            tool.toolCode(),
+                            tool.toolType(),
+                            tool.toolSource(),
+                            Map.of("keyword", extractTaskKeyword(routePath, content == null ? "" : content), "domain", domain, "view", "TODO")
+                    );
+                })
+                .orElse(null);
     }
 
     private AiMessageBlockResponse confirmationBlock(AiToolCallResultResponse result) {

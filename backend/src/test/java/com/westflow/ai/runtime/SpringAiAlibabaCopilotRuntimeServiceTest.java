@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.westflow.ai.gateway.AiGatewayRequest;
 import com.westflow.ai.gateway.AiGatewayResponse;
+import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,10 +13,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClient.CallResponseSpec;
 import org.springframework.ai.chat.client.ChatClient.ChatClientRequestSpec;
+import org.springframework.ai.tool.ToolCallbackProvider;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -26,6 +30,7 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
     private SupervisorAgent supervisorAgent;
     private LlmRoutingAgent routingAgent;
     private ChatClient chatClient;
+    private AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider;
     private AiCopilotRuntimeService runtimeService;
 
     @BeforeEach
@@ -33,7 +38,16 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         supervisorAgent = mock(SupervisorAgent.class);
         routingAgent = mock(LlmRoutingAgent.class);
         chatClient = mock(ChatClient.class);
-        runtimeService = new SpringAiAlibabaCopilotRuntimeService(chatClient, supervisorAgent, routingAgent);
+        aiRuntimeToolCallbackProvider = mock(AiRuntimeToolCallbackProvider.class);
+        when(aiRuntimeToolCallbackProvider.createProvider(anyString(), anyString()))
+                .thenReturn(ToolCallbackProvider.from());
+        runtimeService = new SpringAiAlibabaCopilotRuntimeService(
+                chatClient,
+                supervisorAgent,
+                routingAgent,
+                null,
+                aiRuntimeToolCallbackProvider
+        );
     }
 
     @Test
@@ -71,6 +85,8 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         when(chatClient.prompt()).thenReturn(requestSpec);
         when(requestSpec.system(anyString())).thenReturn(requestSpec);
         when(requestSpec.user(anyString())).thenReturn(requestSpec);
+        when(requestSpec.toolCallbacks(any(ToolCallbackProvider.class))).thenReturn(requestSpec);
+        when(requestSpec.toolContext(any())).thenReturn(requestSpec);
         when(requestSpec.call()).thenReturn(callResponseSpec);
         when(callResponseSpec.content()).thenReturn("chat-client-result");
 
@@ -80,5 +96,6 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         );
 
         assertThat(result).isEqualTo("chat-client-result");
+        verify(aiRuntimeToolCallbackProvider).createProvider("usr_001", "OA");
     }
 }

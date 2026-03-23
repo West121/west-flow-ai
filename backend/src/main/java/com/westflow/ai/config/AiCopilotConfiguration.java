@@ -10,6 +10,7 @@ import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.ai.runtime.SpringAiAlibabaCopilotRuntimeService;
 import com.westflow.ai.orchestration.AiOrchestrationPlanner;
 import com.westflow.ai.service.AiRegistryCatalogService;
+import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
 import com.westflow.ai.service.AiToolExecutionService;
 import com.westflow.ai.tool.AiToolDefinition;
 import com.westflow.ai.tool.AiToolRegistry;
@@ -339,13 +340,15 @@ public class AiCopilotConfiguration {
             ChatClient aiCopilotChatClient,
             SupervisorAgent supervisorAgent,
             LlmRoutingAgent routingAgent,
-            AiRegistryCatalogService aiRegistryCatalogService
+            AiRegistryCatalogService aiRegistryCatalogService,
+            AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider
     ) {
         return new SpringAiAlibabaCopilotRuntimeService(
                 aiCopilotChatClient,
                 supervisorAgent,
                 routingAgent,
-                aiRegistryCatalogService
+                aiRegistryCatalogService,
+                aiRuntimeToolCallbackProvider
         );
     }
 

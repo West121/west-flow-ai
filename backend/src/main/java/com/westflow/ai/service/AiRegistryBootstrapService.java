@@ -89,17 +89,17 @@ public class AiRegistryBootstrapService {
     }
 
     private void syncTools() {
-        upsertTool(new ToolSeed("ai_tool_001", "workflow.definition.list", "查询流程定义", "PLATFORM", "READ", "ai:copilot:open", "{\"resource\":\"process-definition\"}"));
-        upsertTool(new ToolSeed("ai_tool_002", "process.start", "发起流程", "PLATFORM", "WRITE", "ai:process:start", "{\"resource\":\"process-instance\",\"confirmRequired\":true}"));
-        upsertTool(new ToolSeed("ai_tool_003", "task.query", "查询待办", "PLATFORM", "READ", "ai:copilot:open", "{\"resource\":\"task\"}"));
-        upsertTool(new ToolSeed("ai_tool_004", "task.handle", "处理待办", "PLATFORM", "WRITE", "ai:task:handle", "{\"resource\":\"task-action\",\"confirmRequired\":true}"));
-        upsertTool(new ToolSeed("ai_tool_005", "stats.query", "查询统计", "PLATFORM", "READ", "ai:stats:query", "{\"resource\":\"stats\"}"));
-        upsertTool(new ToolSeed("ai_tool_006", "plm.bill.query", "查询 PLM 单据", "PLATFORM", "READ", "ai:plm:assist", "{\"resource\":\"plm-bill\"}"));
-        upsertTool(new ToolSeed("ai_tool_legacy_001", "workflow.todo.list", "查询待办", "PLATFORM", "READ", "ai:copilot:open", "{\"aliasOf\":\"task.query\"}"));
-        upsertTool(new ToolSeed("ai_tool_legacy_002", "workflow.trace.summary", "查询待办", "SKILL", "READ", "ai:copilot:open", "{\"aliasOf\":\"task.query\"}"));
-        upsertTool(new ToolSeed("ai_tool_legacy_003", "plm.change.summary", "查询 PLM 单据", "SKILL", "READ", "ai:plm:assist", "{\"aliasOf\":\"plm.bill.query\"}"));
-        upsertTool(new ToolSeed("ai_tool_legacy_004", "workflow.task.complete", "完成待办", "AGENT", "WRITE", "ai:task:handle", "{\"aliasOf\":\"task.handle\",\"action\":\"COMPLETE\"}"));
-        upsertTool(new ToolSeed("ai_tool_legacy_005", "workflow.task.reject", "驳回待办", "AGENT", "WRITE", "ai:task:handle", "{\"aliasOf\":\"task.handle\",\"action\":\"REJECT\"}"));
+        upsertTool(new ToolSeed("ai_tool_001", "workflow.definition.list", "查询流程定义", "PLATFORM", "READ", "ai:copilot:open", "{\"resource\":\"process-definition\",\"businessDomains\":[\"OA\",\"PLM\",\"GENERAL\"],\"triggerKeywords\":[\"流程定义\",\"流程列表\",\"发布记录\",\"流程版本\"],\"routePrefixes\":[\"/workflow/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":70}"));
+        upsertTool(new ToolSeed("ai_tool_002", "process.start", "发起流程", "PLATFORM", "WRITE", "ai:process:start", "{\"resource\":\"process-instance\",\"confirmRequired\":true,\"businessDomains\":[\"OA\",\"PLM\"],\"triggerKeywords\":[\"发起\",\"提交\",\"创建流程\"],\"routePrefixes\":[\"/oa/\",\"/plm/\",\"/workflow/\"],\"priority\":90}"));
+        upsertTool(new ToolSeed("ai_tool_003", "task.query", "查询待办", "PLATFORM", "READ", "ai:copilot:open", "{\"resource\":\"task\",\"businessDomains\":[\"OA\",\"PLM\",\"GENERAL\"],\"triggerKeywords\":[\"待办\",\"轨迹\",\"路径\",\"会签\",\"审批\"],\"routePrefixes\":[\"/workbench/\",\"/oa/\",\"/plm/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":95}"));
+        upsertTool(new ToolSeed("ai_tool_004", "task.handle", "处理待办", "PLATFORM", "WRITE", "ai:task:handle", "{\"resource\":\"task-action\",\"confirmRequired\":true,\"businessDomains\":[\"OA\",\"PLM\"],\"triggerKeywords\":[\"处理\",\"通过\",\"拒绝\",\"驳回\",\"退回\",\"认领\",\"完成\"],\"routePrefixes\":[\"/workbench/\",\"/oa/\",\"/plm/\"],\"priority\":100}"));
+        upsertTool(new ToolSeed("ai_tool_005", "stats.query", "查询统计", "PLATFORM", "READ", "ai:stats:query", "{\"resource\":\"stats\",\"businessDomains\":[\"OA\",\"PLM\",\"GENERAL\"],\"triggerKeywords\":[\"统计\",\"报表\",\"指标\",\"趋势\"],\"routePrefixes\":[\"/workflow/\",\"/system/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":80}"));
+        upsertTool(new ToolSeed("ai_tool_006", "plm.bill.query", "查询 PLM 单据", "PLATFORM", "READ", "ai:plm:assist", "{\"resource\":\"plm-bill\",\"businessDomains\":[\"PLM\"],\"triggerKeywords\":[\"PLM\",\"ECR\",\"ECO\",\"物料\",\"变更\"],\"routePrefixes\":[\"/plm/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":90}"));
+        upsertTool(new ToolSeed("ai_tool_legacy_001", "workflow.todo.list", "查询待办", "PLATFORM", "READ", "ai:copilot:open", "{\"aliasOf\":\"task.query\",\"businessDomains\":[\"OA\",\"PLM\",\"GENERAL\"],\"triggerKeywords\":[\"待办\"],\"routePrefixes\":[\"/workbench/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":60}"));
+        upsertTool(new ToolSeed("ai_tool_legacy_002", "workflow.trace.summary", "查询待办", "SKILL", "READ", "ai:copilot:open", "{\"aliasOf\":\"task.query\",\"businessDomains\":[\"OA\",\"PLM\"],\"triggerKeywords\":[\"轨迹\",\"路径\",\"流程图\",\"会签\"],\"routePrefixes\":[\"/workbench/\",\"/oa/\",\"/plm/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":92}"));
+        upsertTool(new ToolSeed("ai_tool_legacy_003", "plm.change.summary", "查询 PLM 单据", "SKILL", "READ", "ai:plm:assist", "{\"aliasOf\":\"plm.bill.query\",\"businessDomains\":[\"PLM\"],\"triggerKeywords\":[\"PLM\",\"ECR\",\"ECO\",\"物料\",\"变更\"],\"routePrefixes\":[\"/plm/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":91}"));
+        upsertTool(new ToolSeed("ai_tool_legacy_004", "workflow.task.complete", "完成待办", "AGENT", "WRITE", "ai:task:handle", "{\"aliasOf\":\"task.handle\",\"action\":\"COMPLETE\",\"businessDomains\":[\"OA\",\"PLM\"],\"triggerKeywords\":[\"完成\",\"通过\"],\"routePrefixes\":[\"/workbench/\",\"/oa/\",\"/plm/\"],\"priority\":85}"));
+        upsertTool(new ToolSeed("ai_tool_legacy_005", "workflow.task.reject", "驳回待办", "AGENT", "WRITE", "ai:task:handle", "{\"aliasOf\":\"task.handle\",\"action\":\"REJECT\",\"businessDomains\":[\"OA\",\"PLM\"],\"triggerKeywords\":[\"驳回\",\"拒绝\"],\"routePrefixes\":[\"/workbench/\",\"/oa/\",\"/plm/\"],\"priority\":85}"));
     }
 
     private void syncMcps() {

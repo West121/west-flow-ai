@@ -45,6 +45,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 
 /**
  * AI Copilot 服务层测试。
@@ -134,6 +135,28 @@ class AiCopilotServiceTest {
                 mockSupervisorAgent("supervisor-reply"),
                 mockRoutingAgent("routing-reply")
         );
+        AiRegistryCatalogService aiRegistryCatalogService = mock(AiRegistryCatalogService.class);
+        lenient().when(aiRegistryCatalogService.matchReadTool(anyString(), anyString(), anyString(), any(), anyString()))
+                .thenAnswer(invocation -> {
+                    String content = invocation.getArgument(1, String.class);
+                    if (content != null && content.contains("轨迹")) {
+                        return java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                "task.query",
+                                "查询待办",
+                                AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "ai:copilot:open",
+                                List.of("OA", "PLM"),
+                                List.of("轨迹"),
+                                List.of("/workbench/"),
+                                "westflow-internal-mcp",
+                                "",
+                                95,
+                                Map.of()
+                        ));
+                    }
+                    return java.util.Optional.empty();
+                });
         aiCopilotService = new DbAiCopilotService(
                 aiConversationMapper,
                 aiMessageMapper,
@@ -143,7 +166,8 @@ class AiCopilotServiceTest {
                 new ObjectMapper(),
                 new AiGatewayService(new AiOrchestrationPlanner(aiAgentRegistry, aiSkillRegistry)),
                 new AiToolExecutionService(aiToolRegistry),
-                runtimeService
+                runtimeService,
+                aiRegistryCatalogService
         );
     }
 

@@ -6,6 +6,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.westflow.ai.gateway.AiGatewayService;
 import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.ai.service.AiRegistryCatalogService;
+import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
 import com.westflow.ai.tool.AiToolRegistry;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
@@ -29,6 +30,7 @@ class AiCopilotConfigurationTest {
     void shouldCreateSpringAiAndAlibabaRuntimeBeans() {
         ChatModel chatModel = mock(ChatModel.class);
         AiRegistryCatalogService aiRegistryCatalogService = mock(AiRegistryCatalogService.class);
+        AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider = mock(AiRuntimeToolCallbackProvider.class);
 
         ChatClient chatClient = configuration.aiCopilotChatClient(chatModel);
         AiToolRegistry aiToolRegistry = configuration.aiToolRegistry(
@@ -63,7 +65,8 @@ class AiCopilotConfigurationTest {
                 chatClient,
                 supervisorAgent,
                 routingAgent,
-                aiRegistryCatalogService
+                aiRegistryCatalogService,
+                aiRuntimeToolCallbackProvider
         );
 
         assertThat(chatClient).isNotNull();

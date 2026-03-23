@@ -113,6 +113,46 @@ public class AiRegistryCatalogService {
                 .findFirst();
     }
 
+    /**
+     * 列出当前用户在指定业务域可用的读工具。
+     */
+    public List<AiToolCatalogItem> listReadableTools(String userId, String domain) {
+        return listTools(userId).stream()
+                .filter(item -> item.toolType() == AiToolType.READ)
+                .filter(item -> supportsDomain(item.supportedDomains(), domain))
+                .sorted(Comparator.comparingInt(AiToolCatalogItem::priority).reversed())
+                .toList();
+    }
+
+    /**
+     * 查询当前用户可用的 MCP 注册项。
+     */
+    public Optional<AiMcpCatalogItem> findMcp(String userId, String mcpCode) {
+        return listMcps(userId).stream()
+                .filter(item -> item.mcpCode().equals(mcpCode))
+                .findFirst();
+    }
+
+    /**
+     * 结合内容、业务域、技能和页面路径匹配最合适的只读工具。
+     */
+    public Optional<AiToolCatalogItem> matchReadTool(
+            String userId,
+            String content,
+            String domain,
+            List<String> skillIds,
+            String routePath
+    ) {
+        String normalizedContent = content == null ? "" : content.toLowerCase();
+        String normalizedRoutePath = routePath == null ? "" : routePath.toLowerCase();
+        return listReadableTools(userId, domain).stream()
+                .map(item -> new ScoredTool(item, scoreTool(item, normalizedContent, normalizedRoutePath, skillIds)))
+                .filter(scoredTool -> scoredTool.score() > 0)
+                .sorted(Comparator.comparingInt(ScoredTool::score).reversed())
+                .map(ScoredTool::tool)
+                .findFirst();
+    }
+
     private List<AiAgentCatalogItem> listAgents(String userId, String domain) {
         List<String> capabilities = capabilities(userId);
         return aiRegistryMapper.selectEnabledAgentRegistries().stream()
@@ -135,6 +175,14 @@ public class AiRegistryCatalogService {
         List<String> capabilities = capabilities(userId);
         return aiRegistryMapper.selectEnabledToolRegistries().stream()
                 .map(this::toToolCatalogItem)
+                .filter(item -> supportsCapability(capabilities, item.requiredCapabilityCode()))
+                .toList();
+    }
+
+    private List<AiMcpCatalogItem> listMcps(String userId) {
+        List<String> capabilities = capabilities(userId);
+        return aiRegistryMapper.selectEnabledMcpRegistries().stream()
+                .map(this::toMcpCatalogItem)
                 .filter(item -> supportsCapability(capabilities, item.requiredCapabilityCode()))
                 .toList();
     }
@@ -182,6 +230,24 @@ public class AiRegistryCatalogService {
                 row.toolName(),
                 mapToolSource(row.toolCategory()),
                 mapToolType(row.actionMode()),
+                row.requiredCapabilityCode(),
+                readStringList(metadata, "businessDomains"),
+                readStringList(metadata, "triggerKeywords"),
+                readStringList(metadata, "routePrefixes"),
+                readString(metadata, "mcpCode", ""),
+                readString(metadata, "aliasOf", ""),
+                readInt(metadata, "priority", 50),
+                metadata
+        );
+    }
+
+    private AiMcpCatalogItem toMcpCatalogItem(AiRegistryMapper.AiMcpRegistryRow row) {
+        Map<String, Object> metadata = parseMetadata(row.metadataJson());
+        return new AiMcpCatalogItem(
+                row.mcpCode(),
+                row.mcpName(),
+                row.endpointUrl(),
+                row.transportType(),
                 row.requiredCapabilityCode(),
                 metadata
         );
@@ -252,6 +318,39 @@ public class AiRegistryCatalogService {
 
     private boolean supportsDomain(List<String> domains, String domain) {
         return domains.isEmpty() || domain == null || domains.contains(domain);
+    }
+
+    private int scoreTool(
+            AiToolCatalogItem item,
+            String normalizedContent,
+            String normalizedRoutePath,
+            List<String> skillIds
+    ) {
+        int score = item.priority();
+        if (skillIds != null && !skillIds.isEmpty()) {
+            boolean skillMatched = skillIds.stream().anyMatch(skillId -> item.triggerKeywords().stream()
+                    .anyMatch(keyword -> keyword.equalsIgnoreCase(skillId)));
+            if (skillMatched) {
+                score += 60;
+            }
+        }
+        if (!normalizedContent.isBlank()) {
+            boolean keywordMatched = item.triggerKeywords().stream()
+                    .map(String::toLowerCase)
+                    .anyMatch(normalizedContent::contains);
+            if (keywordMatched) {
+                score += 40;
+            }
+        }
+        if (!normalizedRoutePath.isBlank()) {
+            boolean routeMatched = item.routePrefixes().stream()
+                    .map(String::toLowerCase)
+                    .anyMatch(normalizedRoutePath::startsWith);
+            if (routeMatched) {
+                score += 20;
+            }
+        }
+        return score;
     }
 
     private String inferAgentRouteMode(String agentCode) {
@@ -336,7 +435,29 @@ public class AiRegistryCatalogService {
             AiToolSource toolSource,
             AiToolType toolType,
             String requiredCapabilityCode,
+            List<String> supportedDomains,
+            List<String> triggerKeywords,
+            List<String> routePrefixes,
+            String mcpCode,
+            String aliasOf,
+            int priority,
             Map<String, Object> metadata
     ) {
+    }
+
+    /**
+     * MCP 目录项。
+     */
+    public record AiMcpCatalogItem(
+            String mcpCode,
+            String mcpName,
+            String endpointUrl,
+            String transportType,
+            String requiredCapabilityCode,
+            Map<String, Object> metadata
+    ) {
+    }
+
+    private record ScoredTool(AiToolCatalogItem tool, int score) {
     }
 }

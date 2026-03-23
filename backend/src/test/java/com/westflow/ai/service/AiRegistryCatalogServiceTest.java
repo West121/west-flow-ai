@@ -66,4 +66,62 @@ class AiRegistryCatalogServiceTest {
         assertThat(matched.get(0).skillCode()).isEqualTo("workflow-design-skill");
         assertThat(matched.get(0).content()).contains("流程设计技能");
     }
+
+    @Test
+    void shouldMatchReadToolByDomainRouteAndKeywords() {
+        AiRegistryMapper aiRegistryMapper = mock(AiRegistryMapper.class);
+        AuthUserMapper authUserMapper = mock(AuthUserMapper.class);
+
+        when(authUserMapper.selectAiCapabilitiesByUserId("usr_001"))
+                .thenReturn(List.of("ai:copilot:open", "ai:plm:assist"));
+        when(aiRegistryMapper.selectEnabledToolRegistries()).thenReturn(List.of(
+                new AiRegistryMapper.AiToolRegistryRow(
+                        "ai_tool_001",
+                        "task.query",
+                        "查询待办",
+                        "PLATFORM",
+                        "READ",
+                        "ai:copilot:open",
+                        true,
+                        "{\"businessDomains\":[\"OA\",\"PLM\"],\"triggerKeywords\":[\"轨迹\",\"路径\"],\"routePrefixes\":[\"/workbench/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":95}"
+                ),
+                new AiRegistryMapper.AiToolRegistryRow(
+                        "ai_tool_002",
+                        "plm.bill.query",
+                        "查询 PLM 单据",
+                        "PLATFORM",
+                        "READ",
+                        "ai:plm:assist",
+                        true,
+                        "{\"businessDomains\":[\"PLM\"],\"triggerKeywords\":[\"PLM\",\"ECR\",\"物料\"],\"routePrefixes\":[\"/plm/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":90}"
+                )
+        ));
+
+        AiRegistryCatalogService service = new AiRegistryCatalogService(
+                aiRegistryMapper,
+                authUserMapper,
+                new ObjectMapper(),
+                new AiSkillContentLoader()
+        );
+
+        var matchedTraceTool = service.matchReadTool(
+                "usr_001",
+                "帮我总结一下审批轨迹",
+                "PLM",
+                List.of("approval-trace"),
+                "/plm/ecr/create"
+        );
+        var matchedPlmTool = service.matchReadTool(
+                "usr_001",
+                "帮我看看 ECR 变更单",
+                "PLM",
+                List.of("plm-change-summary"),
+                "/plm/ecr/create"
+        );
+
+        assertThat(matchedTraceTool).isPresent();
+        assertThat(matchedTraceTool.get().toolCode()).isEqualTo("task.query");
+        assertThat(matchedPlmTool).isPresent();
+        assertThat(matchedPlmTool.get().toolCode()).isEqualTo("plm.bill.query");
+    }
 }

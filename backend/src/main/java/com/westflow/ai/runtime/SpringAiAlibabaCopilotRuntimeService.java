@@ -6,10 +6,12 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.westflow.ai.gateway.AiGatewayRequest;
 import com.westflow.ai.gateway.AiGatewayResponse;
 import com.westflow.ai.service.AiRegistryCatalogService;
+import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.tool.ToolCallbackProvider;
 
 /**
  * 基于 Spring AI Alibaba 多智能体和 Spring AI ChatClient 的运行时编排服务。
@@ -20,13 +22,14 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
     private final SupervisorAgent supervisorAgent;
     private final LlmRoutingAgent routingAgent;
     private final AiRegistryCatalogService aiRegistryCatalogService;
+    private final AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider;
 
     public SpringAiAlibabaCopilotRuntimeService(
             ChatClient chatClient,
             SupervisorAgent supervisorAgent,
             LlmRoutingAgent routingAgent
     ) {
-        this(chatClient, supervisorAgent, routingAgent, null);
+        this(chatClient, supervisorAgent, routingAgent, null, null);
     }
 
     public SpringAiAlibabaCopilotRuntimeService(
@@ -35,10 +38,21 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             LlmRoutingAgent routingAgent,
             AiRegistryCatalogService aiRegistryCatalogService
     ) {
+        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, null);
+    }
+
+    public SpringAiAlibabaCopilotRuntimeService(
+            ChatClient chatClient,
+            SupervisorAgent supervisorAgent,
+            LlmRoutingAgent routingAgent,
+            AiRegistryCatalogService aiRegistryCatalogService,
+            AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider
+    ) {
         this.chatClient = chatClient;
         this.supervisorAgent = supervisorAgent;
         this.routingAgent = routingAgent;
         this.aiRegistryCatalogService = aiRegistryCatalogService;
+        this.aiRuntimeToolCallbackProvider = aiRuntimeToolCallbackProvider;
     }
 
     /**
@@ -101,15 +115,29 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
 
     private String fallbackByChatClient(AiGatewayRequest request, AiGatewayResponse response) {
         try {
-            return chatClient.prompt()
+            var promptSpec = chatClient.prompt()
                     .system("""
                             你是 West Flow AI Copilot。
                             当前路由模式是 %s，必须遵守“读直执、写必确认”。
                             请直接输出简洁中文回答。
                             """.formatted(response.routeMode()))
-                    .user(buildPrompt(request, response))
-                    .call()
-                    .content();
+                    .user(buildPrompt(request, response));
+            if (aiRuntimeToolCallbackProvider != null) {
+                ToolCallbackProvider callbackProvider = aiRuntimeToolCallbackProvider.createProvider(
+                        request.userId(),
+                        request.domain()
+                );
+                promptSpec = promptSpec
+                        .toolCallbacks(callbackProvider)
+                        .toolContext(Map.of(
+                                "conversationId", request.conversationId(),
+                                "userId", request.userId(),
+                                "domain", request.domain(),
+                                "pageRoute", request.pageRoute() == null ? "" : request.pageRoute(),
+                                "routeMode", response.routeMode()
+                        ));
+            }
+            return promptSpec.call().content();
         } catch (RuntimeException exception) {
             if ("SUPERVISOR".equals(response.routeMode())) {
                 return "已进入 Supervisor 编排链路，待你确认后再执行写操作。";
