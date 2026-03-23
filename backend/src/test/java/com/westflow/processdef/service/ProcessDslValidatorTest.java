@@ -260,6 +260,53 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectSubprocessWithoutCalledProcessKey() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("subprocess_1", "subprocess", Map.of(
+                                "calledVersionPolicy", "LATEST_PUBLISHED",
+                                "businessBindingMode", "INHERIT_PARENT",
+                                "terminatePolicy", "TERMINATE_SUBPROCESS_ONLY",
+                                "childFinishPolicy", "RETURN_TO_PARENT"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "subprocess_1"),
+                        edge("edge_2", "subprocess_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "subprocess 节点必须配置 calledProcessKey");
+    }
+
+    @Test
+    void shouldRejectSubprocessWithoutFixedVersionWhenPolicyRequiresIt() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("subprocess_1", "subprocess", Map.of(
+                                "calledProcessKey", "oa_leave_subflow",
+                                "calledVersionPolicy", "FIXED_VERSION",
+                                "businessBindingMode", "INHERIT_PARENT",
+                                "terminatePolicy", "TERMINATE_SUBPROCESS_ONLY",
+                                "childFinishPolicy", "RETURN_TO_PARENT"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "subprocess_1"),
+                        edge("edge_2", "subprocess_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "subprocess 节点 FIXED_VERSION 模式必须配置 calledVersion");
+    }
+
+    @Test
     void shouldRejectTimerNodeWithoutScheduleConfig() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),

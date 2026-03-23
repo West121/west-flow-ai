@@ -31,6 +31,16 @@ public class ProcessDslValidator {
     );
     private static final List<String> SUPPORTED_SCHEDULE_TYPES = List.of("ABSOLUTE_TIME", "RELATIVE_TO_ARRIVAL");
     private static final List<String> SUPPORTED_TRIGGER_MODES = List.of("IMMEDIATE", "SCHEDULED");
+    private static final List<String> SUPPORTED_SUBPROCESS_VERSION_POLICIES = List.of("LATEST_PUBLISHED", "FIXED_VERSION");
+    private static final List<String> SUPPORTED_SUBPROCESS_BUSINESS_BINDING_MODES = List.of("INHERIT_PARENT", "OVERRIDE");
+    private static final List<String> SUPPORTED_SUBPROCESS_TERMINATE_POLICIES = List.of(
+            "TERMINATE_SUBPROCESS_ONLY",
+            "TERMINATE_PARENT_AND_SUBPROCESS"
+    );
+    private static final List<String> SUPPORTED_SUBPROCESS_CHILD_FINISH_POLICIES = List.of(
+            "RETURN_TO_PARENT",
+            "TERMINATE_PARENT"
+    );
     private static final List<String> SUPPORTED_APPROVAL_MODES = List.of(
             "SINGLE",
             "SEQUENTIAL",
@@ -54,6 +64,7 @@ public class ProcessDslValidator {
         validateAtLeastOneEnd(nodeById.values());
         validateStartConfig(nodeById.values());
         validateApproverAssignments(nodeById.values());
+        validateSubprocessNodes(nodeById.values());
         validateCcTargets(nodeById.values());
         validateTimerNodes(nodeById.values());
         validateTriggerNodes(nodeById.values());
@@ -61,6 +72,44 @@ public class ProcessDslValidator {
         validateReachability(nodeById.values(), outgoingEdges);
         validateConditionFanout(nodeById.values(), outgoingEdges);
         validateParallelPairs(nodeById.values(), outgoingEdges, incomingEdges, nodeById);
+    }
+
+    // 校验子流程节点的调用目标、版本策略和父子联动配置。
+    private void validateSubprocessNodes(Collection<ProcessDslPayload.Node> nodes) {
+        for (ProcessDslPayload.Node node : nodes) {
+            if (!"subprocess".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> config = safeConfig(node);
+            String calledProcessKey = asString(config.get("calledProcessKey"));
+            if (calledProcessKey == null) {
+                throw invalid("subprocess 节点必须配置 calledProcessKey", Map.of("nodeId", node.id()));
+            }
+
+            String calledVersionPolicy = asString(config.get("calledVersionPolicy"));
+            if (calledVersionPolicy == null || !SUPPORTED_SUBPROCESS_VERSION_POLICIES.contains(calledVersionPolicy)) {
+                throw invalid("subprocess 节点 calledVersionPolicy 不合法", Map.of("nodeId", node.id(), "calledVersionPolicy", calledVersionPolicy));
+            }
+
+            if ("FIXED_VERSION".equals(calledVersionPolicy) && integerValue(config.get("calledVersion")) == null) {
+                throw invalid("subprocess 节点 FIXED_VERSION 模式必须配置 calledVersion", Map.of("nodeId", node.id()));
+            }
+
+            String businessBindingMode = asString(config.get("businessBindingMode"));
+            if (businessBindingMode == null || !SUPPORTED_SUBPROCESS_BUSINESS_BINDING_MODES.contains(businessBindingMode)) {
+                throw invalid("subprocess 节点 businessBindingMode 不合法", Map.of("nodeId", node.id(), "businessBindingMode", businessBindingMode));
+            }
+
+            String terminatePolicy = asString(config.get("terminatePolicy"));
+            if (terminatePolicy == null || !SUPPORTED_SUBPROCESS_TERMINATE_POLICIES.contains(terminatePolicy)) {
+                throw invalid("subprocess 节点 terminatePolicy 不合法", Map.of("nodeId", node.id(), "terminatePolicy", terminatePolicy));
+            }
+
+            String childFinishPolicy = asString(config.get("childFinishPolicy"));
+            if (childFinishPolicy == null || !SUPPORTED_SUBPROCESS_CHILD_FINISH_POLICIES.contains(childFinishPolicy)) {
+                throw invalid("subprocess 节点 childFinishPolicy 不合法", Map.of("nodeId", node.id(), "childFinishPolicy", childFinishPolicy));
+            }
+        }
     }
 
     // 先按节点 id 建索引，顺便拦截重复节点。

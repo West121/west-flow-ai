@@ -244,6 +244,62 @@ class ProcessDslToBpmnServiceTest {
         );
     }
 
+    @Test
+    void shouldConvertSubprocessNodeIntoCallActivity() {
+        ProcessDslPayload payload = new ProcessDslPayload(
+                "1.0.0",
+                "oa_parent",
+                "主流程",
+                "OA",
+                "oa-parent-form",
+                "1.0.0",
+                List.of(),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of(
+                                "initiatorEditable", true
+                        )),
+                        node("subprocess_1", "subprocess", "采购复核子流程", Map.of(
+                                "calledProcessKey", "plm_purchase_review",
+                                "calledVersionPolicy", "FIXED_VERSION",
+                                "calledVersion", 3,
+                                "businessBindingMode", "OVERRIDE",
+                                "terminatePolicy", "TERMINATE_PARENT_AND_SUBPROCESS",
+                                "childFinishPolicy", "TERMINATE_PARENT",
+                                "inputMappings", List.of(
+                                        Map.of("source", "billNo", "target", "sourceBillNo")
+                                ),
+                                "outputMappings", List.of(
+                                        Map.of("source", "approvedResult", "target", "purchaseResult")
+                                )
+                        )),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "subprocess_1", 1, null),
+                        edge("edge_2", "subprocess_1", "end_1", 2, null)
+                )
+        );
+
+        String xml = service.convert(payload, "oa_parent:1", 1);
+
+        assertThat(xml).contains(
+                "<callActivity",
+                "id=\"subprocess_1\"",
+                "name=\"采购复核子流程\"",
+                "calledElement=\"plm_purchase_review\"",
+                "calledProcessKey=\"plm_purchase_review\"",
+                "calledVersionPolicy=\"FIXED_VERSION\"",
+                "calledVersion=\"3\"",
+                "terminatePolicy=\"TERMINATE_PARENT_AND_SUBPROCESS\"",
+                "childFinishPolicy=\"TERMINATE_PARENT\""
+        );
+    }
+
     private ProcessDslPayload.Node node(
             String id,
             String type,

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import org.flowable.bpmn.converter.BpmnXMLConverter;
 import org.flowable.bpmn.model.BaseElement;
+import org.flowable.bpmn.model.CallActivity;
 import org.flowable.bpmn.model.EndEvent;
 import org.flowable.bpmn.model.ExclusiveGateway;
 import org.flowable.bpmn.model.ExtensionAttribute;
@@ -65,6 +66,7 @@ public class ProcessDslToBpmnService {
         FlowElement element = switch (node.type()) {
             case "start" -> buildStartEvent(node, config);
             case "approver" -> buildApproverTask(node, config);
+            case "subprocess" -> buildSubprocessCallActivity(node, config);
             case "cc" -> buildCcTask(node, config);
             case "condition" -> buildExclusiveGateway(node, config);
             case "parallel_split" -> buildParallelGateway(node, "split");
@@ -117,6 +119,15 @@ public class ProcessDslToBpmnService {
         }
         addExtensionAttribute(task, "taskKind", "CC");
         return task;
+    }
+
+    // 子流程节点统一映射为 Flowable callActivity。
+    private CallActivity buildSubprocessCallActivity(ProcessDslPayload.Node node, Map<String, Object> config) {
+        CallActivity activity = new CallActivity();
+        activity.setId(node.id());
+        activity.setName(node.name());
+        activity.setCalledElement(stringValue(config.get("calledProcessKey")));
+        return activity;
     }
 
     // 条件节点映射为排他网关。
@@ -236,6 +247,14 @@ public class ProcessDslToBpmnService {
         attrs.put("retryTimes", stringValue(config.get("retryTimes")));
         attrs.put("retryIntervalMinutes", stringValue(config.get("retryIntervalMinutes")));
         attrs.put("payloadTemplate", stringValue(config.get("payloadTemplate")));
+        attrs.put("calledProcessKey", stringValue(config.get("calledProcessKey")));
+        attrs.put("calledVersionPolicy", stringValue(config.get("calledVersionPolicy")));
+        attrs.put("calledVersion", stringValue(config.get("calledVersion")));
+        attrs.put("businessBindingMode", stringValue(config.get("businessBindingMode")));
+        attrs.put("terminatePolicy", stringValue(config.get("terminatePolicy")));
+        attrs.put("childFinishPolicy", stringValue(config.get("childFinishPolicy")));
+        attrs.put("inputMappings", serializeMappings(config.get("inputMappings")));
+        attrs.put("outputMappings", serializeMappings(config.get("outputMappings")));
 
         Map<String, Object> assignment = mapValue(config.get("assignment"));
         attrs.put("assignmentMode", stringValue(assignment.get("mode")));
@@ -378,6 +397,30 @@ public class ProcessDslToBpmnService {
                 continue;
             }
             items.add(userIdText + ":" + weightText);
+        }
+        return items.isEmpty() ? null : String.join(",", items);
+    }
+
+    private String serializeMappings(Object value) {
+        if (!(value instanceof List<?> mappings) || mappings.isEmpty()) {
+            return null;
+        }
+        List<String> items = new ArrayList<>();
+        for (Object mappingItem : mappings) {
+            if (!(mappingItem instanceof Map<?, ?> mappingMap)) {
+                continue;
+            }
+            Object source = mappingMap.get("source");
+            Object target = mappingMap.get("target");
+            if (source == null || target == null) {
+                continue;
+            }
+            String sourceText = String.valueOf(source).trim();
+            String targetText = String.valueOf(target).trim();
+            if (sourceText.isBlank() || targetText.isBlank()) {
+                continue;
+            }
+            items.add(sourceText + "->" + targetText);
         }
         return items.isEmpty() ? null : String.join(",", items);
     }
