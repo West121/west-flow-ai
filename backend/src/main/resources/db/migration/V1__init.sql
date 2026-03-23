@@ -1392,6 +1392,26 @@ INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
 SELECT 'rm_008', 'role_process_admin', 'menu_system_handover', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_008');
 
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_019', 'role_oa_user', 'menu_workbench', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_019');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_020', 'role_dept_manager', 'menu_org', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_020');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_021', 'role_process_admin', 'menu_workbench', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_021');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_022', 'role_process_admin', 'menu_workflow', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_022');
+
+INSERT INTO wf_role_menu (id, role_id, menu_id, created_at)
+SELECT 'rm_023', 'role_process_admin', 'menu_system', CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_role_menu WHERE id = 'rm_023');
+
 INSERT INTO wf_role_data_scope (id, role_id, scope_type, scope_value, created_at)
 SELECT 'rds_001', 'role_oa_user', 'SELF', '*', CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_role_data_scope WHERE id = 'rds_001');

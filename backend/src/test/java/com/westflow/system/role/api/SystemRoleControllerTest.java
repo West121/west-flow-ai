@@ -67,6 +67,8 @@ class SystemRoleControllerTest {
         JsonNode detailData = objectMapper.readTree(detailResponse).path("data");
         assertThat(detailData.path("roleCode").asText()).isEqualTo("DEPT_MANAGER");
         assertThat(detailData.path("menuIds").isArray()).isTrue();
+        assertThat(detailData.path("menuIds")).extracting(JsonNode::asText)
+                .contains("menu_org", "menu_system", "menu_system_menu", "menu_system_user", "menu_system_permission_probe");
         assertThat(detailData.path("dataScopes").isArray()).isTrue();
 
         String createResponse = mockMvc.perform(post("/api/v1/system/roles")
