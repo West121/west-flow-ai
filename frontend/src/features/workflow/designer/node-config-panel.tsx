@@ -283,6 +283,7 @@ const nodeConfigFormSchema = z
     }),
     inclusive: z.object({
       gatewayDirection: z.enum(['SPLIT', 'JOIN']),
+      branches: z.array(branchSchema),
     }),
     parallel: z.object({
       gatewayDirection: z.enum(['SPLIT', 'JOIN']),
@@ -725,6 +726,26 @@ const nodeConfigFormSchema = z
         }
       })
     }
+
+    if (values.kind === 'inclusive' && values.inclusive.gatewayDirection === 'SPLIT') {
+      if (values.inclusive.branches.length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '包容网关至少需要两条出边',
+          path: ['inclusive', 'branches'],
+        })
+      }
+
+      values.inclusive.branches.forEach((branch, index) => {
+        if (!branch.conditionExpression.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '包容网关每条出边都需要配置条件表达式',
+            path: ['inclusive', 'branches', index, 'conditionExpression'],
+          })
+        }
+      })
+    }
   })
 
 type NodeConfigFormValues = z.infer<typeof nodeConfigFormSchema>
@@ -922,6 +943,7 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
     },
     inclusive: {
       gatewayDirection: config.gatewayDirection === 'JOIN' ? 'JOIN' : 'SPLIT',
+      branches: branchDefaults,
     },
     timer: {
       scheduleType:
@@ -1319,6 +1341,7 @@ export function NodeConfigPanel({
           },
           inclusive: {
             gatewayDirection: 'SPLIT',
+            branches: [],
           },
           parallel: {
             gatewayDirection: 'SPLIT',
@@ -1365,6 +1388,14 @@ export function NodeConfigPanel({
     control: form.control,
     name: 'condition.expressionMode',
   })
+  const selectedInclusiveDirection = useWatch({
+    control: form.control,
+    name: 'inclusive.gatewayDirection',
+  })
+  const selectedInclusiveBranches = useWatch({
+    control: form.control,
+    name: 'inclusive.branches',
+  })
   const selectedTriggerMode = useWatch({
     control: form.control,
     name: 'trigger.triggerMode',
@@ -1409,7 +1440,16 @@ export function NodeConfigPanel({
                     expression: branch.conditionExpression.trim(),
                   },
           }))
-        : undefined
+        : values.kind === 'inclusive' && values.inclusive.gatewayDirection === 'SPLIT'
+          ? values.inclusive.branches.map((branch) => ({
+              edgeId: branch.edgeId,
+              label: branch.label.trim() || branch.edgeId,
+              condition: {
+                type: 'EXPRESSION' as const,
+                expression: branch.conditionExpression.trim(),
+              },
+            }))
+          : undefined
 
     onApply(
       node.id,
@@ -2413,7 +2453,7 @@ export function NodeConfigPanel({
           <div className='flex flex-col gap-4 rounded-2xl border p-4'>
             <div className='flex items-center gap-2 text-sm font-medium'>
               <Check className='size-4 text-primary' />
-              条件节点
+              排他网关
             </div>
 
             <FormField
@@ -2544,7 +2584,7 @@ export function NodeConfigPanel({
               ))}
               {selectedBranches.length === 0 ? (
                 <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
-                  当前条件节点没有出边，请先在画布上连出至少两条分支。
+                  当前排他网关没有出边，请先在画布上连出至少两条分支。
                 </div>
               ) : null}
             </div>
@@ -2799,10 +2839,12 @@ export function NodeConfigPanel({
               <div className='flex flex-col gap-4'>
                 <div>
                   <h3 className='text-sm font-medium text-foreground'>
-                    {selectedKind === 'inclusive' ? '包容分支节点' : '并行分支节点'}
+                    {selectedKind === 'inclusive' ? '包容网关' : '并行网关'}
                   </h3>
                   <p className='text-xs text-muted-foreground'>
-                    使用同一节点种类表达分支与汇聚，方向由下面的配置决定。
+                    {selectedKind === 'inclusive'
+                      ? '包容网关分支时可命中多条条件路径，汇聚时等待已命中的路径回流。'
+                      : '并行网关按 BPMN 语义只负责并发分支与汇聚，不支持条件表达式。'}
                   </p>
                 </div>
                 <FormField
@@ -2833,6 +2875,62 @@ export function NodeConfigPanel({
                     </FormItem>
                   )}
                 />
+
+                {selectedKind === 'inclusive' && selectedInclusiveDirection === 'SPLIT' ? (
+                  <>
+                    <Separator />
+                    <div className='flex flex-col gap-4'>
+                      {selectedInclusiveBranches.map((branch, index) => (
+                        <div
+                          key={branch.edgeId}
+                          className='flex flex-col gap-3 rounded-xl border p-3 text-foreground'
+                        >
+                          <div>
+                            <p className='text-sm font-medium'>条件分支</p>
+                            <p className='text-xs text-muted-foreground'>连线：{branch.edgeId}</p>
+                          </div>
+
+                          <FormField
+                            control={form.control}
+                            name={`inclusive.branches.${index}.label`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>分支名称</FormLabel>
+                                <FormControl>
+                                  <Input {...field} placeholder='例如：金额超标且需要会签' />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name={`inclusive.branches.${index}.conditionExpression`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>条件表达式</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    rows={3}
+                                    placeholder='例如：amount > 10000 || urgent == true'
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      ))}
+                      {selectedInclusiveBranches.length === 0 ? (
+                        <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
+                          当前包容网关没有出边，请先在画布上连出至少两条分支。
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                ) : null}
               </div>
             )}
           </div>

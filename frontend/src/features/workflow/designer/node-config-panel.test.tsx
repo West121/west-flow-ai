@@ -124,7 +124,7 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
-function buildInclusiveNode(): WorkflowNode {
+function buildInclusiveNode(direction: 'SPLIT' | 'JOIN' = 'JOIN'): WorkflowNode {
   return {
     id: 'inclusive_1',
     type: 'workflow',
@@ -135,13 +135,41 @@ function buildInclusiveNode(): WorkflowNode {
       description: '命中多个条件分支',
       tone: 'warning',
       config: {
-        gatewayDirection: 'JOIN',
+        gatewayDirection: direction,
       } as never,
     },
   }
 }
 
 const edges: WorkflowEdge[] = []
+const inclusiveSplitEdges: WorkflowEdge[] = [
+  {
+    id: 'edge_yes',
+    source: 'inclusive_1',
+    target: 'approve_yes',
+    type: 'smoothstep',
+    label: '金额超标',
+    data: {
+      condition: {
+        type: 'EXPRESSION',
+        expression: 'amount > 10000',
+      },
+    },
+  },
+  {
+    id: 'edge_urgent',
+    source: 'inclusive_1',
+    target: 'approve_urgent',
+    type: 'smoothstep',
+    label: '紧急场景',
+    data: {
+      condition: {
+        type: 'EXPRESSION',
+        expression: 'urgent == true',
+      },
+    },
+  },
+]
 
 describe('workflow designer node config panel', () => {
   it('exposes subprocess node template in the palette', () => {
@@ -300,9 +328,15 @@ describe('workflow designer node config panel', () => {
   it('hydrates and submits inclusive gateway direction back to the canvas patch', async () => {
     const onApply = vi.fn()
 
-    render(<NodeConfigPanel node={buildInclusiveNode()} edges={edges} onApply={onApply} />)
+    render(
+      <NodeConfigPanel
+        node={buildInclusiveNode()}
+        edges={inclusiveSplitEdges}
+        onApply={onApply}
+      />
+    )
 
-    expect(screen.getByText('包容分支节点')).toBeInTheDocument()
+    expect(screen.getByText('包容网关')).toBeInTheDocument()
     expect(screen.getAllByText('汇聚').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('combobox'))
@@ -318,7 +352,74 @@ describe('workflow designer node config panel', () => {
           gatewayDirection: 'SPLIT',
         }),
       }),
-      undefined
+      [
+        {
+          edgeId: 'edge_yes',
+          label: '金额超标',
+          condition: {
+            type: 'EXPRESSION',
+            expression: 'amount > 10000',
+          },
+        },
+        {
+          edgeId: 'edge_urgent',
+          label: '紧急场景',
+          condition: {
+            type: 'EXPRESSION',
+            expression: 'urgent == true',
+          },
+        },
+      ]
+    )
+  })
+
+  it('submits inclusive split branch conditions back to the canvas edges', async () => {
+    const onApply = vi.fn()
+
+    render(
+      <NodeConfigPanel
+        node={buildInclusiveNode('SPLIT')}
+        edges={inclusiveSplitEdges}
+        onApply={onApply}
+      />
+    )
+
+    expect(screen.getByText('包容网关')).toBeInTheDocument()
+    fireEvent.change(screen.getAllByRole('textbox', { name: '分支名称' })[0]!, {
+      target: { value: '金额超标并会签' },
+    })
+    fireEvent.change(screen.getByDisplayValue('amount > 10000'), {
+      target: { value: 'amount >= 20000' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'inclusive_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          gatewayDirection: 'SPLIT',
+        }),
+      }),
+      [
+        {
+          edgeId: 'edge_yes',
+          label: '金额超标并会签',
+          condition: {
+            type: 'EXPRESSION',
+            expression: 'amount >= 20000',
+          },
+        },
+        {
+          edgeId: 'edge_urgent',
+          label: '紧急场景',
+          condition: {
+            type: 'EXPRESSION',
+            expression: 'urgent == true',
+          },
+        },
+      ]
     )
   })
 })

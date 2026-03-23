@@ -626,6 +626,23 @@ public class ProcessDslValidator {
             if (edges.size() < 2) {
                 throw invalid("inclusive_split 节点至少需要两条出边", Map.of("nodeId", split.id(), "outgoingCount", edges.size()));
             }
+            for (ProcessDslPayload.Edge edge : edges) {
+                Map<String, Object> condition = mapValue(edge.condition());
+                String expression = asString(condition.get("expression"));
+                String type = asString(condition.get("type"));
+                if (type == null) {
+                    throw invalid("inclusive_split 分支必须配置 condition.type", Map.of("nodeId", split.id(), "edgeId", edge.id()));
+                }
+                if (!"EXPRESSION".equals(type)) {
+                    throw invalid(
+                            "inclusive_split 分支 condition.type 不合法",
+                            Map.of("nodeId", split.id(), "edgeId", edge.id(), "type", type)
+                    );
+                }
+                if (expression == null) {
+                    throw invalid("inclusive_split 分支必须配置 expression", Map.of("nodeId", split.id(), "edgeId", edge.id()));
+                }
+            }
             if (!canReachNodeType(split.id(), "inclusive_join", outgoingEdges, nodeById, new HashSet<>(), false)) {
                 throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of("nodeId", split.id()));
             }

@@ -361,6 +361,97 @@ describe('workflow designer dsl mapping', () => {
     expect(joinDsl.nodes[1]?.type).toBe('inclusive_join')
   })
 
+  it('round-trips inclusive split branch expressions', () => {
+    const inclusiveSnapshot: WorkflowSnapshot = {
+      nodes: [
+        snapshot.nodes[0]!,
+        buildInclusiveNode('SPLIT'),
+        {
+          ...snapshot.nodes[1]!,
+          id: 'approve_yes',
+          data: {
+            ...snapshot.nodes[1]!.data,
+            label: '高金额审批',
+          },
+        },
+        {
+          ...snapshot.nodes[1]!,
+          id: 'approve_urgent',
+          data: {
+            ...snapshot.nodes[1]!.data,
+            label: '紧急审批',
+          },
+        },
+        buildInclusiveNode('JOIN'),
+        snapshot.nodes[2]!,
+      ],
+      edges: [
+        { id: 'edge_start', source: 'start_1', target: 'inclusive_split', type: 'smoothstep' },
+        {
+          id: 'edge_yes',
+          source: 'inclusive_split',
+          target: 'approve_yes',
+          type: 'smoothstep',
+          data: {
+            condition: {
+              type: 'EXPRESSION',
+              expression: 'amount > 10000',
+            },
+          },
+        },
+        {
+          id: 'edge_urgent',
+          source: 'inclusive_split',
+          target: 'approve_urgent',
+          type: 'smoothstep',
+          data: {
+            condition: {
+              type: 'EXPRESSION',
+              expression: 'urgent == true',
+            },
+          },
+        },
+        { id: 'edge_join_1', source: 'approve_yes', target: 'inclusive_join', type: 'smoothstep' },
+        { id: 'edge_join_2', source: 'approve_urgent', target: 'inclusive_join', type: 'smoothstep' },
+        { id: 'edge_end', source: 'inclusive_join', target: 'end_1', type: 'smoothstep' },
+      ],
+      selectedNodeId: 'inclusive_split',
+    }
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(inclusiveSnapshot, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.edges.find((edge) => edge.id === 'edge_yes')?.condition).toMatchObject({
+      type: 'EXPRESSION',
+      expression: 'amount > 10000',
+    })
+
+    const hydrated = processDefinitionDetailToWorkflowSnapshot({
+      processDefinitionId: 'oa_leave:inclusive-1',
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      version: 1,
+      status: 'PUBLISHED',
+      createdAt: '2026-03-22T10:00:00+08:00',
+      updatedAt: '2026-03-22T10:00:00+08:00',
+      dsl,
+      bpmnXml: '<process />',
+    })
+
+    expect(hydrated.edges.find((edge) => edge.id === 'edge_urgent')?.data?.condition)
+      .toMatchObject({
+        type: 'EXPRESSION',
+        expression: 'urgent == true',
+      })
+  })
+
   it('hydrates the designer snapshot from the persisted process definition detail', () => {
     const hydrated = processDefinitionDetailToWorkflowSnapshot({
       processDefinitionId: 'oa_leave:1',

@@ -61,8 +61,8 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
   },
   {
     kind: 'condition',
-    label: '条件分支',
-    description: '金额、部门、字段表达式路由',
+    label: '排他网关',
+    description: '按条件命中单条分支路径',
     tone: 'warning',
     accent: 'from-amber-500/20 to-amber-500/5',
     icon: GitBranch,
@@ -70,7 +70,7 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
   {
     kind: 'inclusive',
     label: '包容分支',
-    description: '可命中多个条件分支并汇聚',
+    description: '按条件命中多条分支并汇聚',
     tone: 'warning',
     accent: 'from-orange-500/20 to-orange-500/5',
     icon: GitMerge,

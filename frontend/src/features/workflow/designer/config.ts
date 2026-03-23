@@ -325,7 +325,7 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
     case 'dynamic-builder':
       return '运行时动态生成审批链路'
     case 'condition':
-      return '条件分支节点'
+      return '排他网关节点'
     case 'inclusive':
       return '包容分支节点'
     case 'cc':
@@ -353,7 +353,7 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
     case 'dynamic-builder':
       return '动态构建'
     case 'condition':
-      return '条件'
+      return '排他网关'
     case 'inclusive':
       return '包容分支'
     case 'cc':

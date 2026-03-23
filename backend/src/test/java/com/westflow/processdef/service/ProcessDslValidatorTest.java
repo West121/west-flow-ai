@@ -153,7 +153,7 @@ class ProcessDslValidatorTest {
     }
 
     @Test
-    void shouldAcceptPairedInclusiveNodes() {
+    void shouldRejectInclusiveSplitWithoutBranchExpressions() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),
                 List.of(
@@ -168,6 +168,31 @@ class ProcessDslValidatorTest {
                         edge("edge_1", "start_1", "inclusive_split_1"),
                         edge("edge_2", "inclusive_split_1", "approve_1"),
                         edge("edge_3", "inclusive_split_1", "approve_2"),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "inclusive_split 分支必须配置 condition.type");
+    }
+
+    @Test
+    void shouldAcceptPairedInclusiveNodes() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of()),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        edge("edge_2", "inclusive_split_1", "approve_1", expressionCondition("amount > 10000")),
+                        edge("edge_3", "inclusive_split_1", "approve_2", expressionCondition("urgent == true")),
                         edge("edge_4", "approve_1", "inclusive_join_1"),
                         edge("edge_5", "approve_2", "inclusive_join_1"),
                         edge("edge_6", "inclusive_join_1", "end_1")
@@ -769,5 +794,16 @@ class ProcessDslValidatorTest {
 
     private ProcessDslPayload.Edge edge(String id, String source, String target) {
         return new ProcessDslPayload.Edge(id, source, target, 10, id, null);
+    }
+
+    private ProcessDslPayload.Edge edge(String id, String source, String target, Map<String, Object> condition) {
+        return new ProcessDslPayload.Edge(id, source, target, 10, id, condition);
+    }
+
+    private Map<String, Object> expressionCondition(String expression) {
+        return Map.of(
+                "type", "EXPRESSION",
+                "expression", expression
+        );
     }
 }
