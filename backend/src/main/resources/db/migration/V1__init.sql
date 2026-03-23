@@ -1712,6 +1712,20 @@ INSERT INTO wf_ai_mcp_registry (id, mcp_code, mcp_name, endpoint_url, transport_
 SELECT 'ai_mcp_001', 'westflow-internal-mcp', '平台内置 MCP 桥', NULL, 'INTERNAL', 'ai:copilot:open', TRUE, '{"description":"统一桥接平台内外部 MCP 工具"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_ai_mcp_registry WHERE id = 'ai_mcp_001');
 
+INSERT INTO wf_ai_mcp_registry (id, mcp_code, mcp_name, endpoint_url, transport_type, required_capability_code, enabled, metadata_json, created_at, updated_at)
+SELECT
+    'ai_mcp_002',
+    'westflow-demo-mcp',
+    '本地外部 MCP Demo 服务',
+    'http://localhost:8080/api/mcp-demo',
+    'STREAMABLE_HTTP',
+    'ai:copilot:open',
+    TRUE,
+    '{"description":"本地可直接演示的 Streamable HTTP MCP 服务","businessDomains":["OA","PLM"],"priority":95,"openConnectionOnStartup":true,"requestTimeoutSeconds":15,"connectTimeoutSeconds":5,"headers":{"X-WestFlow-MCP":"demo"}}',
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM wf_ai_mcp_registry WHERE id = 'ai_mcp_002');
+
 INSERT INTO wf_ai_skill_registry (id, skill_code, skill_name, skill_path, required_capability_code, enabled, metadata_json, created_at, updated_at)
 SELECT 'ai_skill_001', 'workflow-design-skill', '流程设计技能', '/Users/west/.agents/skills/using-superpowers/SKILL.md', 'ai:workflow:design', TRUE, '{"type":"local-skill"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_ai_skill_registry WHERE id = 'ai_skill_001');

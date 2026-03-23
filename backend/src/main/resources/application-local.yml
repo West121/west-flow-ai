@@ -32,3 +32,13 @@ minio:
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket: ${MINIO_BUCKET:west-flow-ai}
+
+westflow:
+  ai:
+    mcp-demo:
+      enabled: true
+      endpoint-path: /api/mcp-demo
+      server-name: westflow-mcp-demo
+      server-version: 1.0.0
+      description: 本地可直接演示的外部 Streamable HTTP MCP 服务
+      summary-limit: 5

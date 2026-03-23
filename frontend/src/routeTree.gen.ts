@@ -125,6 +125,17 @@ import { Route as AuthenticatedSystemDictTypesDictTypeIdEditRouteImport } from '
 import { Route as AuthenticatedSystemDictItemsDictItemIdEditRouteImport } from './routes/_authenticated/system/dict-items/$dictItemId/edit'
 import { Route as AuthenticatedSystemDepartmentsDepartmentIdEditRouteImport } from './routes/_authenticated/system/departments/$departmentId/edit'
 import { Route as AuthenticatedSystemCompaniesCompanyIdEditRouteImport } from './routes/_authenticated/system/companies/$companyId/edit'
+import { Route as AuthenticatedSystemAiToolsListRouteImport } from './routes/_authenticated/system/ai/tools/list'
+import { Route as AuthenticatedSystemAiToolsCreateRouteImport } from './routes/_authenticated/system/ai/tools/create'
+import { Route as AuthenticatedSystemAiToolCallsListRouteImport } from './routes/_authenticated/system/ai/tool-calls/list'
+import { Route as AuthenticatedSystemAiSkillsListRouteImport } from './routes/_authenticated/system/ai/skills/list'
+import { Route as AuthenticatedSystemAiSkillsCreateRouteImport } from './routes/_authenticated/system/ai/skills/create'
+import { Route as AuthenticatedSystemAiMcpsListRouteImport } from './routes/_authenticated/system/ai/mcps/list'
+import { Route as AuthenticatedSystemAiMcpsCreateRouteImport } from './routes/_authenticated/system/ai/mcps/create'
+import { Route as AuthenticatedSystemAiConversationsListRouteImport } from './routes/_authenticated/system/ai/conversations/list'
+import { Route as AuthenticatedSystemAiConfirmationsListRouteImport } from './routes/_authenticated/system/ai/confirmations/list'
+import { Route as AuthenticatedSystemAiAgentsListRouteImport } from './routes/_authenticated/system/ai/agents/list'
+import { Route as AuthenticatedSystemAiAgentsCreateRouteImport } from './routes/_authenticated/system/ai/agents/create'
 import { Route as AuthenticatedSystemAgentsAgentIdEditRouteImport } from './routes/_authenticated/system/agents/$agentId/edit'
 import { Route as AuthenticatedSystemNotificationsTemplatesTemplateIdIndexRouteImport } from './routes/_authenticated/system/notifications/templates/$templateId/index'
 import { Route as AuthenticatedSystemNotificationsRecordsRecordIdIndexRouteImport } from './routes/_authenticated/system/notifications/records/$recordId/index'
@@ -133,8 +144,19 @@ import { Route as AuthenticatedSystemMonitorOrchestratorScansExecutionIdIndexRou
 import { Route as AuthenticatedSystemLogsNotificationsRecordIdIndexRouteImport } from './routes/_authenticated/system/logs/notifications/$recordId/index'
 import { Route as AuthenticatedSystemLogsLoginLogIdIndexRouteImport } from './routes/_authenticated/system/logs/login/$logId/index'
 import { Route as AuthenticatedSystemLogsAuditLogIdIndexRouteImport } from './routes/_authenticated/system/logs/audit/$logId/index'
+import { Route as AuthenticatedSystemAiToolsToolIdIndexRouteImport } from './routes/_authenticated/system/ai/tools/$toolId/index'
+import { Route as AuthenticatedSystemAiToolCallsToolCallIdIndexRouteImport } from './routes/_authenticated/system/ai/tool-calls/$toolCallId/index'
+import { Route as AuthenticatedSystemAiSkillsSkillIdIndexRouteImport } from './routes/_authenticated/system/ai/skills/$skillId/index'
+import { Route as AuthenticatedSystemAiMcpsMcpIdIndexRouteImport } from './routes/_authenticated/system/ai/mcps/$mcpId/index'
+import { Route as AuthenticatedSystemAiConversationsConversationIdIndexRouteImport } from './routes/_authenticated/system/ai/conversations/$conversationId/index'
+import { Route as AuthenticatedSystemAiConfirmationsConfirmationIdIndexRouteImport } from './routes/_authenticated/system/ai/confirmations/$confirmationId/index'
+import { Route as AuthenticatedSystemAiAgentsAgentIdIndexRouteImport } from './routes/_authenticated/system/ai/agents/$agentId/index'
 import { Route as AuthenticatedSystemNotificationsTemplatesTemplateIdEditRouteImport } from './routes/_authenticated/system/notifications/templates/$templateId/edit'
 import { Route as AuthenticatedSystemMonitorNotificationChannelsHealthListRouteImport } from './routes/_authenticated/system/monitor/notification-channels/health/list'
+import { Route as AuthenticatedSystemAiToolsToolIdEditRouteImport } from './routes/_authenticated/system/ai/tools/$toolId/edit'
+import { Route as AuthenticatedSystemAiSkillsSkillIdEditRouteImport } from './routes/_authenticated/system/ai/skills/$skillId/edit'
+import { Route as AuthenticatedSystemAiMcpsMcpIdEditRouteImport } from './routes/_authenticated/system/ai/mcps/$mcpId/edit'
+import { Route as AuthenticatedSystemAiAgentsAgentIdEditRouteImport } from './routes/_authenticated/system/ai/agents/$agentId/edit'
 import { Route as AuthenticatedSystemMonitorNotificationChannelsHealthChannelIdIndexRouteImport } from './routes/_authenticated/system/monitor/notification-channels/health/$channelId/index'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -821,6 +843,72 @@ const AuthenticatedSystemCompaniesCompanyIdEditRoute =
     path: '/system/companies/$companyId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemAiToolsListRoute =
+  AuthenticatedSystemAiToolsListRouteImport.update({
+    id: '/system/ai/tools/list',
+    path: '/system/ai/tools/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiToolsCreateRoute =
+  AuthenticatedSystemAiToolsCreateRouteImport.update({
+    id: '/system/ai/tools/create',
+    path: '/system/ai/tools/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiToolCallsListRoute =
+  AuthenticatedSystemAiToolCallsListRouteImport.update({
+    id: '/system/ai/tool-calls/list',
+    path: '/system/ai/tool-calls/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiSkillsListRoute =
+  AuthenticatedSystemAiSkillsListRouteImport.update({
+    id: '/system/ai/skills/list',
+    path: '/system/ai/skills/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiSkillsCreateRoute =
+  AuthenticatedSystemAiSkillsCreateRouteImport.update({
+    id: '/system/ai/skills/create',
+    path: '/system/ai/skills/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiMcpsListRoute =
+  AuthenticatedSystemAiMcpsListRouteImport.update({
+    id: '/system/ai/mcps/list',
+    path: '/system/ai/mcps/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiMcpsCreateRoute =
+  AuthenticatedSystemAiMcpsCreateRouteImport.update({
+    id: '/system/ai/mcps/create',
+    path: '/system/ai/mcps/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiConversationsListRoute =
+  AuthenticatedSystemAiConversationsListRouteImport.update({
+    id: '/system/ai/conversations/list',
+    path: '/system/ai/conversations/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiConfirmationsListRoute =
+  AuthenticatedSystemAiConfirmationsListRouteImport.update({
+    id: '/system/ai/confirmations/list',
+    path: '/system/ai/confirmations/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiAgentsListRoute =
+  AuthenticatedSystemAiAgentsListRouteImport.update({
+    id: '/system/ai/agents/list',
+    path: '/system/ai/agents/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiAgentsCreateRoute =
+  AuthenticatedSystemAiAgentsCreateRouteImport.update({
+    id: '/system/ai/agents/create',
+    path: '/system/ai/agents/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemAgentsAgentIdEditRoute =
   AuthenticatedSystemAgentsAgentIdEditRouteImport.update({
     id: '/system/agents/$agentId/edit',
@@ -873,6 +961,48 @@ const AuthenticatedSystemLogsAuditLogIdIndexRoute =
     path: '/system/logs/audit/$logId/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSystemAiToolsToolIdIndexRoute =
+  AuthenticatedSystemAiToolsToolIdIndexRouteImport.update({
+    id: '/system/ai/tools/$toolId/',
+    path: '/system/ai/tools/$toolId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiToolCallsToolCallIdIndexRoute =
+  AuthenticatedSystemAiToolCallsToolCallIdIndexRouteImport.update({
+    id: '/system/ai/tool-calls/$toolCallId/',
+    path: '/system/ai/tool-calls/$toolCallId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiSkillsSkillIdIndexRoute =
+  AuthenticatedSystemAiSkillsSkillIdIndexRouteImport.update({
+    id: '/system/ai/skills/$skillId/',
+    path: '/system/ai/skills/$skillId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiMcpsMcpIdIndexRoute =
+  AuthenticatedSystemAiMcpsMcpIdIndexRouteImport.update({
+    id: '/system/ai/mcps/$mcpId/',
+    path: '/system/ai/mcps/$mcpId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiConversationsConversationIdIndexRoute =
+  AuthenticatedSystemAiConversationsConversationIdIndexRouteImport.update({
+    id: '/system/ai/conversations/$conversationId/',
+    path: '/system/ai/conversations/$conversationId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute =
+  AuthenticatedSystemAiConfirmationsConfirmationIdIndexRouteImport.update({
+    id: '/system/ai/confirmations/$confirmationId/',
+    path: '/system/ai/confirmations/$confirmationId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiAgentsAgentIdIndexRoute =
+  AuthenticatedSystemAiAgentsAgentIdIndexRouteImport.update({
+    id: '/system/ai/agents/$agentId/',
+    path: '/system/ai/agents/$agentId/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute =
   AuthenticatedSystemNotificationsTemplatesTemplateIdEditRouteImport.update({
     id: '/system/notifications/templates/$templateId/edit',
@@ -883,6 +1013,30 @@ const AuthenticatedSystemMonitorNotificationChannelsHealthListRoute =
   AuthenticatedSystemMonitorNotificationChannelsHealthListRouteImport.update({
     id: '/system/monitor/notification-channels/health/list',
     path: '/system/monitor/notification-channels/health/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiToolsToolIdEditRoute =
+  AuthenticatedSystemAiToolsToolIdEditRouteImport.update({
+    id: '/system/ai/tools/$toolId/edit',
+    path: '/system/ai/tools/$toolId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiSkillsSkillIdEditRoute =
+  AuthenticatedSystemAiSkillsSkillIdEditRouteImport.update({
+    id: '/system/ai/skills/$skillId/edit',
+    path: '/system/ai/skills/$skillId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiMcpsMcpIdEditRoute =
+  AuthenticatedSystemAiMcpsMcpIdEditRouteImport.update({
+    id: '/system/ai/mcps/$mcpId/edit',
+    path: '/system/ai/mcps/$mcpId/edit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSystemAiAgentsAgentIdEditRoute =
+  AuthenticatedSystemAiAgentsAgentIdEditRouteImport.update({
+    id: '/system/ai/agents/$agentId/edit',
+    path: '/system/ai/agents/$agentId/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemMonitorNotificationChannelsHealthChannelIdIndexRoute =
@@ -970,6 +1124,17 @@ export interface FileRoutesByFullPath {
   '/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
   '/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
+  '/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
+  '/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
+  '/system/ai/confirmations/list': typeof AuthenticatedSystemAiConfirmationsListRoute
+  '/system/ai/conversations/list': typeof AuthenticatedSystemAiConversationsListRoute
+  '/system/ai/mcps/create': typeof AuthenticatedSystemAiMcpsCreateRoute
+  '/system/ai/mcps/list': typeof AuthenticatedSystemAiMcpsListRoute
+  '/system/ai/skills/create': typeof AuthenticatedSystemAiSkillsCreateRoute
+  '/system/ai/skills/list': typeof AuthenticatedSystemAiSkillsListRoute
+  '/system/ai/tool-calls/list': typeof AuthenticatedSystemAiToolCallsListRoute
+  '/system/ai/tools/create': typeof AuthenticatedSystemAiToolsCreateRoute
+  '/system/ai/tools/list': typeof AuthenticatedSystemAiToolsListRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/dict-items/$dictItemId/edit': typeof AuthenticatedSystemDictItemsDictItemIdEditRoute
@@ -1011,8 +1176,19 @@ export interface FileRoutesByFullPath {
   '/workflow/opinion-configs/$configId': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
   '/workflow/publish-records/$processDefinitionId': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
   '/workflow/versions/$processDefinitionId': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
+  '/system/ai/agents/$agentId/edit': typeof AuthenticatedSystemAiAgentsAgentIdEditRoute
+  '/system/ai/mcps/$mcpId/edit': typeof AuthenticatedSystemAiMcpsMcpIdEditRoute
+  '/system/ai/skills/$skillId/edit': typeof AuthenticatedSystemAiSkillsSkillIdEditRoute
+  '/system/ai/tools/$toolId/edit': typeof AuthenticatedSystemAiToolsToolIdEditRoute
   '/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
+  '/system/ai/agents/$agentId': typeof AuthenticatedSystemAiAgentsAgentIdIndexRoute
+  '/system/ai/confirmations/$confirmationId': typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute
+  '/system/ai/conversations/$conversationId': typeof AuthenticatedSystemAiConversationsConversationIdIndexRoute
+  '/system/ai/mcps/$mcpId': typeof AuthenticatedSystemAiMcpsMcpIdIndexRoute
+  '/system/ai/skills/$skillId': typeof AuthenticatedSystemAiSkillsSkillIdIndexRoute
+  '/system/ai/tool-calls/$toolCallId': typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRoute
+  '/system/ai/tools/$toolId': typeof AuthenticatedSystemAiToolsToolIdIndexRoute
   '/system/logs/audit/$logId': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
   '/system/logs/login/$logId': typeof AuthenticatedSystemLogsLoginLogIdIndexRoute
   '/system/logs/notifications/$recordId': typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRoute
@@ -1097,6 +1273,17 @@ export interface FileRoutesByTo {
   '/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
   '/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
+  '/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
+  '/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
+  '/system/ai/confirmations/list': typeof AuthenticatedSystemAiConfirmationsListRoute
+  '/system/ai/conversations/list': typeof AuthenticatedSystemAiConversationsListRoute
+  '/system/ai/mcps/create': typeof AuthenticatedSystemAiMcpsCreateRoute
+  '/system/ai/mcps/list': typeof AuthenticatedSystemAiMcpsListRoute
+  '/system/ai/skills/create': typeof AuthenticatedSystemAiSkillsCreateRoute
+  '/system/ai/skills/list': typeof AuthenticatedSystemAiSkillsListRoute
+  '/system/ai/tool-calls/list': typeof AuthenticatedSystemAiToolCallsListRoute
+  '/system/ai/tools/create': typeof AuthenticatedSystemAiToolsCreateRoute
+  '/system/ai/tools/list': typeof AuthenticatedSystemAiToolsListRoute
   '/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/system/dict-items/$dictItemId/edit': typeof AuthenticatedSystemDictItemsDictItemIdEditRoute
@@ -1138,8 +1325,19 @@ export interface FileRoutesByTo {
   '/workflow/opinion-configs/$configId': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
   '/workflow/publish-records/$processDefinitionId': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
   '/workflow/versions/$processDefinitionId': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
+  '/system/ai/agents/$agentId/edit': typeof AuthenticatedSystemAiAgentsAgentIdEditRoute
+  '/system/ai/mcps/$mcpId/edit': typeof AuthenticatedSystemAiMcpsMcpIdEditRoute
+  '/system/ai/skills/$skillId/edit': typeof AuthenticatedSystemAiSkillsSkillIdEditRoute
+  '/system/ai/tools/$toolId/edit': typeof AuthenticatedSystemAiToolsToolIdEditRoute
   '/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
+  '/system/ai/agents/$agentId': typeof AuthenticatedSystemAiAgentsAgentIdIndexRoute
+  '/system/ai/confirmations/$confirmationId': typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute
+  '/system/ai/conversations/$conversationId': typeof AuthenticatedSystemAiConversationsConversationIdIndexRoute
+  '/system/ai/mcps/$mcpId': typeof AuthenticatedSystemAiMcpsMcpIdIndexRoute
+  '/system/ai/skills/$skillId': typeof AuthenticatedSystemAiSkillsSkillIdIndexRoute
+  '/system/ai/tool-calls/$toolCallId': typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRoute
+  '/system/ai/tools/$toolId': typeof AuthenticatedSystemAiToolsToolIdIndexRoute
   '/system/logs/audit/$logId': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
   '/system/logs/login/$logId': typeof AuthenticatedSystemLogsLoginLogIdIndexRoute
   '/system/logs/notifications/$recordId': typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRoute
@@ -1227,6 +1425,17 @@ export interface FileRoutesById {
   '/_authenticated/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
   '/_authenticated/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
   '/_authenticated/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
+  '/_authenticated/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
+  '/_authenticated/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
+  '/_authenticated/system/ai/confirmations/list': typeof AuthenticatedSystemAiConfirmationsListRoute
+  '/_authenticated/system/ai/conversations/list': typeof AuthenticatedSystemAiConversationsListRoute
+  '/_authenticated/system/ai/mcps/create': typeof AuthenticatedSystemAiMcpsCreateRoute
+  '/_authenticated/system/ai/mcps/list': typeof AuthenticatedSystemAiMcpsListRoute
+  '/_authenticated/system/ai/skills/create': typeof AuthenticatedSystemAiSkillsCreateRoute
+  '/_authenticated/system/ai/skills/list': typeof AuthenticatedSystemAiSkillsListRoute
+  '/_authenticated/system/ai/tool-calls/list': typeof AuthenticatedSystemAiToolCallsListRoute
+  '/_authenticated/system/ai/tools/create': typeof AuthenticatedSystemAiToolsCreateRoute
+  '/_authenticated/system/ai/tools/list': typeof AuthenticatedSystemAiToolsListRoute
   '/_authenticated/system/companies/$companyId/edit': typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   '/_authenticated/system/departments/$departmentId/edit': typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   '/_authenticated/system/dict-items/$dictItemId/edit': typeof AuthenticatedSystemDictItemsDictItemIdEditRoute
@@ -1268,8 +1477,19 @@ export interface FileRoutesById {
   '/_authenticated/workflow/opinion-configs/$configId/': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
   '/_authenticated/workflow/publish-records/$processDefinitionId/': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
   '/_authenticated/workflow/versions/$processDefinitionId/': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
+  '/_authenticated/system/ai/agents/$agentId/edit': typeof AuthenticatedSystemAiAgentsAgentIdEditRoute
+  '/_authenticated/system/ai/mcps/$mcpId/edit': typeof AuthenticatedSystemAiMcpsMcpIdEditRoute
+  '/_authenticated/system/ai/skills/$skillId/edit': typeof AuthenticatedSystemAiSkillsSkillIdEditRoute
+  '/_authenticated/system/ai/tools/$toolId/edit': typeof AuthenticatedSystemAiToolsToolIdEditRoute
   '/_authenticated/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/_authenticated/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
+  '/_authenticated/system/ai/agents/$agentId/': typeof AuthenticatedSystemAiAgentsAgentIdIndexRoute
+  '/_authenticated/system/ai/confirmations/$confirmationId/': typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute
+  '/_authenticated/system/ai/conversations/$conversationId/': typeof AuthenticatedSystemAiConversationsConversationIdIndexRoute
+  '/_authenticated/system/ai/mcps/$mcpId/': typeof AuthenticatedSystemAiMcpsMcpIdIndexRoute
+  '/_authenticated/system/ai/skills/$skillId/': typeof AuthenticatedSystemAiSkillsSkillIdIndexRoute
+  '/_authenticated/system/ai/tool-calls/$toolCallId/': typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRoute
+  '/_authenticated/system/ai/tools/$toolId/': typeof AuthenticatedSystemAiToolsToolIdIndexRoute
   '/_authenticated/system/logs/audit/$logId/': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
   '/_authenticated/system/logs/login/$logId/': typeof AuthenticatedSystemLogsLoginLogIdIndexRoute
   '/_authenticated/system/logs/notifications/$recordId/': typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRoute
@@ -1357,6 +1577,17 @@ export interface FileRouteTypes {
     | '/workflow/publish-records/list'
     | '/workflow/versions/list'
     | '/system/agents/$agentId/edit'
+    | '/system/ai/agents/create'
+    | '/system/ai/agents/list'
+    | '/system/ai/confirmations/list'
+    | '/system/ai/conversations/list'
+    | '/system/ai/mcps/create'
+    | '/system/ai/mcps/list'
+    | '/system/ai/skills/create'
+    | '/system/ai/skills/list'
+    | '/system/ai/tool-calls/list'
+    | '/system/ai/tools/create'
+    | '/system/ai/tools/list'
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
     | '/system/dict-items/$dictItemId/edit'
@@ -1398,8 +1629,19 @@ export interface FileRouteTypes {
     | '/workflow/opinion-configs/$configId'
     | '/workflow/publish-records/$processDefinitionId'
     | '/workflow/versions/$processDefinitionId'
+    | '/system/ai/agents/$agentId/edit'
+    | '/system/ai/mcps/$mcpId/edit'
+    | '/system/ai/skills/$skillId/edit'
+    | '/system/ai/tools/$toolId/edit'
     | '/system/monitor/notification-channels/health/list'
     | '/system/notifications/templates/$templateId/edit'
+    | '/system/ai/agents/$agentId'
+    | '/system/ai/confirmations/$confirmationId'
+    | '/system/ai/conversations/$conversationId'
+    | '/system/ai/mcps/$mcpId'
+    | '/system/ai/skills/$skillId'
+    | '/system/ai/tool-calls/$toolCallId'
+    | '/system/ai/tools/$toolId'
     | '/system/logs/audit/$logId'
     | '/system/logs/login/$logId'
     | '/system/logs/notifications/$recordId'
@@ -1484,6 +1726,17 @@ export interface FileRouteTypes {
     | '/workflow/publish-records/list'
     | '/workflow/versions/list'
     | '/system/agents/$agentId/edit'
+    | '/system/ai/agents/create'
+    | '/system/ai/agents/list'
+    | '/system/ai/confirmations/list'
+    | '/system/ai/conversations/list'
+    | '/system/ai/mcps/create'
+    | '/system/ai/mcps/list'
+    | '/system/ai/skills/create'
+    | '/system/ai/skills/list'
+    | '/system/ai/tool-calls/list'
+    | '/system/ai/tools/create'
+    | '/system/ai/tools/list'
     | '/system/companies/$companyId/edit'
     | '/system/departments/$departmentId/edit'
     | '/system/dict-items/$dictItemId/edit'
@@ -1525,8 +1778,19 @@ export interface FileRouteTypes {
     | '/workflow/opinion-configs/$configId'
     | '/workflow/publish-records/$processDefinitionId'
     | '/workflow/versions/$processDefinitionId'
+    | '/system/ai/agents/$agentId/edit'
+    | '/system/ai/mcps/$mcpId/edit'
+    | '/system/ai/skills/$skillId/edit'
+    | '/system/ai/tools/$toolId/edit'
     | '/system/monitor/notification-channels/health/list'
     | '/system/notifications/templates/$templateId/edit'
+    | '/system/ai/agents/$agentId'
+    | '/system/ai/confirmations/$confirmationId'
+    | '/system/ai/conversations/$conversationId'
+    | '/system/ai/mcps/$mcpId'
+    | '/system/ai/skills/$skillId'
+    | '/system/ai/tool-calls/$toolCallId'
+    | '/system/ai/tools/$toolId'
     | '/system/logs/audit/$logId'
     | '/system/logs/login/$logId'
     | '/system/logs/notifications/$recordId'
@@ -1613,6 +1877,17 @@ export interface FileRouteTypes {
     | '/_authenticated/workflow/publish-records/list'
     | '/_authenticated/workflow/versions/list'
     | '/_authenticated/system/agents/$agentId/edit'
+    | '/_authenticated/system/ai/agents/create'
+    | '/_authenticated/system/ai/agents/list'
+    | '/_authenticated/system/ai/confirmations/list'
+    | '/_authenticated/system/ai/conversations/list'
+    | '/_authenticated/system/ai/mcps/create'
+    | '/_authenticated/system/ai/mcps/list'
+    | '/_authenticated/system/ai/skills/create'
+    | '/_authenticated/system/ai/skills/list'
+    | '/_authenticated/system/ai/tool-calls/list'
+    | '/_authenticated/system/ai/tools/create'
+    | '/_authenticated/system/ai/tools/list'
     | '/_authenticated/system/companies/$companyId/edit'
     | '/_authenticated/system/departments/$departmentId/edit'
     | '/_authenticated/system/dict-items/$dictItemId/edit'
@@ -1654,8 +1929,19 @@ export interface FileRouteTypes {
     | '/_authenticated/workflow/opinion-configs/$configId/'
     | '/_authenticated/workflow/publish-records/$processDefinitionId/'
     | '/_authenticated/workflow/versions/$processDefinitionId/'
+    | '/_authenticated/system/ai/agents/$agentId/edit'
+    | '/_authenticated/system/ai/mcps/$mcpId/edit'
+    | '/_authenticated/system/ai/skills/$skillId/edit'
+    | '/_authenticated/system/ai/tools/$toolId/edit'
     | '/_authenticated/system/monitor/notification-channels/health/list'
     | '/_authenticated/system/notifications/templates/$templateId/edit'
+    | '/_authenticated/system/ai/agents/$agentId/'
+    | '/_authenticated/system/ai/confirmations/$confirmationId/'
+    | '/_authenticated/system/ai/conversations/$conversationId/'
+    | '/_authenticated/system/ai/mcps/$mcpId/'
+    | '/_authenticated/system/ai/skills/$skillId/'
+    | '/_authenticated/system/ai/tool-calls/$toolCallId/'
+    | '/_authenticated/system/ai/tools/$toolId/'
     | '/_authenticated/system/logs/audit/$logId/'
     | '/_authenticated/system/logs/login/$logId/'
     | '/_authenticated/system/logs/notifications/$recordId/'
@@ -2490,6 +2776,83 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/ai/tools/list': {
+      id: '/_authenticated/system/ai/tools/list'
+      path: '/system/ai/tools/list'
+      fullPath: '/system/ai/tools/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiToolsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/tools/create': {
+      id: '/_authenticated/system/ai/tools/create'
+      path: '/system/ai/tools/create'
+      fullPath: '/system/ai/tools/create'
+      preLoaderRoute: typeof AuthenticatedSystemAiToolsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/tool-calls/list': {
+      id: '/_authenticated/system/ai/tool-calls/list'
+      path: '/system/ai/tool-calls/list'
+      fullPath: '/system/ai/tool-calls/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiToolCallsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/skills/list': {
+      id: '/_authenticated/system/ai/skills/list'
+      path: '/system/ai/skills/list'
+      fullPath: '/system/ai/skills/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiSkillsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/skills/create': {
+      id: '/_authenticated/system/ai/skills/create'
+      path: '/system/ai/skills/create'
+      fullPath: '/system/ai/skills/create'
+      preLoaderRoute: typeof AuthenticatedSystemAiSkillsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/mcps/list': {
+      id: '/_authenticated/system/ai/mcps/list'
+      path: '/system/ai/mcps/list'
+      fullPath: '/system/ai/mcps/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiMcpsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/mcps/create': {
+      id: '/_authenticated/system/ai/mcps/create'
+      path: '/system/ai/mcps/create'
+      fullPath: '/system/ai/mcps/create'
+      preLoaderRoute: typeof AuthenticatedSystemAiMcpsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/conversations/list': {
+      id: '/_authenticated/system/ai/conversations/list'
+      path: '/system/ai/conversations/list'
+      fullPath: '/system/ai/conversations/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiConversationsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/confirmations/list': {
+      id: '/_authenticated/system/ai/confirmations/list'
+      path: '/system/ai/confirmations/list'
+      fullPath: '/system/ai/confirmations/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiConfirmationsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/agents/list': {
+      id: '/_authenticated/system/ai/agents/list'
+      path: '/system/ai/agents/list'
+      fullPath: '/system/ai/agents/list'
+      preLoaderRoute: typeof AuthenticatedSystemAiAgentsListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/agents/create': {
+      id: '/_authenticated/system/ai/agents/create'
+      path: '/system/ai/agents/create'
+      fullPath: '/system/ai/agents/create'
+      preLoaderRoute: typeof AuthenticatedSystemAiAgentsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/agents/$agentId/edit': {
       id: '/_authenticated/system/agents/$agentId/edit'
       path: '/system/agents/$agentId/edit'
@@ -2546,6 +2909,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSystemLogsAuditLogIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/system/ai/tools/$toolId/': {
+      id: '/_authenticated/system/ai/tools/$toolId/'
+      path: '/system/ai/tools/$toolId'
+      fullPath: '/system/ai/tools/$toolId'
+      preLoaderRoute: typeof AuthenticatedSystemAiToolsToolIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/tool-calls/$toolCallId/': {
+      id: '/_authenticated/system/ai/tool-calls/$toolCallId/'
+      path: '/system/ai/tool-calls/$toolCallId'
+      fullPath: '/system/ai/tool-calls/$toolCallId'
+      preLoaderRoute: typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/skills/$skillId/': {
+      id: '/_authenticated/system/ai/skills/$skillId/'
+      path: '/system/ai/skills/$skillId'
+      fullPath: '/system/ai/skills/$skillId'
+      preLoaderRoute: typeof AuthenticatedSystemAiSkillsSkillIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/mcps/$mcpId/': {
+      id: '/_authenticated/system/ai/mcps/$mcpId/'
+      path: '/system/ai/mcps/$mcpId'
+      fullPath: '/system/ai/mcps/$mcpId'
+      preLoaderRoute: typeof AuthenticatedSystemAiMcpsMcpIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/conversations/$conversationId/': {
+      id: '/_authenticated/system/ai/conversations/$conversationId/'
+      path: '/system/ai/conversations/$conversationId'
+      fullPath: '/system/ai/conversations/$conversationId'
+      preLoaderRoute: typeof AuthenticatedSystemAiConversationsConversationIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/confirmations/$confirmationId/': {
+      id: '/_authenticated/system/ai/confirmations/$confirmationId/'
+      path: '/system/ai/confirmations/$confirmationId'
+      fullPath: '/system/ai/confirmations/$confirmationId'
+      preLoaderRoute: typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/agents/$agentId/': {
+      id: '/_authenticated/system/ai/agents/$agentId/'
+      path: '/system/ai/agents/$agentId'
+      fullPath: '/system/ai/agents/$agentId'
+      preLoaderRoute: typeof AuthenticatedSystemAiAgentsAgentIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/system/notifications/templates/$templateId/edit': {
       id: '/_authenticated/system/notifications/templates/$templateId/edit'
       path: '/system/notifications/templates/$templateId/edit'
@@ -2558,6 +2970,34 @@ declare module '@tanstack/react-router' {
       path: '/system/monitor/notification-channels/health/list'
       fullPath: '/system/monitor/notification-channels/health/list'
       preLoaderRoute: typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/tools/$toolId/edit': {
+      id: '/_authenticated/system/ai/tools/$toolId/edit'
+      path: '/system/ai/tools/$toolId/edit'
+      fullPath: '/system/ai/tools/$toolId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemAiToolsToolIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/skills/$skillId/edit': {
+      id: '/_authenticated/system/ai/skills/$skillId/edit'
+      path: '/system/ai/skills/$skillId/edit'
+      fullPath: '/system/ai/skills/$skillId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemAiSkillsSkillIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/mcps/$mcpId/edit': {
+      id: '/_authenticated/system/ai/mcps/$mcpId/edit'
+      path: '/system/ai/mcps/$mcpId/edit'
+      fullPath: '/system/ai/mcps/$mcpId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemAiMcpsMcpIdEditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/system/ai/agents/$agentId/edit': {
+      id: '/_authenticated/system/ai/agents/$agentId/edit'
+      path: '/system/ai/agents/$agentId/edit'
+      fullPath: '/system/ai/agents/$agentId/edit'
+      preLoaderRoute: typeof AuthenticatedSystemAiAgentsAgentIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/monitor/notification-channels/health/$channelId/': {
@@ -2658,6 +3098,17 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkflowPublishRecordsListRoute: typeof AuthenticatedWorkflowPublishRecordsListRoute
   AuthenticatedWorkflowVersionsListRoute: typeof AuthenticatedWorkflowVersionsListRoute
   AuthenticatedSystemAgentsAgentIdEditRoute: typeof AuthenticatedSystemAgentsAgentIdEditRoute
+  AuthenticatedSystemAiAgentsCreateRoute: typeof AuthenticatedSystemAiAgentsCreateRoute
+  AuthenticatedSystemAiAgentsListRoute: typeof AuthenticatedSystemAiAgentsListRoute
+  AuthenticatedSystemAiConfirmationsListRoute: typeof AuthenticatedSystemAiConfirmationsListRoute
+  AuthenticatedSystemAiConversationsListRoute: typeof AuthenticatedSystemAiConversationsListRoute
+  AuthenticatedSystemAiMcpsCreateRoute: typeof AuthenticatedSystemAiMcpsCreateRoute
+  AuthenticatedSystemAiMcpsListRoute: typeof AuthenticatedSystemAiMcpsListRoute
+  AuthenticatedSystemAiSkillsCreateRoute: typeof AuthenticatedSystemAiSkillsCreateRoute
+  AuthenticatedSystemAiSkillsListRoute: typeof AuthenticatedSystemAiSkillsListRoute
+  AuthenticatedSystemAiToolCallsListRoute: typeof AuthenticatedSystemAiToolCallsListRoute
+  AuthenticatedSystemAiToolsCreateRoute: typeof AuthenticatedSystemAiToolsCreateRoute
+  AuthenticatedSystemAiToolsListRoute: typeof AuthenticatedSystemAiToolsListRoute
   AuthenticatedSystemCompaniesCompanyIdEditRoute: typeof AuthenticatedSystemCompaniesCompanyIdEditRoute
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdEditRoute
   AuthenticatedSystemDictItemsDictItemIdEditRoute: typeof AuthenticatedSystemDictItemsDictItemIdEditRoute
@@ -2699,8 +3150,19 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute: typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
   AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute: typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
   AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute: typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
+  AuthenticatedSystemAiAgentsAgentIdEditRoute: typeof AuthenticatedSystemAiAgentsAgentIdEditRoute
+  AuthenticatedSystemAiMcpsMcpIdEditRoute: typeof AuthenticatedSystemAiMcpsMcpIdEditRoute
+  AuthenticatedSystemAiSkillsSkillIdEditRoute: typeof AuthenticatedSystemAiSkillsSkillIdEditRoute
+  AuthenticatedSystemAiToolsToolIdEditRoute: typeof AuthenticatedSystemAiToolsToolIdEditRoute
   AuthenticatedSystemMonitorNotificationChannelsHealthListRoute: typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute: typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
+  AuthenticatedSystemAiAgentsAgentIdIndexRoute: typeof AuthenticatedSystemAiAgentsAgentIdIndexRoute
+  AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute: typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute
+  AuthenticatedSystemAiConversationsConversationIdIndexRoute: typeof AuthenticatedSystemAiConversationsConversationIdIndexRoute
+  AuthenticatedSystemAiMcpsMcpIdIndexRoute: typeof AuthenticatedSystemAiMcpsMcpIdIndexRoute
+  AuthenticatedSystemAiSkillsSkillIdIndexRoute: typeof AuthenticatedSystemAiSkillsSkillIdIndexRoute
+  AuthenticatedSystemAiToolCallsToolCallIdIndexRoute: typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRoute
+  AuthenticatedSystemAiToolsToolIdIndexRoute: typeof AuthenticatedSystemAiToolsToolIdIndexRoute
   AuthenticatedSystemLogsAuditLogIdIndexRoute: typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
   AuthenticatedSystemLogsLoginLogIdIndexRoute: typeof AuthenticatedSystemLogsLoginLogIdIndexRoute
   AuthenticatedSystemLogsNotificationsRecordIdIndexRoute: typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRoute
@@ -2800,6 +3262,22 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedWorkflowVersionsListRoute,
   AuthenticatedSystemAgentsAgentIdEditRoute:
     AuthenticatedSystemAgentsAgentIdEditRoute,
+  AuthenticatedSystemAiAgentsCreateRoute:
+    AuthenticatedSystemAiAgentsCreateRoute,
+  AuthenticatedSystemAiAgentsListRoute: AuthenticatedSystemAiAgentsListRoute,
+  AuthenticatedSystemAiConfirmationsListRoute:
+    AuthenticatedSystemAiConfirmationsListRoute,
+  AuthenticatedSystemAiConversationsListRoute:
+    AuthenticatedSystemAiConversationsListRoute,
+  AuthenticatedSystemAiMcpsCreateRoute: AuthenticatedSystemAiMcpsCreateRoute,
+  AuthenticatedSystemAiMcpsListRoute: AuthenticatedSystemAiMcpsListRoute,
+  AuthenticatedSystemAiSkillsCreateRoute:
+    AuthenticatedSystemAiSkillsCreateRoute,
+  AuthenticatedSystemAiSkillsListRoute: AuthenticatedSystemAiSkillsListRoute,
+  AuthenticatedSystemAiToolCallsListRoute:
+    AuthenticatedSystemAiToolCallsListRoute,
+  AuthenticatedSystemAiToolsCreateRoute: AuthenticatedSystemAiToolsCreateRoute,
+  AuthenticatedSystemAiToolsListRoute: AuthenticatedSystemAiToolsListRoute,
   AuthenticatedSystemCompaniesCompanyIdEditRoute:
     AuthenticatedSystemCompaniesCompanyIdEditRoute,
   AuthenticatedSystemDepartmentsDepartmentIdEditRoute:
@@ -2880,10 +3358,32 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute,
   AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute:
     AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute,
+  AuthenticatedSystemAiAgentsAgentIdEditRoute:
+    AuthenticatedSystemAiAgentsAgentIdEditRoute,
+  AuthenticatedSystemAiMcpsMcpIdEditRoute:
+    AuthenticatedSystemAiMcpsMcpIdEditRoute,
+  AuthenticatedSystemAiSkillsSkillIdEditRoute:
+    AuthenticatedSystemAiSkillsSkillIdEditRoute,
+  AuthenticatedSystemAiToolsToolIdEditRoute:
+    AuthenticatedSystemAiToolsToolIdEditRoute,
   AuthenticatedSystemMonitorNotificationChannelsHealthListRoute:
     AuthenticatedSystemMonitorNotificationChannelsHealthListRoute,
   AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute:
     AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute,
+  AuthenticatedSystemAiAgentsAgentIdIndexRoute:
+    AuthenticatedSystemAiAgentsAgentIdIndexRoute,
+  AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute:
+    AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute,
+  AuthenticatedSystemAiConversationsConversationIdIndexRoute:
+    AuthenticatedSystemAiConversationsConversationIdIndexRoute,
+  AuthenticatedSystemAiMcpsMcpIdIndexRoute:
+    AuthenticatedSystemAiMcpsMcpIdIndexRoute,
+  AuthenticatedSystemAiSkillsSkillIdIndexRoute:
+    AuthenticatedSystemAiSkillsSkillIdIndexRoute,
+  AuthenticatedSystemAiToolCallsToolCallIdIndexRoute:
+    AuthenticatedSystemAiToolCallsToolCallIdIndexRoute,
+  AuthenticatedSystemAiToolsToolIdIndexRoute:
+    AuthenticatedSystemAiToolsToolIdIndexRoute,
   AuthenticatedSystemLogsAuditLogIdIndexRoute:
     AuthenticatedSystemLogsAuditLogIdIndexRoute,
   AuthenticatedSystemLogsLoginLogIdIndexRoute:

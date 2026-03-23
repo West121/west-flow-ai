@@ -10,6 +10,7 @@ import io.modelcontextprotocol.client.transport.StdioClientTransport;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PreDestroy;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -99,9 +100,11 @@ public class AiMcpClientFactory {
             return null;
         }
         Map<String, String> headers = readStringMap(item.metadata(), "headers");
-        HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(item.endpointUrl())
+        ParsedMcpEndpoint endpoint = parseEndpoint(item.endpointUrl());
+        HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(endpoint.baseUrl())
                 .clientBuilder(HttpClient.newBuilder())
                 .jsonMapper(new JacksonMcpJsonMapper(objectMapper))
+                .endpoint(endpoint.endpointPath())
                 .connectTimeout(Duration.ofSeconds(readInt(item.metadata(), "connectTimeoutSeconds", 5)))
                 .openConnectionOnStartup(readBoolean(item.metadata(), "openConnectionOnStartup", false))
                 .customizeRequest(builder -> headers.forEach(builder::header))
@@ -200,5 +203,30 @@ public class AiMcpClientFactory {
             return Boolean.parseBoolean(text);
         }
         return defaultValue;
+    }
+
+    /**
+     * 把完整 MCP URL 拆成 baseUrl 和 endpointPath，兼容数据库里直接存完整地址。
+     */
+    private ParsedMcpEndpoint parseEndpoint(String endpointUrl) {
+        URI uri = URI.create(endpointUrl);
+        String scheme = uri.getScheme() == null ? "http" : uri.getScheme();
+        String host = uri.getHost();
+        int port = uri.getPort();
+        String baseUrl = port > 0
+                ? "%s://%s:%d".formatted(scheme, host, port)
+                : "%s://%s".formatted(scheme, host);
+        String path = uri.getPath();
+        String endpointPath = (path == null || path.isBlank()) ? "/mcp" : path;
+        return new ParsedMcpEndpoint(baseUrl, endpointPath);
+    }
+
+    /**
+     * MCP endpoint 拆分结果。
+     */
+    private record ParsedMcpEndpoint(
+            String baseUrl,
+            String endpointPath
+    ) {
     }
 }

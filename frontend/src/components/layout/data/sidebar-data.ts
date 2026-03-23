@@ -1,6 +1,7 @@
 import {
   ArrowRightLeft,
   BookText,
+  Bot,
   Building2,
   CheckCircle2,
   CircleUserRound,
@@ -333,6 +334,68 @@ export const sidebarData: SidebarData = {
             {
               title: '新建通知渠道',
               url: '/system/notification-channels/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+          ],
+        },
+        {
+          title: 'AI 管理',
+          icon: Bot,
+          requiredRoles: ['PROCESS_ADMIN'],
+          items: [
+            {
+              title: '智能体列表',
+              url: '/system/ai/agents/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建智能体',
+              url: '/system/ai/agents/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '工具列表',
+              url: '/system/ai/tools/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建工具',
+              url: '/system/ai/tools/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: 'MCP 列表',
+              url: '/system/ai/mcps/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建 MCP',
+              url: '/system/ai/mcps/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '技能列表',
+              url: '/system/ai/skills/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '新建技能',
+              url: '/system/ai/skills/create',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '会话审计',
+              url: '/system/ai/conversations/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '工具调用记录',
+              url: '/system/ai/tool-calls/list',
+              requiredRoles: ['PROCESS_ADMIN'],
+            },
+            {
+              title: '确认记录',
+              url: '/system/ai/confirmations/list',
               requiredRoles: ['PROCESS_ADMIN'],
             },
           ],
