@@ -235,7 +235,7 @@ public class ProcessDslToBpmnService {
         Map<String, Object> condition = mapValue(edge.condition());
         String expression = stringValue(condition.get("expression"));
         if (expression != null) {
-            flow.setConditionExpression(expression);
+            flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression));
         }
         addExtensionAttribute(flow, "priority", edge.priority() == null ? null : String.valueOf(edge.priority()));
         String conditionType = stringValue(condition.get("type"));
@@ -243,6 +243,14 @@ public class ProcessDslToBpmnService {
             addExtensionAttribute(flow, "conditionType", conditionType);
         }
         return flow;
+    }
+
+    private String normalizeSequenceFlowConditionExpression(String expression) {
+        String trimmed = expression.trim();
+        if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
+            return trimmed;
+        }
+        return "${" + trimmed + "}";
     }
 
     // 把 DSL 节点元数据和配置统一写成扩展属性，供运行态读取。

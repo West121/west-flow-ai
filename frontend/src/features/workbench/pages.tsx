@@ -79,6 +79,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import {
   RuntimeStructureSection,
 } from '@/features/workflow/runtime-structure'
+import { InclusiveGatewaySection } from '@/features/workflow/inclusive-gateway-section'
 import {
   mergeRuntimeStructureLinks,
   type RuntimeStructureLink,
@@ -2177,7 +2178,10 @@ export function WorkbenchTodoDetailPage({
                   <ApprovalSheetCountersignSection
                     countersignGroups={detail.countersignGroups ?? []}
                   />
-                    <ApprovalSheetProcessLinkSection
+                  <InclusiveGatewaySection
+                    hits={detail.inclusiveGatewayHits ?? []}
+                  />
+                  <ApprovalSheetProcessLinkSection
                     links={mergeRuntimeStructureLinks(
                       detail.processLinks ?? [],
                       detail.runtimeStructureLinks ?? []

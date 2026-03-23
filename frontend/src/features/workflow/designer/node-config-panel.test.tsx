@@ -306,7 +306,8 @@ describe('workflow designer node config panel', () => {
     expect(screen.getAllByText('汇聚').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('combobox'))
-    fireEvent.click(screen.getAllByText('分支').at(-1)!)
+    const splitOptions = screen.getAllByText('分支')
+    fireEvent.click(splitOptions[splitOptions.length - 1]!)
     fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
 
     await waitFor(() => expect(onApply).toHaveBeenCalled())

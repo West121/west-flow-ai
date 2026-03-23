@@ -160,6 +160,7 @@ public class WorkflowManagementService {
                 toOffsetDateTime(historicInstance.getStartTime()),
                 toOffsetDateTime(historicInstance.getEndTime()),
                 context.variables(),
+                flowableProcessRuntimeService.inclusiveGatewayHits(instanceId),
                 processLinks(instanceId),
                 flowableProcessRuntimeService.appendLinks(instanceId)
         );

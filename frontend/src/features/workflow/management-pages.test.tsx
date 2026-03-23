@@ -61,6 +61,23 @@ describe('workflow management pages', () => {
       variables: {
         westflowBusinessKey: 'leave_026',
       },
+      inclusiveGatewayHits: [
+        {
+          splitNodeId: 'inclusive_split_1',
+          splitNodeName: '包容分支',
+          joinNodeId: 'inclusive_join_1',
+          joinNodeName: '包容汇聚',
+          gatewayStatus: 'COMPLETED',
+          totalTargetCount: 2,
+          activatedTargetCount: 1,
+          activatedTargetNodeIds: ['approve_finance'],
+          activatedTargetNodeNames: ['财务审批'],
+          skippedTargetNodeIds: ['approve_hr'],
+          skippedTargetNodeNames: ['人事审批'],
+          firstActivatedAt: '2026-03-23T10:05:00+08:00',
+          finishedAt: '2026-03-23T10:20:00+08:00',
+        },
+      ],
       processLinks: [
         {
           linkId: 'subprocess_001',
@@ -109,6 +126,9 @@ describe('workflow management pages', () => {
 
     renderWithQuery(<WorkflowInstanceDetailPage instanceId='pi_001' />)
 
+    expect(await screen.findByText('包容分支命中')).toBeInTheDocument()
+    expect(screen.getByText('财务审批')).toBeInTheDocument()
+    expect(screen.getByText('人事审批')).toBeInTheDocument()
     expect(await screen.findByText('运行态结构')).toBeInTheDocument()
     expect(screen.getByText('主子流程')).toBeInTheDocument()
     expect(screen.getByText('动态构建')).toBeInTheDocument()

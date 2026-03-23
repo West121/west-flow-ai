@@ -37,6 +37,7 @@ import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import { RuntimeStructureSection } from '@/features/workflow/runtime-structure'
+import { InclusiveGatewaySection } from '@/features/workflow/inclusive-gateway-section'
 import {
   mergeRuntimeStructureLinks,
   type RuntimeStructureLink,
@@ -553,6 +554,11 @@ export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string 
         },
       ]}
     >
+      <InclusiveGatewaySection
+        hits={detail.inclusiveGatewayHits ?? []}
+        title='包容分支命中'
+        description='这里展示当前流程实例实际命中的包容路径和汇聚完成状态，便于排查条件命中情况。'
+      />
       <RuntimeStructureSection
         title='运行态结构'
         description='这里按调用链展示主流程、子流程、追加和动态构建实例关系，便于监控联动终止和回查执行状态。'

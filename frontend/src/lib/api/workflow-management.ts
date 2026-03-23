@@ -77,8 +77,25 @@ export type WorkflowRuntimeAppendLink = RuntimeStructureLink & {
   triggerMode: 'APPEND' | 'DYNAMIC_BUILD'
 }
 
+export type WorkflowInclusiveGatewayHit = {
+  splitNodeId: string
+  splitNodeName: string
+  joinNodeId: string | null
+  joinNodeName: string | null
+  gatewayStatus: string
+  totalTargetCount: number
+  activatedTargetCount: number
+  activatedTargetNodeIds: string[]
+  activatedTargetNodeNames: string[]
+  skippedTargetNodeIds: string[]
+  skippedTargetNodeNames: string[]
+  firstActivatedAt: string | null
+  finishedAt: string | null
+}
+
 export type WorkflowInstanceDetail = WorkflowInstanceRecord & {
   variables: Record<string, unknown>
+  inclusiveGatewayHits: WorkflowInclusiveGatewayHit[]
   processLinks: WorkflowProcessLink[]
   runtimeStructureLinks?: WorkflowRuntimeAppendLink[] | null
 }

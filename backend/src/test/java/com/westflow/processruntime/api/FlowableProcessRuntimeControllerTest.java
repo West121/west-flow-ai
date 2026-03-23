@@ -255,6 +255,49 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeInclusiveGatewayHitsOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String financeToken = login("lisi");
+        processDefinitionService.publish(buildInclusiveGatewayPayload());
+        seedLeaveBill("leave_029");
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_inclusive",
+                                  "businessKey": "leave_029",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "amount": 2000,
+                                    "reason": "包容分支测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + financeToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(detailBody.path("inclusiveGatewayHits").isArray()).isTrue();
+        assertThat(detailBody.path("inclusiveGatewayHits")).hasSize(1);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("splitNodeId").asText()).isEqualTo("inclusive_split_1");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("activatedTargetNodeNames").get(0).asText()).isEqualTo("财务审批");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("skippedTargetNodeNames").get(0).asText()).isEqualTo("人事审批");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("INCLUSIVE_BRANCH_ACTIVATED");
+    }
+
+    @Test
     void shouldExposeSubprocessInstanceLinksOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayload());
@@ -2318,6 +2361,146 @@ class FlowableProcessRuntimeControllerTest {
                     {
                       "id": "edge_2",
                       "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildInclusiveGatewayPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_inclusive",
+                  "processName": "包容分支请假审批",
+                  "category": "OA",
+                  "processFormKey": "oa_inclusive_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "inclusive_split_1",
+                      "type": "inclusive_split",
+                      "name": "包容分支",
+                      "position": {"x": 320, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_finance",
+                      "type": "approver",
+                      "name": "财务审批",
+                      "position": {"x": 540, "y": 40},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_hr",
+                      "type": "approver",
+                      "name": "人事审批",
+                      "position": {"x": 540, "y": 180},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "inclusive_join_1",
+                      "type": "inclusive_join",
+                      "name": "包容汇聚",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 980, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "inclusive_split_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "inclusive_split_1",
+                      "target": "approve_finance",
+                      "priority": 10,
+                      "label": "金额超限",
+                      "condition": {
+                        "type": "EXPRESSION",
+                        "expression": "amount > 1000"
+                      }
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "inclusive_split_1",
+                      "target": "approve_hr",
+                      "priority": 20,
+                      "label": "长假",
+                      "condition": {
+                        "type": "EXPRESSION",
+                        "expression": "days > 3"
+                      }
+                    },
+                    {
+                      "id": "edge_4",
+                      "source": "approve_finance",
+                      "target": "inclusive_join_1",
+                      "priority": 10,
+                      "label": "汇聚"
+                    },
+                    {
+                      "id": "edge_5",
+                      "source": "approve_hr",
+                      "target": "inclusive_join_1",
+                      "priority": 10,
+                      "label": "汇聚"
+                    },
+                    {
+                      "id": "edge_6",
+                      "source": "inclusive_join_1",
                       "target": "end_1",
                       "priority": 10,
                       "label": "完成"

@@ -288,6 +288,7 @@ function createWorkbenchTaskDetail(
       },
     ],
     countersignGroups: [],
+    inclusiveGatewayHits: [],
     activeTaskIds: [taskId],
     ...overrides,
   }
@@ -1258,6 +1259,88 @@ describe('workbench pages', () => {
     expect(screen.getByText('子流程实例：pi_child_001')).toBeInTheDocument()
     expect(screen.getByText('调用节点：subprocess_review')).toBeInTheDocument()
     expect(screen.getByText('子流程编码：oa_sub_review')).toBeInTheDocument()
+  })
+
+  it('shows inclusive gateway hits in approval detail', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_inclusive_001',
+        flowNodes: [
+          {
+            id: 'start_1',
+            type: 'start',
+            name: '开始',
+            position: { x: 100, y: 100 },
+          },
+          {
+            id: 'inclusive_split_1',
+            type: 'inclusive_split',
+            name: '包容分支',
+            position: { x: 320, y: 100 },
+          },
+          {
+            id: 'approve_finance',
+            type: 'approver',
+            name: '财务审批',
+            position: { x: 540, y: 40 },
+          },
+          {
+            id: 'approve_hr',
+            type: 'approver',
+            name: '人事审批',
+            position: { x: 540, y: 180 },
+          },
+          {
+            id: 'inclusive_join_1',
+            type: 'inclusive_join',
+            name: '包容汇聚',
+            position: { x: 760, y: 100 },
+          },
+        ],
+        inclusiveGatewayHits: [
+          {
+            splitNodeId: 'inclusive_split_1',
+            splitNodeName: '包容分支',
+            joinNodeId: 'inclusive_join_1',
+            joinNodeName: '包容汇聚',
+            gatewayStatus: 'COMPLETED',
+            totalTargetCount: 2,
+            activatedTargetCount: 1,
+            activatedTargetNodeIds: ['approve_finance'],
+            activatedTargetNodeNames: ['财务审批'],
+            skippedTargetNodeIds: ['approve_hr'],
+            skippedTargetNodeNames: ['人事审批'],
+            firstActivatedAt: '2026-03-23T10:05:00+08:00',
+            finishedAt: '2026-03-23T10:20:00+08:00',
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_inclusive_001' />)
+
+    expect(await screen.findByText('包容分支命中')).toBeInTheDocument()
+    expect(screen.getAllByText('包容分支').length).toBeGreaterThan(0)
+    expect(screen.getByText('命中路径')).toBeInTheDocument()
+    expect(screen.getByText('跳过路径')).toBeInTheDocument()
+    expect(screen.getByText('财务审批')).toBeInTheDocument()
+    expect(screen.getByText('人事审批')).toBeInTheDocument()
   })
 
   it('shows append and dynamic build runtime structure links in approval detail', async () => {

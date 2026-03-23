@@ -171,6 +171,22 @@ export type WorkbenchCountersignGroup = {
   members: WorkbenchCountersignGroupMember[]
 }
 
+export type WorkbenchInclusiveGatewayHit = {
+  splitNodeId: string
+  splitNodeName: string
+  joinNodeId: string | null
+  joinNodeName: string | null
+  gatewayStatus: string
+  totalTargetCount: number
+  activatedTargetCount: number
+  activatedTargetNodeIds: string[]
+  activatedTargetNodeNames: string[]
+  skippedTargetNodeIds: string[]
+  skippedTargetNodeNames: string[]
+  firstActivatedAt: string | null
+  finishedAt: string | null
+}
+
 export type WorkbenchProcessLink = {
   linkId: string
   rootInstanceId: string
@@ -226,6 +242,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   fieldBindings: WorkflowFieldBinding[]
   taskFormData: Record<string, unknown> | null
   countersignGroups?: WorkbenchCountersignGroup[] | null
+  inclusiveGatewayHits?: WorkbenchInclusiveGatewayHit[] | null
   processLinks?: WorkbenchProcessLink[] | null
   runtimeStructureLinks?: WorkbenchRuntimeAppendLink[] | null
   activeTaskIds: string[]

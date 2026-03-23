@@ -21,17 +21,18 @@ import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
 import com.westflow.processruntime.api.CountersignTaskGroupResponse;
 import com.westflow.processruntime.api.DelegateTaskRequest;
-import com.westflow.processruntime.api.ProcessTaskSnapshot;
 import com.westflow.processruntime.api.HandoverExecutionResponse;
 import com.westflow.processruntime.api.HandoverExecutionTaskItemResponse;
 import com.westflow.processruntime.api.HandoverPreviewResponse;
 import com.westflow.processruntime.api.HandoverPreviewTaskItemResponse;
+import com.westflow.processruntime.api.InclusiveGatewayHitResponse;
 import com.westflow.processruntime.api.HandoverTaskRequest;
 import com.westflow.processruntime.api.JumpTaskRequest;
 import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
 import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
+import com.westflow.processruntime.api.ProcessTaskSnapshot;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
 import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
@@ -72,6 +73,7 @@ import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
+import org.flowable.engine.history.HistoricActivityInstance;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
@@ -214,6 +216,26 @@ public class FlowableProcessRuntimeService {
     public List<CountersignTaskGroupResponse> taskGroups(String instanceId) {
         requireHistoricProcessInstance(instanceId);
         return flowableCountersignService.queryTaskGroups(instanceId);
+    }
+
+    /**
+     * 查询实例维度的包容分支命中摘要。
+     */
+    public List<InclusiveGatewayHitResponse> inclusiveGatewayHits(String instanceId) {
+        HistoricProcessInstance historicProcessInstance = requireHistoricProcessInstance(instanceId);
+        Map<String, Object> processVariables = runtimeOrHistoricVariables(instanceId);
+        PublishedProcessDefinition definition = resolvePublishedDefinition(
+                null,
+                stringValue(processVariables.get("westflowProcessDefinitionId")),
+                stringValue(processVariables.get("westflowProcessKey")),
+                instanceId
+        );
+        List<Task> activeTasks = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(instanceId)
+                .active()
+                .list();
+        return buildInclusiveGatewayHits(instanceId, definition.dsl(), historicProcessInstance, activeTasks);
     }
 
     /**
@@ -1669,6 +1691,16 @@ public class FlowableProcessRuntimeService {
         if (instanceEvents.isEmpty()) {
             instanceEvents = buildSyntheticEvents(historicProcessInstance, taskTrace);
         }
+        List<InclusiveGatewayHitResponse> inclusiveGatewayHits = buildInclusiveGatewayHits(
+                processInstanceId,
+                payload,
+                historicProcessInstance,
+                activeTasks
+        );
+        instanceEvents = mergeInstanceEvents(
+                instanceEvents,
+                buildInclusiveGatewayEvents(processInstanceId, inclusiveGatewayHits)
+        );
         List<ProcessAutomationTraceItemResponse> automationTrace = traceStore.queryAutomationTraces(
                 processInstanceId,
                 blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
@@ -1746,6 +1778,7 @@ public class FlowableProcessRuntimeService {
                 mapValue(variables.get("westflowFormData")),
                 mapValue(variables.get("westflowTaskFormData")),
                 countersignGroups,
+                inclusiveGatewayHits,
                 processLinks,
                 runtimeAppendLinks,
                 blockingActiveTasks.stream().map(Task::getId).toList()
@@ -1837,6 +1870,334 @@ public class FlowableProcessRuntimeService {
             ));
         }
         return items;
+    }
+
+    private List<InclusiveGatewayHitResponse> buildInclusiveGatewayHits(
+            String processInstanceId,
+            ProcessDslPayload payload,
+            HistoricProcessInstance historicProcessInstance,
+            List<Task> activeTasks
+    ) {
+        if (payload == null || payload.nodes() == null || payload.edges() == null) {
+            return List.of();
+        }
+
+        Map<String, ProcessDslPayload.Node> nodeById = payload.nodes().stream()
+                .collect(LinkedHashMap::new, (map, node) -> map.put(node.id(), node), Map::putAll);
+        List<ProcessDslPayload.Node> inclusiveSplits = payload.nodes().stream()
+                .filter(node -> "inclusive_split".equals(node.type()))
+                .toList();
+        if (inclusiveSplits.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, List<ProcessDslPayload.Edge>> outgoingEdges = new LinkedHashMap<>();
+        for (ProcessDslPayload.Edge edge : payload.edges()) {
+            outgoingEdges.computeIfAbsent(edge.source(), ignored -> new ArrayList<>()).add(edge);
+        }
+
+        Map<String, OffsetDateTime> firstOccurredAtByNodeId = new HashMap<>();
+        Set<String> reachedNodeIds = new LinkedHashSet<>();
+        List<HistoricActivityInstance> historicActivities = flowableEngineFacade.historyService()
+                .createHistoricActivityInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .orderByHistoricActivityInstanceStartTime()
+                .asc()
+                .list();
+        for (HistoricActivityInstance activity : historicActivities) {
+            if (activity.getActivityId() == null || activity.getActivityId().isBlank()) {
+                continue;
+            }
+            reachedNodeIds.add(activity.getActivityId());
+            firstOccurredAtByNodeId.putIfAbsent(
+                    activity.getActivityId(),
+                    toOffsetDateTime(activity.getStartTime())
+            );
+        }
+        for (Task activeTask : activeTasks) {
+            if (activeTask.getTaskDefinitionKey() == null || activeTask.getTaskDefinitionKey().isBlank()) {
+                continue;
+            }
+            reachedNodeIds.add(activeTask.getTaskDefinitionKey());
+            firstOccurredAtByNodeId.putIfAbsent(
+                    activeTask.getTaskDefinitionKey(),
+                    toOffsetDateTime(activeTask.getCreateTime())
+            );
+        }
+
+        List<InclusiveGatewayHitResponse> hits = new ArrayList<>();
+        for (ProcessDslPayload.Node split : inclusiveSplits) {
+            ProcessDslPayload.Node join = resolveNearestInclusiveJoin(split.id(), nodeById, outgoingEdges);
+            List<ProcessDslPayload.Edge> branchEdges = outgoingEdges.getOrDefault(split.id(), List.of());
+            if (branchEdges.isEmpty()) {
+                continue;
+            }
+
+            List<String> activatedTargetNodeIds = new ArrayList<>();
+            List<String> activatedTargetNodeNames = new ArrayList<>();
+            List<String> skippedTargetNodeIds = new ArrayList<>();
+            List<String> skippedTargetNodeNames = new ArrayList<>();
+            OffsetDateTime firstActivatedAt = null;
+
+            for (ProcessDslPayload.Edge edge : branchEdges) {
+                String targetNodeId = edge.target();
+                if (targetNodeId == null || targetNodeId.isBlank()) {
+                    continue;
+                }
+                ProcessDslPayload.Node targetNode = nodeById.get(targetNodeId);
+                boolean activated = hasReachedInclusiveBranchTarget(
+                        targetNodeId,
+                        join == null ? null : join.id(),
+                        outgoingEdges,
+                        reachedNodeIds,
+                        new LinkedHashSet<>()
+                );
+                if (activated) {
+                    activatedTargetNodeIds.add(targetNodeId);
+                    activatedTargetNodeNames.add(targetNode == null ? targetNodeId : targetNode.name());
+                    OffsetDateTime occurredAt = resolveInclusiveBranchOccurredAt(
+                            targetNodeId,
+                            join == null ? null : join.id(),
+                            outgoingEdges,
+                            firstOccurredAtByNodeId,
+                            new LinkedHashSet<>()
+                    );
+                    if (occurredAt != null && (firstActivatedAt == null || occurredAt.isBefore(firstActivatedAt))) {
+                        firstActivatedAt = occurredAt;
+                    }
+                } else {
+                    skippedTargetNodeIds.add(targetNodeId);
+                    skippedTargetNodeNames.add(targetNode == null ? targetNodeId : targetNode.name());
+                }
+            }
+
+            OffsetDateTime finishedAt = join == null ? null : firstOccurredAtByNodeId.get(join.id());
+            String gatewayStatus = resolveInclusiveGatewayStatus(
+                    historicProcessInstance,
+                    join == null ? null : join.id(),
+                    finishedAt,
+                    activatedTargetNodeIds
+            );
+
+            hits.add(new InclusiveGatewayHitResponse(
+                    split.id(),
+                    split.name(),
+                    join == null ? null : join.id(),
+                    join == null ? null : join.name(),
+                    gatewayStatus,
+                    branchEdges.size(),
+                    activatedTargetNodeIds.size(),
+                    List.copyOf(activatedTargetNodeIds),
+                    List.copyOf(activatedTargetNodeNames),
+                    List.copyOf(skippedTargetNodeIds),
+                    List.copyOf(skippedTargetNodeNames),
+                    firstActivatedAt,
+                    finishedAt
+            ));
+        }
+        return hits;
+    }
+
+    private List<ProcessInstanceEventResponse> buildInclusiveGatewayEvents(
+            String instanceId,
+            List<InclusiveGatewayHitResponse> hits
+    ) {
+        if (hits.isEmpty()) {
+            return List.of();
+        }
+        List<ProcessInstanceEventResponse> events = new ArrayList<>();
+        for (InclusiveGatewayHitResponse hit : hits) {
+            if (!hit.activatedTargetNodeIds().isEmpty()) {
+                events.add(new ProcessInstanceEventResponse(
+                        instanceId + "::inclusive::" + hit.splitNodeId(),
+                        instanceId,
+                        null,
+                        hit.splitNodeId(),
+                        "INCLUSIVE_BRANCH_ACTIVATED",
+                        "包容分支已命中",
+                        "ROUTE",
+                        null,
+                        null,
+                        null,
+                        null,
+                        hit.firstActivatedAt(),
+                        Map.of(
+                                "joinNodeId", hit.joinNodeId(),
+                                "joinNodeName", hit.joinNodeName(),
+                                "activatedTargetNodeIds", hit.activatedTargetNodeIds(),
+                                "activatedTargetNodeNames", hit.activatedTargetNodeNames(),
+                                "skippedTargetNodeIds", hit.skippedTargetNodeIds(),
+                                "skippedTargetNodeNames", hit.skippedTargetNodeNames()
+                        ),
+                        null,
+                        hit.joinNodeId(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ));
+            }
+            if (hit.finishedAt() != null && hit.joinNodeId() != null) {
+                events.add(new ProcessInstanceEventResponse(
+                        instanceId + "::inclusive-join::" + hit.joinNodeId(),
+                        instanceId,
+                        null,
+                        hit.joinNodeId(),
+                        "INCLUSIVE_GATEWAY_JOINED",
+                        "包容汇聚已完成",
+                        "ROUTE",
+                        null,
+                        null,
+                        null,
+                        null,
+                        hit.finishedAt(),
+                        Map.of(
+                                "splitNodeId", hit.splitNodeId(),
+                                "splitNodeName", hit.splitNodeName(),
+                                "activatedTargetNodeIds", hit.activatedTargetNodeIds(),
+                                "activatedTargetNodeNames", hit.activatedTargetNodeNames()
+                        ),
+                        null,
+                        hit.joinNodeId(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ));
+            }
+        }
+        return events;
+    }
+
+    private List<ProcessInstanceEventResponse> mergeInstanceEvents(
+            List<ProcessInstanceEventResponse> instanceEvents,
+            List<ProcessInstanceEventResponse> derivedEvents
+    ) {
+        if (derivedEvents.isEmpty()) {
+            return instanceEvents;
+        }
+        Map<String, ProcessInstanceEventResponse> deduped = new LinkedHashMap<>();
+        for (ProcessInstanceEventResponse event : instanceEvents) {
+            deduped.put(event.eventId(), event);
+        }
+        for (ProcessInstanceEventResponse event : derivedEvents) {
+            deduped.put(event.eventId(), event);
+        }
+        return deduped.values().stream()
+                .sorted(Comparator.comparing(ProcessInstanceEventResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(ProcessInstanceEventResponse::eventId))
+                .toList();
+    }
+
+    private ProcessDslPayload.Node resolveNearestInclusiveJoin(
+            String splitNodeId,
+            Map<String, ProcessDslPayload.Node> nodeById,
+            Map<String, List<ProcessDslPayload.Edge>> outgoingEdges
+    ) {
+        Set<String> visited = new LinkedHashSet<>();
+        List<String> queue = new ArrayList<>();
+        queue.add(splitNodeId);
+        while (!queue.isEmpty()) {
+            String currentNodeId = queue.remove(0);
+            if (!visited.add(currentNodeId)) {
+                continue;
+            }
+            if (!splitNodeId.equals(currentNodeId)) {
+                ProcessDslPayload.Node node = nodeById.get(currentNodeId);
+                if (node != null && "inclusive_join".equals(node.type())) {
+                    return node;
+                }
+            }
+            for (ProcessDslPayload.Edge edge : outgoingEdges.getOrDefault(currentNodeId, List.of())) {
+                if (edge.target() != null && !edge.target().isBlank()) {
+                    queue.add(edge.target());
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean hasReachedInclusiveBranchTarget(
+            String nodeId,
+            String joinNodeId,
+            Map<String, List<ProcessDslPayload.Edge>> outgoingEdges,
+            Set<String> reachedNodeIds,
+            Set<String> visited
+    ) {
+        if (nodeId == null || nodeId.isBlank() || !visited.add(nodeId)) {
+            return false;
+        }
+        if (nodeId.equals(joinNodeId)) {
+            return false;
+        }
+        if (reachedNodeIds.contains(nodeId)) {
+            return true;
+        }
+        for (ProcessDslPayload.Edge edge : outgoingEdges.getOrDefault(nodeId, List.of())) {
+            if (hasReachedInclusiveBranchTarget(edge.target(), joinNodeId, outgoingEdges, reachedNodeIds, visited)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private OffsetDateTime resolveInclusiveBranchOccurredAt(
+            String nodeId,
+            String joinNodeId,
+            Map<String, List<ProcessDslPayload.Edge>> outgoingEdges,
+            Map<String, OffsetDateTime> occurredAtByNodeId,
+            Set<String> visited
+    ) {
+        if (nodeId == null || nodeId.isBlank() || !visited.add(nodeId)) {
+            return null;
+        }
+        if (nodeId.equals(joinNodeId)) {
+            return null;
+        }
+        OffsetDateTime directOccurredAt = occurredAtByNodeId.get(nodeId);
+        if (directOccurredAt != null) {
+            return directOccurredAt;
+        }
+        OffsetDateTime earliest = null;
+        for (ProcessDslPayload.Edge edge : outgoingEdges.getOrDefault(nodeId, List.of())) {
+            OffsetDateTime occurredAt = resolveInclusiveBranchOccurredAt(
+                    edge.target(),
+                    joinNodeId,
+                    outgoingEdges,
+                    occurredAtByNodeId,
+                    visited
+            );
+            if (occurredAt != null && (earliest == null || occurredAt.isBefore(earliest))) {
+                earliest = occurredAt;
+            }
+        }
+        return earliest;
+    }
+
+    private String resolveInclusiveGatewayStatus(
+            HistoricProcessInstance historicProcessInstance,
+            String joinNodeId,
+            OffsetDateTime finishedAt,
+            List<String> activatedTargetNodeIds
+    ) {
+        if (finishedAt != null || (joinNodeId != null && isNodeCurrentlyActive(historicProcessInstance.getId(), joinNodeId))) {
+            return finishedAt != null ? "COMPLETED" : "RUNNING";
+        }
+        if (historicProcessInstance.getEndTime() != null) {
+            return "COMPLETED";
+        }
+        return activatedTargetNodeIds.isEmpty() ? "PENDING" : "RUNNING";
+    }
+
+    private boolean isNodeCurrentlyActive(String processInstanceId, String nodeId) {
+        return flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .taskDefinitionKey(nodeId)
+                .active()
+                .count() > 0;
     }
 
     private List<ProcessInstanceEventResponse> buildSyntheticEvents(
