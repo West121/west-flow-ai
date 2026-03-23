@@ -113,6 +113,23 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
+function buildInclusiveNode(direction: 'SPLIT' | 'JOIN'): WorkflowNode {
+  return {
+    id: `inclusive_${direction.toLowerCase()}`,
+    type: 'workflow',
+    position: { x: 320, y: 100 },
+    data: {
+      kind: 'inclusive',
+      label: '包容分支',
+      description: '支持多条条件同时命中',
+      tone: 'warning',
+      config: {
+        gatewayDirection: direction,
+      } as never,
+    },
+  }
+}
+
 describe('workflow designer dsl mapping', () => {
   it('maps the canvas snapshot to the frozen process definition DSL', () => {
     const dsl = workflowSnapshotToProcessDefinitionDsl(snapshot, {
@@ -301,6 +318,47 @@ describe('workflow designer dsl mapping', () => {
       maxGeneratedCount: 2,
       terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
     })
+  })
+
+  it('persists inclusive gateway direction into the DSL node type', () => {
+    const splitSnapshot: WorkflowSnapshot = {
+      ...snapshot,
+      nodes: [snapshot.nodes[0], buildInclusiveNode('SPLIT'), snapshot.nodes[2]],
+      edges: [
+        { id: 'edge_1', source: 'start_1', target: 'inclusive_split', type: 'smoothstep' },
+        { id: 'edge_2', source: 'inclusive_split', target: 'end_1', type: 'smoothstep' },
+      ],
+      selectedNodeId: 'inclusive_split',
+    }
+    const joinSnapshot: WorkflowSnapshot = {
+      ...snapshot,
+      nodes: [snapshot.nodes[0], buildInclusiveNode('JOIN'), snapshot.nodes[2]],
+      edges: [
+        { id: 'edge_1', source: 'start_1', target: 'inclusive_join', type: 'smoothstep' },
+        { id: 'edge_2', source: 'inclusive_join', target: 'end_1', type: 'smoothstep' },
+      ],
+      selectedNodeId: 'inclusive_join',
+    }
+
+    const splitDsl = workflowSnapshotToProcessDefinitionDsl(splitSnapshot, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+    const joinDsl = workflowSnapshotToProcessDefinitionDsl(joinSnapshot, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(splitDsl.nodes[1]?.type).toBe('inclusive_split')
+    expect(joinDsl.nodes[1]?.type).toBe('inclusive_join')
   })
 
   it('hydrates the designer snapshot from the persisted process definition detail', () => {

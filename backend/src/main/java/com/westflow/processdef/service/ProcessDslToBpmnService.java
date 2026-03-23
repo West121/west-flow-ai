@@ -12,6 +12,7 @@ import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.CallActivity;
 import org.flowable.bpmn.model.EndEvent;
 import org.flowable.bpmn.model.ExclusiveGateway;
+import org.flowable.bpmn.model.InclusiveGateway;
 import org.flowable.bpmn.model.ExtensionAttribute;
 import org.flowable.bpmn.model.FlowElement;
 import org.flowable.bpmn.model.ImplementationType;
@@ -71,6 +72,8 @@ public class ProcessDslToBpmnService {
             case "dynamic-builder" -> buildDynamicBuilderPlaceholder(node, config);
             case "cc" -> buildCcTask(node, config);
             case "condition" -> buildExclusiveGateway(node, config);
+            case "inclusive_split" -> buildInclusiveGateway(node, "split");
+            case "inclusive_join" -> buildInclusiveGateway(node, "join");
             case "parallel_split" -> buildParallelGateway(node, "split");
             case "parallel_join" -> buildParallelGateway(node, "join");
             case "timer" -> buildTimerEvent(node, config);
@@ -147,6 +150,15 @@ public class ProcessDslToBpmnService {
     // 并行网关分别承载分支和汇聚语义。
     private ParallelGateway buildParallelGateway(ProcessDslPayload.Node node, String gatewayType) {
         ParallelGateway gateway = new ParallelGateway();
+        gateway.setId(node.id());
+        gateway.setName(node.name());
+        addExtensionAttribute(gateway, "gatewayType", gatewayType);
+        return gateway;
+    }
+
+    // 包容网关分别承载分支和汇聚语义。
+    private InclusiveGateway buildInclusiveGateway(ProcessDslPayload.Node node, String gatewayType) {
+        InclusiveGateway gateway = new InclusiveGateway();
         gateway.setId(node.id());
         gateway.setName(node.name());
         addExtensionAttribute(gateway, "gatewayType", gatewayType);

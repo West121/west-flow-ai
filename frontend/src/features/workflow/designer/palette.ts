@@ -68,6 +68,14 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
     icon: GitBranch,
   },
   {
+    kind: 'inclusive',
+    label: '包容分支',
+    description: '可命中多个条件分支并汇聚',
+    tone: 'warning',
+    accent: 'from-orange-500/20 to-orange-500/5',
+    icon: GitMerge,
+  },
+  {
     kind: 'parallel',
     label: '并行分支',
     description: '并发任务和汇聚节点编排',

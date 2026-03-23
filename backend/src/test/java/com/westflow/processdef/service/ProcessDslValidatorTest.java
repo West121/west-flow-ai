@@ -130,6 +130,54 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectInclusiveSplitWithoutJoin() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of()),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        edge("edge_2", "inclusive_split_1", "approve_1"),
+                        edge("edge_3", "inclusive_split_1", "approve_2"),
+                        edge("edge_4", "approve_1", "end_1"),
+                        edge("edge_5", "approve_2", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "inclusive_split 与 inclusive_join 必须成对出现");
+    }
+
+    @Test
+    void shouldAcceptPairedInclusiveNodes() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of()),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        edge("edge_2", "inclusive_split_1", "approve_1"),
+                        edge("edge_3", "inclusive_split_1", "approve_2"),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
     void shouldRejectApproverWithoutAssignment() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),

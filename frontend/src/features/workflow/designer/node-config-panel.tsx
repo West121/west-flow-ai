@@ -28,6 +28,7 @@ import {
 import { NodeFormSelector } from './form-selection'
 import {
   type WorkflowFieldBinding,
+  type WorkflowGatewayDirection,
   type WorkflowApproverApprovalPolicyType,
   type WorkflowApproverAssignmentMode,
   type WorkflowCcTargetMode,
@@ -127,6 +128,11 @@ const dynamicBuilderTerminatePolicies = [
   { value: 'TERMINATE_PARENT_AND_GENERATED', label: '级联终止父节点与生成结构' },
 ] satisfies Array<{ value: WorkflowDynamicBuilderTerminatePolicy; label: string }>
 
+const gatewayDirections = [
+  { value: 'SPLIT', label: '分支' },
+  { value: 'JOIN', label: '汇聚' },
+] satisfies Array<{ value: WorkflowGatewayDirection; label: string }>
+
 const reminderChannels = [
   { value: 'IN_APP', label: '站内信' },
   { value: 'EMAIL', label: '邮件' },
@@ -163,6 +169,7 @@ const nodeConfigFormSchema = z
       'subprocess',
       'dynamic-builder',
       'condition',
+      'inclusive',
       'cc',
       'timer',
       'trigger',
@@ -274,7 +281,12 @@ const nodeConfigFormSchema = z
       expressionFieldKey: z.string(),
       branches: z.array(branchSchema),
     }),
-    parallel: z.object({}),
+    inclusive: z.object({
+      gatewayDirection: z.enum(['SPLIT', 'JOIN']),
+    }),
+    parallel: z.object({
+      gatewayDirection: z.enum(['SPLIT', 'JOIN']),
+    }),
     end: z.object({}),
   })
   .superRefine((values, ctx) => {
@@ -908,6 +920,9 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
       expressionFieldKey: String(config.expressionFieldKey ?? ''),
       branches: branchDefaults,
     },
+    inclusive: {
+      gatewayDirection: config.gatewayDirection === 'JOIN' ? 'JOIN' : 'SPLIT',
+    },
     timer: {
       scheduleType:
         timerConfig.scheduleType === 'ABSOLUTE_TIME'
@@ -943,7 +958,9 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
           : String(triggerConfig.retryIntervalMinutes),
       payloadTemplate: String(triggerConfig.payloadTemplate ?? ''),
     },
-    parallel: {},
+    parallel: {
+      gatewayDirection: config.gatewayDirection === 'JOIN' ? 'JOIN' : 'SPLIT',
+    },
     end: {},
   }
 }
@@ -1130,6 +1147,12 @@ function buildNodePatch(values: NodeConfigFormValues) {
           expressionFieldKey: values.condition.expressionFieldKey.trim(),
         },
       }
+    case 'inclusive':
+      return {
+        config: {
+          gatewayDirection: values.inclusive.gatewayDirection,
+        },
+      }
     case 'timer':
       return {
         config: {
@@ -1160,6 +1183,12 @@ function buildNodePatch(values: NodeConfigFormValues) {
           retryTimes: parseNumber(values.trigger.retryTimes),
           retryIntervalMinutes: parseNumber(values.trigger.retryIntervalMinutes),
           payloadTemplate: values.trigger.payloadTemplate.trim(),
+        },
+      }
+    case 'parallel':
+      return {
+        config: {
+          gatewayDirection: values.parallel.gatewayDirection,
         },
       }
     default:
@@ -1288,7 +1317,12 @@ export function NodeConfigPanel({
             expressionFieldKey: '',
             branches: [],
           },
-          parallel: {},
+          inclusive: {
+            gatewayDirection: 'SPLIT',
+          },
+          parallel: {
+            gatewayDirection: 'SPLIT',
+          },
           end: {},
         },
   })
@@ -2757,11 +2791,50 @@ export function NodeConfigPanel({
           </div>
         ) : null}
 
-        {selectedKind === 'parallel' || selectedKind === 'end' ? (
+        {selectedKind === 'inclusive' || selectedKind === 'parallel' || selectedKind === 'end' ? (
           <div className='rounded-2xl border p-4 text-sm text-muted-foreground'>
-            {selectedKind === 'parallel'
-              ? '并行节点当前只保留名称和描述配置，后续会继续扩展分支/汇聚条件。'
-              : '结束节点当前只保留名称和描述配置。'}
+            {selectedKind === 'end' ? (
+              '结束节点当前只保留名称和描述配置。'
+            ) : (
+              <div className='flex flex-col gap-4'>
+                <div>
+                  <h3 className='text-sm font-medium text-foreground'>
+                    {selectedKind === 'inclusive' ? '包容分支节点' : '并行分支节点'}
+                  </h3>
+                  <p className='text-xs text-muted-foreground'>
+                    使用同一节点种类表达分支与汇聚，方向由下面的配置决定。
+                  </p>
+                </div>
+                <FormField
+                  control={form.control}
+                  name={
+                    selectedKind === 'inclusive'
+                      ? 'inclusive.gatewayDirection'
+                      : 'parallel.gatewayDirection'
+                  }
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>节点方向</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder='请选择节点方向' />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {gatewayDirections.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
           </div>
         ) : null}
 

@@ -124,6 +124,23 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
+function buildInclusiveNode(): WorkflowNode {
+  return {
+    id: 'inclusive_1',
+    type: 'workflow',
+    position: { x: 100, y: 100 },
+    data: {
+      kind: 'inclusive',
+      label: '包容分支',
+      description: '命中多个条件分支',
+      tone: 'warning',
+      config: {
+        gatewayDirection: 'JOIN',
+      } as never,
+    },
+  }
+}
+
 const edges: WorkflowEdge[] = []
 
 describe('workflow designer node config panel', () => {
@@ -132,6 +149,7 @@ describe('workflow designer node config panel', () => {
     expect(
       workflowNodeTemplates.some((template) => template.kind === 'dynamic-builder')
     ).toBe(true)
+    expect(workflowNodeTemplates.some((template) => template.kind === 'inclusive')).toBe(true)
   })
 
   it('submits timer node automation settings', async () => {
@@ -273,6 +291,30 @@ describe('workflow designer node config panel', () => {
           appendPolicy: 'SERIAL_AFTER_CURRENT',
           maxGeneratedCount: 2,
           terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('hydrates and submits inclusive gateway direction back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(<NodeConfigPanel node={buildInclusiveNode()} edges={edges} onApply={onApply} />)
+
+    expect(screen.getByText('包容分支节点')).toBeInTheDocument()
+    expect(screen.getAllByText('汇聚').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('combobox'))
+    fireEvent.click(screen.getAllByText('分支').at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'inclusive_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          gatewayDirection: 'SPLIT',
         }),
       }),
       undefined

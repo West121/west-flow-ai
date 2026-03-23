@@ -91,6 +91,7 @@ public class ProcessDslValidator {
         validateReachability(nodeById.values(), outgoingEdges);
         validateConditionFanout(nodeById.values(), outgoingEdges);
         validateParallelPairs(nodeById.values(), outgoingEdges, incomingEdges, nodeById);
+        validateInclusivePairs(nodeById.values(), outgoingEdges, incomingEdges, nodeById);
     }
 
     // 校验子流程节点的调用目标、版本策略和父子联动配置。
@@ -595,6 +596,48 @@ public class ProcessDslValidator {
         for (ProcessDslPayload.Node join : joins) {
             if (!canReachNodeType(join.id(), "parallel_split", incomingEdges, nodeById, new HashSet<>(), true)) {
                 throw invalid("parallel_split 与 parallel_join 必须成对出现", Map.of("nodeId", join.id()));
+            }
+        }
+    }
+
+    // 包容分支必须成对出现，split 至少两条出边，join 至少两条入边。
+    private void validateInclusivePairs(
+            Collection<ProcessDslPayload.Node> nodes,
+            Map<String, List<ProcessDslPayload.Edge>> outgoingEdges,
+            Map<String, List<ProcessDslPayload.Edge>> incomingEdges,
+            Map<String, ProcessDslPayload.Node> nodeById
+    ) {
+        List<ProcessDslPayload.Node> splits = nodes.stream()
+                .filter(node -> "inclusive_split".equals(node.type()))
+                .toList();
+        List<ProcessDslPayload.Node> joins = nodes.stream()
+                .filter(node -> "inclusive_join".equals(node.type()))
+                .toList();
+
+        if (splits.size() != joins.size()) {
+            throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of(
+                    "inclusiveSplitCount", splits.size(),
+                    "inclusiveJoinCount", joins.size()
+            ));
+        }
+
+        for (ProcessDslPayload.Node split : splits) {
+            List<ProcessDslPayload.Edge> edges = outgoingEdges.getOrDefault(split.id(), List.of());
+            if (edges.size() < 2) {
+                throw invalid("inclusive_split 节点至少需要两条出边", Map.of("nodeId", split.id(), "outgoingCount", edges.size()));
+            }
+            if (!canReachNodeType(split.id(), "inclusive_join", outgoingEdges, nodeById, new HashSet<>(), false)) {
+                throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of("nodeId", split.id()));
+            }
+        }
+
+        for (ProcessDslPayload.Node join : joins) {
+            List<ProcessDslPayload.Edge> edges = incomingEdges.getOrDefault(join.id(), List.of());
+            if (edges.size() < 2) {
+                throw invalid("inclusive_join 节点至少需要两条入边", Map.of("nodeId", join.id(), "incomingCount", edges.size()));
+            }
+            if (!canReachNodeType(join.id(), "inclusive_split", incomingEdges, nodeById, new HashSet<>(), true)) {
+                throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of("nodeId", join.id()));
             }
         }
     }

@@ -24,6 +24,8 @@ export type ProcessDefinitionDslNodeType =
   | 'timer'
   | 'trigger'
   | 'condition'
+  | 'inclusive_split'
+  | 'inclusive_join'
   | 'parallel_split'
   | 'parallel_join'
   | 'end'
@@ -87,7 +89,7 @@ const DEFAULT_NODE_HEIGHT = 96
 
 // 画布节点类型和流程定义节点类型不是完全一一对应，需要先做归一化。
 // 画布节点种类和流程定义节点类型需要先做映射。
-function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
+function nodeTypeFor(kind: string, config?: Record<string, unknown>): ProcessDefinitionDslNodeType {
   switch (kind) {
     case 'start':
     case 'approver':
@@ -100,8 +102,10 @@ function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
       return kind
     case 'dynamic-builder':
       return 'dynamic_builder'
+    case 'inclusive':
+      return config?.gatewayDirection === 'JOIN' ? 'inclusive_join' : 'inclusive_split'
     case 'parallel':
-      return 'parallel_split'
+      return config?.gatewayDirection === 'JOIN' ? 'parallel_join' : 'parallel_split'
     default:
       return 'approver'
   }
@@ -114,6 +118,9 @@ function nodeKindFor(type: ProcessDefinitionDslNodeType) {
     case 'parallel_split':
     case 'parallel_join':
       return 'parallel'
+    case 'inclusive_split':
+    case 'inclusive_join':
+      return 'inclusive'
     case 'subprocess':
     case 'timer':
     case 'trigger':
@@ -135,6 +142,8 @@ function toneFor(type: ProcessDefinitionDslNodeType) {
     case 'dynamic_builder':
       return 'brand'
     case 'condition':
+    case 'inclusive_split':
+    case 'inclusive_join':
       return 'warning'
     case 'timer':
       return 'warning'
@@ -164,7 +173,10 @@ export function workflowSnapshotToProcessDefinitionDsl(
       allowTransfer: true,
     },
     nodes: snapshot.nodes.map((node) => {
-      const nodeType = nodeTypeFor(node.data.kind)
+      const nodeType = nodeTypeFor(
+        node.data.kind,
+        (node.data.config as Record<string, unknown> | undefined) ?? undefined
+      )
       return {
         id: node.id,
         type: nodeType,

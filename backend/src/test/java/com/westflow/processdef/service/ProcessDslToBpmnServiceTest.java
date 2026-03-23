@@ -301,6 +301,69 @@ class ProcessDslToBpmnServiceTest {
     }
 
     @Test
+    void shouldConvertInclusiveGatewayNodesIntoBpmnXml() {
+        ProcessDslPayload payload = new ProcessDslPayload(
+                "1.0.0",
+                "oa_inclusive",
+                "包容分支审批",
+                "OA",
+                "oa-inclusive-form",
+                "1.0.0",
+                List.of(),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of()),
+                        node("inclusive_split_1", "inclusive_split", "包容分支", Map.of()),
+                        node("approve_1", "approver", "审批A", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE")
+                        )),
+                        node("approve_2", "approver", "审批B", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy("SINGLE", null),
+                                "operations", List.of("APPROVE")
+                        )),
+                        node("inclusive_join_1", "inclusive_join", "包容汇聚", Map.of()),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1", 1, null),
+                        edge("edge_2", "inclusive_split_1", "approve_1", 2, Map.of("type", "EXPRESSION", "expression", "amount > 1000")),
+                        edge("edge_3", "inclusive_split_1", "approve_2", 3, Map.of("type", "EXPRESSION", "expression", "days > 3")),
+                        edge("edge_4", "approve_1", "inclusive_join_1", 4, null),
+                        edge("edge_5", "approve_2", "inclusive_join_1", 5, null),
+                        edge("edge_6", "inclusive_join_1", "end_1", 6, null)
+                )
+        );
+
+        String xml = service.convert(payload, "oa_inclusive:1", 1);
+
+        assertThat(xml).contains(
+                "<inclusiveGateway",
+                "id=\"inclusive_split_1\"",
+                "id=\"inclusive_join_1\""
+        );
+        assertThat(xml).contains("amount > 1000", "days > 3");
+    }
+
+    @Test
     void shouldConvertDynamicBuilderNodeIntoPlaceholderServiceTask() {
         ProcessDslPayload payload = new ProcessDslPayload(
                 "1.0.0",

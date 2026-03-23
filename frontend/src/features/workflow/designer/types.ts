@@ -7,6 +7,7 @@ export type WorkflowNodeKind =
   | 'subprocess'
   | 'dynamic-builder'
   | 'condition'
+  | 'inclusive'
   | 'cc'
   | 'timer'
   | 'trigger'
@@ -72,6 +73,8 @@ export type WorkflowDynamicBuilderAppendPolicy =
 export type WorkflowDynamicBuilderTerminatePolicy =
   | 'TERMINATE_GENERATED_ONLY'
   | 'TERMINATE_PARENT_AND_GENERATED'
+
+export type WorkflowGatewayDirection = 'SPLIT' | 'JOIN'
 
 export type WorkflowDynamicBuilderNodeConfig = {
   buildMode: WorkflowDynamicBuildMode
@@ -198,6 +201,10 @@ export type WorkflowCcNodeConfig = {
   readRequired: boolean
 }
 
+export type WorkflowGatewayNodeConfig = {
+  gatewayDirection: WorkflowGatewayDirection
+}
+
 // 每种节点类型都对应一套独立配置结构。
 export type WorkflowNodeConfigMap = {
   start: WorkflowStartNodeConfig
@@ -205,10 +212,11 @@ export type WorkflowNodeConfigMap = {
   subprocess: WorkflowSubprocessNodeConfig
   'dynamic-builder': WorkflowDynamicBuilderNodeConfig
   condition: WorkflowConditionNodeConfig
+  inclusive: WorkflowGatewayNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
   trigger: WorkflowTriggerNodeConfig
-  parallel: Record<string, never>
+  parallel: WorkflowGatewayNodeConfig
   end: Record<string, never>
 }
 

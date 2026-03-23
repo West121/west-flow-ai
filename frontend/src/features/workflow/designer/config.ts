@@ -4,6 +4,8 @@ import {
   type WorkflowConditionNodeConfig,
   type WorkflowEdgeConditionType,
   type WorkflowFieldBinding,
+  type WorkflowGatewayDirection,
+  type WorkflowGatewayNodeConfig,
   type WorkflowReapprovePolicy,
   type WorkflowVoteWeight,
   type WorkflowNodeConfigMap,
@@ -32,10 +34,11 @@ export type WorkflowNodeConfigRecord = {
   subprocess: WorkflowSubprocessNodeConfig
   dynamicBuilder: WorkflowDynamicBuilderNodeConfig
   condition: WorkflowConditionNodeConfig
+  inclusive: WorkflowGatewayNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
   trigger: WorkflowTriggerNodeConfig
-  parallel: Record<string, never>
+  parallel: WorkflowGatewayNodeConfig
   end: Record<string, never>
 }
 
@@ -139,6 +142,10 @@ const defaultDynamicBuilderConfig: WorkflowDynamicBuilderNodeConfig = {
   appendPolicy: 'SERIAL_AFTER_CURRENT',
   maxGeneratedCount: 1,
   terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+}
+
+const defaultGatewayConfig: WorkflowGatewayNodeConfig = {
+  gatewayDirection: 'SPLIT',
 }
 
 const defaultStartConfig: WorkflowStartNodeConfig = {
@@ -248,6 +255,10 @@ function normalizeDynamicBuilderTerminatePolicy(
     : 'TERMINATE_GENERATED_ONLY'
 }
 
+function normalizeGatewayDirection(value: unknown): WorkflowGatewayDirection {
+  return value === 'JOIN' ? 'JOIN' : 'SPLIT'
+}
+
 // 根据节点类型返回默认配置，设计器初始化会用到。
 export function defaultNodeConfig<K extends WorkflowNodeKind>(
   kind: K
@@ -263,6 +274,8 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
       return defaultDynamicBuilderConfig as WorkflowNodeConfigMap[K]
     case 'condition':
       return defaultConditionConfig as WorkflowNodeConfigMap[K]
+    case 'inclusive':
+      return defaultGatewayConfig as WorkflowNodeConfigMap[K]
     case 'cc':
       return defaultCcConfig as WorkflowNodeConfigMap[K]
     case 'timer':
@@ -270,6 +283,7 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
     case 'trigger':
       return defaultTriggerConfig as WorkflowNodeConfigMap[K]
     case 'parallel':
+      return defaultGatewayConfig as WorkflowNodeConfigMap[K]
     case 'end':
       return emptyConfig as WorkflowNodeConfigMap[K]
   }
@@ -287,6 +301,8 @@ export function toneForKind(kind: WorkflowNodeKind): WorkflowNodeTone {
     case 'dynamic-builder':
       return 'brand'
     case 'condition':
+      return 'warning'
+    case 'inclusive':
       return 'warning'
     case 'timer':
       return 'warning'
@@ -310,6 +326,8 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
       return '运行时动态生成审批链路'
     case 'condition':
       return '条件分支节点'
+    case 'inclusive':
+      return '包容分支节点'
     case 'cc':
       return '抄送节点'
     case 'timer':
@@ -336,6 +354,8 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
       return '动态构建'
     case 'condition':
       return '条件'
+    case 'inclusive':
+      return '包容分支'
     case 'cc':
       return '抄送'
     case 'timer':
@@ -363,6 +383,13 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
         typeof value?.initiatorEditable === 'boolean'
           ? value.initiatorEditable
           : defaultStartConfig.initiatorEditable,
+    } as WorkflowNodeConfigMap[K]
+  }
+
+  if (kind === 'parallel' || kind === 'inclusive') {
+    const value = config as Partial<WorkflowGatewayNodeConfig> | null | undefined
+    return {
+      gatewayDirection: normalizeGatewayDirection(value?.gatewayDirection),
     } as WorkflowNodeConfigMap[K]
   }
 
