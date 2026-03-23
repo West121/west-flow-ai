@@ -347,7 +347,7 @@ public class DbAiCopilotService implements AiCopilotService {
                                     "pending",
                                     buildRouteTrace(gatewayResponse, domain, routePath, toolResult.toolCallId())
                             ),
-                            buildProcessStartPreviewBlock(content, domain, routePath, toolResult),
+                            buildWritePreviewBlock(content, domain, routePath, toolResult),
                             resultBlock(
                                     toolResult.toolSource().name(),
                                     toolResult.toolKey(),
@@ -425,6 +425,8 @@ public class DbAiCopilotService implements AiCopilotService {
     ) {
         String status = request.approved() ? "confirmed" : "cancelled";
         String content = request.approved() ? "操作确认成功，系统已记录执行结果。" : "已取消本次操作，流程状态保持不变。";
+        List<Field> executionFields = buildWriteExecutionFields(toolCall, confirmation, request, finalResult);
+        List<Metric> executionMetrics = buildWriteExecutionMetrics(toolCall, finalResult);
         List<TraceStep> trace = buildToolResultTrace(
                 toolCall.toolSource().name(),
                 toolCall.toolKey(),
@@ -457,14 +459,17 @@ public class DbAiCopilotService implements AiCopilotService {
                                 "写操作执行失败",
                                 "AI.TOOL_EXECUTE_FAILED",
                                 "写操作执行失败",
-                                finalResult.summary(),
+                                buildWriteFailureDetail(toolCall, finalResult),
                                 trace,
-                                Map.of(
-                                        "toolCallId", toolCall.toolCallId(),
-                                        "confirmationId", confirmation.confirmationId(),
-                                        "retryable", true,
-                                        "arguments", finalResult.arguments(),
-                                        "toolType", toolCall.toolType().name()
+                                buildWriteFailureFields(toolCall, confirmation, request, finalResult),
+                                buildWriteFailureMetrics(toolCall, finalResult),
+                                buildTaskHandleResultPayload(
+                                        toolCall.toolCallId(),
+                                        confirmation.confirmationId(),
+                                        toolCall.toolKey(),
+                                        toolCall.toolType().name(),
+                                        finalResult.arguments(),
+                                        Map.of("retryable", true)
                                 )
                         )
                                 : resultBlock(
@@ -473,29 +478,22 @@ public class DbAiCopilotService implements AiCopilotService {
                                 toolCall.toolKey(),
                                 toolCall.toolType().name(),
                                 finalResult.summary(),
-                                Map.of(
-                                        "approved", request.approved(),
-                                        "comment", request.comment(),
-                                        "status", finalResult.status(),
-                                        "result", finalResult.result(),
-                                        "confirmationId", confirmation.confirmationId(),
-                                        "toolCallId", toolCall.toolCallId(),
-                                        "toolType", toolCall.toolType().name()
-                                ),
-                                trace,
-                                buildToolContextFields(
-                                        toolCall.toolSource().name(),
-                                        toolCall.toolKey(),
-                                        toolCall.toolKey(),
-                                        toolCall.toolType().name(),
-                                        null,
-                                        null,
+                                buildTaskHandleResultPayload(
                                         toolCall.toolCallId(),
                                         confirmation.confirmationId(),
-                                        finalResult.summary(),
-                                        request.approved() ? "确认执行" : "已取消"
+                                        toolCall.toolKey(),
+                                        toolCall.toolType().name(),
+                                        finalResult.arguments(),
+                                        Map.of(
+                                                "approved", request.approved(),
+                                                "comment", request.comment() == null ? "" : request.comment(),
+                                                "status", finalResult.status(),
+                                                "result", finalResult.result()
+                                        )
                                 ),
-                                List.of()
+                                trace,
+                                executionFields,
+                                executionMetrics
                         ),
                         failed
                                 ? retryBlock(
@@ -505,27 +503,17 @@ public class DbAiCopilotService implements AiCopilotService {
                                 toolCall.toolType().name(),
                                 finalResult.summary(),
                                 "当前写操作执行失败，可以在修正参数后重新确认并重试。",
-                                Map.of(
-                                        "toolCallId", toolCall.toolCallId(),
-                                        "confirmationId", confirmation.confirmationId(),
-                                        "retryable", true,
-                                        "toolType", toolCall.toolType().name(),
-                                        "toolKey", toolCall.toolKey(),
-                                        "arguments", finalResult.arguments()
-                                ),
-                                trace,
-                                buildToolContextFields(
-                                        toolCall.toolSource().name(),
-                                        toolCall.toolKey(),
-                                        toolCall.toolKey(),
-                                        toolCall.toolType().name(),
-                                        null,
-                                        null,
+                                buildTaskHandleResultPayload(
                                         toolCall.toolCallId(),
                                         confirmation.confirmationId(),
-                                        finalResult.summary(),
-                                        "建议重试"
-                                )
+                                        toolCall.toolKey(),
+                                        toolCall.toolType().name(),
+                                        finalResult.arguments(),
+                                        Map.of("retryable", true)
+                                ),
+                                trace,
+                                executionFields,
+                                buildWriteFailureMetrics(toolCall, finalResult)
                         )
                                 : defaultTextBlock("本次写操作已完成，可继续查看流程状态或发起下一步操作。"),
                         confirmationBlock(toolCall, confirmation, request, finalResult, status, now)
@@ -724,6 +712,8 @@ public class DbAiCopilotService implements AiCopilotService {
             String message,
             String detail,
             List<TraceStep> trace,
+            List<Field> fields,
+            List<Metric> metrics,
             Map<String, Object> result
     ) {
         return new AiMessageBlockResponse(
@@ -746,8 +736,8 @@ public class DbAiCopilotService implements AiCopilotService {
                 result,
                 new Failure(code, message, detail),
                 trace,
-                List.of(),
-                List.of()
+                fields,
+                metrics
         );
     }
 
@@ -763,8 +753,14 @@ public class DbAiCopilotService implements AiCopilotService {
             String detail,
             Map<String, Object> result,
             List<TraceStep> trace,
-            List<Field> fields
+            List<Field> fields,
+            List<Metric> metrics
     ) {
+        java.util.ArrayList<Metric> retryMetrics = new java.util.ArrayList<>();
+        retryMetrics.add(new Metric("可重试", "是", null, "warning"));
+        if (metrics != null) {
+            retryMetrics.addAll(metrics);
+        }
         return new AiMessageBlockResponse(
                 "retry",
                 "重试建议",
@@ -786,7 +782,7 @@ public class DbAiCopilotService implements AiCopilotService {
                 null,
                 trace,
                 fields,
-                List.of(new Metric("可重试", "是", null, "warning"))
+                List.copyOf(retryMetrics)
         );
     }
 
@@ -917,7 +913,6 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     private AiToolCallRequest buildWriteToolCall(String content, String domain, String routePath) {
-        String taskId = extractTaskId(routePath);
         if (content.contains("发起") || content.contains("提交")) {
             Map<String, Object> startDraft = buildProcessStartDraft(content, domain, routePath);
             return new AiToolCallRequest(
@@ -932,7 +927,7 @@ public class DbAiCopilotService implements AiCopilotService {
                     "task.handle",
                     AiToolType.WRITE,
                     AiToolSource.PLATFORM,
-                    Map.of("content", content, "domain", domain, "routePath", routePath, "taskId", taskId, "action", "CLAIM")
+                    buildTaskHandleDraft(content, domain, routePath, "CLAIM")
             );
         }
         if (content.contains("驳回") || content.contains("退回")) {
@@ -940,7 +935,7 @@ public class DbAiCopilotService implements AiCopilotService {
                     "task.handle",
                     AiToolType.WRITE,
                     AiToolSource.PLATFORM,
-                    Map.of("content", content, "domain", domain, "routePath", routePath, "taskId", taskId, "action", "REJECT")
+                    buildTaskHandleDraft(content, domain, routePath, "REJECT")
             );
         }
         if (content.contains("已读") || content.contains("已阅")) {
@@ -948,15 +943,26 @@ public class DbAiCopilotService implements AiCopilotService {
                     "task.handle",
                     AiToolType.WRITE,
                     AiToolSource.PLATFORM,
-                    Map.of("content", content, "domain", domain, "routePath", routePath, "taskId", taskId, "action", "READ")
+                    buildTaskHandleDraft(content, domain, routePath, "READ")
             );
         }
         return new AiToolCallRequest(
                 "task.handle",
                 AiToolType.WRITE,
                 AiToolSource.PLATFORM,
-                Map.of("content", content, "domain", domain, "routePath", routePath, "taskId", taskId, "action", "COMPLETE")
+                buildTaskHandleDraft(content, domain, routePath, "COMPLETE")
         );
+    }
+
+    private Map<String, Object> buildTaskHandleDraft(String content, String domain, String routePath, String action) {
+        Map<String, Object> draft = new java.util.LinkedHashMap<>();
+        draft.put("content", content);
+        draft.put("domain", domain);
+        draft.put("routePath", routePath);
+        draft.put("taskId", extractTaskId(routePath));
+        draft.put("action", action);
+        enrichBusinessContextFromRoute(routePath).forEach(draft::put);
+        return Map.copyOf(draft);
     }
 
     private Map<String, Object> buildProcessStartDraft(String content, String domain, String routePath) {
@@ -1064,6 +1070,22 @@ public class DbAiCopilotService implements AiCopilotService {
             String domain,
             String routePath
     ) {
+        List<Field> fields = new java.util.ArrayList<>(List.of(
+                new Field("业务域", domain, null),
+                new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
+                new Field("工具名称", result.toolKey(), null),
+                new Field("工具类型", result.toolType().name(), null),
+                new Field("确认单编号", result.confirmationId(), null)
+        ));
+        List<Metric> metrics = new java.util.ArrayList<>(List.of(
+                new Metric("确认状态", result.requiresConfirmation() ? "待确认" : "已确认", null, "warning")
+        ));
+        if (isTaskHandleTool(result.toolKey(), result.arguments())) {
+            String action = normalizeTaskAction(result.arguments().get("action"));
+            fields.addAll(buildTaskHandleOutcomeFields(result.arguments(), "拟执行动作", action));
+            metrics.add(new Metric("动作类型", resolveTaskActionLabel(action), null, "warning"));
+            metrics.add(new Metric("动作语义", resolveTaskActionSemantic(action), null, "neutral"));
+        }
         return new AiMessageBlockResponse(
                 "confirm",
                 "请确认是否继续执行",
@@ -1081,17 +1103,7 @@ public class DbAiCopilotService implements AiCopilotService {
                 result.toolKey(),
                 result.toolKey(),
                 result.toolType().name(),
-                Map.of(
-                        "toolCallId", result.toolCallId(),
-                        "confirmationId", result.confirmationId(),
-                        "status", result.status(),
-                        "requiresConfirmation", result.requiresConfirmation(),
-                        "toolType", result.toolType().name(),
-                        "toolSource", result.toolSource().name(),
-                        "domain", domain,
-                        "routePath", routePath,
-                        "arguments", result.arguments()
-                ),
+                buildPendingConfirmationPayload(result, domain, routePath),
                 null,
                 List.of(
                         new TraceStep("route", "路由模式", gatewayResponse.routeMode(), "pending"),
@@ -1100,14 +1112,8 @@ public class DbAiCopilotService implements AiCopilotService {
                         new TraceStep("context", "来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, "pending"),
                         new TraceStep("tool", "工具调用", result.toolCallId(), "pending")
                 ),
-                List.of(
-                        new Field("业务域", domain, null),
-                        new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
-                        new Field("工具名称", result.toolKey(), null),
-                        new Field("工具类型", result.toolType().name(), null),
-                        new Field("确认单编号", result.confirmationId(), null)
-                ),
-                List.of(new Metric("确认状态", result.requiresConfirmation() ? "待确认" : "已确认", null, "warning"))
+                List.copyOf(fields),
+                List.copyOf(metrics)
         );
     }
 
@@ -1119,6 +1125,20 @@ public class DbAiCopilotService implements AiCopilotService {
             String status,
             LocalDateTime now
     ) {
+        java.util.ArrayList<Field> fields = new java.util.ArrayList<>(List.of(
+                new Field("工具名称", toolCall.toolKey(), null),
+                new Field("工具类型", toolCall.toolType().name(), null),
+                new Field("确认人", currentUserId(), null),
+                new Field("确认意见", request.comment() == null || request.comment().isBlank() ? "无" : request.comment(), null)
+        ));
+        java.util.ArrayList<Metric> metrics = new java.util.ArrayList<>(List.of(
+                new Metric("执行状态", finalResult.status(), null, "neutral")
+        ));
+        if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            fields.addAll(buildTaskHandleOutcomeFields(finalResult.arguments(), "待办动作", action));
+            metrics.add(new Metric("动作语义", resolveTaskActionSemantic(action), null, "neutral"));
+        }
         return new AiMessageBlockResponse(
                 "confirm",
                 "操作确认结果",
@@ -1136,32 +1156,95 @@ public class DbAiCopilotService implements AiCopilotService {
                 toolCall.toolKey(),
                 toolCall.toolKey(),
                 toolCall.toolType().name(),
-                Map.of(
-                        "toolCallId", toolCall.toolCallId(),
-                        "confirmationId", confirmation.confirmationId(),
-                        "status", finalResult.status(),
-                        "approved", request.approved(),
-                        "comment", request.comment(),
-                        "toolType", toolCall.toolType().name(),
-                        "toolSource", toolCall.toolSource().name(),
-                        "toolKey", toolCall.toolKey(),
-                        "result", finalResult.result(),
-                        "summary", finalResult.summary()
-                ),
+                buildResolvedConfirmationPayload(toolCall, confirmation, request, finalResult),
                 null,
                 List.of(
                         new TraceStep("tool", "工具调用", toolCall.toolCallId(), status),
                         new TraceStep("confirmation", "确认单", confirmation.confirmationId(), status),
                         new TraceStep("result", "执行状态", finalResult.status(), status)
                 ),
-                List.of(
-                        new Field("工具名称", toolCall.toolKey(), null),
-                        new Field("工具类型", toolCall.toolType().name(), null),
-                        new Field("确认人", currentUserId(), null),
-                        new Field("确认意见", request.comment() == null || request.comment().isBlank() ? "无" : request.comment(), null)
-                ),
-                List.of(new Metric("执行状态", finalResult.status(), null, "neutral"))
+                List.copyOf(fields),
+                List.copyOf(metrics)
         );
+    }
+
+    private Map<String, Object> buildPendingConfirmationPayload(
+            AiToolCallResultResponse result,
+            String domain,
+            String routePath
+    ) {
+        java.util.LinkedHashMap<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("toolCallId", result.toolCallId());
+        payload.put("confirmationId", result.confirmationId());
+        payload.put("status", result.status());
+        payload.put("requiresConfirmation", result.requiresConfirmation());
+        payload.put("toolType", result.toolType().name());
+        payload.put("toolSource", result.toolSource().name());
+        payload.put("domain", domain);
+        payload.put("routePath", routePath);
+        payload.put("arguments", result.arguments());
+        if (isTaskHandleTool(result.toolKey(), result.arguments())) {
+            String action = normalizeTaskAction(result.arguments().get("action"));
+            payload.put("actionLabel", resolveTaskActionLabel(action));
+            payload.put("actionSemantic", resolveTaskActionSemantic(action));
+        }
+        return Map.copyOf(payload);
+    }
+
+    private Map<String, Object> buildResolvedConfirmationPayload(
+            AiToolCallRecord toolCall,
+            AiConfirmationRecord confirmation,
+            AiConfirmToolCallRequest request,
+            AiToolCallResultResponse finalResult
+    ) {
+        java.util.LinkedHashMap<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("toolCallId", toolCall.toolCallId());
+        payload.put("confirmationId", confirmation.confirmationId());
+        payload.put("status", finalResult.status());
+        payload.put("approved", request.approved());
+        payload.put("comment", request.comment() == null ? "" : request.comment());
+        payload.put("toolType", toolCall.toolType().name());
+        payload.put("toolSource", toolCall.toolSource().name());
+        payload.put("toolKey", toolCall.toolKey());
+        payload.put("result", finalResult.result());
+        payload.put("summary", finalResult.summary());
+        payload.put("arguments", finalResult.arguments());
+        if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            payload.put("actionLabel", resolveTaskActionLabel(action));
+            payload.put("actionSemantic", resolveTaskActionSemantic(action));
+        }
+        return Map.copyOf(payload);
+    }
+
+    private Map<String, Object> buildTaskHandleResultPayload(
+            String toolCallId,
+            String confirmationId,
+            String toolKey,
+            String toolType,
+            Map<String, Object> arguments,
+            Map<String, ?> extra
+    ) {
+        java.util.LinkedHashMap<String, Object> payload = new java.util.LinkedHashMap<>();
+        if (extra != null) {
+            extra.forEach(payload::put);
+        }
+        String action = normalizeTaskAction(arguments.get("action"));
+        payload.put("toolCallId", toolCallId);
+        payload.put("confirmationId", confirmationId);
+        payload.put("toolKey", toolKey);
+        payload.put("toolType", toolType);
+        payload.put("arguments", arguments);
+        payload.put("action", action);
+        payload.put("actionLabel", resolveTaskActionLabel(action));
+        payload.put("actionSemantic", resolveTaskActionSemantic(action));
+        payload.put("domain", stringValue(arguments.get("domain")));
+        payload.put("businessType", stringValue(arguments.get("businessType")));
+        payload.put("businessId", stringValue(arguments.get("businessId")));
+        payload.put("billNo", stringValue(arguments.get("billNo")));
+        payload.put("businessTitle", resolveBusinessTitle(arguments));
+        payload.put("routePath", stringValue(arguments.get("routePath")));
+        return Map.copyOf(payload);
     }
 
     private List<Field> buildToolContextFields(
@@ -1355,6 +1438,31 @@ public class DbAiCopilotService implements AiCopilotService {
                     buildStatsAnswerBlock(result.result())
             );
         }
+        if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
+            return List.of(
+                    defaultTextBlock("已通过 PLM 助手读取变更单据与业务摘要。"),
+                    traceBlock(
+                            gatewayResponse.routeMode(),
+                            gatewayResponse.agentId(),
+                            gatewayResponse.agentKey(),
+                            "已命中 PLM 变更摘要链路。",
+                            "executed",
+                            trace
+                    ),
+                    resultBlock(
+                            result.toolSource().name(),
+                            result.toolKey(),
+                            result.toolKey(),
+                            result.toolType().name(),
+                            result.summary(),
+                            result.result(),
+                            trace,
+                            buildPlmSummaryFields(result.result(), routePath, result),
+                            buildPlmSummaryMetrics(result.result())
+                    ),
+                    buildPlmSummaryStatsBlock(result.result())
+            );
+        }
         return List.of(
                 defaultTextBlock("已通过 " + gatewayResponse.routeMode() + " 路由完成只读分析。"),
                 traceBlock(
@@ -1405,6 +1513,305 @@ public class DbAiCopilotService implements AiCopilotService {
             return "我已经整理出当前统计摘要，可继续追问时间范围或业务域。";
         }
         return "我已经完成本次只读分析。";
+    }
+
+    private String normalizeTaskAction(Object value) {
+        String action = stringValue(value).toUpperCase();
+        return action.isBlank() ? "COMPLETE" : action;
+    }
+
+    private String resolveTaskActionLabel(String action) {
+        return switch (normalizeTaskAction(action)) {
+            case "CLAIM" -> "认领待办";
+            case "REJECT" -> "驳回/退回";
+            case "READ" -> "标记已读";
+            case "APPROVE", "COMPLETE" -> "通过待办";
+            default -> action;
+        };
+    }
+
+    private boolean isTaskHandleTool(String toolKey, Map<String, Object> arguments) {
+        if ("task.handle".equals(toolKey)) {
+            return true;
+        }
+        return arguments != null
+                && (!stringValue(arguments.get("taskId")).isBlank()
+                || !stringValue(arguments.get("action")).isBlank());
+    }
+
+    private boolean isProcessStartTool(String toolKey, Map<String, Object> arguments) {
+        if ("process.start".equals(toolKey)) {
+            return true;
+        }
+        return arguments != null
+                && !stringValue(arguments.get("processKey")).isBlank()
+                && arguments.containsKey("formData")
+                && stringValue(arguments.get("taskId")).isBlank();
+    }
+
+    private String resolveTaskActionSemantic(String action) {
+        return switch (normalizeTaskAction(action)) {
+            case "CLAIM" -> "认领后待办归当前处理人，不推进流程节点";
+            case "REJECT" -> "退回当前审批事项，流程回到上一步节点";
+            case "READ" -> "仅标记已读，不改变流程流转";
+            case "APPROVE", "COMPLETE" -> "审批通过并推进到后续节点";
+            default -> "按当前动作处理待办";
+        };
+    }
+
+    private String resolveTaskHandleNextSuggestion(String action, Object nextTasks) {
+        String nextTasksText = describeNextTasks(nextTasks);
+        if (!nextTasksText.isBlank()) {
+            return "下一步待办：" + nextTasksText;
+        }
+        return switch (normalizeTaskAction(action)) {
+            case "CLAIM" -> "认领后回到工作台继续处理该待办";
+            case "REJECT" -> "刷新流程状态，确认退回节点和补充材料";
+            case "READ" -> "已读后可继续追问轨迹或返回工作台处理";
+            case "APPROVE", "COMPLETE" -> "刷新流程状态，确认是否已进入终态";
+            default -> "刷新当前待办状态并核对参数";
+        };
+    }
+
+    private String resolveBusinessTitle(Map<String, Object> arguments) {
+        String businessTitle = stringValue(arguments.get("businessTitle"));
+        if (!businessTitle.isBlank()) {
+            return businessTitle;
+        }
+        return stringValue(arguments.get("title"));
+    }
+
+    private List<Field> buildTaskHandleBusinessFields(Map<String, Object> arguments) {
+        java.util.ArrayList<Field> fields = new java.util.ArrayList<>();
+        String businessType = stringValue(arguments.get("businessType"));
+        String businessId = stringValue(arguments.get("businessId"));
+        String billNo = stringValue(arguments.get("billNo"));
+        String businessTitle = resolveBusinessTitle(arguments);
+        if (!businessType.isBlank()) {
+            fields.add(new Field("业务类型", businessType, null));
+        }
+        if (!businessId.isBlank()) {
+            fields.add(new Field("业务标识", businessId, null));
+        }
+        if (!billNo.isBlank()) {
+            fields.add(new Field("业务单据", billNo, null));
+        }
+        if (!businessTitle.isBlank()) {
+            fields.add(new Field("业务标题", businessTitle, null));
+        }
+        return List.copyOf(fields);
+    }
+
+    private List<Field> buildTaskHandleOutcomeFields(
+            Map<String, Object> arguments,
+            String actionFieldLabel,
+            String action
+    ) {
+        java.util.ArrayList<Field> fields = new java.util.ArrayList<>();
+        String taskId = stringValue(arguments.get("taskId"));
+        String comment = stringValue(arguments.get("comment"));
+        String routePath = stringValue(arguments.get("routePath"));
+        fields.add(new Field("待办编号", taskId.isBlank() ? "未定位" : taskId, null));
+        fields.add(new Field(actionFieldLabel, resolveTaskActionLabel(action), null));
+        fields.add(new Field("动作语义", resolveTaskActionSemantic(action), null));
+        if (!routePath.isBlank()) {
+            fields.add(new Field("来源页面", routePath, null));
+        }
+        fields.addAll(buildTaskHandleBusinessFields(arguments));
+        if (!comment.isBlank()) {
+            fields.add(new Field("处理意见", comment, null));
+        }
+        return List.copyOf(fields);
+    }
+
+    private List<Field> buildWriteExecutionFields(
+            AiToolCallRecord toolCall,
+            AiConfirmationRecord confirmation,
+            AiConfirmToolCallRequest request,
+            AiToolCallResultResponse finalResult
+    ) {
+        if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            Map<String, Object> result = mapValue(finalResult.result());
+            String instanceId = stringValue(result.get("instanceId"));
+            String nextTasks = describeNextTasks(result.get("nextTasks"));
+            List<Field> fields = new java.util.ArrayList<>(buildTaskHandleOutcomeFields(finalResult.arguments(), "待办动作", action));
+            fields.add(new Field("工具调用编号", toolCall.toolCallId(), null));
+            fields.add(new Field("确认单编号", confirmation.confirmationId(), null));
+            fields.add(new Field("执行状态", finalResult.status(), null));
+            if (!instanceId.isBlank()) {
+                fields.add(new Field("流程实例", instanceId, null));
+            }
+            if (!nextTasks.isBlank()) {
+                fields.add(new Field("后续任务", nextTasks, "处理完成后命中的下一步待办"));
+            }
+            fields.add(new Field("下一步建议", resolveTaskHandleNextSuggestion(action, result.get("nextTasks")), null));
+            return List.copyOf(fields);
+        }
+        if (isProcessStartTool(toolCall.toolKey(), finalResult.arguments())) {
+            Map<String, Object> result = mapValue(finalResult.result());
+            return List.of(
+                    new Field("业务类型", stringValue(finalResult.arguments().get("businessType")), null),
+                    new Field("流程编码", stringValue(finalResult.arguments().get("processKey")), null),
+                    new Field("单据编号", stringValue(result.get("billNo")), null),
+                    new Field("流程实例", stringValue(result.get("instanceId")), null),
+                    new Field("首个待办", describeNextTasks(result.get("activeTasks")), "发起成功后会优先进入首个待办"),
+                    new Field("执行状态", finalResult.status(), null)
+            );
+        }
+        return buildToolContextFields(
+                toolCall.toolSource().name(),
+                toolCall.toolKey(),
+                toolCall.toolKey(),
+                toolCall.toolType().name(),
+                null,
+                null,
+                toolCall.toolCallId(),
+                confirmation.confirmationId(),
+                finalResult.summary(),
+                request.approved() ? "确认执行" : "已取消"
+        );
+    }
+
+    private List<Metric> buildWriteExecutionMetrics(
+            AiToolCallRecord toolCall,
+            AiToolCallResultResponse finalResult
+    ) {
+        if ("task.handle".equals(toolCall.toolKey())) {
+            Map<String, Object> result = mapValue(finalResult.result());
+            Object nextTasks = result.get("nextTasks");
+            int nextTaskCount = countItems(nextTasks);
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            String domain = stringValue(finalResult.arguments().get("domain"));
+            return List.of(
+                    new Metric("动作", resolveTaskActionLabel(action), null, "warning"),
+                    new Metric("动作语义", resolveTaskActionSemantic(action), null, "neutral"),
+                    new Metric("后续待办数", String.valueOf(nextTaskCount), nextTaskCount > 0 ? "流程仍在继续推进" : "当前动作后可能已到终态", nextTaskCount > 0 ? "positive" : "neutral"),
+                    new Metric("执行状态", finalResult.status(), null, "positive"),
+                    new Metric("业务域", domain.isBlank() ? "未定位" : domain, null, "neutral")
+            );
+        }
+        if ("process.start".equals(toolCall.toolKey())) {
+            return List.of(
+                    new Metric("业务类型", stringValue(finalResult.arguments().get("businessType")), null, "neutral"),
+                    new Metric("首个待办数", String.valueOf(countItems(mapValue(finalResult.result()).get("activeTasks"))), "发起后系统生成的当前活动任务", "positive"),
+                    new Metric("执行状态", finalResult.status(), null, "positive")
+            );
+        }
+        return List.of();
+    }
+
+    private List<Field> buildWriteFailureFields(
+            AiToolCallRecord toolCall,
+            AiConfirmationRecord confirmation,
+            AiConfirmToolCallRequest request,
+            AiToolCallResultResponse finalResult
+    ) {
+        if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            List<Field> fields = new java.util.ArrayList<>(
+                    buildTaskHandleOutcomeFields(
+                            finalResult.arguments(),
+                            "待办动作",
+                            action
+                    )
+            );
+            fields.add(new Field("工具调用编号", toolCall.toolCallId(), null));
+            fields.add(new Field("确认单编号", confirmation.confirmationId(), null));
+            fields.add(new Field("下一步建议", resolveTaskHandleNextSuggestion(action, null), null));
+            return List.copyOf(fields);
+        }
+        if (isProcessStartTool(toolCall.toolKey(), finalResult.arguments())) {
+            return List.of(
+                    new Field("业务类型", stringValue(finalResult.arguments().get("businessType")), null),
+                    new Field("流程编码", stringValue(finalResult.arguments().get("processKey")), null),
+                    new Field("来源页面", stringValue(finalResult.arguments().get("routePath")), null),
+                    new Field("工具调用编号", toolCall.toolCallId(), null),
+                    new Field("确认单编号", confirmation.confirmationId(), null)
+            );
+        }
+        return buildToolContextFields(
+                toolCall.toolSource().name(),
+                toolCall.toolKey(),
+                toolCall.toolKey(),
+                toolCall.toolType().name(),
+                stringValue(finalResult.arguments().get("domain")),
+                stringValue(finalResult.arguments().get("routePath")),
+                toolCall.toolCallId(),
+                confirmation.confirmationId(),
+                finalResult.summary(),
+                TOOL_STATUS_FAILED
+        );
+    }
+
+    private List<Metric> buildWriteFailureMetrics(
+            AiToolCallRecord toolCall,
+            AiToolCallResultResponse finalResult
+    ) {
+        if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            String domain = stringValue(finalResult.arguments().get("domain"));
+            return List.of(
+                    new Metric("动作类型", resolveTaskActionLabel(action), null, "warning"),
+                    new Metric("动作语义", resolveTaskActionSemantic(action), null, "warning"),
+                    new Metric("执行状态", finalResult.status(), null, "warning"),
+                    new Metric("业务域", domain.isBlank() ? "未定位" : domain, null, "neutral")
+            );
+        }
+        if (isProcessStartTool(toolCall.toolKey(), finalResult.arguments())) {
+            return List.of(
+                    new Metric("业务类型", stringValue(finalResult.arguments().get("businessType")), null, "neutral"),
+                    new Metric("执行状态", finalResult.status(), null, "warning"),
+                    new Metric("可重试", "是", null, "warning")
+            );
+        }
+        return List.of(
+                new Metric("执行状态", finalResult.status(), null, "warning"),
+                new Metric("可重试", "是", null, "warning")
+        );
+    }
+
+    private String buildWriteFailureDetail(AiToolCallRecord toolCall, AiToolCallResultResponse finalResult) {
+        if (isTaskHandleTool(toolCall.toolKey(), finalResult.arguments())) {
+            String action = normalizeTaskAction(finalResult.arguments().get("action"));
+            return "待办动作“" + resolveTaskActionLabel(action) + "”执行失败，" + resolveTaskActionSemantic(action) + "，请检查当前任务状态或重试。";
+        }
+        if (isProcessStartTool(toolCall.toolKey(), finalResult.arguments())) {
+            return "流程发起执行失败，请检查业务表单字段和业务绑定配置后重试。";
+        }
+        return finalResult.summary();
+    }
+
+    private int countItems(Object value) {
+        if (value instanceof List<?> list) {
+            return list.size();
+        }
+        return 0;
+    }
+
+    private String describeNextTasks(Object value) {
+        if (!(value instanceof List<?> items) || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+                .map(this::describeTaskLikeItem)
+                .filter(text -> text != null && !text.isBlank())
+                .limit(3)
+                .reduce((left, right) -> left + "、" + right)
+                .orElse("");
+    }
+
+    @SuppressWarnings("unchecked")
+    private String describeTaskLikeItem(Object item) {
+        if (item instanceof Map<?, ?> map) {
+            String nodeName = stringValue(map.get("nodeName"));
+            String taskId = stringValue(map.get("taskId"));
+            if (!nodeName.isBlank() && !taskId.isBlank()) {
+                return nodeName + "(" + taskId + ")";
+            }
+            return !nodeName.isBlank() ? nodeName : taskId;
+        }
+        return item == null ? "" : item.toString();
     }
 
     private String buildAssistantSummary(AiGatewayResponse gatewayResponse, String domain) {
@@ -1463,6 +1870,27 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("/workbench/todos/([^/?]+)").matcher(routePath);
         return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private Map<String, Object> enrichBusinessContextFromRoute(String routePath) {
+        if (routePath == null || routePath.isBlank()) {
+            return Map.of();
+        }
+        java.util.regex.Matcher plmMatcher = java.util.regex.Pattern.compile("^/plm/(ecr|eco|material-master)/([^/?]+)$").matcher(routePath);
+        if (plmMatcher.find()) {
+            String segment = plmMatcher.group(1);
+            String businessId = plmMatcher.group(2);
+            String businessType = switch (segment) {
+                case "ecr" -> "PLM_ECR";
+                case "eco" -> "PLM_ECO";
+                case "material-master" -> "PLM_MATERIAL";
+                default -> "";
+            };
+            if (!businessType.isBlank()) {
+                return Map.of("businessType", businessType, "businessId", businessId);
+            }
+        }
+        return Map.of();
     }
 
     private String extractTaskKeyword(String routePath, String fallbackKeyword) {
@@ -1576,6 +2004,112 @@ public class DbAiCopilotService implements AiCopilotService {
         );
     }
 
+    private AiMessageBlockResponse buildTaskHandlePreviewBlock(
+            String domain,
+            String routePath,
+            AiToolCallResultResponse toolResult
+    ) {
+        Map<String, Object> arguments = toolResult.arguments();
+        String action = normalizeTaskAction(arguments.get("action"));
+        String taskId = stringValue(arguments.get("taskId"));
+        return resultBlock(
+                toolResult.toolSource().name(),
+                toolResult.toolKey(),
+                toolResult.toolKey(),
+                toolResult.toolType().name(),
+                "待办处理预览已生成，确认后才会执行真实审批动作。",
+                buildTaskHandleResultPayload(
+                        toolResult.toolCallId(),
+                        toolResult.confirmationId(),
+                        toolResult.toolKey(),
+                        toolResult.toolType().name(),
+                        arguments,
+                        Map.of()
+                ),
+                buildToolResultTrace(
+                        toolResult.toolSource().name(),
+                        toolResult.toolKey(),
+                        toolResult.toolKey(),
+                        toolResult.status(),
+                        "待确认前可继续核对待办动作"
+                ),
+                previewFields(domain, routePath, toolResult, arguments, action, taskId),
+                List.of(
+                        new Metric("动作类型", resolveTaskActionLabel(action), "确认后才会真正落到流程运行态", "warning"),
+                        new Metric("动作语义", resolveTaskActionSemantic(action), null, "neutral"),
+                        new Metric("待办定位", taskId.isBlank() ? "待补充" : "已命中", null, taskId.isBlank() ? "warning" : "positive")
+                )
+        );
+    }
+
+    private List<Field> previewFields(
+            String domain,
+            String routePath,
+            AiToolCallResultResponse toolResult,
+            Map<String, Object> arguments,
+            String action,
+            String taskId
+    ) {
+        java.util.ArrayList<Field> fields = new java.util.ArrayList<>();
+        fields.add(new Field("业务域", domain, null));
+        fields.add(new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null));
+        fields.add(new Field("待办编号", taskId.isBlank() ? "未定位" : taskId, "优先使用当前页面上下文中的任务编号"));
+        fields.add(new Field("拟执行动作", resolveTaskActionLabel(action), null));
+        fields.add(new Field("动作语义", resolveTaskActionSemantic(action), null));
+        fields.addAll(buildTaskHandleBusinessFields(arguments));
+        fields.add(new Field("工具调用编号", toolResult.toolCallId(), null));
+        fields.add(new Field("确认单编号", toolResult.confirmationId(), null));
+        fields.add(new Field("状态", toolResult.status(), null));
+        return List.copyOf(fields);
+    }
+
+    private AiMessageBlockResponse buildWritePreviewBlock(
+            String content,
+            String domain,
+            String routePath,
+            AiToolCallResultResponse toolResult
+    ) {
+        if ("process.start".equals(toolResult.toolKey())) {
+            return buildProcessStartPreviewBlock(content, domain, routePath, toolResult);
+        }
+        if ("task.handle".equals(toolResult.toolKey())) {
+            return buildTaskHandlePreviewBlock(domain, routePath, toolResult);
+        }
+        return resultBlock(
+                toolResult.toolSource().name(),
+                toolResult.toolKey(),
+                toolResult.toolKey(),
+                toolResult.toolType().name(),
+                "写操作预览已生成，确认后才会真正执行。",
+                Map.of(
+                        "toolCallId", toolResult.toolCallId(),
+                        "confirmationId", toolResult.confirmationId(),
+                        "toolKey", toolResult.toolKey(),
+                        "toolType", toolResult.toolType().name()
+                ),
+                buildToolResultTrace(
+                        toolResult.toolSource().name(),
+                        toolResult.toolKey(),
+                        toolResult.toolKey(),
+                        toolResult.status(),
+                        "待确认前可继续核对写操作"
+                ),
+                buildToolContextFields(
+                        toolResult.toolSource().name(),
+                        toolResult.toolKey(),
+                        toolResult.toolKey(),
+                        toolResult.toolType().name(),
+                        domain,
+                        routePath,
+                        toolResult.toolCallId(),
+                        toolResult.confirmationId(),
+                        toolResult.summary(),
+                        "等待确认"
+                ),
+                List.of()
+        );
+    }
+
     private AiMessageBlockResponse buildTodoStatsBlock(String routePath, Object count) {
         String taskId = extractTaskId(routePath);
         return new AiMessageBlockResponse(
@@ -1643,6 +2177,84 @@ public class DbAiCopilotService implements AiCopilotService {
                         new Metric("完成率", String.valueOf(completionRate), null, "positive")
                 )
         );
+    }
+
+    private List<Field> buildPlmSummaryFields(
+            Map<String, Object> result,
+            String routePath,
+            AiToolCallResultResponse toolResult
+    ) {
+        Object items = result.get("items");
+        String firstBill = "";
+        String businessType = "";
+        if (items instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> firstItem) {
+            firstBill = stringValue(firstItem.get("billNo"));
+            businessType = stringValue(firstItem.get("businessType"));
+        }
+        List<Field> fields = new java.util.ArrayList<>(List.of(
+                new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
+                new Field("工具调用编号", toolResult.toolCallId(), null),
+                new Field("命中业务类型", businessType.isBlank() ? "未定位" : businessType, null),
+                new Field("首条单据", firstBill.isBlank() ? "无匹配单据" : firstBill, null)
+        ));
+        String topSummary = summarizeTopPlmItems(items);
+        if (!topSummary.isBlank()) {
+            fields.add(new Field("命中摘要", topSummary, "最多展示前三条命中单据"));
+        }
+        return List.copyOf(fields);
+    }
+
+    private List<Metric> buildPlmSummaryMetrics(Map<String, Object> result) {
+        int count = countItems(result.get("items"));
+        return List.of(
+                new Metric("命中单据数", String.valueOf(count), count > 0 ? "已读取真实 PLM 业务数据" : "当前关键词未匹配到 PLM 单据", count > 0 ? "positive" : "warning"),
+                new Metric("业务域", "PLM", null, "neutral")
+        );
+    }
+
+    private AiMessageBlockResponse buildPlmSummaryStatsBlock(Map<String, Object> result) {
+        return new AiMessageBlockResponse(
+                "stats",
+                "PLM 业务摘要",
+                null,
+                null,
+                null,
+                "当前结果来自 PLM 单据查询，可继续追问 ECR/ECO/物料变更影响范围。",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(
+                        new Field("摘要", summarizeTopPlmItems(result.get("items")), "最多展示前三条命中单据")
+                ),
+                buildPlmSummaryMetrics(result)
+        );
+    }
+
+    private String summarizeTopPlmItems(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) {
+            return "暂无匹配单据";
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .limit(3)
+                .map(item -> {
+                    String billNo = stringValue(item.get("billNo"));
+                    String title = stringValue(item.get("title"));
+                    String businessType = stringValue(item.get("businessType"));
+                    if (!billNo.isBlank() && !title.isBlank()) {
+                        return businessType + " · " + billNo + " · " + title;
+                    }
+                    if (!billNo.isBlank()) {
+                        return businessType + " · " + billNo;
+                    }
+                    return title;
+                })
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("暂无匹配单据");
     }
 
     /**

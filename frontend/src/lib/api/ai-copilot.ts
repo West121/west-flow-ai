@@ -373,8 +373,8 @@ function mapConversationDetailToSession(
       role: message.role,
       authorName: message.authorName,
       createdAt: message.createdAt,
-        content: message.content,
-        blocks: message.blocks ?? [],
+      content: message.content,
+      blocks: (message.blocks ?? []).map(enrichBusinessMessageBlock),
     })),
     toolCalls: (conversation.toolCalls ?? []).map((toolCall) => ({
       toolCallId: toolCall.toolCallId,
@@ -397,6 +397,171 @@ function mapConversationDetailToSession(
       occurredAt: auditEntry.occurredAt,
     })),
   }
+}
+
+function enrichBusinessMessageBlock(
+  block: BackendAICopilotMessageBlock
+): BackendAICopilotMessageBlock {
+  if (
+    block.type !== 'result' &&
+    block.type !== 'failure' &&
+    block.type !== 'retry'
+  ) {
+    return block
+  }
+
+  if (!isTaskHandleBlock(block)) {
+    return block
+  }
+
+  const taskHandleContext = resolveTaskHandleContext(block.result)
+  const extraFields = [
+    {
+      label: '待办动作',
+      value: taskHandleContext.actionLabel,
+    },
+    taskHandleContext.taskId
+      ? {
+          label: '待办编号',
+          value: taskHandleContext.taskId,
+        }
+      : null,
+    taskHandleContext.comment
+      ? {
+          label: '处理意见',
+          value: taskHandleContext.comment,
+        }
+      : null,
+    block.type === 'failure' && block.failure?.message
+      ? {
+          label: '失败原因',
+          value: block.failure.message,
+          hint: block.failure.detail,
+        }
+      : null,
+    {
+      label: '下一步建议',
+      value: resolveTaskHandleNextStep(block.type, taskHandleContext.actionLabel),
+    },
+  ].filter(Boolean) as {
+    label: string
+    value: string
+    hint?: string
+  }[]
+
+  return {
+    ...block,
+    ...(block.type === 'failure'
+      ? {
+          fields: extraFields,
+        }
+      : {
+          fields: mergeFieldEntries(block.fields, extraFields),
+          metrics:
+            block.type === 'retry'
+              ? mergeMetricEntries(block.metrics, [
+                  {
+                    label: '当前动作',
+                    value: taskHandleContext.actionLabel,
+                    tone: 'warning',
+                  },
+                ])
+              : block.metrics,
+        }),
+  }
+}
+
+function isTaskHandleBlock(
+  block: Extract<AICopilotMessageBlock, { type: 'result' | 'failure' | 'retry' }>
+) {
+  return (
+    block.sourceKey === 'task.handle' ||
+    block.sourceKey === 'workflow.task.complete' ||
+    block.sourceKey === 'workflow.task.reject'
+  )
+}
+
+function resolveTaskHandleContext(result?: Record<string, unknown>) {
+  const rawArguments =
+    result && typeof result.arguments === 'object' && result.arguments
+      ? (result.arguments as Record<string, unknown>)
+      : result ?? {}
+  const action = String(rawArguments.action ?? result?.action ?? '').toUpperCase()
+  const taskId = String(rawArguments.taskId ?? result?.taskId ?? '').trim()
+  const comment = String(rawArguments.comment ?? result?.comment ?? '').trim()
+
+  return {
+    action,
+    actionLabel: formatTaskHandleAction(action),
+    taskId,
+    comment,
+  }
+}
+
+function formatTaskHandleAction(action: string) {
+  switch (action) {
+    case 'COMPLETE':
+      return '完成待办'
+    case 'REJECT':
+      return '驳回待办'
+    case 'CLAIM':
+      return '认领待办'
+    case 'READ':
+      return '标记已阅'
+    default:
+      return '处理待办'
+  }
+}
+
+function resolveTaskHandleNextStep(
+  blockType: 'result' | 'failure' | 'retry',
+  actionLabel: string
+) {
+  switch (blockType) {
+    case 'result':
+      return '返回工作台刷新状态或继续追问流程轨迹'
+    case 'failure':
+      return `先刷新待办状态并核对参数，再重新执行${actionLabel}`
+    case 'retry':
+      return `沿用当前参数，直接重新执行${actionLabel}`
+  }
+}
+
+function mergeFieldEntries<
+  T extends {
+    label: string
+    value: string
+    hint?: string
+  },
+>(existing: T[] | undefined, appended: T[]) {
+  const merged = [...(existing ?? [])]
+
+  for (const field of appended) {
+    if (!merged.some((current) => current.label === field.label)) {
+      merged.push(field)
+    }
+  }
+
+  return merged
+}
+
+function mergeMetricEntries<
+  T extends {
+    label: string
+    value: string
+    hint?: string
+    tone?: 'neutral' | 'positive' | 'warning'
+  },
+>(existing: T[] | undefined, appended: T[]) {
+  const merged = [...(existing ?? [])]
+
+  for (const metric of appended) {
+    if (!merged.some((current) => current.label === metric.label)) {
+      merged.push(metric)
+    }
+  }
+
+  return merged
 }
 
 async function getConversationDetail(

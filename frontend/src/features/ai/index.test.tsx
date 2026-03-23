@@ -556,7 +556,7 @@ describe('AICopilotPage', () => {
 
     fireEvent.click(
       screen
-        .getAllByRole('button', { name: '重新执行' })
+        .getAllByRole('button', { name: '重试处理待办' })
         .find((button) => !button.hasAttribute('disabled'))!
     )
 
@@ -647,7 +647,7 @@ describe('AICopilotPage', () => {
 
     expect(await screen.findByText('AI 重试链路')).toBeInTheDocument()
     const retryButtons = await screen.findAllByRole('button', {
-      name: '按当前参数重试',
+      name: '重试处理待办',
     })
     expect(screen.getAllByText('调用：session_retry_001_tool_001').length).toBeGreaterThan(0)
     expect(screen.getAllByText('确认单：session_retry_001_confirm_001').length).toBeGreaterThan(0)
@@ -659,6 +659,150 @@ describe('AICopilotPage', () => {
         {
           sessionId: 'session_retry_001',
           confirmationId: 'session_retry_001_confirm_001',
+          decision: 'confirm',
+          argumentsOverride: undefined,
+        },
+        expect.any(Object)
+      )
+    )
+  })
+
+  it('renders task.handle cards with business action, next step, and retry wording', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_task_handle_001',
+        title: '待办处理闭环',
+        preview: '处理结果已经回写。',
+        status: 'active',
+        updatedAt: '2026-03-23T10:20:00.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot', 'route:/workbench/todos/task_001'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(async () =>
+      buildSession({
+        sessionId: 'session_task_handle_001',
+        title: '待办处理闭环',
+        contextTags: ['AI Copilot', 'route:/workbench/todos/task_001'],
+        history: [
+          {
+            messageId: 'session_task_handle_001_msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-23T10:20:10.000Z',
+            content: '待办处理已经返回结构化结果。',
+            blocks: [
+              {
+                type: 'result',
+                title: '执行结果',
+                summary: '待办处理成功。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  toolCallId: 'session_task_handle_001_tool_001',
+                  confirmationId: 'session_task_handle_001_confirm_001',
+                  arguments: {
+                    taskId: 'task_001',
+                    action: 'COMPLETE',
+                    comment: '审批通过',
+                  },
+                },
+                fields: [
+                  { label: '待办动作', value: '完成待办' },
+                  { label: '待办编号', value: 'task_001' },
+                  {
+                    label: '下一步建议',
+                    value: '返回工作台刷新状态或继续追问流程轨迹',
+                  },
+                ],
+              },
+              {
+                type: 'failure',
+                title: '执行失败',
+                summary: '待办处理失败。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  toolCallId: 'session_task_handle_001_tool_002',
+                  confirmationId: 'session_task_handle_001_confirm_002',
+                  retryable: true,
+                  arguments: {
+                    taskId: 'task_002',
+                    action: 'REJECT',
+                  },
+                },
+                failure: {
+                  code: 'AI.TOOL_EXECUTE_FAILED',
+                  message: '执行失败',
+                  detail: '当前任务状态已变化。',
+                },
+                fields: [
+                  { label: '待办动作', value: '驳回待办' },
+                  { label: '失败原因', value: '执行失败' },
+                ],
+              },
+              {
+                type: 'retry',
+                title: '重试建议',
+                summary: '可以沿用原动作快速重试。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  toolCallId: 'session_task_handle_001_tool_002',
+                  confirmationId: 'session_task_handle_001_confirm_002',
+                  retryable: true,
+                  arguments: {
+                    taskId: 'task_002',
+                    action: 'REJECT',
+                  },
+                },
+                fields: [
+                  { label: '待办动作', value: '驳回待办' },
+                  {
+                    label: '下一步建议',
+                    value: '修正意见后直接再次确认执行',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+    )
+    aiCopilotApiMocks.confirmAICopilotConfirmation.mockResolvedValue(
+      buildSession({
+        sessionId: 'session_task_handle_001',
+        title: '待办处理闭环',
+        contextTags: ['AI Copilot', 'route:/workbench/todos/task_001'],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('待办处理闭环')).toBeInTheDocument()
+    expect(await screen.findAllByText('待办动作')).not.toHaveLength(0)
+    expect(screen.getAllByText('完成待办').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('下一步建议').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('返回工作台刷新状态或继续追问流程轨迹').length).toBeGreaterThan(0)
+
+    const retryButtons = await screen.findAllByRole('button', {
+      name: '重试驳回待办',
+    })
+    fireEvent.click(retryButtons[0])
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.confirmAICopilotConfirmation).toHaveBeenCalledWith(
+        {
+          sessionId: 'session_task_handle_001',
+          confirmationId: 'session_task_handle_001_confirm_002',
           decision: 'confirm',
           argumentsOverride: undefined,
         },

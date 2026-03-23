@@ -1262,7 +1262,7 @@ function BlockCard({
             />
             <FieldList fields={block.fields} />
             <MetricGrid metrics={block.metrics} />
-            {block.result && Object.keys(block.result).length ? (
+            {shouldShowRawResultPayload(block) ? (
               <pre className='overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-3 text-xs leading-5 text-slate-200'>
                 {JSON.stringify(block.result, null, 2)}
               </pre>
@@ -1318,7 +1318,9 @@ function BlockCard({
                   onClick={onRetry}
                   disabled={!onRetry || isPending}
                 >
-                  {isPending ? '重试中…' : '重新执行'}
+                  {isPending
+                    ? '重试中…'
+                    : resolveRetryButtonLabel(block, '重新执行')}
                 </Button>
               </div>
             ) : null}
@@ -1358,7 +1360,9 @@ function BlockCard({
                 onClick={onRetry}
                 disabled={!onRetry || isPending}
               >
-                {isPending ? '重试中…' : '按当前参数重试'}
+                {isPending
+                  ? '重试中…'
+                  : resolveRetryButtonLabel(block, '按当前参数重试')}
               </Button>
             </div>
             {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
@@ -1402,6 +1406,8 @@ function ExecutionSummaryBanner({
       : null
   const toolCallId =
     typeof result.toolCallId === 'string' ? result.toolCallId : null
+  const taskHandleAction = resolveTaskHandleActionLabel(block)
+  const taskHandleTaskId = resolveTaskHandleTaskId(block)
   const bannerClass =
     tone === 'success'
       ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-50'
@@ -1423,6 +1429,8 @@ function ExecutionSummaryBanner({
     <div className={cn('rounded-2xl border px-3 py-3', bannerClass)}>
       <div className='flex flex-wrap gap-3 text-xs'>
         <span>{defaultLabel}</span>
+        {taskHandleAction ? <span>待办动作：{taskHandleAction}</span> : null}
+        {taskHandleTaskId ? <span>待办编号：{taskHandleTaskId}</span> : null}
         {block.sourceName ? <span>命中：{block.sourceName}</span> : null}
         {block.toolType ? <span>动作：{block.toolType}</span> : null}
         {toolCallId ? <span>调用：{toolCallId}</span> : null}
@@ -1637,6 +1645,107 @@ function formatAuditAction(actionType: string) {
     default:
       return actionType
   }
+}
+
+function resolveRetryButtonLabel(
+  block:
+    | Extract<AICopilotMessageBlock, { type: 'failure' }>
+    | Extract<AICopilotMessageBlock, { type: 'retry' }>,
+  fallback: string
+) {
+  const actionLabel = resolveTaskHandleActionLabel(block)
+  if (!actionLabel) {
+    return fallback
+  }
+
+  return `重试${actionLabel}`
+}
+
+function resolveTaskHandleActionLabel(
+  block:
+    | Extract<AICopilotMessageBlock, { type: 'result' }>
+    | Extract<AICopilotMessageBlock, { type: 'failure' }>
+    | Extract<AICopilotMessageBlock, { type: 'retry' }>
+) {
+  if (!isTaskHandleSource(block.sourceKey)) {
+    return null
+  }
+
+  const argumentsValue = resolveTaskHandleArguments(block.result)
+  const action = String(argumentsValue?.action ?? '').toUpperCase()
+
+  switch (action) {
+    case 'COMPLETE':
+      return '完成待办'
+    case 'REJECT':
+      return '驳回待办'
+    case 'CLAIM':
+      return '认领待办'
+    case 'READ':
+      return '标记已阅'
+    default:
+      return '处理待办'
+  }
+}
+
+function resolveTaskHandleTaskId(
+  block:
+    | Extract<AICopilotMessageBlock, { type: 'result' }>
+    | Extract<AICopilotMessageBlock, { type: 'failure' }>
+    | Extract<AICopilotMessageBlock, { type: 'retry' }>
+) {
+  if (!isTaskHandleSource(block.sourceKey)) {
+    return null
+  }
+
+  const argumentsValue = resolveTaskHandleArguments(block.result)
+  const taskId = String(argumentsValue?.taskId ?? '').trim()
+
+  return taskId || null
+}
+
+function resolveTaskHandleArguments(result?: Record<string, unknown>) {
+  if (!result || typeof result !== 'object') {
+    return null
+  }
+
+  const argumentsValue = result.arguments
+  if (
+    !argumentsValue ||
+    typeof argumentsValue !== 'object' ||
+    Array.isArray(argumentsValue)
+  ) {
+    return result
+  }
+
+  return argumentsValue as Record<string, unknown>
+}
+
+function isTaskHandleSource(sourceKey?: string) {
+  return (
+    sourceKey === 'task.handle' ||
+    sourceKey === 'workflow.task.complete' ||
+    sourceKey === 'workflow.task.reject'
+  )
+}
+
+function shouldShowRawResultPayload(
+  block: Extract<AICopilotMessageBlock, { type: 'result' }>
+) {
+  if (!block.result || Object.keys(block.result).length === 0) {
+    return false
+  }
+
+  if (
+    block.sourceKey === 'process.start' ||
+    block.sourceKey === 'task.handle' ||
+    block.sourceKey === 'plm.bill.query' ||
+    block.sourceKey === 'plm.change.summary'
+  ) {
+    return false
+  }
+
+  return !block.fields?.length && !block.metrics?.length
 }
 
 function toEditableFormData(value: unknown) {

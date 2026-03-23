@@ -117,10 +117,28 @@ class AiCopilotServiceTest {
                         )
                 ),
                 AiToolDefinition.read(
+                        "plm.bill.query",
+                        AiToolSource.PLATFORM,
+                        "已返回 PLM 单据列表",
+                        context -> Map.of(
+                                "count", 2,
+                                "items", List.of(
+                                        Map.of("businessType", "PLM_ECR", "billId", "ecr_001", "billNo", "ECR-20260323-001", "title", "电机外壳 BOM 变更"),
+                                        Map.of("businessType", "PLM_MATERIAL", "billId", "mat_001", "billNo", "MAT-20260323-003", "title", "主数据属性调整")
+                                )
+                        )
+                ),
+                AiToolDefinition.read(
                         "plm.change.summary",
                         AiToolSource.SKILL,
                         "已返回 PLM 变更摘要",
-                        context -> Map.of("summary", "PLM 变更摘要已生成")
+                        context -> Map.of(
+                                "count", 2,
+                                "items", List.of(
+                                        Map.of("businessType", "PLM_ECR", "billId", "ecr_001", "billNo", "ECR-20260323-001", "title", "电机外壳 BOM 变更"),
+                                        Map.of("businessType", "PLM_MATERIAL", "billId", "mat_001", "billNo", "MAT-20260323-003", "title", "主数据属性调整")
+                                )
+                        )
                 ),
                 AiToolDefinition.write(
                         "process.start",
@@ -134,7 +152,16 @@ class AiCopilotServiceTest {
                         "请确认是否处理当前待办",
                         context -> {
                             confirmedWriteExecuted.set(true);
-                            return Map.of("accepted", true, "done", true);
+                            return Map.of(
+                                    "accepted", true,
+                                    "done", true,
+                                    "instanceId", "proc_001",
+                                    "completedTaskId", "task_001",
+                                    "status", "COMPLETED",
+                                    "nextTasks", List.of(
+                                            Map.of("taskId", "task_002", "nodeName", "研发负责人审批")
+                                    )
+                            );
                         }
                 ),
                 AiToolDefinition.write(
@@ -210,6 +237,22 @@ class AiCopilotServiceTest {
                                 Map.of()
                         ));
                     }
+                    if (content != null && (content.contains("PLM") || content.contains("ECR") || content.contains("ECO") || content.contains("物料"))) {
+                        return java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                content.contains("摘要") ? "plm.change.summary" : "plm.bill.query",
+                                "查询 PLM 单据",
+                                content.contains("摘要") ? AiToolSource.SKILL : AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "ai:copilot:open",
+                                List.of("PLM"),
+                                List.of("PLM", "ECR", "ECO", "物料"),
+                                List.of("/plm/"),
+                                "plm-change-summary",
+                                "",
+                                88,
+                                Map.of()
+                        ));
+                    }
                     return java.util.Optional.empty();
                 });
         aiCopilotService = new DbAiCopilotService(
@@ -244,10 +287,31 @@ class AiCopilotServiceTest {
     @Test
     void shouldStageWriteToolCallForConfirmationAndConfirmIt() {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+        java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>();
+        doAnswer(invocation -> {
+            storedMessages.add(invocation.getArgument(0, AiMessageRecord.class));
+            return null;
+        }).when(aiMessageMapper).insertMessage(any());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(0L);
 
         AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
                 "conv_001",
-                new AiToolCallRequest("task.handle", AiToolType.WRITE, AiToolSource.PLATFORM, Map.of("taskId", "task_001", "action", "COMPLETE"))
+                new AiToolCallRequest(
+                        "task.handle",
+                        AiToolType.WRITE,
+                        AiToolSource.PLATFORM,
+                        Map.of(
+                                "taskId", "task_001",
+                                "action", "COMPLETE",
+                                "comment", "同意执行",
+                                "domain", "PLM",
+                                "routePath", "/plm/ecr/ecr_001",
+                                "businessType", "PLM_ECR",
+                                "businessId", "ecr_001",
+                                "billNo", "ECR-20260323-001",
+                                "businessTitle", "电机外壳 BOM 变更"
+                        )
+                )
         );
         assertThat(pending.status()).isEqualTo("PENDING_CONFIRMATION");
         assertThat(pending.requiresConfirmation()).isTrue();
@@ -260,7 +324,7 @@ class AiCopilotServiceTest {
                 AiToolSource.PLATFORM,
                 "PENDING_CONFIRMATION",
                 true,
-                "{\"taskId\":\"task_001\",\"action\":\"COMPLETE\"}",
+                "{\"taskId\":\"task_001\",\"action\":\"COMPLETE\",\"comment\":\"同意执行\",\"domain\":\"PLM\",\"routePath\":\"/plm/ecr/ecr_001\",\"businessType\":\"PLM_ECR\",\"businessId\":\"ecr_001\",\"billNo\":\"ECR-20260323-001\",\"businessTitle\":\"电机外壳 BOM 变更\"}",
                 "{}",
                 "请确认是否处理当前待办",
                 pending.confirmationId(),
@@ -277,6 +341,25 @@ class AiCopilotServiceTest {
         assertThat(confirmed.status()).isEqualTo("CONFIRMED");
         assertThat(confirmed.result()).containsEntry("done", true);
         assertThat(confirmedWriteExecuted.get()).isTrue();
+        assertThat(storedMessages).isNotEmpty();
+        List<AiMessageBlockResponse> blocks = parseBlocks(storedMessages.get(storedMessages.size() - 1));
+        AiMessageBlockResponse resultBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("待办编号", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题", "来源页面", "后续任务", "下一步建议", "处理意见");
+        assertThat(resultBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("动作", "动作语义", "后续待办数", "执行状态", "业务域");
+        AiMessageBlockResponse confirmBlock = blocks.stream()
+                .filter(block -> "confirm".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(confirmBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("工具名称", "工具类型", "确认人", "确认意见", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题");
         verify(aiConfirmationMapper).insertConfirmation(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -320,6 +403,72 @@ class AiCopilotServiceTest {
                 .contains("业务域", "来源页面", "流程编码", "业务类型", "场景编码", "工具调用编号", "确认单编号", "状态", "用户指令");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
+    }
+
+    @Test
+    void shouldAppendTaskHandlePreviewInsteadOfProcessStartPreview() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "待办", "route:/workbench/todos/task_001"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我认领这个待办")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        AiMessageBlockResponse previewBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        AiMessageBlockResponse confirmBlock = blocks.stream()
+                .filter(block -> "confirm".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(blocks).extracting(AiMessageBlockResponse::type).doesNotContain("form-preview");
+        assertThat(previewBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("待办编号", "拟执行动作", "工具调用编号", "确认单编号", "状态");
+        assertThat(confirmBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("待办编号", "拟执行动作");
+    }
+
+    @Test
+    void shouldAppendTaskHandlePreviewWithBusinessContextAndActionSemantic() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("PLM", "审批", "route:/plm/ecr/ecr_001"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("请通过这个 ECR 审批")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        AiMessageBlockResponse previewBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()) && "待办处理预览已生成，确认后才会执行真实审批动作。".equals(block.summary()))
+                .findFirst()
+                .orElseThrow();
+        AiMessageBlockResponse confirmBlock = blocks.stream()
+                .filter(block -> "confirm".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(previewBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务域", "来源页面", "待办编号", "拟执行动作", "业务类型", "业务标识", "动作语义");
+        assertThat(confirmBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务类型", "业务标识", "拟执行动作", "动作语义");
+        assertThat(confirmBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("确认状态", "动作类型", "动作语义");
     }
 
     @Test
@@ -414,6 +563,44 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldAppendPlmSummaryBlocksForPlmAssistantQueries() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("PLM", "route:/plm/query"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我总结一下 ECR 变更")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        assertThat(blocks)
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "result", "stats");
+        AiMessageBlockResponse resultBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        AiMessageBlockResponse statsBlock = blocks.stream()
+                .filter(block -> "stats".equals(block.type()) && "PLM 业务摘要".equals(block.title()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.sourceKey()).isEqualTo("plm.bill.query");
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("来源页面", "工具调用编号", "命中业务类型", "首条单据", "命中摘要");
+        assertThat(resultBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("命中单据数", "业务域");
+        assertThat(statsBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("命中单据数", "业务域");
+    }
+
+    @Test
     void shouldRenderFailureBlockWhenConfirmedWriteExecutionFails() throws Exception {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
         java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>();
@@ -425,7 +612,22 @@ class AiCopilotServiceTest {
 
         AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
                 "conv_001",
-                new AiToolCallRequest("workflow.task.fail", AiToolType.WRITE, AiToolSource.PLATFORM, Map.of("taskId", "task_002"))
+                new AiToolCallRequest(
+                        "workflow.task.fail",
+                        AiToolType.WRITE,
+                        AiToolSource.PLATFORM,
+                        Map.of(
+                                "taskId", "task_002",
+                                "action", "REJECT",
+                                "comment", "退回补充信息",
+                                "domain", "PLM",
+                                "routePath", "/plm/eco/eco_001",
+                                "businessType", "PLM_ECO",
+                                "businessId", "eco_001",
+                                "billNo", "ECO-20260323-002",
+                                "businessTitle", "产线装配工艺调整"
+                        )
+                )
         );
         when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
                 pending.toolCallId(),
@@ -435,7 +637,7 @@ class AiCopilotServiceTest {
                 AiToolSource.PLATFORM,
                 "PENDING_CONFIRMATION",
                 true,
-                "{\"taskId\":\"task_002\"}",
+                "{\"taskId\":\"task_002\",\"action\":\"REJECT\",\"comment\":\"退回补充信息\",\"domain\":\"PLM\",\"routePath\":\"/plm/eco/eco_001\",\"businessType\":\"PLM_ECO\",\"businessId\":\"eco_001\",\"billNo\":\"ECO-20260323-002\",\"businessTitle\":\"产线装配工艺调整\"}",
                 "{}",
                 "请确认是否执行失败示例",
                 pending.confirmationId(),
@@ -463,13 +665,16 @@ class AiCopilotServiceTest {
         assertThat(failureBlock.failure()).isNotNull();
         assertThat(failureBlock.sourceType()).isEqualTo("PLATFORM");
         assertThat(failureBlock.sourceKey()).isEqualTo("workflow.task.fail");
+        assertThat(failureBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("待办编号", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题", "来源页面", "处理意见", "下一步建议");
         AiMessageBlockResponse confirmBlock = blocks.stream()
                 .filter(block -> "confirm".equals(block.type()))
                 .findFirst()
                 .orElseThrow();
         assertThat(confirmBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
-                .contains("工具名称", "工具类型", "确认人", "确认意见");
+                .contains("工具名称", "工具类型", "确认人", "确认意见", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题");
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
                 .contains("retry");
@@ -479,10 +684,10 @@ class AiCopilotServiceTest {
                 .orElseThrow();
         assertThat(retryBlock.metrics())
                 .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("可重试");
+                .contains("可重试", "动作语义", "业务域");
         assertThat(retryBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
-                .contains("工具名称", "工具类型", "工具调用编号", "确认单编号", "摘要", "状态");
+                .contains("待办编号", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题", "来源页面", "处理意见", "下一步建议");
     }
 
     @Test
@@ -579,6 +784,17 @@ class AiCopilotServiceTest {
             return null;
         }).when(aiMessageMapper).insertMessage(any());
         return storedMessages;
+    }
+
+    private List<AiMessageBlockResponse> parseBlocks(AiMessageRecord messageRecord) {
+        try {
+            return new ObjectMapper().readValue(
+                    messageRecord.blocksJson(),
+                    new com.fasterxml.jackson.core.type.TypeReference<List<AiMessageBlockResponse>>() { }
+            );
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
     }
 
     private com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent mockSupervisorAgent(String reply) {

@@ -8,6 +8,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
+import org.flowable.engine.RepositoryService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "flowable.enabled", havingValue = "true", matchIfMissing = true)
 public class PublishedDefinitionBootstrapService {
 
     private final ProcessDefinitionMapper processDefinitionMapper;
@@ -36,6 +39,10 @@ public class PublishedDefinitionBootstrapService {
      */
     @Transactional
     public void syncPublishedDefinitions() {
+        RepositoryService repositoryService = flowableEngineFacade.repositoryService();
+        if (repositoryService == null || repositoryService.createDeployment() == null) {
+            return;
+        }
         List<ProcessDefinitionRecord> publishedDefinitions = processDefinitionMapper.selectAllPublished();
         for (ProcessDefinitionRecord record : publishedDefinitions) {
             if (record.bpmnXml() == null || record.bpmnXml().isBlank()) {

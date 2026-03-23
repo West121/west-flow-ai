@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   type ColumnDef,
@@ -57,6 +57,7 @@ type ResourceListPageProps<TData> = {
     label: string
     href: string
   }
+  extraActions?: ReactNode
 }
 
 function toSortingState(search: ListQuerySearch): SortingState {
@@ -79,6 +80,7 @@ export function ResourceListPage<TData>({
   total,
   summaries,
   createAction,
+  extraActions,
 }: ResourceListPageProps<TData>) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
@@ -169,6 +171,7 @@ export function ResourceListPage<TData>({
 
   const actions = (
     <>
+      {extraActions}
       <Button variant='outline' disabled>
         <FileDown data-icon='inline-start' />
         导出预留

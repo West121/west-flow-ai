@@ -455,4 +455,111 @@ describe('ai-copilot api', () => {
       ],
     })
   })
+
+  it('enriches task.handle blocks with business action, task id, and next step hints', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        conversationId: 'session_task_handle_001',
+        title: '待办处理闭环',
+        preview: '这里是待办处理结果。',
+        status: 'active',
+        updatedAt: '2026-03-23T09:30:00.000Z',
+        messageCount: 1,
+        contextTags: ['工作台', '待办'],
+        history: [
+          {
+            messageId: 'msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-23T09:30:00.000Z',
+            content: '待办处理已经返回结构化结果。',
+            blocks: [
+              {
+                type: 'result',
+                title: '执行结果',
+                summary: '待办处理成功。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  confirmationId: 'confirm_001',
+                  toolCallId: 'tool_001',
+                  arguments: {
+                    taskId: 'task_001',
+                    action: 'COMPLETE',
+                    comment: '审批通过',
+                  },
+                },
+              },
+              {
+                type: 'failure',
+                title: '执行失败',
+                summary: '待办处理失败。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'task.handle',
+                sourceName: 'task.handle',
+                toolType: 'WRITE',
+                result: {
+                  confirmationId: 'confirm_002',
+                  retryable: true,
+                  arguments: {
+                    taskId: 'task_002',
+                    action: 'REJECT',
+                  },
+                },
+                failure: {
+                  code: 'AI.TOOL_EXECUTE_FAILED',
+                  message: '执行失败',
+                  detail: '当前任务状态已变化。',
+                },
+              },
+            ],
+          },
+        ],
+        toolCalls: [],
+        audit: [],
+      })
+    )
+
+    const { getAICopilotSession } = await import('./ai-copilot')
+
+    await expect(getAICopilotSession('session_task_handle_001')).resolves.toMatchObject({
+      history: [
+        expect.objectContaining({
+          blocks: expect.arrayContaining([
+            expect.objectContaining({
+              type: 'result',
+              fields: expect.arrayContaining([
+                expect.objectContaining({
+                  label: '待办动作',
+                  value: '完成待办',
+                }),
+                expect.objectContaining({
+                  label: '待办编号',
+                  value: 'task_001',
+                }),
+                expect.objectContaining({
+                  label: '下一步建议',
+                }),
+              ]),
+            }),
+            expect.objectContaining({
+              type: 'failure',
+              fields: expect.arrayContaining([
+                expect.objectContaining({
+                  label: '待办动作',
+                  value: '驳回待办',
+                }),
+                expect.objectContaining({
+                  label: '失败原因',
+                  value: '执行失败',
+                }),
+              ]),
+            }),
+          ]),
+        }),
+      ],
+    })
+  })
 })

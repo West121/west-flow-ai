@@ -30,13 +30,27 @@ const { navigateMock, oaApiMocks } = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
     to,
+    search,
     children,
     ...props
-  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string; search?: Record<string, unknown> }) => {
+    const query = search && Object.keys(search).length > 0
+      ? `?${new URLSearchParams(
+          Object.entries(search).reduce<Record<string, string>>((acc, [key, value]) => {
+            if (value != null) {
+              acc[key] = String(value)
+            }
+            return acc
+          }, {})
+        ).toString()}`
+      : ''
+
+    return (
+      <a href={`${to ?? ''}${query}`} {...props}>
+        {children}
+      </a>
+    )
+  },
   useNavigate: () => navigateMock,
   getRouteApi: () => ({
     useSearch: () => ({
@@ -49,6 +63,17 @@ vi.mock('@tanstack/react-router', () => ({
     }),
     useNavigate: () => navigateMock,
   }),
+}))
+
+vi.mock('@/stores/auth-store', () => ({
+  useAuthStore: (
+    selector: (state: { currentUser: { aiCapabilities: string[] } }) => unknown
+  ) =>
+    selector({
+      currentUser: {
+        aiCapabilities: ['ai:copilot:open'],
+      },
+    }),
 }))
 
 vi.mock('@/features/shared/page-shell', () => ({
@@ -75,15 +100,18 @@ vi.mock('@/features/shared/page-shell', () => ({
 vi.mock('@/features/shared/crud/resource-list-page', () => ({
   ResourceListPage: ({
     title,
+    extraActions,
     createAction,
     data,
   }: {
     title: string
+    extraActions?: React.ReactNode
     createAction?: { label: string; href: string }
     data: Array<{ instanceId: string; businessTitle?: string; billNo?: string }>
   }) => (
     <div>
       <h2>{title}</h2>
+      {extraActions}
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
       {data.map((item) => (
         <div key={item.instanceId}>{item.businessTitle ?? item.billNo}</div>
@@ -355,6 +383,9 @@ describe('oa pages', () => {
     expect(await screen.findByText('OA 流程查询')).toBeInTheDocument()
     expect(screen.getByText('请假申请 · 外出处理事务')).toBeInTheDocument()
     expect(
+      screen.getByRole('link', { name: '用 AI 解读 OA 查询结果' })
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fquery')
+    expect(
       screen.getByRole('link', { name: '发起 OA 申请' })
     ).toHaveAttribute('href', '/workbench/start')
   })
@@ -387,6 +418,36 @@ describe('oa pages', () => {
     expect(await screen.findByText('审批单详情')).toBeInTheDocument()
     expect(screen.getByText('业务正文')).toBeInTheDocument()
     expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 解读当前审批单' })
+    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fleave%2Fleave_001')
+  })
+
+  it.each([
+    {
+      name: 'OALeaveCreatePage',
+      buttonLabel: '用 AI 辅助填写请假申请',
+      href: '/ai?sourceRoute=%2Foa%2Fleave%2Fcreate',
+      renderPage: OALeaveCreatePage,
+    },
+    {
+      name: 'OAExpenseCreatePage',
+      buttonLabel: '用 AI 辅助填写报销申请',
+      href: '/ai?sourceRoute=%2Foa%2Fexpense%2Fcreate',
+      renderPage: OAExpenseCreatePage,
+    },
+    {
+      name: 'OACommonCreatePage',
+      buttonLabel: '用 AI 辅助填写通用申请',
+      href: '/ai?sourceRoute=%2Foa%2Fcommon%2Fcreate',
+      renderPage: OACommonCreatePage,
+    },
+  ] as const)('renders Copilot entry on $name', async ({ buttonLabel, href, renderPage }) => {
+    const RenderPage = renderPage
+
+    renderWithQuery(<RenderPage />)
+
+    expect(screen.getByRole('link', { name: buttonLabel })).toHaveAttribute('href', href)
   })
 
   it('exposes OA and process-center entries in the sidebar data', () => {

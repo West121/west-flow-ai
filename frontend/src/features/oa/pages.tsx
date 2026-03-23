@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import {
@@ -422,9 +423,15 @@ export function OALeaveCreatePage() {
       title='请假申请'
       description='业务发起页先保存业务单据，再自动发起对应流程实例。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/workbench/start'>返回业务入口</Link>
-        </Button>
+        <>
+          <ContextualCopilotEntry
+            sourceRoute='/oa/leave/create'
+            label='用 AI 辅助填写请假申请'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/workbench/start'>返回业务入口</Link>
+          </Button>
+        </>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -441,9 +448,15 @@ export function OAExpenseCreatePage() {
       title='报销申请'
       description='报销单保存后会直接进入当前生效的审批流程。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/workbench/start'>返回业务入口</Link>
-        </Button>
+        <>
+          <ContextualCopilotEntry
+            sourceRoute='/oa/expense/create'
+            label='用 AI 辅助填写报销申请'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/workbench/start'>返回业务入口</Link>
+          </Button>
+        </>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -460,9 +473,15 @@ export function OACommonCreatePage() {
       title='通用申请'
       description='通用申请入口用于非固定场景的业务发起。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/workbench/start'>返回业务入口</Link>
-        </Button>
+        <>
+          <ContextualCopilotEntry
+            sourceRoute='/oa/common/create'
+            label='用 AI 辅助填写通用申请'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/workbench/start'>返回业务入口</Link>
+          </Button>
+        </>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -539,6 +558,12 @@ export function OAQueryPage() {
           label: '发起 OA 申请',
           href: '/workbench/start',
         }}
+        extraActions={
+          <ContextualCopilotEntry
+            sourceRoute='/oa/query'
+            label='用 AI 解读 OA 查询结果'
+          />
+        }
       />
     </>
   )

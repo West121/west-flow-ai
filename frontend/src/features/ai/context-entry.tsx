@@ -3,6 +3,8 @@ import { Bot, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth-store'
 
+const EMPTY_AI_CAPABILITIES: string[] = []
+
 // 页面内嵌 Copilot 入口，始终把当前页面路由透传为上下文来源。
 export function ContextualCopilotEntry({
   sourceRoute,
@@ -14,7 +16,7 @@ export function ContextualCopilotEntry({
   variant?: 'default' | 'outline'
 }) {
   const aiCapabilities = useAuthStore(
-    (state) => state.currentUser?.aiCapabilities ?? []
+    (state) => state.currentUser?.aiCapabilities ?? EMPTY_AI_CAPABILITIES
   )
 
   if (!aiCapabilities.includes('ai:copilot:open')) {
