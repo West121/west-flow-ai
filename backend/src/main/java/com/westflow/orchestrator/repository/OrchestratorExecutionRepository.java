@@ -48,6 +48,41 @@ public class OrchestratorExecutionRepository {
         );
     }
 
+    public List<OrchestratorScanExecutionRecord> selectByTargetId(String targetId) {
+        return jdbcTemplate.query(
+                """
+                SELECT
+                  id,
+                  run_id,
+                  target_id,
+                  automation_type,
+                  status,
+                  message,
+                  executed_at
+                FROM wf_orchestrator_execution
+                WHERE target_id = ?
+                ORDER BY executed_at ASC, id ASC
+                """,
+                this::mapRecord,
+                targetId
+        );
+    }
+
+    public long countSucceededByTargetId(String targetId) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(1)
+                FROM wf_orchestrator_execution
+                WHERE target_id = ?
+                  AND status = ?
+                """,
+                Integer.class,
+                targetId,
+                OrchestratorExecutionStatus.SUCCEEDED.name()
+        );
+        return count == null ? 0L : count;
+    }
+
     public List<OrchestratorScanExecutionRecord> selectByInstanceId(String instanceId) {
         return jdbcTemplate.query(
                 """

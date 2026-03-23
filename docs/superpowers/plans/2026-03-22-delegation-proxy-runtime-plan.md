@@ -1,6 +1,8 @@
 # Delegation Proxy Runtime Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划是切换真实 `Flowable` 前的历史执行稿；文中 `DemoTask`、`ProcessDemoService` 和相关 demo 运行态表述仅代表当时实现起点，不代表当前正式接口或运行时现状。
 
 **Goal:** 打通委派、代理、离职转办与转办链路增强的运行态闭环，不新增系统配置后台。
 

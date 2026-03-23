@@ -1,6 +1,8 @@
 # Approval Sheet Detail Closure Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划记录审批单详情页从 demo 运行态向真实审批单视图过渡时的历史方案；文中 “in-memory demo runtime” 只表示当时前提，不代表当前平台现状。
 
 **Goal:** Turn the current task detail page into the real approval-sheet detail page, combining business form content, current approval actions, process tracking, and animated flow review in one runtime screen.
 

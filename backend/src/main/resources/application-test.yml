@@ -45,5 +45,16 @@ liteflow:
   enabled: false
 
 spring.ai:
+  mcp:
+    server:
+      enabled: false
+      annotation-scanner:
+        enabled: false
   openai:
     api-key: test-key
+
+logging:
+  level:
+    # 测试环境只保留 MCP 错误级日志，避免 provider/握手预探测刷屏。
+    org.springaicommunity.mcp.provider: error
+    io.modelcontextprotocol.client.LifecycleInitializer: error

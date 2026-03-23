@@ -1,42 +1,57 @@
 package com.westflow.orchestrator.service;
 
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.notification.mapper.NotificationChannelMapper;
+import com.westflow.notification.model.NotificationChannelRecord;
+import com.westflow.notification.model.NotificationDispatchRequest;
+import com.westflow.notification.service.NotificationDispatchService;
 import com.westflow.orchestrator.mapper.OrchestratorScanMapper;
 import com.westflow.orchestrator.model.OrchestratorAutomationType;
 import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
 import com.westflow.orchestrator.model.OrchestratorScanExecutionRecord;
 import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
 import com.westflow.orchestrator.repository.OrchestratorExecutionRepository;
+import com.westflow.system.trigger.mapper.SystemTriggerMapper;
+import com.westflow.system.trigger.model.TriggerDefinitionRecord;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import org.flowable.bpmn.model.FlowElement;
-import org.flowable.bpmn.model.ExtensionAttribute;
-import org.flowable.bpmn.model.IntermediateCatchEvent;
-import org.flowable.bpmn.model.EventDefinition;
-import org.flowable.bpmn.model.TimerEventDefinition;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.EventDefinition;
+import org.flowable.bpmn.model.ExtensionAttribute;
+import org.flowable.bpmn.model.FlowElement;
+import org.flowable.bpmn.model.FlowNode;
+import org.flowable.bpmn.model.IntermediateCatchEvent;
+import org.flowable.bpmn.model.SequenceFlow;
+import org.flowable.bpmn.model.TimerEventDefinition;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
+import org.flowable.engine.runtime.Execution;
+import org.flowable.engine.runtime.ExecutionQuery;
 import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.task.api.Task;
+import org.flowable.task.api.TaskInfo;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 /**
- * 基于真实 Flowable 运行时读取 BPMN 活动节点的扫描桥接。
+ * 基于真实 Flowable 运行时读取 BPMN 活动节点并执行自动化动作。
  */
 @Service
 @Primary
@@ -53,22 +68,36 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
     private static final String ATTR_DSL_NODE_TYPE = "dslNodeType";
     private static final String ATTR_TIMEOUT_ENABLED = "timeoutEnabled";
     private static final String ATTR_TIMEOUT_DURATION_MINUTES = "timeoutDurationMinutes";
+    private static final String ATTR_TIMEOUT_ACTION = "timeoutAction";
     private static final String ATTR_REMINDER_ENABLED = "reminderEnabled";
     private static final String ATTR_REMINDER_FIRST_REMINDER_MINUTES = "reminderFirstReminderAfterMinutes";
+    private static final String ATTR_REMINDER_REPEAT_INTERVAL_MINUTES = "reminderRepeatIntervalMinutes";
+    private static final String ATTR_REMINDER_MAX_TIMES = "reminderMaxTimes";
+    private static final String ATTR_REMINDER_CHANNELS = "reminderChannels";
+    private static final String ATTR_TRIGGER_KEY = "triggerKey";
     private static final Set<String> SUPPORTED_NODE_TYPES = Set.of("approver", "timer", "trigger");
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final OrchestratorScanMapper orchestratorScanMapper;
     private final OrchestratorExecutionRepository orchestratorExecutionRepository;
+    private final NotificationDispatchService notificationDispatchService;
+    private final NotificationChannelMapper notificationChannelMapper;
+    private final SystemTriggerMapper systemTriggerMapper;
 
     public FlowableOrchestratorRuntimeBridge(
             FlowableEngineFacade flowableEngineFacade,
             OrchestratorScanMapper orchestratorScanMapper,
-            OrchestratorExecutionRepository orchestratorExecutionRepository
+            OrchestratorExecutionRepository orchestratorExecutionRepository,
+            NotificationDispatchService notificationDispatchService,
+            NotificationChannelMapper notificationChannelMapper,
+            SystemTriggerMapper systemTriggerMapper
     ) {
         this.flowableEngineFacade = flowableEngineFacade;
         this.orchestratorScanMapper = orchestratorScanMapper;
         this.orchestratorExecutionRepository = orchestratorExecutionRepository;
+        this.notificationDispatchService = notificationDispatchService;
+        this.notificationChannelMapper = notificationChannelMapper;
+        this.systemTriggerMapper = systemTriggerMapper;
     }
 
     @Override
@@ -89,26 +118,38 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         if (target == null) {
             throw new IllegalArgumentException("执行目标不能为空");
         }
-        OrchestratorScanExecutionRecord executionRecord = new OrchestratorScanExecutionRecord(
-                buildId("orc_exec_"),
-                runId,
-                target.targetId(),
-                target.automationType(),
-                OrchestratorExecutionStatus.SKIPPED,
-                buildExecutionMessage(target.automationType()),
-                Instant.now()
-        );
+        OrchestratorScanExecutionRecord executionRecord = executeTargetInternal(runId, target);
         try {
             orchestratorScanMapper.insertExecutionRecord(executionRecord);
         } catch (Exception ignored) {
-            // 预研阶段保留落库契约，执行失败不影响扫描流程。
+            // 监控快照写入失败不阻塞主流程。
         }
         try {
             orchestratorExecutionRepository.insert(executionRecord);
         } catch (Exception ignored) {
-            // 不阻塞主流程。
+            // 执行记录持久化失败不影响扫描返回。
         }
         return executionRecord;
+    }
+
+    private OrchestratorScanExecutionRecord executeTargetInternal(String runId, OrchestratorScanTargetRecord target) {
+        Instant executedAt = Instant.now();
+        try {
+            return switch (target.automationType()) {
+                case TIMEOUT_APPROVAL -> executeTimeoutApproval(runId, target, executedAt);
+                case AUTO_REMINDER -> executeAutoReminder(runId, target, executedAt);
+                case TIMER_NODE -> executeTimerNode(runId, target, executedAt);
+                case TRIGGER_NODE -> executeTriggerNode(runId, target, executedAt);
+            };
+        } catch (Exception exception) {
+            return buildExecutionRecord(
+                    runId,
+                    target,
+                    OrchestratorExecutionStatus.FAILED,
+                    "执行失败：" + exception.getMessage(),
+                    executedAt
+            );
+        }
     }
 
     private List<OrchestratorScanTargetRecord> scanDueTargets(Instant asOf) {
@@ -144,13 +185,9 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
 
                 if ("approver".equals(nodeType)) {
                     targets.addAll(buildApproverTargets(asOf, instance, element, seenTargetIds));
-                    continue;
-                }
-                if ("timer".equals(nodeType)) {
+                } else if ("timer".equals(nodeType)) {
                     addIfDue(targets, asOf, buildTimerTarget(instance, element, activityId, asOf), seenTargetIds);
-                    continue;
-                }
-                if ("trigger".equals(nodeType)) {
+                } else if ("trigger".equals(nodeType)) {
                     addIfDue(targets, asOf, buildTriggerTarget(instance, element, activityId, asOf), seenTargetIds);
                 }
             }
@@ -209,6 +246,8 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         boolean reminderEnabled = Boolean.parseBoolean(resolveAttribute(element, ATTR_REMINDER_ENABLED));
         Long timeoutMinutes = parseLong(resolveAttribute(element, ATTR_TIMEOUT_DURATION_MINUTES));
         Long reminderMinutes = parseLong(resolveAttribute(element, ATTR_REMINDER_FIRST_REMINDER_MINUTES));
+        Long reminderRepeatIntervalMinutes = parseLong(resolveAttribute(element, ATTR_REMINDER_REPEAT_INTERVAL_MINUTES));
+        Long reminderMaxTimes = parseLong(resolveAttribute(element, ATTR_REMINDER_MAX_TIMES));
 
         List<OrchestratorScanTargetRecord> targets = new ArrayList<>();
         for (Task task : activeTasks) {
@@ -216,10 +255,10 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                 continue;
             }
 
-            Instant createAt = task.getCreateTime().toInstant();
+            Instant createdAt = task.getCreateTime().toInstant();
 
             if (timeoutEnabled && timeoutMinutes != null) {
-                Instant dueAt = createAt.plus(Duration.ofMinutes(timeoutMinutes));
+                Instant dueAt = createdAt.plus(Duration.ofMinutes(timeoutMinutes));
                 addApproverTarget(
                         targets,
                         asOf,
@@ -231,8 +270,17 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                         seenTargetIds
                 );
             }
+
             if (reminderEnabled && reminderMinutes != null) {
-                Instant dueAt = createAt.plus(Duration.ofMinutes(reminderMinutes));
+                String reminderTargetId = buildTargetId(instance.getId(), task.getId(), OrchestratorAutomationType.AUTO_REMINDER);
+                long reminderCount = orchestratorExecutionRepository.countSucceededByTargetId(reminderTargetId);
+                if (reminderMaxTimes != null && reminderCount >= reminderMaxTimes) {
+                    continue;
+                }
+                Instant dueAt = createdAt.plus(Duration.ofMinutes(reminderMinutes));
+                if (reminderRepeatIntervalMinutes != null && reminderRepeatIntervalMinutes > 0 && reminderCount > 0) {
+                    dueAt = dueAt.plus(Duration.ofMinutes(reminderRepeatIntervalMinutes * reminderCount));
+                }
                 addApproverTarget(
                         targets,
                         asOf,
@@ -268,8 +316,8 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                 resolveBusinessId(instance),
                 dueAt,
                 automationType == OrchestratorAutomationType.TIMEOUT_APPROVAL
-                        ? "审批超时后执行策略"
-                        : "审批节点自动提醒策略"
+                        ? "审批超时后自动处理"
+                        : "审批节点自动提醒"
         ), seenTargetIds);
     }
 
@@ -283,15 +331,14 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
             return null;
         }
         Instant dueAt = resolveTimerDueAt(instance, element, asOf);
-        String targetId = buildTargetId(instance.getId(), activityId, OrchestratorAutomationType.TIMER_NODE);
         return new OrchestratorScanTargetRecord(
-                targetId,
+                buildTargetId(instance.getId(), activityId, OrchestratorAutomationType.TIMER_NODE),
                 OrchestratorAutomationType.TIMER_NODE,
                 resolveElementName(element),
                 activityId,
                 resolveBusinessId(instance),
                 dueAt,
-                "定时节点到期后可推进流程"
+                "定时节点到期后推进流程"
         );
     }
 
@@ -304,15 +351,14 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         if (instance == null || instance.getId() == null) {
             return null;
         }
-        String targetId = buildTargetId(instance.getId(), activityId, OrchestratorAutomationType.TRIGGER_NODE);
         return new OrchestratorScanTargetRecord(
-                targetId,
+                buildTargetId(instance.getId(), activityId, OrchestratorAutomationType.TRIGGER_NODE),
                 OrchestratorAutomationType.TRIGGER_NODE,
                 resolveElementName(element),
                 activityId,
                 resolveBusinessId(instance),
                 asOf,
-                "触发节点待执行回调动作"
+                "触发节点回调并推进流程"
         );
     }
 
@@ -324,9 +370,9 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
             if (!(definition instanceof TimerEventDefinition timerDefinition)) {
                 continue;
             }
-            Instant dateBased = parseIsoDate(timerDefinition.getTimeDate());
-            if (dateBased != null) {
-                return dateBased;
+            Instant fixedDate = parseIsoDate(timerDefinition.getTimeDate());
+            if (fixedDate != null) {
+                return fixedDate;
             }
             Duration duration = parseDuration(timerDefinition.getTimeDuration());
             if (duration != null) {
@@ -336,23 +382,238 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         return asOf;
     }
 
-    private String buildTargetId(String instanceId, String nodeRefId, OrchestratorAutomationType type) {
-        return "orc_target_" + instanceId + "_" + nodeRefId + "_" + type.name().toLowerCase();
+    private OrchestratorScanExecutionRecord executeTimeoutApproval(
+            String runId,
+            OrchestratorScanTargetRecord target,
+            Instant executedAt
+    ) {
+        Task task = requireActiveTask(target.nodeId());
+        FlowElement element = requireTaskElement(task);
+        String timeoutAction = defaultValue(resolveAttribute(element, ATTR_TIMEOUT_ACTION), "APPROVE");
+        flowableEngineFacade.taskService().complete(
+                task.getId(),
+                Map.of(
+                        "westflowTimeoutAction", timeoutAction,
+                        "westflowOrchestratorTriggered", Boolean.TRUE
+                )
+        );
+        return buildExecutionRecord(
+                runId,
+                target,
+                OrchestratorExecutionStatus.SUCCEEDED,
+                "已按超时策略自动处理审批任务（action=%s）".formatted(timeoutAction),
+                executedAt
+        );
     }
 
-    private String buildExecutionMessage(OrchestratorAutomationType type) {
-        return switch (type) {
-            case TIMEOUT_APPROVAL -> "已识别超时审批目标，执行器预研阶段先跳过";
-            case AUTO_REMINDER -> "已识别自动提醒目标，执行器预研阶段先跳过";
-            case TIMER_NODE -> "已识别定时节点目标，执行器预研阶段先跳过";
-            case TRIGGER_NODE -> "已识别触发器目标，执行器预研阶段先跳过";
-        };
+    private OrchestratorScanExecutionRecord executeAutoReminder(
+            String runId,
+            OrchestratorScanTargetRecord target,
+            Instant executedAt
+    ) {
+        Task task = requireActiveTask(target.nodeId());
+        FlowElement element = requireTaskElement(task);
+        List<NotificationChannelRecord> channels = resolveReminderChannels(element);
+        if (channels.isEmpty()) {
+            return buildExecutionRecord(
+                    runId,
+                    target,
+                    OrchestratorExecutionStatus.FAILED,
+                    "未找到可用的提醒通知渠道",
+                    executedAt
+            );
+        }
+
+        String recipient = resolveTaskRecipient(task);
+        String taskName = safeText(task.getName(), task.getTaskDefinitionKey());
+        for (NotificationChannelRecord channel : channels) {
+            notificationDispatchService.dispatchByChannelCode(
+                    channel.channelCode(),
+                    new NotificationDispatchRequest(
+                            recipient,
+                            "审批提醒：" + taskName,
+                            "任务 %s 仍待处理，业务单号：%s".formatted(
+                                    taskName,
+                                    safeText(target.businessId(), task.getProcessInstanceId())
+                            ),
+                            Map.of(
+                                    "taskId", task.getId(),
+                                    "processInstanceId", task.getProcessInstanceId(),
+                                    "automationType", target.automationType().name()
+                            )
+                    )
+            );
+        }
+
+        return buildExecutionRecord(
+                runId,
+                target,
+                OrchestratorExecutionStatus.SUCCEEDED,
+                "已派发 %d 条审批提醒".formatted(channels.size()),
+                executedAt
+        );
     }
 
-    private String resolveElementName(FlowElement element) {
-        return element == null || element.getName() == null || element.getName().isBlank()
-                ? "未命名 BPMN 节点"
-                : element.getName();
+    private OrchestratorScanExecutionRecord executeTimerNode(
+            String runId,
+            OrchestratorScanTargetRecord target,
+            Instant executedAt
+    ) {
+        advanceNodeExecution(target.nodeId(), target.targetId());
+        return buildExecutionRecord(
+                runId,
+                target,
+                OrchestratorExecutionStatus.SUCCEEDED,
+                "定时节点已到点推进",
+                executedAt
+        );
+    }
+
+    private OrchestratorScanExecutionRecord executeTriggerNode(
+            String runId,
+            OrchestratorScanTargetRecord target,
+            Instant executedAt
+    ) {
+        long dispatchCount = dispatchTriggerNotifications(target);
+        advanceNodeExecution(target.nodeId(), target.targetId());
+        return buildExecutionRecord(
+                runId,
+                target,
+                OrchestratorExecutionStatus.SUCCEEDED,
+                dispatchCount > 0
+                        ? "触发节点已执行并派发 %d 条通知".formatted(dispatchCount)
+                        : "触发节点已执行并推进到下一节点",
+                executedAt
+        );
+    }
+
+    private long dispatchTriggerNotifications(OrchestratorScanTargetRecord target) {
+        ProcessInstance instance = requireProcessInstance(resolveInstanceId(target.targetId()));
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(instance.getProcessDefinitionId());
+        FlowElement element = model == null ? null : model.getFlowElement(target.nodeId());
+        String triggerKey = resolveAttribute(element, ATTR_TRIGGER_KEY);
+        if (triggerKey == null || triggerKey.isBlank()) {
+            return 0L;
+        }
+
+        long dispatchCount = 0L;
+        for (TriggerDefinitionRecord record : systemTriggerMapper.selectAll()) {
+            if (!Boolean.TRUE.equals(record.enabled()) || !triggerKey.equalsIgnoreCase(record.triggerKey())) {
+                continue;
+            }
+            if (record.channelIds() == null) {
+                continue;
+            }
+            for (String channelId : record.channelIds()) {
+                NotificationChannelRecord channel = notificationChannelMapper.selectById(channelId);
+                if (channel == null || !Boolean.TRUE.equals(channel.enabled())) {
+                    continue;
+                }
+                notificationDispatchService.dispatchByChannelCode(
+                        channel.channelCode(),
+                        new NotificationDispatchRequest(
+                                safeText(target.businessId(), instance.getBusinessKey()),
+                                safeText(record.triggerName(), record.triggerKey()),
+                                safeText(record.description(), "触发节点已执行"),
+                                Map.of(
+                                        "triggerId", record.triggerId(),
+                                        "triggerKey", record.triggerKey(),
+                                        "processInstanceId", instance.getId(),
+                                        "automationType", target.automationType().name()
+                                )
+                        )
+                );
+                dispatchCount++;
+            }
+        }
+        return dispatchCount;
+    }
+
+    private void advanceNodeExecution(String activityId, String targetId) {
+        String instanceId = resolveInstanceId(targetId);
+        ProcessInstance instance = requireProcessInstance(instanceId);
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(instance.getProcessDefinitionId());
+        FlowElement element = model == null ? null : model.getFlowElement(activityId);
+        String nextActivityId = resolveNextActivityId(element);
+        if (nextActivityId == null) {
+            throw new IllegalStateException("未找到可推进的后继节点");
+        }
+
+        ExecutionQuery executionQuery = flowableEngineFacade.runtimeService()
+                .createExecutionQuery()
+                .processInstanceId(instanceId)
+                .activityId(activityId);
+        List<Execution> executions = executionQuery.list();
+        if (executions == null || executions.isEmpty()) {
+            throw new IllegalStateException("未找到等待推进的执行实例");
+        }
+
+        var builder = flowableEngineFacade.runtimeService()
+                .createChangeActivityStateBuilder()
+                .processInstanceId(instanceId);
+        for (Execution execution : executions) {
+            builder.moveExecutionToActivityId(execution.getId(), nextActivityId);
+        }
+        builder.changeState();
+    }
+
+    private ProcessInstance requireProcessInstance(String instanceId) {
+        ProcessInstanceQuery instanceQuery = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(instanceId);
+        ProcessInstance instance = instanceQuery.singleResult();
+        if (instance == null) {
+            throw new IllegalStateException("流程实例不存在或已结束");
+        }
+        return instance;
+    }
+
+    private Task requireActiveTask(String taskId) {
+        Task task = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .taskId(taskId)
+                .active()
+                .singleResult();
+        if (task == null) {
+            throw new IllegalStateException("任务不存在或已处理");
+        }
+        return task;
+    }
+
+    private FlowElement requireTaskElement(Task task) {
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(task.getProcessDefinitionId());
+        FlowElement element = model == null ? null : model.getFlowElement(task.getTaskDefinitionKey());
+        if (element == null) {
+            throw new IllegalStateException("未找到任务节点定义");
+        }
+        return element;
+    }
+
+    private List<NotificationChannelRecord> resolveReminderChannels(FlowElement element) {
+        Set<String> expectedTypes = splitCsv(resolveAttribute(element, ATTR_REMINDER_CHANNELS));
+        if (expectedTypes.isEmpty()) {
+            return List.of();
+        }
+        Map<String, NotificationChannelRecord> channels = new LinkedHashMap<>();
+        for (NotificationChannelRecord channel : notificationChannelMapper.selectAll()) {
+            if (!Boolean.TRUE.equals(channel.enabled()) || !expectedTypes.contains(channel.channelType())) {
+                continue;
+            }
+            channels.putIfAbsent(channel.channelType(), channel);
+        }
+        return new ArrayList<>(channels.values());
+    }
+
+    private String resolveNextActivityId(FlowElement element) {
+        if (!(element instanceof FlowNode flowNode) || flowNode.getOutgoingFlows() == null) {
+            return null;
+        }
+        return flowNode.getOutgoingFlows().stream()
+                .map(SequenceFlow::getTargetRef)
+                .filter(value -> value != null && !value.isBlank())
+                .sorted(Comparator.naturalOrder())
+                .findFirst()
+                .orElse(null);
     }
 
     private String resolveAttribute(FlowElement element, String key) {
@@ -369,6 +630,41 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         }
         String value = values.get(0).getValue();
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private Set<String> splitCsv(String text) {
+        if (text == null || text.isBlank()) {
+            return Set.of();
+        }
+        Set<String> values = new LinkedHashSet<>();
+        for (String segment : text.split(",")) {
+            if (segment != null && !segment.isBlank()) {
+                values.add(segment.trim().toUpperCase());
+            }
+        }
+        return values;
+    }
+
+    private String resolveTaskRecipient(TaskInfo task) {
+        if (task.getAssignee() != null && !task.getAssignee().isBlank()) {
+            return task.getAssignee();
+        }
+        if (task.getOwner() != null && !task.getOwner().isBlank()) {
+            return task.getOwner();
+        }
+        return safeText(task.getProcessInstanceId(), task.getId());
+    }
+
+    private String resolveInstanceId(String targetId) {
+        if (targetId == null || !targetId.startsWith("orc_target_")) {
+            throw new IllegalStateException("非法的编排目标标识");
+        }
+        String withoutPrefix = targetId.substring("orc_target_".length());
+        int splitIndex = withoutPrefix.indexOf("__");
+        if (splitIndex < 0) {
+            throw new IllegalStateException("无法解析流程实例标识");
+        }
+        return withoutPrefix.substring(0, splitIndex);
     }
 
     private Instant parseIsoDate(String text) {
@@ -408,8 +704,22 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         return value == null ? fallback : value.toInstant();
     }
 
-    private String buildId(String prefix) {
-        return prefix + UUID.randomUUID().toString().replace("-", "");
+    private String defaultValue(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String safeText(String primary, String fallback) {
+        return primary == null || primary.isBlank() ? fallback : primary;
+    }
+
+    private String buildTargetId(String instanceId, String nodeRefId, OrchestratorAutomationType type) {
+        return "orc_target_" + instanceId + "__" + nodeRefId + "__" + type.name().toLowerCase();
+    }
+
+    private String resolveElementName(FlowElement element) {
+        return element == null || element.getName() == null || element.getName().isBlank()
+                ? "未命名 BPMN 节点"
+                : element.getName();
     }
 
     private String resolveBusinessId(ProcessInstance instance) {
@@ -419,11 +729,32 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         return instance.getBusinessKey() == null ? instance.getId() : instance.getBusinessKey();
     }
 
+    private String buildId(String prefix) {
+        return prefix + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private OrchestratorScanExecutionRecord buildExecutionRecord(
+            String runId,
+            OrchestratorScanTargetRecord target,
+            OrchestratorExecutionStatus status,
+            String message,
+            Instant executedAt
+    ) {
+        return new OrchestratorScanExecutionRecord(
+                buildId("orc_exec_"),
+                runId,
+                target.targetId(),
+                target.automationType(),
+                status,
+                message,
+                executedAt
+        );
+    }
+
     private boolean isRuntimeAvailable() {
-        return flowableEngineFacade != null
-                && flowableEngineFacade.processEngine() != null
-                && flowableEngineFacade.runtimeService() != null
+        return flowableEngineFacade.processEngine() != null
                 && flowableEngineFacade.repositoryService() != null
+                && flowableEngineFacade.runtimeService() != null
                 && flowableEngineFacade.taskService() != null
                 && flowableEngineFacade.historyService() != null;
     }

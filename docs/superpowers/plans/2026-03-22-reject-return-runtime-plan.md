@@ -1,6 +1,8 @@
 # Reject & Return Runtime Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划是 demo 运行态阶段的历史实现稿；其中 `ProcessDemoService` 和 “single in-memory runtime backbone” 仅表示当时设计前提，当前正式运行态已统一到真实 `Flowable`。
 
 **Goal:** Implement one coherent runtime slice covering reject routing strategies, jump, take-back, wake-up, and richer approval-sheet trajectory data.
 

@@ -14,7 +14,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-// 执行编排器的手动扫描和演示态推进。
+// 执行编排器的手动扫描与自动化动作。
 public class OrchestratorService {
 
     private final OrchestratorRuntimeBridge orchestratorRuntimeBridge;
@@ -37,7 +37,7 @@ public class OrchestratorService {
         return new OrchestratorManualScanResponse(runId, scannedAt, results);
     }
 
-    // 演示态保留入库能力，当前仅供监控列表展示。
+    // 把扫描目标和执行结果组装成接口返回模型。
     private OrchestratorScanResultResponse toResult(
             OrchestratorScanTargetRecord target,
             OrchestratorScanExecutionRecord executionRecord

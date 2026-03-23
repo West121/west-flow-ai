@@ -8,6 +8,7 @@ import com.westflow.notification.api.SaveNotificationChannelRequest;
 import com.westflow.notification.mapper.NotificationChannelMapper;
 import com.westflow.notification.mapper.NotificationLogMapper;
 import com.westflow.notification.model.NotificationDispatchRequest;
+import com.westflow.system.message.mapper.SystemMessageMapper;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -38,12 +39,16 @@ class NotificationDispatchServiceTest {
     @Autowired
     private NotificationLogMapper notificationLogMapper;
 
+    @Autowired
+    private SystemMessageMapper systemMessageMapper;
+
     private final AtomicReference<String> receivedPayload = new AtomicReference<>("");
 
     @BeforeEach
     void resetStorage() {
         notificationChannelMapper.clear();
         notificationLogMapper.clear();
+        systemMessageMapper.clear();
         receivedPayload.set("");
     }
 
@@ -126,6 +131,31 @@ class NotificationDispatchServiceTest {
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void shouldDispatchInAppNotificationAndPersistSystemMessage() {
+        createChannel("in_app_ops", "IN_APP", false, Map.of("senderUserId", "usr_system"));
+
+        var result = notificationDispatchService.dispatchByChannelCode(
+                "in_app_ops",
+                new NotificationDispatchRequest(
+                        "usr_001",
+                        "站内提醒",
+                        "请尽快处理待办任务",
+                        Map.of("instanceId", "pi_003", "taskId", "task_003")
+                )
+        );
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.providerName()).isEqualTo("IN_APP");
+        assertThat(systemMessageMapper.selectAll()).hasSize(1);
+        assertThat(systemMessageMapper.selectAll().get(0).title()).isEqualTo("站内提醒");
+        assertThat(systemMessageMapper.selectAll().get(0).content()).isEqualTo("请尽快处理待办任务");
+        assertThat(systemMessageMapper.selectAll().get(0).status()).isEqualTo("SENT");
+        assertThat(systemMessageMapper.selectAll().get(0).targetType()).isEqualTo("USER");
+        assertThat(systemMessageMapper.selectAll().get(0).targetUserIds()).containsExactly("usr_001");
+        assertThat(systemMessageMapper.selectAll().get(0).senderUserId()).isEqualTo("usr_system");
     }
 
     private void handleWebhook(HttpExchange exchange) throws IOException {

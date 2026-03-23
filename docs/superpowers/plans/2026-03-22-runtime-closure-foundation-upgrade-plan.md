@@ -1,6 +1,8 @@
 # Runtime Closure And Foundation Upgrade Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划保留从 demo 运行态过渡到系统侧闭环时的历史执行背景；下文若出现 `ProcessDemoService` 等旧实现路径，仅作归档说明，不代表当前正式口径。
 
 **Goal:** 补齐委派、代理、离职转办的系统侧闭环，并完成前后端中文注释治理、后端 JDK 21 统一、record 优先的 Lombok 整理。
 

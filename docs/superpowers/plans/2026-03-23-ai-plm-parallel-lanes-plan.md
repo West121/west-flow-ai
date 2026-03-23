@@ -1,6 +1,8 @@
 # AI PLM Parallel Lanes Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本并行计划记录当日分工冻结；若出现 `backend/src/main/java/com/westflow/aimcpdemo/**`，仅表示演示 / 集成测试域写集，不代表当前正式平台契约仍以 demo 域为主。
 
 **Goal:** 在当前真实登录、真实 Flowable、完整 AI Copilot 与 PLM 基线上，并行交付 AI 业务闭环、PLM 业务深化、AI 运维可观测和前端体验收口。
 

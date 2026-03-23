@@ -1,6 +1,8 @@
 # Orchestrator Automation Foundation Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划保留自动化能力接入 demo 运行态时期的实现顺序；文中 `processruntime` demo 模型与 `ProcessDemoService` 仅表示历史前提，不代表当前正式平台。
 
 **Goal:** 打通超时审批、自动提醒、定时节点、触发节点从设计器配置到运行态执行再到详情展示的完整闭环。
 

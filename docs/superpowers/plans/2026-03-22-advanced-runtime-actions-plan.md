@@ -1,6 +1,8 @@
 # Advanced Runtime Actions Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划保留 demo 运行态时期的动作扩展思路；文中 `ProcessDemoService`、`demo runtime service` 仅代表历史实现背景，不代表当前正式运行态口径。
 
 **Goal:** Implement one coherent advanced runtime slice covering add-sign, remove-sign, revoke, urge, real CC delivery/read, process-center filter expansion, and richer approval-sheet action timelines.
 

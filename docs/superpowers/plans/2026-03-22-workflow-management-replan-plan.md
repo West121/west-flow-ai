@@ -1,6 +1,8 @@
 # Workflow Management Replan Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本重排计划形成于真实 `Flowable` 切换之前；若下文仍出现 `ProcessDemoService` 等旧文件路径，只表示历史执行上下文，不代表当前正式实现。
 
 **Goal:** Replan and implement workflow management as one coherent product slice: dual entry (`OA` + `流程管理`), one shared process center, business-direct launch, approval-sheet detail pages, property-panel form selection, and business-process binding without introducing standalone form management.
 
