@@ -124,6 +124,14 @@ vi.mock('@/lib/api/workbench', () => ({
     tasksPage: '/process-runtime/tasks/page',
   },
 }))
+vi.mock('@/stores/auth-store', () => ({
+  useAuthStore: (selector: (state: { currentUser: { aiCapabilities: string[] } }) => unknown) =>
+    selector({
+      currentUser: {
+        aiCapabilities: ['ai:copilot:open'],
+      },
+    }),
+}))
 
 function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -414,6 +422,9 @@ describe('workbench pages', () => {
 
     expect(await screen.findByText('公共认领请假审批')).toBeInTheDocument()
     expect(screen.getByText('待认领')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 解读当前待办' })
+    ).toHaveAttribute('href', '/ai')
   })
 
   it('shows the handover toolbar entry on the todo list', async () => {
@@ -430,6 +441,9 @@ describe('workbench pages', () => {
 
     expect(screen.queryByLabelText('流程标识')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('业务单号')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 推荐发起入口' })
+    ).toHaveAttribute('href', '/ai')
     expect(
       screen.getByRole('link', { name: '请假申请' })
     ).toHaveAttribute('href', '/oa/leave/create')
@@ -716,6 +730,9 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('办理时长').length).toBeGreaterThan(0)
     expect(screen.getAllByText('是否超时').length).toBeGreaterThan(0)
     expect(screen.getAllByText('审批意见摘要').length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('link', { name: '用 AI 解读当前审批单' })
+    ).toHaveAttribute('href', '/ai')
     expect(await screen.findByRole('button', { name: '认领任务' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '退回上一步' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '驳回' })).not.toBeInTheDocument()

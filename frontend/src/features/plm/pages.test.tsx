@@ -105,6 +105,14 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
 
 vi.mock('@/lib/api/plm', () => plmApiMocks)
 vi.mock('@/lib/api/workbench', () => workbenchApiMocks)
+vi.mock('@/stores/auth-store', () => ({
+  useAuthStore: (selector: (state: { currentUser: { aiCapabilities: string[] } }) => unknown) =>
+    selector({
+      currentUser: {
+        aiCapabilities: ['ai:copilot:open'],
+      },
+    }),
+}))
 
 function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -234,6 +242,9 @@ describe('plm pages', () => {
     renderWithQuery(<PLMHomePage />)
 
     expect(screen.getByText('PLM 发起中心')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 推荐 PLM 入口' })
+    ).toHaveAttribute('href', '/ai')
     expect(screen.getByRole('link', { name: '发起 ECR' })).toHaveAttribute(
       'href',
       '/plm/ecr/create'
@@ -366,6 +377,9 @@ describe('plm pages', () => {
     plmApiMocks.createPLMECRRequest.mockResolvedValue(createLaunchResponse('ecr_001'))
 
     renderWithQuery(<PLMECRCreatePage />)
+    expect(
+      screen.getByRole('link', { name: '用 AI 辅助填写 ECR' })
+    ).toHaveAttribute('href', '/ai')
 
     fireEvent.change(screen.getByLabelText('变更标题'), {
       target: { value: '结构件变更' },
@@ -403,6 +417,9 @@ describe('plm pages', () => {
     plmApiMocks.createPLMECOExecution.mockResolvedValue(createLaunchResponse('eco_001'))
 
     renderWithQuery(<PLMECOCreatePage />)
+    expect(
+      screen.getByRole('link', { name: '用 AI 辅助填写 ECO' })
+    ).toHaveAttribute('href', '/ai')
 
     fireEvent.change(screen.getByLabelText('执行标题'), {
       target: { value: 'ECO 下发' },
@@ -441,6 +458,9 @@ describe('plm pages', () => {
     )
 
     renderWithQuery(<PLMMaterialChangeCreatePage />)
+    expect(
+      screen.getByRole('link', { name: '用 AI 辅助填写物料变更' })
+    ).toHaveAttribute('href', '/ai')
 
     fireEvent.change(screen.getByLabelText('物料编码'), {
       target: { value: 'MAT-001' },
@@ -486,6 +506,9 @@ describe('plm pages', () => {
     renderWithQuery(<PLMQueryPage />)
 
     expect(await screen.findByText('PLM 流程查询')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 解读 PLM 查询结果' })
+    ).toHaveAttribute('href', '/ai')
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()
     expect(screen.getByText('total:1')).toBeInTheDocument()
     expect(
@@ -512,6 +535,9 @@ describe('plm pages', () => {
     renderWithQuery(<PLMECRRequestBillDetailPage billId='ecr_001' />)
 
     expect(await screen.findByText('ECR 变更申请详情')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: '用 AI 解读当前 PLM 单据' })
+    ).toHaveAttribute('href', '/ai')
     expect(await screen.findByText('业务单详情')).toBeInTheDocument()
     expect(await screen.findByText('审批单联查')).toBeInTheDocument()
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()

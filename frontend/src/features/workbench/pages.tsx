@@ -53,6 +53,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
@@ -1146,8 +1147,12 @@ export function WorkbenchTodoListPage() {
 
   return (
     <>
-      <div className='mb-4'>
+      <div className='mb-4 flex flex-wrap items-center justify-between gap-2'>
         <WorkbenchTodoHandoverToolbar />
+        <ContextualCopilotEntry
+          sourceRoute='/workbench/todos/list'
+          label='用 AI 解读当前待办'
+        />
       </div>
       {tasksQuery.isError ? (
         <Alert variant='destructive' className='mb-4'>
@@ -1202,12 +1207,18 @@ export function WorkbenchStartPage() {
       title='发起流程'
       description='先选择业务入口，再进入对应的 OA 发起页。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/workbench/todos/list' search={{}}>
-            <ArrowLeft />
-            返回待办列表
-          </Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute='/workbench/start'
+            label='用 AI 推荐发起入口'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/workbench/todos/list' search={{}}>
+              <ArrowLeft />
+              返回待办列表
+            </Link>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -1911,6 +1922,22 @@ export function WorkbenchTodoDetailPage({
       name: 'targetStrategy',
     }) ?? 'PREVIOUS_USER_TASK'
   const businessBillHref = detail ? resolveBusinessBillHref(detail) : null
+  const detailRoutePath =
+    locator.mode === 'task'
+      ? `/workbench/todos/${locator.taskId}`
+      : detail?.businessType === 'OA_LEAVE'
+        ? `/oa/leave/${locator.businessId}`
+        : detail?.businessType === 'OA_EXPENSE'
+          ? `/oa/expense/${locator.businessId}`
+          : detail?.businessType === 'OA_COMMON'
+            ? `/oa/common/${locator.businessId}`
+            : detail?.businessType === 'PLM_ECR'
+              ? `/plm/ecr/${locator.businessId}`
+              : detail?.businessType === 'PLM_ECO'
+                ? `/plm/eco/${locator.businessId}`
+                : detail?.businessType === 'PLM_MATERIAL'
+                  ? `/plm/material-master/${locator.businessId}`
+                  : '/workbench/todos/list'
 
   return (
     <PageShell
@@ -1918,6 +1945,10 @@ export function WorkbenchTodoDetailPage({
       description='统一审批单详情页，支持业务正文、流程回顾和运行态处理动作。'
       actions={
         <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute={detailRoutePath}
+            label='用 AI 解读当前审批单'
+          />
           {businessBillHref ? (
             <Button asChild variant='secondary'>
               <Link to={businessBillHref.to} params={businessBillHref.params}>

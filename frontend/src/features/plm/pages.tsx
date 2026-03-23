@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
@@ -543,9 +544,15 @@ function LaunchGrid({
       title={title}
       description={description}
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/plm/query'>进入 PLM 流程查询</Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute='/plm/start'
+            label='用 AI 推荐 PLM 入口'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/plm/query'>进入 PLM 流程查询</Link>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 xl:grid-cols-3'>
@@ -606,9 +613,15 @@ export function PLMECRCreatePage() {
       title='ECR 变更申请'
       description='ECR 申请页负责采集变更请求，保存后自动发起审批实例。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/plm/start'>返回 PLM 发起中心</Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute='/plm/ecr/create'
+            label='用 AI 辅助填写 ECR'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/plm/start'>返回 PLM 发起中心</Link>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -625,9 +638,15 @@ export function PLMECOCreatePage() {
       title='ECO 变更执行'
       description='ECO 入口用于执行已批准的变更方案并进入统一审批流。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/plm/start'>返回 PLM 发起中心</Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute='/plm/eco/create'
+            label='用 AI 辅助填写 ECO'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/plm/start'>返回 PLM 发起中心</Link>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -644,9 +663,15 @@ export function PLMMaterialChangeCreatePage() {
       title='物料主数据变更申请'
       description='物料主数据入口用于编码、名称和基础属性修订。'
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/plm/start'>返回 PLM 发起中心</Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute='/plm/material-master/create'
+            label='用 AI 辅助填写物料变更'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/plm/start'>返回 PLM 发起中心</Link>
+          </Button>
+        </div>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -789,6 +814,12 @@ export function PLMQueryPage() {
 
   return (
     <>
+      <div className='mb-4 flex justify-end'>
+        <ContextualCopilotEntry
+          sourceRoute='/plm/query'
+          label='用 AI 解读 PLM 查询结果'
+        />
+      </div>
       {approvalSheetsQuery.isError ? (
         <Alert variant='destructive' className='mb-4'>
           <AlertTitle>PLM 流程查询加载失败</AlertTitle>
@@ -886,15 +917,27 @@ function PLMBusinessBillDetailPage({
     unknown
   >
   const approvalHref = resolveApprovalDetailHref(approvalDetail)
+  const detailRoutePath =
+    businessType === 'PLM_ECR'
+      ? `/plm/ecr/${billId}`
+      : businessType === 'PLM_ECO'
+        ? `/plm/eco/${billId}`
+        : `/plm/material-master/${billId}`
 
   return (
     <PageShell
       title={title}
       description={description}
       actions={
-        <Button asChild variant='outline'>
-          <Link to='/plm/query'>返回 PLM 查询</Link>
-        </Button>
+        <div className='flex flex-wrap gap-2'>
+          <ContextualCopilotEntry
+            sourceRoute={detailRoutePath}
+            label='用 AI 解读当前 PLM 单据'
+          />
+          <Button asChild variant='outline'>
+            <Link to='/plm/query'>返回 PLM 查询</Link>
+          </Button>
+        </div>
       }
     >
       {approvalDetailQuery.isError ? (

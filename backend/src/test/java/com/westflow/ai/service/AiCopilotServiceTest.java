@@ -295,9 +295,22 @@ class AiCopilotServiceTest {
 
         assertThat(detail.conversationId()).isEqualTo("conv_001");
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
-        assertThat(assistantMessage.blocks())
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
                 .contains("trace", "result", "form-preview", "confirm");
+        AiMessageBlockResponse confirmBlock = blocks.stream()
+                .filter(block -> "confirm".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(confirmBlock.sourceType()).isEqualTo("PLATFORM");
+        assertThat(confirmBlock.sourceKey()).isEqualTo("process.start");
+        assertThat(confirmBlock.toolType()).isEqualTo("WRITE");
+        assertThat(confirmBlock.result())
+                .containsKeys("toolCallId", "confirmationId", "status", "requiresConfirmation", "domain", "routePath", "arguments");
+        assertThat(confirmBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务域", "来源页面", "工具名称", "工具类型", "确认单编号");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -348,9 +361,20 @@ class AiCopilotServiceTest {
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
-        assertThat(assistantMessage.blocks())
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
                 .contains("trace", "result", "stats");
+        AiMessageBlockResponse statsBlock = blocks.stream()
+                .filter(block -> "stats".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(statsBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("待办编号", "来源页面", "视图");
+        assertThat(statsBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("当前待办数", "待办编号", "视图");
     }
 
     @Test
@@ -366,9 +390,20 @@ class AiCopilotServiceTest {
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
-        assertThat(assistantMessage.blocks())
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
                 .contains("trace", "result", "stats");
+        AiMessageBlockResponse statsBlock = blocks.stream()
+                .filter(block -> "stats".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(statsBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("统计口径", "统计主题", "摘要");
+        assertThat(statsBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("总量", "已完成", "待处理", "完成率");
     }
 
     @Test
@@ -414,11 +449,20 @@ class AiCopilotServiceTest {
                 new com.fasterxml.jackson.core.type.TypeReference<List<AiMessageBlockResponse>>() { }
         );
         assertThat(blocks).extracting(AiMessageBlockResponse::type).contains("trace", "failure", "confirm");
-        assertThat(blocks.stream().filter(block -> "failure".equals(block.type())).findFirst())
-                .isPresent()
-                .get()
-                .extracting(AiMessageBlockResponse::failure)
-                .isNotNull();
+        AiMessageBlockResponse failureBlock = blocks.stream()
+                .filter(block -> "failure".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(failureBlock.failure()).isNotNull();
+        assertThat(failureBlock.sourceType()).isEqualTo("PLATFORM");
+        assertThat(failureBlock.sourceKey()).isEqualTo("workflow.task.fail");
+        AiMessageBlockResponse confirmBlock = blocks.stream()
+                .filter(block -> "confirm".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(confirmBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("工具名称", "工具类型", "确认人", "确认意见");
     }
 
     private AiConversationRecord conversation() {
