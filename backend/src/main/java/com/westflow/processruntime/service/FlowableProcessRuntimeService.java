@@ -28,6 +28,7 @@ import com.westflow.processruntime.api.HandoverTaskRequest;
 import com.westflow.processruntime.api.JumpTaskRequest;
 import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
+import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
 import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import com.westflow.processruntime.api.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.ProcessTaskListItemResponse;
@@ -40,6 +41,7 @@ import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import com.westflow.processruntime.api.TakeBackTaskRequest;
 import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
+import com.westflow.processruntime.api.TerminateProcessInstanceRequest;
 import com.westflow.processruntime.api.UrgeTaskRequest;
 import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WakeUpInstanceRequest;
@@ -92,6 +94,7 @@ public class FlowableProcessRuntimeService {
     private final FlowableCountersignService flowableCountersignService;
     private final ProcessDefinitionService processDefinitionService;
     private final ApprovalSheetQueryService approvalSheetQueryService;
+    private final ProcessLinkService processLinkService;
     private final ProcessRuntimeTraceStore traceStore;
     private final JdbcTemplate jdbcTemplate;
     private final WorkflowOperationLogService workflowOperationLogService;
@@ -202,6 +205,81 @@ public class FlowableProcessRuntimeService {
     public List<CountersignTaskGroupResponse> taskGroups(String instanceId) {
         requireHistoricProcessInstance(instanceId);
         return flowableCountersignService.queryTaskGroups(instanceId);
+    }
+
+    /**
+     * 查询实例与其子流程之间的关联记录。
+     */
+    public List<ProcessInstanceLinkResponse> links(String instanceId) {
+        requireHistoricProcessInstance(instanceId);
+        return processLinkService.listByParentInstanceId(instanceId).stream()
+                .map(record -> new ProcessInstanceLinkResponse(
+                        record.id(),
+                        record.rootInstanceId(),
+                        record.parentInstanceId(),
+                        record.childInstanceId(),
+                        record.parentNodeId(),
+                        record.calledProcessKey(),
+                        record.calledDefinitionId(),
+                        record.linkType(),
+                        record.status(),
+                        record.terminatePolicy(),
+                        record.childFinishPolicy(),
+                        record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
+                        record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
+                ))
+                .toList();
+    }
+
+    /**
+     * 终止流程实例。当前先收口根流程级联终止，后续再扩子流程单独终止。
+     */
+    @Transactional
+    public CompleteTaskResponse terminate(String instanceId, TerminateProcessInstanceRequest request) {
+        String terminateScope = normalizeTerminateScope(request.terminateScope());
+        if (!"ROOT".equals(terminateScope)) {
+            throw actionNotAllowed("当前仅支持终止根流程", Map.of("terminateScope", terminateScope));
+        }
+        ProcessInstance runtimeInstance = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(instanceId)
+                .singleResult();
+        if (runtimeInstance == null) {
+            throw new ContractException(
+                    "PROCESS.INSTANCE_NOT_RUNNING",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "流程实例未运行，不能终止",
+                    Map.of("instanceId", instanceId)
+            );
+        }
+        Instant terminatedAt = Instant.now();
+        List<com.westflow.processruntime.model.ProcessLinkRecord> childLinks = processLinkService.listByParentInstanceId(instanceId);
+        flowableTaskActionService.revokeProcessInstance(instanceId, "WESTFLOW_TERMINATE:" + request.reason());
+        childLinks.forEach(link -> processLinkService.updateStatus(link.childInstanceId(), "TERMINATED", terminatedAt));
+        appendInstanceEvent(
+                instanceId,
+                null,
+                null,
+                "INSTANCE_TERMINATED",
+                "流程已终止",
+                "INSTANCE",
+                null,
+                null,
+                null,
+                eventDetails(
+                        "terminateScope", terminateScope,
+                        "reason", request.reason(),
+                        "terminatedChildCount", childLinks.size()
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        return new CompleteTaskResponse(instanceId, null, "TERMINATED", List.of());
     }
 
     /**
@@ -1732,6 +1810,12 @@ public class FlowableProcessRuntimeService {
         return reapproveStrategy == null || reapproveStrategy.isBlank()
                 ? "CONTINUE"
                 : reapproveStrategy.trim();
+    }
+
+    private String normalizeTerminateScope(String terminateScope) {
+        return terminateScope == null || terminateScope.isBlank()
+                ? "ROOT"
+                : terminateScope.trim().toUpperCase();
     }
 
     private CompleteTaskResponse nextTaskResponse(String processInstanceId, String completedTaskId) {

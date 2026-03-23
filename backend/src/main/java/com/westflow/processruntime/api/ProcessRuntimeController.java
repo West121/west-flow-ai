@@ -70,6 +70,23 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.taskGroups(instanceId));
     }
 
+    @GetMapping("/instances/{instanceId}/links")
+    @SaCheckLogin
+    // 查询流程实例下挂载的主子流程关联。
+    public ApiResponse<java.util.List<ProcessInstanceLinkResponse>> links(@PathVariable String instanceId) {
+        return ApiResponse.success(flowableProcessRuntimeService.links(instanceId));
+    }
+
+    @PostMapping("/instances/{instanceId}/terminate")
+    @SaCheckLogin
+    // 按指定作用域终止流程实例。
+    public ApiResponse<CompleteTaskResponse> terminate(
+            @PathVariable String instanceId,
+            @Valid @RequestBody TerminateProcessInstanceRequest request
+    ) {
+        return ApiResponse.success(flowableProcessRuntimeService.terminate(instanceId, request));
+    }
+
     @GetMapping("/tasks/{taskId}/actions")
     @SaCheckLogin
     // 查询任务可执行动作。
