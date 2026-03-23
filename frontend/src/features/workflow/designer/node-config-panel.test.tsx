@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { NodeConfigPanel } from './node-config-panel'
+import { workflowNodeTemplates } from './palette'
 import { type WorkflowEdge, type WorkflowNode } from './types'
 
 function buildTimerNode(): WorkflowNode {
@@ -76,9 +77,37 @@ function buildApproverNode(): WorkflowNode {
   }
 }
 
+function buildSubprocessNode(): WorkflowNode {
+  return {
+    id: 'subprocess_1',
+    type: 'workflow',
+    position: { x: 100, y: 100 },
+    data: {
+      kind: 'subprocess',
+      label: '采购子流程',
+      description: '调用采购会签流程',
+      tone: 'brand',
+      config: {
+        calledProcessKey: 'plm_purchase_review',
+        calledVersionPolicy: 'FIXED_VERSION',
+        calledVersion: 3,
+        businessBindingMode: 'OVERRIDE',
+        terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
+        childFinishPolicy: 'TERMINATE_PARENT',
+        inputMappingsJson: '[{\"source\":\"billNo\",\"target\":\"sourceBillNo\"}]',
+        outputMappingsJson: '[{\"source\":\"approvedResult\",\"target\":\"purchaseResult\"}]',
+      },
+    },
+  }
+}
+
 const edges: WorkflowEdge[] = []
 
 describe('workflow designer node config panel', () => {
+  it('exposes subprocess node template in the palette', () => {
+    expect(workflowNodeTemplates.some((template) => template.kind === 'subprocess')).toBe(true)
+  })
+
   it('submits timer node automation settings', async () => {
     const onApply = vi.fn()
 
@@ -147,6 +176,41 @@ describe('workflow designer node config panel', () => {
           }),
           reapprovePolicy: 'CONTINUE_PROGRESS',
           autoFinishRemaining: true,
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('hydrates and submits subprocess fields back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(<NodeConfigPanel node={buildSubprocessNode()} edges={edges} onApply={onApply} />)
+
+    expect(screen.getByText('子流程节点')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('plm_purchase_review')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('3')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: '子流程 Key' }), {
+      target: { value: 'oa_common_subflow' },
+    })
+    fireEvent.change(screen.getByRole('spinbutton', { name: '固定版本号' }), {
+      target: { value: '5' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'subprocess_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          calledProcessKey: 'oa_common_subflow',
+          calledVersionPolicy: 'FIXED_VERSION',
+          calledVersion: 5,
+          businessBindingMode: 'OVERRIDE',
+          terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
+          childFinishPolicy: 'TERMINATE_PARENT',
         }),
       }),
       undefined

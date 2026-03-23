@@ -4,6 +4,7 @@ import { type Edge, type Node } from '@xyflow/react'
 export type WorkflowNodeKind =
   | 'start'
   | 'approver'
+  | 'subprocess'
   | 'condition'
   | 'cc'
   | 'timer'
@@ -52,6 +53,14 @@ export type WorkflowReminderChannel =
   | 'DINGTALK'
 export type WorkflowTimerScheduleType = 'ABSOLUTE_TIME' | 'RELATIVE_TO_ARRIVAL'
 export type WorkflowTriggerMode = 'IMMEDIATE' | 'SCHEDULED'
+export type WorkflowSubprocessVersionPolicy = 'LATEST_PUBLISHED' | 'FIXED_VERSION'
+export type WorkflowSubprocessBusinessBindingMode = 'INHERIT_PARENT' | 'OVERRIDE'
+export type WorkflowSubprocessTerminatePolicy =
+  | 'TERMINATE_SUBPROCESS_ONLY'
+  | 'TERMINATE_PARENT_AND_SUBPROCESS'
+export type WorkflowSubprocessChildFinishPolicy =
+  | 'RETURN_TO_PARENT'
+  | 'TERMINATE_PARENT'
 
 export type WorkflowCcTargetMode = 'USER' | 'ROLE' | 'DEPARTMENT'
 export type WorkflowConditionExpressionMode = 'EXPRESSION' | 'FIELD_COMPARE'
@@ -136,6 +145,22 @@ export type WorkflowTriggerNodeConfig = {
   payloadTemplate: string
 }
 
+export type WorkflowSubprocessVariableMapping = {
+  source: string
+  target: string
+}
+
+export type WorkflowSubprocessNodeConfig = {
+  calledProcessKey: string
+  calledVersionPolicy: WorkflowSubprocessVersionPolicy
+  calledVersion: number | null
+  businessBindingMode: WorkflowSubprocessBusinessBindingMode
+  terminatePolicy: WorkflowSubprocessTerminatePolicy
+  childFinishPolicy: WorkflowSubprocessChildFinishPolicy
+  inputMappings: WorkflowSubprocessVariableMapping[]
+  outputMappings: WorkflowSubprocessVariableMapping[]
+}
+
 export type WorkflowConditionNodeConfig = {
   defaultEdgeId: string
   expressionMode?: WorkflowConditionExpressionMode
@@ -156,6 +181,7 @@ export type WorkflowCcNodeConfig = {
 export type WorkflowNodeConfigMap = {
   start: WorkflowStartNodeConfig
   approver: WorkflowApproverNodeConfig
+  subprocess: WorkflowSubprocessNodeConfig
   condition: WorkflowConditionNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig

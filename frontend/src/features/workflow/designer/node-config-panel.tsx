@@ -35,6 +35,11 @@ import {
   type WorkflowNode,
   type WorkflowReapprovePolicy,
   type WorkflowReminderChannel,
+  type WorkflowSubprocessBusinessBindingMode,
+  type WorkflowSubprocessChildFinishPolicy,
+  type WorkflowSubprocessTerminatePolicy,
+  type WorkflowSubprocessVariableMapping,
+  type WorkflowSubprocessVersionPolicy,
   type WorkflowTimeoutApprovalAction,
   type WorkflowVoteWeight,
 } from './types'
@@ -77,6 +82,26 @@ const triggerModes = [
   { value: 'SCHEDULED', label: '定时执行' },
 ] satisfies Array<{ value: 'IMMEDIATE' | 'SCHEDULED'; label: string }>
 
+const subprocessVersionPolicies = [
+  { value: 'LATEST_PUBLISHED', label: '最新已发布版本' },
+  { value: 'FIXED_VERSION', label: '固定版本' },
+] satisfies Array<{ value: WorkflowSubprocessVersionPolicy; label: string }>
+
+const subprocessBusinessBindingModes = [
+  { value: 'INHERIT_PARENT', label: '继承父流程业务上下文' },
+  { value: 'OVERRIDE', label: '覆盖为子流程独立业务上下文' },
+] satisfies Array<{ value: WorkflowSubprocessBusinessBindingMode; label: string }>
+
+const subprocessTerminatePolicies = [
+  { value: 'TERMINATE_SUBPROCESS_ONLY', label: '仅终止子流程' },
+  { value: 'TERMINATE_PARENT_AND_SUBPROCESS', label: '级联终止父子流程' },
+] satisfies Array<{ value: WorkflowSubprocessTerminatePolicy; label: string }>
+
+const subprocessChildFinishPolicies = [
+  { value: 'RETURN_TO_PARENT', label: '子流程完成后回到父流程' },
+  { value: 'TERMINATE_PARENT', label: '子流程完成后终止父流程' },
+] satisfies Array<{ value: WorkflowSubprocessChildFinishPolicy; label: string }>
+
 const reminderChannels = [
   { value: 'IN_APP', label: '站内信' },
   { value: 'EMAIL', label: '邮件' },
@@ -110,6 +135,7 @@ const nodeConfigFormSchema = z
     kind: z.enum([
       'start',
       'approver',
+      'subprocess',
       'condition',
       'cc',
       'timer',
@@ -163,6 +189,19 @@ const nodeConfigFormSchema = z
         TRANSFER: z.boolean(),
       }),
       commentRequired: z.boolean(),
+    }),
+    subprocess: z.object({
+      calledProcessKey: z.string(),
+      calledVersionPolicy: z.enum(['LATEST_PUBLISHED', 'FIXED_VERSION']),
+      calledVersion: z.string(),
+      businessBindingMode: z.enum(['INHERIT_PARENT', 'OVERRIDE']),
+      terminatePolicy: z.enum([
+        'TERMINATE_SUBPROCESS_ONLY',
+        'TERMINATE_PARENT_AND_SUBPROCESS',
+      ]),
+      childFinishPolicy: z.enum(['RETURN_TO_PARENT', 'TERMINATE_PARENT']),
+      inputMappingsJson: z.string(),
+      outputMappingsJson: z.string(),
     }),
     cc: z.object({
       targetMode: z.enum(['USER', 'ROLE', 'DEPARTMENT']),
@@ -459,6 +498,27 @@ const nodeConfigFormSchema = z
       }
     }
 
+    if (values.kind === 'subprocess') {
+      if (!values.subprocess.calledProcessKey.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '请输入子流程 Key',
+          path: ['subprocess', 'calledProcessKey'],
+        })
+      }
+
+      if (
+        values.subprocess.calledVersionPolicy === 'FIXED_VERSION' &&
+        !values.subprocess.calledVersion.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '固定版本模式需要填写版本号',
+          path: ['subprocess', 'calledVersion'],
+        })
+      }
+    }
+
     if (values.kind === 'timer') {
       if (values.timer.scheduleType === 'ABSOLUTE_TIME' && !values.timer.runAt.trim()) {
         ctx.addIssue({
@@ -694,6 +754,37 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
           : ['IN_APP'],
       },
     },
+    subprocess: {
+      calledProcessKey: String(config.calledProcessKey ?? ''),
+      calledVersionPolicy:
+        config.calledVersionPolicy === 'FIXED_VERSION'
+          ? 'FIXED_VERSION'
+          : 'LATEST_PUBLISHED',
+      calledVersion:
+        config.calledVersion === null || config.calledVersion === undefined
+          ? ''
+          : String(config.calledVersion),
+      businessBindingMode:
+        config.businessBindingMode === 'OVERRIDE' ? 'OVERRIDE' : 'INHERIT_PARENT',
+      terminatePolicy:
+        config.terminatePolicy === 'TERMINATE_PARENT_AND_SUBPROCESS'
+          ? 'TERMINATE_PARENT_AND_SUBPROCESS'
+          : 'TERMINATE_SUBPROCESS_ONLY',
+      childFinishPolicy:
+        config.childFinishPolicy === 'TERMINATE_PARENT'
+          ? 'TERMINATE_PARENT'
+          : 'RETURN_TO_PARENT',
+      inputMappingsJson: JSON.stringify(
+        Array.isArray(config.inputMappings) ? config.inputMappings : [],
+        null,
+        2
+      ),
+      outputMappingsJson: JSON.stringify(
+        Array.isArray(config.outputMappings) ? config.outputMappings : [],
+        null,
+        2
+      ),
+    },
     cc: {
       targetMode: (targets.mode as WorkflowCcTargetMode) ?? 'USER',
       userIds: joinListValue(
@@ -801,6 +892,25 @@ function buildNodePatch(values: NodeConfigFormValues) {
     }
   }
 
+  function parseVariableMappings(json: string): WorkflowSubprocessVariableMapping[] {
+    try {
+      const parsed = JSON.parse(json)
+      if (!Array.isArray(parsed)) {
+        return []
+      }
+      return parsed
+        .map((item) => item as Partial<WorkflowSubprocessVariableMapping>)
+        .filter((item): item is Partial<WorkflowSubprocessVariableMapping> => Boolean(item))
+        .map<WorkflowSubprocessVariableMapping>((item) => ({
+          source: item.source?.trim() ?? '',
+          target: item.target?.trim() ?? '',
+        }))
+        .filter((item) => item.source && item.target)
+    } catch {
+      return []
+    }
+  }
+
   switch (values.kind) {
     case 'start':
       return {
@@ -870,6 +980,22 @@ function buildNodePatch(values: NodeConfigFormValues) {
             .filter(([, checked]) => checked)
             .map(([operation]) => operation),
           commentRequired: values.approver.commentRequired,
+        },
+      }
+    case 'subprocess':
+      return {
+        config: {
+          calledProcessKey: values.subprocess.calledProcessKey.trim(),
+          calledVersionPolicy: values.subprocess.calledVersionPolicy,
+          calledVersion:
+            values.subprocess.calledVersionPolicy === 'FIXED_VERSION'
+              ? parseNumber(values.subprocess.calledVersion)
+              : null,
+          businessBindingMode: values.subprocess.businessBindingMode,
+          terminatePolicy: values.subprocess.terminatePolicy,
+          childFinishPolicy: values.subprocess.childFinishPolicy,
+          inputMappings: parseVariableMappings(values.subprocess.inputMappingsJson),
+          outputMappings: parseVariableMappings(values.subprocess.outputMappingsJson),
         },
       }
     case 'cc':
@@ -1001,6 +1127,16 @@ export function NodeConfigPanel({
               TRANSFER: false,
             },
             commentRequired: false,
+          },
+          subprocess: {
+            calledProcessKey: '',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: '',
+            businessBindingMode: 'INHERIT_PARENT',
+            terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
+            childFinishPolicy: 'RETURN_TO_PARENT',
+            inputMappingsJson: '[]',
+            outputMappingsJson: '[]',
           },
           cc: {
             targetMode: 'USER',
@@ -1204,6 +1340,181 @@ export function NodeConfigPanel({
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
                   </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
+        ) : null}
+
+        {selectedKind === 'subprocess' ? (
+          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
+            <div className='flex items-center gap-2 text-sm font-medium'>
+              <Check className='size-4 text-primary' />
+              子流程节点
+            </div>
+
+            <FormField
+              control={form.control}
+              name='subprocess.calledProcessKey'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>子流程 Key</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder='oa_leave_subflow' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='subprocess.calledVersionPolicy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>版本策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择版本策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessVersionPolicies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='subprocess.calledVersion'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>固定版本号</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type='number'
+                        min='1'
+                        placeholder='3'
+                        disabled={form.getValues('subprocess.calledVersionPolicy') !== 'FIXED_VERSION'}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='subprocess.businessBindingMode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>业务绑定策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择业务绑定策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessBusinessBindingModes.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='subprocess.childFinishPolicy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>子流程完成策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择完成策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessChildFinishPolicies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name='subprocess.terminatePolicy'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>终止策略</FormLabel>
+                  <FormControl>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className='w-full'>
+                        <SelectValue placeholder='请选择终止策略' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {subprocessTerminatePolicies.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='subprocess.inputMappingsJson'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>输入映射 JSON</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} rows={4} placeholder='[{\"source\":\"billNo\",\"target\":\"sourceBillNo\"}]' />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='subprocess.outputMappingsJson'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>输出映射 JSON</FormLabel>
+                  <FormControl>
+                    <Textarea {...field} rows={4} placeholder='[{\"source\":\"approvedResult\",\"target\":\"purchaseResult\"}]' />
+                  </FormControl>
+                  <FormMessage />
                 </FormItem>
               )}
             />

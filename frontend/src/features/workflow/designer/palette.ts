@@ -3,6 +3,7 @@ import {
   Clock3,
   Flag,
   GitBranch,
+  GitPullRequestArrow,
   GitMerge,
   Play,
   Zap,
@@ -41,6 +42,14 @@ export const workflowNodeTemplates: WorkflowNodeTemplate[] = [
     tone: 'brand',
     accent: 'from-sky-500/20 to-sky-500/5',
     icon: UserRoundCheck,
+  },
+  {
+    kind: 'subprocess',
+    label: '子流程',
+    description: '调用已发布流程作为子流程节点',
+    tone: 'brand',
+    accent: 'from-cyan-500/20 to-cyan-500/5',
+    icon: GitPullRequestArrow,
   },
   {
     kind: 'condition',

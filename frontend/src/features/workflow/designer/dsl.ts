@@ -18,6 +18,7 @@ export type ProcessDefinitionMeta = {
 export type ProcessDefinitionDslNodeType =
   | 'start'
   | 'approver'
+  | 'subprocess'
   | 'cc'
   | 'timer'
   | 'trigger'
@@ -89,6 +90,7 @@ function nodeTypeFor(kind: string): ProcessDefinitionDslNodeType {
   switch (kind) {
     case 'start':
     case 'approver':
+    case 'subprocess':
     case 'cc':
     case 'timer':
     case 'trigger':
@@ -109,6 +111,7 @@ function nodeKindFor(type: ProcessDefinitionDslNodeType) {
     case 'parallel_split':
     case 'parallel_join':
       return 'parallel'
+    case 'subprocess':
     case 'timer':
     case 'trigger':
       return type
@@ -123,6 +126,7 @@ function toneFor(type: ProcessDefinitionDslNodeType) {
     case 'start':
       return 'success'
     case 'approver':
+    case 'subprocess':
       return 'brand'
     case 'condition':
       return 'warning'

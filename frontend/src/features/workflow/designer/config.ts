@@ -11,6 +11,7 @@ import {
   type WorkflowNodeTone,
   type WorkflowStartNodeConfig,
   type WorkflowReminderChannel,
+  type WorkflowSubprocessNodeConfig,
   type WorkflowTimerNodeConfig,
   type WorkflowTriggerNodeConfig,
 } from './types'
@@ -23,6 +24,7 @@ export type WorkflowEdgeCondition = {
 export type WorkflowNodeConfigRecord = {
   start: WorkflowStartNodeConfig
   approver: WorkflowApproverNodeConfig
+  subprocess: WorkflowSubprocessNodeConfig
   condition: WorkflowConditionNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
@@ -112,6 +114,17 @@ const defaultTriggerConfig: WorkflowTriggerNodeConfig = {
   payloadTemplate: '',
 }
 
+const defaultSubprocessConfig: WorkflowSubprocessNodeConfig = {
+  calledProcessKey: '',
+  calledVersionPolicy: 'LATEST_PUBLISHED',
+  calledVersion: null,
+  businessBindingMode: 'INHERIT_PARENT',
+  terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
+  childFinishPolicy: 'RETURN_TO_PARENT',
+  inputMappings: [],
+  outputMappings: [],
+}
+
 const defaultStartConfig: WorkflowStartNodeConfig = {
   initiatorEditable: true,
 }
@@ -198,6 +211,8 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
       return defaultStartConfig as WorkflowNodeConfigMap[K]
     case 'approver':
       return defaultApproverConfig as WorkflowNodeConfigMap[K]
+    case 'subprocess':
+      return defaultSubprocessConfig as WorkflowNodeConfigMap[K]
     case 'condition':
       return defaultConditionConfig as WorkflowNodeConfigMap[K]
     case 'cc':
@@ -219,6 +234,8 @@ export function toneForKind(kind: WorkflowNodeKind): WorkflowNodeTone {
       return 'success'
     case 'approver':
       return 'brand'
+    case 'subprocess':
+      return 'brand'
     case 'condition':
       return 'warning'
     case 'timer':
@@ -237,6 +254,8 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
       return '流程发起与表单提交入口'
     case 'approver':
       return '审批节点'
+    case 'subprocess':
+      return '主流程调用已发布子流程'
     case 'condition':
       return '条件分支节点'
     case 'cc':
@@ -259,6 +278,8 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
       return '开始'
     case 'approver':
       return '审批'
+    case 'subprocess':
+      return '子流程'
     case 'condition':
       return '条件'
     case 'cc':
@@ -376,6 +397,46 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
         ? value.operations.map(String)
         : [...defaultApproverConfig.operations],
       commentRequired: Boolean(value?.commentRequired ?? defaultApproverConfig.commentRequired),
+    } as WorkflowNodeConfigMap[K]
+  }
+
+  if (kind === 'subprocess') {
+    const value = config as Partial<WorkflowSubprocessNodeConfig> | null | undefined
+    return {
+      calledProcessKey: value?.calledProcessKey ? String(value.calledProcessKey) : '',
+      calledVersionPolicy:
+        value?.calledVersionPolicy === 'FIXED_VERSION'
+          ? 'FIXED_VERSION'
+          : defaultSubprocessConfig.calledVersionPolicy,
+      calledVersion: normalizeNumber(value?.calledVersion, defaultSubprocessConfig.calledVersion),
+      businessBindingMode:
+        value?.businessBindingMode === 'OVERRIDE' ? 'OVERRIDE' : 'INHERIT_PARENT',
+      terminatePolicy:
+        value?.terminatePolicy === 'TERMINATE_PARENT_AND_SUBPROCESS'
+          ? 'TERMINATE_PARENT_AND_SUBPROCESS'
+          : defaultSubprocessConfig.terminatePolicy,
+      childFinishPolicy:
+        value?.childFinishPolicy === 'TERMINATE_PARENT'
+          ? 'TERMINATE_PARENT'
+          : defaultSubprocessConfig.childFinishPolicy,
+      inputMappings: Array.isArray(value?.inputMappings)
+        ? value.inputMappings
+            .map((item) => item as { source?: unknown; target?: unknown })
+            .map((item) => ({
+              source: item.source ? String(item.source) : '',
+              target: item.target ? String(item.target) : '',
+            }))
+            .filter((item) => item.source && item.target)
+        : [],
+      outputMappings: Array.isArray(value?.outputMappings)
+        ? value.outputMappings
+            .map((item) => item as { source?: unknown; target?: unknown })
+            .map((item) => ({
+              source: item.source ? String(item.source) : '',
+              target: item.target ? String(item.target) : '',
+            }))
+            .filter((item) => item.source && item.target)
+        : [],
     } as WorkflowNodeConfigMap[K]
   }
 
