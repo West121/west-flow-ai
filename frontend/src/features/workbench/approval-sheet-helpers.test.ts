@@ -51,5 +51,19 @@ describe('approval-sheet helpers', () => {
         status: 'HANDOVERED',
       } as never)
     ).toBe('离职转办')
+
+    expect(
+      resolveApprovalSheetResultLabel({
+        action: 'APPEND',
+        status: 'COMPLETED',
+      } as never)
+    ).toBe('追加')
+
+    expect(
+      resolveApprovalSheetResultLabel({
+        action: 'DYNAMIC_BUILD',
+        status: 'COMPLETED',
+      } as never)
+    ).toBe('动态构建')
   })
 })

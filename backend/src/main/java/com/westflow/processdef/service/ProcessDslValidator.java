@@ -83,7 +83,7 @@ public class ProcessDslValidator {
         validateStartConfig(nodeById.values());
         validateApproverAssignments(nodeById.values());
         validateSubprocessNodes(nodeById.values());
-        validateDynamicBuilderNodes(nodeById.values());
+        validateDynamicBuilderNodes(nodeById.values(), nodeById, outgoingEdges);
         validateCcTargets(nodeById.values());
         validateTimerNodes(nodeById.values());
         validateTriggerNodes(nodeById.values());
@@ -252,7 +252,11 @@ public class ProcessDslValidator {
     }
 
     // 校验动态构建节点的运行时生成规则和终止策略。
-    private void validateDynamicBuilderNodes(Collection<ProcessDslPayload.Node> nodes) {
+    private void validateDynamicBuilderNodes(
+            Collection<ProcessDslPayload.Node> nodes,
+            Map<String, ProcessDslPayload.Node> nodeById,
+            Map<String, List<ProcessDslPayload.Edge>> outgoingEdges
+    ) {
         for (ProcessDslPayload.Node node : nodes) {
             if (!"dynamic-builder".equals(node.type())) {
                 continue;
@@ -289,6 +293,17 @@ public class ProcessDslValidator {
             String terminatePolicy = asString(config.get("terminatePolicy"));
             if (terminatePolicy == null || !SUPPORTED_DYNAMIC_BUILDER_TERMINATE_POLICIES.contains(terminatePolicy)) {
                 throw invalid("dynamic-builder 节点 terminatePolicy 不合法", details("nodeId", node.id(), "terminatePolicy", terminatePolicy));
+            }
+
+            if ("APPROVER_TASKS".equals(buildMode)) {
+                boolean hasNonEndSuccessor = outgoingEdges.getOrDefault(node.id(), List.of()).stream()
+                        .map(ProcessDslPayload.Edge::target)
+                        .map(nodeById::get)
+                        .filter(java.util.Objects::nonNull)
+                        .anyMatch(target -> !"end".equals(target.type()));
+                if (!hasNonEndSuccessor) {
+                    throw invalid("dynamic-builder 节点 APPROVER_TASKS 模式后续必须保留活跃等待节点", details("nodeId", node.id()));
+                }
             }
         }
     }

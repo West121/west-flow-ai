@@ -167,6 +167,12 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   if (item.action === 'REJECT') {
     return '拒绝'
   }
+  if (item.action === 'APPEND') {
+    return '追加'
+  }
+  if (item.action === 'DYNAMIC_BUILD') {
+    return '动态构建'
+  }
   if (item.action === 'READ') {
     return '已阅'
   }

@@ -2,11 +2,13 @@ package com.westflow.processruntime.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.api.RuntimeAppendLinkResponse;
 import java.util.List;
 import java.util.Map;
 import org.flowable.engine.HistoryService;
@@ -16,6 +18,7 @@ import org.flowable.engine.TaskService;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
+import org.flowable.task.api.TaskInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +35,9 @@ class FlowableRuntimeStartServiceTest {
 
     @Autowired
     private FlowableRuntimeStartService flowableRuntimeStartService;
+
+    @Autowired
+    private FlowableEngineFacade flowableEngineFacade;
 
     @Autowired
     private ProcessDefinitionService processDefinitionService;
@@ -66,7 +72,16 @@ class FlowableRuntimeStartServiceTest {
     void setUp() {
         StpUtil.logout();
         runtimeService.createProcessInstanceQuery().list()
-                .forEach(instance -> runtimeService.deleteProcessInstance(instance.getId(), "TEST_CLEANUP"));
+                .forEach(instance -> {
+                    taskService.createTaskQuery()
+                            .processInstanceId(instance.getId())
+                            .list()
+                            .stream()
+                            .filter(task -> task.getExecutionId() == null || task.getExecutionId().isBlank())
+                            .map(TaskInfo::getId)
+                            .forEach(taskId -> taskService.deleteTask(taskId, "TEST_CLEANUP"));
+                    runtimeService.deleteProcessInstance(instance.getId(), "TEST_CLEANUP");
+                });
         historyService.createHistoricProcessInstanceQuery().list()
                 .forEach(instance -> {
                     try {
@@ -79,6 +94,7 @@ class FlowableRuntimeStartServiceTest {
                 .forEach(deployment -> repositoryService.deleteDeployment(deployment.getId(), true));
         jdbcTemplate.update("DELETE FROM wf_process_definition");
         jdbcTemplate.update("DELETE FROM wf_process_link");
+        jdbcTemplate.update("DELETE FROM wf_runtime_append_link");
         jdbcTemplate.update("DELETE FROM wf_task_vote_snapshot");
         jdbcTemplate.update("DELETE FROM wf_task_group_member");
         jdbcTemplate.update("DELETE FROM wf_task_group");
@@ -93,6 +109,68 @@ class FlowableRuntimeStartServiceTest {
                 .containsKey("flowableProcessRuntimeTraceStore");
         assertThat(traceStores.get("flowableProcessRuntimeTraceStore"))
                 .isInstanceOf(FlowableProcessRuntimeTraceStore.class);
+    }
+
+    @Test
+    void shouldExecuteDynamicBuilderAndCreateAppendTasksFromRuleExpression() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildDynamicBuilderTaskPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_dynamic_append_tasks",
+                "dynamic_append_task_001",
+                "OA_LEAVE",
+                Map.of(
+                        "days", 5,
+                        "reason", "动态构建附属任务"
+                )
+        ));
+
+        String instanceId = response.instanceId();
+        assertThat(taskService.createTaskQuery().processInstanceId(instanceId).active().count()).isEqualTo(3);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_runtime_append_link WHERE root_instance_id = ? AND trigger_mode = 'DYNAMIC_BUILD' AND append_type = 'TASK'",
+                Integer.class,
+                instanceId
+        )).isEqualTo(2);
+
+        List<RuntimeAppendLinkResponse> appendLinks = flowableProcessRuntimeService.appendLinks(instanceId);
+        assertThat(appendLinks).hasSize(2);
+        assertThat(appendLinks).allSatisfy(link -> {
+            assertThat(link.triggerMode()).isEqualTo("DYNAMIC_BUILD");
+            assertThat(link.appendType()).isEqualTo("TASK");
+            assertThat(link.targetTaskId()).isNotBlank();
+        });
+    }
+
+    @Test
+    void shouldExecuteDynamicBuilderAndCreateAppendSubprocessesFromRuleExpression() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildDynamicBuilderSubprocessChildPayload());
+        processDefinitionService.publish(buildDynamicBuilderSubprocessParentPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_dynamic_append_subprocess",
+                "dynamic_append_subprocess_001",
+                "OA_COMMON",
+                Map.of(
+                        "days", 5,
+                        "reason", "动态构建附属子流程"
+                )
+        ));
+
+        String instanceId = response.instanceId();
+        List<RuntimeAppendLinkResponse> appendLinks = flowableProcessRuntimeService.appendLinks(instanceId);
+        assertThat(appendLinks).hasSize(1);
+        RuntimeAppendLinkResponse link = appendLinks.get(0);
+        assertThat(link.triggerMode()).isEqualTo("DYNAMIC_BUILD");
+        assertThat(link.appendType()).isEqualTo("SUBPROCESS");
+        assertThat(link.targetInstanceId()).isNotBlank();
+        assertThat(link.calledProcessKey()).isEqualTo("oa_dynamic_sub_review");
+        assertThat(flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(link.targetInstanceId())
+                .singleResult()).isNotNull();
     }
 
     @Test
@@ -761,6 +839,247 @@ class FlowableRuntimeStartServiceTest {
                     {
                       "id": "edge_2",
                       "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderTaskPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_append_tasks",
+                  "processName": "动态构建附属任务",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_append_task_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "APPROVER_TASKS",
+                        "sourceMode": "RULE",
+                        "ruleExpression": "days > 3",
+                        "appendPolicy": "PARALLEL_WITH_CURRENT",
+                        "maxGeneratedCount": 2,
+                        "terminatePolicy": "TERMINATE_GENERATED_ONLY",
+                        "targets": {
+                          "mode": "USER",
+                          "userIds": ["usr_002", "usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": ""
+                        }
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_004"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SINGLE"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "dynamic_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "dynamic_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "完成"
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderSubprocessParentPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_append_subprocess",
+                  "processName": "动态构建附属子流程主流程",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_append_subprocess_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建子流程",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "SUBPROCESS_CALLS",
+                        "sourceMode": "RULE",
+                        "ruleExpression": "days > 3",
+                        "calledProcessKey": "oa_dynamic_sub_review",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "appendPolicy": "SERIAL_AFTER_CURRENT",
+                        "maxGeneratedCount": 1,
+                        "terminatePolicy": "TERMINATE_PARENT_AND_GENERATED"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "dynamic_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "dynamic_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderSubprocessChildPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_sub_review",
+                  "processName": "动态构建附属子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_sub_review_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_1",
+                      "type": "approver",
+                      "name": "子流程审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_1",
                       "target": "end_1",
                       "priority": 10,
                       "label": "完成"

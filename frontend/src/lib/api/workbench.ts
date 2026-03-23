@@ -1,6 +1,7 @@
 import { apiClient, unwrapResponse } from '@/lib/api/client'
 import { type ListQuerySearch, toPaginationRequest } from '@/features/shared/table/query-contract'
 import { type WorkflowFieldBinding } from '@/features/workflow/designer/types'
+import type { RuntimeStructureLink } from '@/features/workflow/runtime-structure-utils'
 
 // 命名空间默认不带前缀，直接命中后端新 runtime 路径；如需切旧环境可通过环境变量覆盖。
 const DEFAULT_RUNTIME_NAMESPACE = (import.meta.env.VITE_PROCESS_RUNTIME_NAMESPACE ?? '').trim()
@@ -184,6 +185,12 @@ export type WorkbenchProcessLink = {
   childFinishPolicy: string | null
   createdAt: string | null
   finishedAt: string | null
+} & RuntimeStructureLink
+
+export type WorkbenchRuntimeAppendLink = RuntimeStructureLink & {
+  appendType: 'TASK' | 'SUBPROCESS'
+  runtimeLinkType: 'ADHOC_TASK' | 'ADHOC_SUBPROCESS'
+  triggerMode: 'APPEND' | 'DYNAMIC_BUILD'
 }
 
 export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
@@ -220,6 +227,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   taskFormData: Record<string, unknown> | null
   countersignGroups?: WorkbenchCountersignGroup[] | null
   processLinks?: WorkbenchProcessLink[] | null
+  runtimeStructureLinks?: WorkbenchRuntimeAppendLink[] | null
   activeTaskIds: string[]
 }
 

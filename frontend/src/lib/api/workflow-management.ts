@@ -1,4 +1,5 @@
 import { type ListQuerySearch, toPaginationRequest } from '@/features/shared/table/query-contract'
+import type { RuntimeStructureLink } from '@/features/workflow/runtime-structure-utils'
 import { apiClient, unwrapResponse, type ApiSuccessResponse } from './client'
 
 export type WorkflowVersionRecord = {
@@ -68,11 +69,18 @@ export type WorkflowProcessLink = {
   childFinishPolicy: string | null
   createdAt: string | null
   finishedAt: string | null
+} & RuntimeStructureLink
+
+export type WorkflowRuntimeAppendLink = RuntimeStructureLink & {
+  appendType: 'TASK' | 'SUBPROCESS'
+  runtimeLinkType: 'ADHOC_TASK' | 'ADHOC_SUBPROCESS'
+  triggerMode: 'APPEND' | 'DYNAMIC_BUILD'
 }
 
 export type WorkflowInstanceDetail = WorkflowInstanceRecord & {
   variables: Record<string, unknown>
   processLinks: WorkflowProcessLink[]
+  runtimeStructureLinks?: WorkflowRuntimeAppendLink[] | null
 }
 
 export type WorkflowOperationLogRecord = {

@@ -34,6 +34,10 @@ import {
   type NavGroup as NavGroupProps,
 } from './types'
 
+function isNavCollapsible(item: NavItem): item is NavCollapsible {
+  return Array.isArray((item as NavCollapsible).items)
+}
+
 // 按权限过滤并渲染侧边栏导航分组。
 export function NavGroup({ title, items }: NavGroupProps) {
   const { state, isMobile } = useSidebar()
@@ -49,20 +53,19 @@ export function NavGroup({ title, items }: NavGroupProps) {
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{title}</SidebarGroupLabel>
+      {title ? <SidebarGroupLabel>{title}</SidebarGroupLabel> : null}
       <SidebarMenu>
         {visibleItems.map((item) => {
-          const key = `${item.title}-${item.url}`
-
-          if (!item.items)
-            return <SidebarMenuLink key={key} item={item} href={href} />
-
-          if (state === 'collapsed' && !isMobile)
-            return (
-              <SidebarMenuCollapsedDropdown key={key} item={item} href={href} />
-            )
-
-          return <SidebarMenuCollapsible key={key} item={item} href={href} />
+          const key = `${item.title}-${'url' in item ? item.url : item.url ?? 'branch'}`
+          return (
+            <SidebarTreeItem
+              key={key}
+              item={item}
+              href={href}
+              depth={0}
+              collapsed={state === 'collapsed' && !isMobile}
+            />
+          )
         })}
       </SidebarMenu>
     </SidebarGroup>
@@ -96,9 +99,11 @@ function SidebarMenuLink({ item, href }: { item: NavLink; href: string }) {
 function SidebarMenuCollapsible({
   item,
   href,
+  depth,
 }: {
   item: NavCollapsible
   href: string
+  depth: number
 }) {
   const { setOpenMobile } = useSidebar()
   return (
@@ -117,20 +122,15 @@ function SidebarMenuCollapsible({
           </SidebarMenuButton>
         </CollapsibleTrigger>
         <CollapsibleContent className='CollapsibleContent'>
-          <SidebarMenuSub>
+          <SidebarMenuSub className={depth > 0 ? 'ms-3 border-s border-sidebar-border/60 ps-2' : ''}>
             {item.items.map((subItem) => (
-              <SidebarMenuSubItem key={subItem.title}>
-                <SidebarMenuSubButton
-                  asChild
-                  isActive={checkIsActive(href, subItem)}
-                >
-                  <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
-                    {subItem.icon && <subItem.icon />}
-                    <span>{subItem.title}</span>
-                    {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
-                  </Link>
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
+              <SidebarTreeSubItem
+                key={`${subItem.title}-${'url' in subItem ? subItem.url : subItem.url ?? 'branch'}`}
+                item={subItem}
+                href={href}
+                depth={depth + 1}
+                onNavigate={() => setOpenMobile(false)}
+              />
             ))}
           </SidebarMenuSub>
         </CollapsibleContent>
@@ -147,6 +147,8 @@ function SidebarMenuCollapsedDropdown({
   item: NavCollapsible
   href: string
 }) {
+  const links = flattenTreeLinks(item)
+
   return (
     <SidebarMenuItem>
       <DropdownMenu>
@@ -166,7 +168,7 @@ function SidebarMenuCollapsedDropdown({
             {item.title} {item.badge ? `(${item.badge})` : ''}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {item.items.map((sub) => (
+          {links.map((sub) => (
             <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
               <Link
                 to={sub.url}
@@ -186,13 +188,93 @@ function SidebarMenuCollapsedDropdown({
   )
 }
 
+function SidebarTreeItem({
+  item,
+  href,
+  depth,
+  collapsed,
+}: {
+  item: NavItem
+  href: string
+  depth: number
+  collapsed: boolean
+}) {
+  if (!isNavCollapsible(item)) {
+    return <SidebarMenuLink item={item} href={href} />
+  }
+
+  if (collapsed) {
+    return <SidebarMenuCollapsedDropdown item={item} href={href} />
+  }
+
+  return <SidebarMenuCollapsible item={item} href={href} depth={depth} />
+}
+
+function SidebarTreeSubItem({
+  item,
+  href,
+  depth,
+  onNavigate,
+}: {
+  item: NavItem
+  href: string
+  depth: number
+  onNavigate: () => void
+}) {
+  if (!isNavCollapsible(item)) {
+    return (
+      <SidebarMenuSubItem>
+        <SidebarMenuSubButton asChild isActive={checkIsActive(href, item)}>
+          <Link to={item.url} onClick={onNavigate}>
+            {item.icon && <item.icon />}
+            <span>{item.title}</span>
+            {item.badge && <NavBadge>{item.badge}</NavBadge>}
+          </Link>
+        </SidebarMenuSubButton>
+      </SidebarMenuSubItem>
+    )
+  }
+
+  return (
+    <Collapsible
+      asChild
+      defaultOpen={checkIsActive(href, item, true)}
+      className='group/collapsible'
+    >
+      <SidebarMenuSubItem>
+        <CollapsibleTrigger asChild>
+          <SidebarMenuSubButton isActive={checkIsActive(href, item, true)}>
+            {item.icon && <item.icon />}
+            <span>{item.title}</span>
+            {item.badge && <NavBadge>{item.badge}</NavBadge>}
+            <ChevronRight className='ms-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 rtl:rotate-180' />
+          </SidebarMenuSubButton>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <SidebarMenuSub className='ms-3 border-s border-sidebar-border/60 ps-2'>
+            {item.items.map((child) => (
+              <SidebarTreeSubItem
+                key={`${child.title}-${'url' in child ? child.url : child.url ?? 'branch'}`}
+                item={child}
+                href={href}
+                depth={depth + 1}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </SidebarMenuSub>
+        </CollapsibleContent>
+      </SidebarMenuSubItem>
+    </Collapsible>
+  )
+}
+
 // 判断导航项是否命中当前地址。
-function checkIsActive(href: string, item: NavItem, mainNav = false) {
+function checkIsActive(href: string, item: NavItem, mainNav = false): boolean {
   // 侧边栏高亮要同时兼容完整 URL、去掉 query 的路径和子菜单命中。
   return (
     href === item.url || // 带 query 的完整路径
     href.split('?')[0] === item.url || // 去掉 query 后的纯路径
-    !!item?.items?.filter((i) => i.url === href).length || // 子菜单命中
+    (isNavCollapsible(item) && item.items.some((i) => checkIsActive(href, i))) || // 子菜单递归命中
     (mainNav &&
       href.split('/')[1] !== '' &&
       href.split('/')[1] === item?.url?.split('/')[1])
@@ -200,7 +282,7 @@ function checkIsActive(href: string, item: NavItem, mainNav = false) {
 }
 
 // 根据当前用户角色过滤掉无权限可见的导航项。
-function filterNavItemByRole(item: NavItem, roleCodes: string[]) {
+function filterNavItemByRole(item: NavItem, roleCodes: string[]): NavItem | null {
   if (item.requiredRoles?.length) {
     const matched = item.requiredRoles.some((roleCode) =>
       roleCodes.includes(roleCode)
@@ -211,7 +293,7 @@ function filterNavItemByRole(item: NavItem, roleCodes: string[]) {
     }
   }
 
-  if (!item.items) {
+  if (!isNavCollapsible(item)) {
     return item
   }
 
@@ -231,4 +313,33 @@ function filterNavItemByRole(item: NavItem, roleCodes: string[]) {
     ...item,
     items: visibleChildren,
   }
+}
+
+function flattenTreeLinks(item: NavCollapsible, ancestors: string[] = []): NavLink[] {
+  const current = [...ancestors, item.title]
+  const self = item.url
+    ? [
+        {
+          title: current.join(' / '),
+          url: item.url,
+          icon: item.icon,
+          badge: item.badge,
+        } satisfies NavLink,
+      ]
+    : []
+
+  const descendants = item.items.flatMap((child) => {
+    if (isNavCollapsible(child)) {
+      return flattenTreeLinks(child, current)
+    }
+
+    return [
+      {
+        ...child,
+        title: [...current, child.title].join(' / '),
+      } satisfies NavLink,
+    ]
+  })
+
+  return [...self, ...descendants]
 }

@@ -368,6 +368,45 @@ class ProcessDslValidatorTest {
                 List.of(
                         node("start_1", "start", Map.of("initiatorEditable", true)),
                         node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        node("approve_1", "approver", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", Map.of(
+                                        "type", "SINGLE"
+                                ),
+                                "operations", List.of("APPROVE", "REJECT")
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "approve_1"),
+                        edge("edge_3", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldRejectDynamicBuilderTaskModeThatEndsImmediately() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("buildMode", "APPROVER_TASKS");
+        dynamicConfig.put("sourceMode", "RULE");
+        dynamicConfig.put("ruleExpression", "days > 3");
+        dynamicConfig.put("appendPolicy", "PARALLEL_WITH_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 2);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_GENERATED_ONLY");
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
                         node("end_1", "end", Map.of())
                 ),
                 List.of(
@@ -376,7 +415,7 @@ class ProcessDslValidatorTest {
                 )
         );
 
-        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+        assertValidationFailure(dsl, "dynamic-builder 节点 APPROVER_TASKS 模式后续必须保留活跃等待节点");
     }
 
     @Test

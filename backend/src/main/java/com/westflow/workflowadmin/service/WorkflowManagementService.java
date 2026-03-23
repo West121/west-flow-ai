@@ -11,6 +11,7 @@ import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
 import com.westflow.processdef.model.ProcessDefinitionRecord;
 import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
+import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.processruntime.service.ProcessLinkService;
 import com.westflow.workflowadmin.api.WorkflowInstanceDetailResponse;
 import com.westflow.workflowadmin.api.WorkflowInstanceListItemResponse;
@@ -50,6 +51,7 @@ public class WorkflowManagementService {
     private final IdentityAuthService fixtureAuthService;
     private final FlowableEngineFacade flowableEngineFacade;
     private final ProcessLinkService processLinkService;
+    private final FlowableProcessRuntimeService flowableProcessRuntimeService;
 
     public PageResponse<WorkflowVersionListItemResponse> pageVersions(PageRequest request) {
         ensureWorkflowAdminAccess();
@@ -158,7 +160,8 @@ public class WorkflowManagementService {
                 toOffsetDateTime(historicInstance.getStartTime()),
                 toOffsetDateTime(historicInstance.getEndTime()),
                 context.variables(),
-                processLinks(instanceId)
+                processLinks(instanceId),
+                flowableProcessRuntimeService.appendLinks(instanceId)
         );
     }
 

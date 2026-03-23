@@ -76,6 +76,13 @@ import {
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
 import { handleServerError } from '@/lib/handle-server-error'
+import {
+  RuntimeStructureSection,
+} from '@/features/workflow/runtime-structure'
+import {
+  mergeRuntimeStructureLinks,
+  type RuntimeStructureLink,
+} from '@/features/workflow/runtime-structure-utils'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
@@ -510,58 +517,21 @@ function ApprovalSheetCountersignSection({
   )
 }
 
-// 主子流程关系单独展示，便于在审批单详情里回查父子实例和终止策略。
+// 运行态结构单独展示，便于在审批单详情里回查主子流程、追加和动态构建关系。
 function ApprovalSheetProcessLinkSection({
-  processLinks,
+  links,
   currentInstanceId,
 }: {
-  processLinks: WorkbenchTaskDetail['processLinks']
+  links: RuntimeStructureLink[]
   currentInstanceId: string
 }) {
-  const links = processLinks ?? []
-
-  if (!links.length) {
-    return null
-  }
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>主子流程</CardTitle>
-        <CardDescription>
-          展示当前审批单所在的主子流程关系、调用节点、终止策略和子流程运行状态。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className='space-y-3'>
-        {links.map((link) => {
-          const isCurrentParent = link.parentInstanceId === currentInstanceId
-          const isCurrentChild = link.childInstanceId === currentInstanceId
-
-          return (
-            <div key={link.linkId} className='space-y-2 rounded-lg border p-4'>
-              <div className='flex flex-wrap items-center gap-2'>
-                <Badge variant='secondary'>{link.linkType}</Badge>
-                <Badge variant={link.status === 'RUNNING' ? 'default' : 'outline'}>
-                  {link.status}
-                </Badge>
-                {isCurrentParent ? <Badge variant='outline'>当前主流程</Badge> : null}
-                {isCurrentChild ? <Badge variant='outline'>当前子流程</Badge> : null}
-              </div>
-              <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2'>
-                <div>主流程实例：{link.parentInstanceId}</div>
-                <div>子流程实例：{link.childInstanceId}</div>
-                <div>调用节点：{link.parentNodeId}</div>
-                <div>子流程编码：{link.calledProcessKey}</div>
-                <div>终止策略：{formatApprovalSheetText(link.terminatePolicy)}</div>
-                <div>子流程完成策略：{formatApprovalSheetText(link.childFinishPolicy)}</div>
-                <div>创建时间：{formatDateTime(link.createdAt)}</div>
-                <div>结束时间：{formatDateTime(link.finishedAt)}</div>
-              </div>
-            </div>
-          )
-        })}
-      </CardContent>
-    </Card>
+    <RuntimeStructureSection
+      title='运行态结构'
+      description='展示当前审批单所在的主子流程、追加和动态构建关系，回查触发方式、终止策略和运行状态。'
+      links={links}
+      currentInstanceId={currentInstanceId}
+    />
   )
 }
 
@@ -2207,8 +2177,11 @@ export function WorkbenchTodoDetailPage({
                   <ApprovalSheetCountersignSection
                     countersignGroups={detail.countersignGroups ?? []}
                   />
-                  <ApprovalSheetProcessLinkSection
-                    processLinks={detail.processLinks ?? []}
+                    <ApprovalSheetProcessLinkSection
+                    links={mergeRuntimeStructureLinks(
+                      detail.processLinks ?? [],
+                      detail.runtimeStructureLinks ?? []
+                    )}
                     currentInstanceId={detail.instanceId}
                   />
                   <ApprovalSheetActionTimeline taskTrace={detail.taskTrace ?? []} />

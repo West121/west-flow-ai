@@ -8,6 +8,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.flowable.engine.TaskService;
 import org.flowable.task.api.Task;
+import org.flowable.task.api.TaskInfo;
 import org.flowable.task.api.TaskQuery;
 import org.flowable.task.service.impl.persistence.entity.TaskEntity;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -69,6 +70,7 @@ public class FlowableTaskActionService {
 
     // 撤销时直接终止整个流程实例。
     public void revokeProcessInstance(String processInstanceId, String deleteReason) {
+        deleteAdhocTasksByProcessInstanceId(processInstanceId, deleteReason);
         flowableEngineFacade.runtimeService().deleteProcessInstance(processInstanceId, deleteReason);
     }
 
@@ -100,8 +102,10 @@ public class FlowableTaskActionService {
         taskEntity.setName(nodeName);
         taskEntity.setParentTaskId(parentTaskId);
         taskEntity.setCategory(taskKind);
-        taskEntity.setAssignee(assigneeUserId);
         taskService.saveTask(taskEntity);
+        if (assigneeUserId != null && !assigneeUserId.isBlank()) {
+            taskService.setAssignee(taskEntity.getId(), assigneeUserId);
+        }
         if (candidateUserIds != null) {
             candidateUserIds.stream()
                     .filter(userId -> userId != null && !userId.isBlank())
@@ -120,6 +124,17 @@ public class FlowableTaskActionService {
         taskService.deleteTask(taskId, deleteReason);
     }
 
+    // 清理没有执行流归属的扩展任务，避免引擎级联删实例时访问空 execution。
+    public void deleteAdhocTasksByProcessInstanceId(String processInstanceId, String deleteReason) {
+        taskService.createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .list()
+                .stream()
+                .filter(this::isAdhocTask)
+                .map(TaskInfo::getId)
+                .forEach(taskId -> taskService.deleteTask(taskId, deleteReason));
+    }
+
     // 用查询确认任务仍然存在。
     private Task requireTask(String taskId) {
         Task task = taskQuery(taskId).singleResult();
@@ -136,5 +151,9 @@ public class FlowableTaskActionService {
 
     private TaskQuery taskQuery(String taskId) {
         return taskService.createTaskQuery().taskId(taskId);
+    }
+
+    private boolean isAdhocTask(Task task) {
+        return task.getExecutionId() == null || task.getExecutionId().isBlank();
     }
 }

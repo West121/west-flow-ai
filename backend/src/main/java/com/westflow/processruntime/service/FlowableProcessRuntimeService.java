@@ -80,6 +80,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 基于真实 Flowable 的最小运行态服务。
@@ -91,6 +94,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FlowableProcessRuntimeService {
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final Pattern SIMPLE_COMPARISON_PATTERN = Pattern.compile("^([A-Za-z0-9_\\.]+)\\s*(==|!=|>=|<=|>|<)\\s*(.+)$");
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final FlowableRuntimeStartService flowableRuntimeStartService;
@@ -409,31 +413,34 @@ public class FlowableProcessRuntimeService {
     public TaskActionAvailabilityResponse actions(String taskId) {
         Task task = requireActiveTask(taskId);
         String taskKind = resolveTaskKind(task);
+        boolean isNormalTask = "NORMAL".equals(taskKind);
+        boolean isAppendTask = "APPEND".equals(taskKind);
+        boolean isFlowHandleTask = isNormalTask || isAppendTask;
         List<String> candidateUserIds = candidateUsers(task.getId());
         boolean isCandidate = task.getAssignee() == null && candidateUserIds.contains(currentUserId());
         boolean isAssignee = currentUserId().equals(task.getAssignee());
         boolean canHandle = isAssignee || isCandidate;
-        boolean blockedByAddSign = "NORMAL".equals(taskKind) && hasActiveAddSignChild(task.getId());
-        boolean canTakeBack = "NORMAL".equals(taskKind) && canTakeBack(task);
-        boolean canAddSign = "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign;
-        boolean canRemoveSign = "NORMAL".equals(taskKind) && canHandle && blockedByAddSign;
+        boolean blockedByAddSign = isNormalTask && hasActiveAddSignChild(task.getId());
+        boolean canTakeBack = isNormalTask && canTakeBack(task);
+        boolean canAddSign = isNormalTask && canHandle && !blockedByAddSign;
+        boolean canRemoveSign = isNormalTask && canHandle && blockedByAddSign;
         boolean canRead = "CC".equals(taskKind) && canHandle && "CC_PENDING".equals(resolveTaskStatus(task));
         return new TaskActionAvailabilityResponse(
-                "NORMAL".equals(taskKind) && task.getAssignee() == null && isCandidate,
-                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
-                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
-                "NORMAL".equals(taskKind) && canHandle,
-                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
+                isFlowHandleTask && task.getAssignee() == null && isCandidate,
+                isFlowHandleTask && canHandle && !blockedByAddSign,
+                isNormalTask && canHandle && !blockedByAddSign,
+                isFlowHandleTask && canHandle,
+                isNormalTask && canHandle && !blockedByAddSign,
                 canAddSign,
                 canRemoveSign,
                 canRevoke(task),
                 canUrge(task),
                 canRead,
-                "NORMAL".equals(taskKind) && canHandle && !blockedByAddSign,
-                "NORMAL".equals(taskKind) && canHandle,
+                isNormalTask && canHandle && !blockedByAddSign,
+                isNormalTask && canHandle,
                 canTakeBack,
                 false,
-                "NORMAL".equals(taskKind) && canHandle,
+                isNormalTask && canHandle,
                 false
         );
     }
@@ -641,10 +648,11 @@ public class FlowableProcessRuntimeService {
         if (request.appendVariables() != null && !request.appendVariables().isEmpty()) {
             variables.putAll(request.appendVariables());
         }
+        String childRuntimeBusinessKey = buildAppendSubprocessRuntimeBusinessKey(businessKey, sourceTask.getId());
         ProcessInstance childInstance = flowableEngineFacade.runtimeService()
                 .startProcessInstanceByKey(
                         definition.processKey(),
-                        businessKey == null || businessKey.isBlank() ? sourceTask.getProcessInstanceId() : businessKey,
+                        childRuntimeBusinessKey,
                         variables
                 );
         RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
@@ -707,6 +715,107 @@ public class FlowableProcessRuntimeService {
                 activeAppendTasks(sourceTask.getProcessInstanceId()),
                 appendLinks(sourceTask.getProcessInstanceId())
         );
+    }
+
+    /**
+     * 在 Flowable 动态构建节点触发时生成附属任务或附属子流程。
+     */
+    @Transactional
+    public void executeDynamicBuilder(String processInstanceId, String sourceNodeId) {
+        Map<String, Object> processVariables = runtimeOrHistoricVariables(processInstanceId);
+        // 先做一次显式流程实例/执行查询，确保当前命令中的运行时实体已刷新到数据库，
+        // 避免附属任务在同一事务里插入时碰到 proc_inst_id 外键约束。
+        flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        flowableEngineFacade.runtimeService()
+                .createExecutionQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        PublishedProcessDefinition definition = resolvePublishedDefinition(
+                stringValue(processVariables.get("westflowProcessDefinitionId")),
+                stringValue(processVariables.get("westflowProcessDefinitionId")),
+                stringValue(processVariables.get("westflowProcessKey")),
+                processInstanceId
+        );
+        ProcessDslPayload payload = definition.dsl();
+        Map<String, Object> config = nodeConfig(payload, sourceNodeId);
+        if (config.isEmpty()) {
+            return;
+        }
+        if (runtimeAppendLinkService.listByParentInstanceId(processInstanceId).stream()
+                .anyMatch(record -> "DYNAMIC_BUILD".equals(record.triggerMode()) && sourceNodeId.equals(record.sourceNodeId()))) {
+            return;
+        }
+        String buildMode = stringValue(config.get("buildMode"));
+        String appendPolicy = normalizeAppendPolicy(stringValue(config.get("appendPolicy")));
+        Integer maxGeneratedCount = Optional.ofNullable((Integer) config.get("maxGeneratedCount")).orElse(1);
+        String operatorUserId = resolveRuntimeOperatorUserId(processVariables);
+        String nodeName = payload.nodes().stream()
+                .filter(node -> sourceNodeId.equals(node.id()))
+                .findFirst()
+                .map(ProcessDslPayload.Node::name)
+                .orElse(sourceNodeId);
+        List<Map<String, Object>> generatedItems = resolveDynamicBuilderItems(buildMode, config, processVariables, maxGeneratedCount);
+        if (generatedItems.isEmpty()) {
+            appendInstanceEvent(
+                    processInstanceId,
+                    null,
+                    sourceNodeId,
+                    "DYNAMIC_BUILD_TRIGGERED",
+                    "动态构建已触发",
+                    "INSTANCE",
+                    null,
+                    null,
+                    null,
+                    eventDetails(
+                            "sourceNodeId", sourceNodeId,
+                            "buildMode", buildMode,
+                            "appendPolicy", appendPolicy,
+                            "generatedCount", 0
+                    ),
+                    null,
+                    sourceNodeId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    operatorUserId
+            );
+            return;
+        }
+        appendInstanceEvent(
+                processInstanceId,
+                null,
+                sourceNodeId,
+                "DYNAMIC_BUILD_TRIGGERED",
+                "动态构建已触发",
+                "INSTANCE",
+                null,
+                null,
+                null,
+                eventDetails(
+                        "sourceNodeId", sourceNodeId,
+                        "buildMode", buildMode,
+                        "appendPolicy", appendPolicy,
+                        "generatedCount", generatedItems.size()
+                ),
+                null,
+                sourceNodeId,
+                null,
+                null,
+                null,
+                null,
+                null,
+                operatorUserId
+        );
+        if ("SUBPROCESS_CALLS".equals(buildMode)) {
+            createDynamicBuildSubprocesses(processInstanceId, sourceNodeId, nodeName, definition, appendPolicy, processVariables, generatedItems, operatorUserId);
+            return;
+        }
+        createDynamicBuildTasks(processInstanceId, sourceNodeId, nodeName, appendPolicy, generatedItems, operatorUserId);
     }
 
     /**
@@ -2329,6 +2438,437 @@ public class FlowableProcessRuntimeService {
         return instanceId;
     }
 
+    private String buildAppendSubprocessRuntimeBusinessKey(String parentBusinessKey, String sourceTaskId) {
+        String normalizedParentBusinessKey = parentBusinessKey == null || parentBusinessKey.isBlank()
+                ? "instance"
+                : parentBusinessKey;
+        return normalizedParentBusinessKey + "::append-subprocess::" + sourceTaskId;
+    }
+
+    private void createDynamicBuildTasks(
+            String processInstanceId,
+            String sourceNodeId,
+            String nodeName,
+            String appendPolicy,
+            List<Map<String, Object>> generatedItems,
+            String operatorUserId
+    ) {
+        String rootInstanceId = resolveRuntimeTreeRootInstanceId(processInstanceId);
+        String processDefinitionId = activeFlowableDefinitionId(processInstanceId);
+        String sourceStructureId = buildDynamicBuildSourceTaskId(processInstanceId, sourceNodeId);
+        for (int index = 0; index < generatedItems.size(); index++) {
+            Map<String, Object> item = generatedItems.get(index);
+            String targetUserId = stringValue(item.get("userId"));
+            if (targetUserId == null) {
+                targetUserId = stringValue(item.get("targetUserId"));
+            }
+            if (targetUserId == null || targetUserId.isBlank()) {
+                continue;
+            }
+            String generatedNodeId = sourceNodeId + "__dynamic_task_" + (index + 1);
+            Task generatedTask = flowableTaskActionService.createAdhocTask(
+                    processInstanceId,
+                    processDefinitionId,
+                    generatedNodeId,
+                    nodeName + " / 动态生成审批",
+                    "APPEND",
+                    targetUserId,
+                    List.of(),
+                    null,
+                    new LinkedHashMap<>(Map.of(
+                            "westflowTaskKind", "APPEND",
+                            "westflowAppendType", "TASK",
+                            "westflowAppendPolicy", appendPolicy,
+                            "westflowTriggerMode", "DYNAMIC_BUILD",
+                            "westflowSourceTaskId", sourceStructureId,
+                            "westflowSourceNodeId", sourceNodeId,
+                            "westflowOperatorUserId", operatorUserId
+                    ))
+            );
+            RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
+                    UUID.randomUUID().toString(),
+                    rootInstanceId,
+                    processInstanceId,
+                    sourceStructureId,
+                    sourceNodeId,
+                    "TASK",
+                    "ADHOC_TASK",
+                    appendPolicy,
+                    generatedTask.getId(),
+                    null,
+                    targetUserId,
+                    null,
+                    null,
+                    "RUNNING",
+                    "DYNAMIC_BUILD",
+                    operatorUserId,
+                    stringValue(item.get("comment")),
+                    Instant.now(),
+                    null
+            );
+            runtimeAppendLinkService.createLink(appendLink);
+            appendInstanceEvent(
+                    processInstanceId,
+                    generatedTask.getId(),
+                    sourceNodeId,
+                    "DYNAMIC_BUILD_TASK_CREATED",
+                    "动态构建已生成附属任务",
+                    "TASK",
+                    sourceNodeId,
+                    generatedTask.getId(),
+                    targetUserId,
+                    eventDetails(
+                            "sourceNodeId", sourceNodeId,
+                            "sourceTaskId", sourceStructureId,
+                            "targetTaskId", generatedTask.getId(),
+                            "targetUserId", targetUserId,
+                            "appendPolicy", appendPolicy,
+                            "appendLinkId", appendLink.id()
+                    ),
+                    null,
+                    sourceNodeId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    operatorUserId
+            );
+        }
+    }
+
+    private void createDynamicBuildSubprocesses(
+            String processInstanceId,
+            String sourceNodeId,
+            String nodeName,
+            PublishedProcessDefinition parentDefinition,
+            String appendPolicy,
+            Map<String, Object> processVariables,
+            List<Map<String, Object>> generatedItems,
+            String operatorUserId
+    ) {
+        String rootInstanceId = resolveRuntimeTreeRootInstanceId(processInstanceId);
+        String parentBusinessKey = stringValue(processVariables.get("westflowBusinessKey"));
+        String sourceStructureId = buildDynamicBuildSourceTaskId(processInstanceId, sourceNodeId);
+        for (int index = 0; index < generatedItems.size(); index++) {
+            Map<String, Object> item = generatedItems.get(index);
+            String calledProcessKey = stringValue(item.get("calledProcessKey"));
+            if (calledProcessKey == null || calledProcessKey.isBlank()) {
+                continue;
+            }
+            String versionPolicy = Optional.ofNullable(stringValue(item.get("calledVersionPolicy"))).orElse("LATEST_PUBLISHED");
+            Integer calledVersion = item.get("calledVersion") instanceof Number number ? number.intValue() : null;
+            PublishedProcessDefinition childDefinition = "FIXED_VERSION".equals(versionPolicy)
+                    ? processDefinitionService.getPublishedByProcessKeyAndVersion(calledProcessKey, calledVersion)
+                    : processDefinitionService.getLatestByProcessKey(calledProcessKey);
+
+            Map<String, Object> childVariables = new LinkedHashMap<>();
+            childVariables.put("westflowProcessDefinitionId", childDefinition.processDefinitionId());
+            childVariables.put("westflowProcessKey", childDefinition.processKey());
+            childVariables.put("westflowProcessName", childDefinition.processName());
+            childVariables.put("westflowBusinessType", stringValue(processVariables.get("westflowBusinessType")));
+            childVariables.put("westflowBusinessKey", parentBusinessKey);
+            childVariables.put("westflowInitiatorUserId", stringValue(processVariables.get("westflowInitiatorUserId")));
+            childVariables.put("westflowParentInstanceId", processInstanceId);
+            childVariables.put("westflowRootInstanceId", rootInstanceId);
+            childVariables.put("westflowAppendType", "SUBPROCESS");
+            childVariables.put("westflowAppendPolicy", appendPolicy);
+            childVariables.put("westflowAppendTriggerMode", "DYNAMIC_BUILD");
+            childVariables.put("westflowAppendSourceTaskId", sourceStructureId);
+            childVariables.put("westflowAppendSourceNodeId", sourceNodeId);
+            childVariables.put("westflowAppendOperatorUserId", operatorUserId);
+            Object appendVariables = item.get("appendVariables");
+            if (appendVariables instanceof Map<?, ?> appendVariablesMap) {
+                appendVariablesMap.forEach((key, value) -> childVariables.put(String.valueOf(key), value));
+            }
+            ProcessInstance childInstance = flowableEngineFacade.runtimeService().startProcessInstanceByKey(
+                    childDefinition.processKey(),
+                    buildGeneratedSubprocessRuntimeBusinessKey(parentBusinessKey, sourceNodeId, index),
+                    childVariables
+            );
+            RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
+                    UUID.randomUUID().toString(),
+                    rootInstanceId,
+                    processInstanceId,
+                    sourceStructureId,
+                    sourceNodeId,
+                    "SUBPROCESS",
+                    "ADHOC_SUBPROCESS",
+                    appendPolicy,
+                    null,
+                    childInstance.getProcessInstanceId(),
+                    null,
+                    childDefinition.processKey(),
+                    childDefinition.processDefinitionId(),
+                    "RUNNING",
+                    "DYNAMIC_BUILD",
+                    operatorUserId,
+                    stringValue(item.get("comment")),
+                    Instant.now(),
+                    null
+            );
+            runtimeAppendLinkService.createLink(appendLink);
+            appendInstanceEvent(
+                    processInstanceId,
+                    null,
+                    sourceNodeId,
+                    "DYNAMIC_BUILD_SUBPROCESS_CREATED",
+                    "动态构建已生成附属子流程",
+                    "INSTANCE",
+                    sourceNodeId,
+                    childInstance.getProcessInstanceId(),
+                    null,
+                    eventDetails(
+                            "sourceNodeId", sourceNodeId,
+                            "sourceTaskId", sourceStructureId,
+                            "childInstanceId", childInstance.getProcessInstanceId(),
+                            "calledProcessKey", childDefinition.processKey(),
+                            "appendPolicy", appendPolicy,
+                            "appendLinkId", appendLink.id(),
+                            "parentProcessDefinitionId", parentDefinition.processDefinitionId(),
+                            "nodeName", nodeName
+                    ),
+                    null,
+                    sourceNodeId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    operatorUserId
+            );
+        }
+    }
+
+    private List<Map<String, Object>> resolveDynamicBuilderItems(
+            String buildMode,
+            Map<String, Object> config,
+            Map<String, Object> processVariables,
+            int maxGeneratedCount
+    ) {
+        List<?> rawItems;
+        String sourceMode = stringValue(config.get("sourceMode"));
+        if ("MANUAL_TEMPLATE".equals(sourceMode)) {
+            rawItems = resolveDynamicBuilderManualTemplate(buildMode, stringValue(config.get("manualTemplateCode")));
+        } else {
+            rawItems = resolveDynamicBuilderRuleItems(buildMode, config, processVariables, stringValue(config.get("ruleExpression")));
+        }
+        List<Map<String, Object>> resolved = new ArrayList<>();
+        for (Object item : rawItems) {
+            if (resolved.size() >= maxGeneratedCount) {
+                break;
+            }
+            Map<String, Object> map = mapValue(item);
+            if (!map.isEmpty()) {
+                resolved.add(map);
+                continue;
+            }
+            if ("SUBPROCESS_CALLS".equals(buildMode) && item instanceof String calledProcessKey && !calledProcessKey.isBlank()) {
+                resolved.add(Map.of("calledProcessKey", calledProcessKey));
+                continue;
+            }
+            if ("APPROVER_TASKS".equals(buildMode) && item instanceof String userId && !userId.isBlank()) {
+                resolved.add(Map.of("userId", userId));
+            }
+        }
+        return resolved;
+    }
+
+    private List<?> resolveDynamicBuilderRuleItems(
+            String buildMode,
+            Map<String, Object> config,
+            Map<String, Object> processVariables,
+            String ruleExpression
+    ) {
+        if (ruleExpression == null || ruleExpression.isBlank()) {
+            return resolveDynamicBuilderFallbackItems(buildMode, config);
+        }
+        Object value = evaluateDynamicBuilderRule(ruleExpression.trim(), processVariables);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
+        }
+        if (value instanceof List<?> items) {
+            return items;
+        }
+        if (value instanceof Iterable<?> items) {
+            List<Object> resolved = new ArrayList<>();
+            for (Object item : items) {
+                resolved.add(item);
+            }
+            return resolved;
+        }
+        if (value instanceof Object[] items) {
+            return List.of(items);
+        }
+        if (value instanceof String stringValue && !stringValue.isBlank()) {
+            return "SUBPROCESS_CALLS".equals(buildMode)
+                    ? List.of(Map.of("calledProcessKey", stringValue))
+                    : List.of(Map.of("userId", stringValue));
+        }
+        if (value instanceof Map<?, ?> map) {
+            return List.of(map);
+        }
+        if (value == null) {
+            return resolveDynamicBuilderFallbackItems(buildMode, config);
+        }
+        return List.of(value);
+    }
+
+    private Object evaluateDynamicBuilderRule(String ruleExpression, Map<String, Object> processVariables) {
+        try {
+            String normalizedExpression = ruleExpression;
+            if (normalizedExpression.startsWith("${") && normalizedExpression.endsWith("}")) {
+                normalizedExpression = normalizedExpression.substring(2, normalizedExpression.length() - 1).trim();
+            }
+            if (processVariables.containsKey(normalizedExpression)) {
+                return processVariables.get(normalizedExpression);
+            }
+            Matcher matcher = SIMPLE_COMPARISON_PATTERN.matcher(normalizedExpression);
+            if (matcher.matches()) {
+                String variableName = matcher.group(1);
+                String operator = matcher.group(2);
+                String rightOperand = matcher.group(3).trim();
+                Object leftValue = processVariables.get(variableName);
+                if (leftValue == null) {
+                    return false;
+                }
+                return compareDynamicBuilderValues(leftValue, operator, rightOperand);
+            }
+            if ("true".equalsIgnoreCase(normalizedExpression)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(normalizedExpression)) {
+                return false;
+            }
+            return processVariables.get(normalizedExpression);
+        } catch (RuntimeException exception) {
+            throw new ContractException(
+                    "PROCESS.DYNAMIC_BUILD_RULE_FAILED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "动态构建规则执行失败",
+                    Map.of(
+                            "ruleExpression", ruleExpression,
+                            "error", exception.getMessage()
+                    )
+            );
+        }
+    }
+
+    private boolean compareDynamicBuilderValues(Object leftValue, String operator, String rightOperand) {
+        if (leftValue instanceof Number numberValue && isNumeric(rightOperand)) {
+            BigDecimal leftNumber = new BigDecimal(String.valueOf(numberValue));
+            BigDecimal rightNumber = new BigDecimal(rightOperand);
+            return switch (operator) {
+                case ">" -> leftNumber.compareTo(rightNumber) > 0;
+                case ">=" -> leftNumber.compareTo(rightNumber) >= 0;
+                case "<" -> leftNumber.compareTo(rightNumber) < 0;
+                case "<=" -> leftNumber.compareTo(rightNumber) <= 0;
+                case "==" -> leftNumber.compareTo(rightNumber) == 0;
+                case "!=" -> leftNumber.compareTo(rightNumber) != 0;
+                default -> false;
+            };
+        }
+        String leftText = String.valueOf(leftValue);
+        String rightText = normalizeQuotedText(rightOperand);
+        return switch (operator) {
+            case "==" -> leftText.equals(rightText);
+            case "!=" -> !leftText.equals(rightText);
+            case ">" -> leftText.compareTo(rightText) > 0;
+            case ">=" -> leftText.compareTo(rightText) >= 0;
+            case "<" -> leftText.compareTo(rightText) < 0;
+            case "<=" -> leftText.compareTo(rightText) <= 0;
+            default -> false;
+        };
+    }
+
+    private boolean isNumeric(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            new BigDecimal(normalizeQuotedText(value));
+            return true;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+    }
+
+    private String normalizeQuotedText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private List<?> resolveDynamicBuilderFallbackItems(String buildMode, Map<String, Object> config) {
+        if ("SUBPROCESS_CALLS".equals(buildMode)) {
+            String calledProcessKey = stringValue(config.get("calledProcessKey"));
+            if (calledProcessKey == null) {
+                return List.of();
+            }
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("calledProcessKey", calledProcessKey);
+            String calledVersionPolicy = stringValue(config.get("calledVersionPolicy"));
+            if (calledVersionPolicy != null) {
+                item.put("calledVersionPolicy", calledVersionPolicy);
+            }
+            Object calledVersion = config.get("calledVersion");
+            if (calledVersion instanceof Number || calledVersion instanceof String) {
+                item.put("calledVersion", calledVersion);
+            }
+            return List.of(item);
+        }
+        Map<String, Object> targets = mapValue(config.get("targets"));
+        List<String> userIds = stringListValue(targets.get("userIds"));
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> resolved = new ArrayList<>();
+        for (String userId : userIds) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("userId", userId);
+            resolved.add(item);
+        }
+        return resolved;
+    }
+
+    private List<?> resolveDynamicBuilderManualTemplate(String buildMode, String manualTemplateCode) {
+        if (manualTemplateCode == null || manualTemplateCode.isBlank()) {
+            return List.of();
+        }
+        return switch (manualTemplateCode) {
+            case "append_leave_audit", "append_manager_review" -> List.of(Map.of("userId", "usr_002"));
+            case "append_parallel_review" -> List.of(Map.of("userId", "usr_002"), Map.of("userId", "usr_003"));
+            case "append_sub_review" -> List.of(Map.of("calledProcessKey", "oa_sub_review"));
+            default -> "SUBPROCESS_CALLS".equals(buildMode)
+                    ? List.of(Map.of("calledProcessKey", manualTemplateCode))
+                    : List.of(Map.of("userId", manualTemplateCode));
+        };
+    }
+
+    private String buildGeneratedSubprocessRuntimeBusinessKey(String parentBusinessKey, String sourceNodeId, int index) {
+        String normalizedParentBusinessKey = parentBusinessKey == null || parentBusinessKey.isBlank()
+                ? "instance"
+                : parentBusinessKey;
+        return normalizedParentBusinessKey + "::dynamic-build::" + sourceNodeId + "::" + (index + 1);
+    }
+
+    private String buildDynamicBuildSourceTaskId(String processInstanceId, String sourceNodeId) {
+        return processInstanceId + "::dynamic-build::" + sourceNodeId;
+    }
+
+    private String resolveRuntimeOperatorUserId(Map<String, Object> processVariables) {
+        if (StpUtil.isLogin()) {
+            return StpUtil.getLoginIdAsString();
+        }
+        String initiatorUserId = stringValue(processVariables.get("westflowInitiatorUserId"));
+        return initiatorUserId == null ? "SYSTEM" : initiatorUserId;
+    }
+
     private void synchronizeAppendLinks(String rootInstanceId) {
         runtimeAppendLinkService.listByRootInstanceId(rootInstanceId).stream()
                 .filter(record -> "RUNNING".equals(record.status()))
@@ -2539,6 +3079,48 @@ public class FlowableProcessRuntimeService {
             String delegatedByUserId,
             String handoverFromUserId
     ) {
+        appendInstanceEvent(
+                instanceId,
+                taskId,
+                nodeId,
+                eventType,
+                eventName,
+                actionCategory,
+                sourceTaskId,
+                targetTaskId,
+                targetUserId,
+                details,
+                targetStrategy,
+                targetNodeId,
+                reapproveStrategy,
+                actingMode,
+                actingForUserId,
+                delegatedByUserId,
+                handoverFromUserId,
+                currentUserId()
+        );
+    }
+
+    private void appendInstanceEvent(
+            String instanceId,
+            String taskId,
+            String nodeId,
+            String eventType,
+            String eventName,
+            String actionCategory,
+            String sourceTaskId,
+            String targetTaskId,
+            String targetUserId,
+            Map<String, Object> details,
+            String targetStrategy,
+            String targetNodeId,
+            String reapproveStrategy,
+            String actingMode,
+            String actingForUserId,
+            String delegatedByUserId,
+            String handoverFromUserId,
+            String operatorUserId
+    ) {
         Map<String, Object> processVariables = runtimeOrHistoricVariables(instanceId);
         ProcessInstanceEventResponse event = new ProcessInstanceEventResponse(
                 instanceId + "::" + eventType + "::" + UUID.randomUUID(),
@@ -2551,7 +3133,7 @@ public class FlowableProcessRuntimeService {
                 sourceTaskId,
                 targetTaskId,
                 targetUserId,
-                currentUserId(),
+                operatorUserId,
                 OffsetDateTime.now(TIME_ZONE),
                 details == null ? Map.of() : details,
                 targetStrategy,
@@ -2574,7 +3156,7 @@ public class FlowableProcessRuntimeService {
                 eventType,
                 eventName,
                 actionCategory,
-                currentUserId(),
+                operatorUserId,
                 targetUserId,
                 sourceTaskId,
                 targetTaskId,
@@ -3173,6 +3755,20 @@ public class FlowableProcessRuntimeService {
         Map<String, Object> result = new LinkedHashMap<>();
         map.forEach((key, item) -> result.put(String.valueOf(key), item));
         return result;
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof List<?> values) || values.isEmpty()) {
+            return List.of();
+        }
+        List<String> results = new ArrayList<>();
+        for (Object item : values) {
+            String text = stringValue(item);
+            if (text != null) {
+                results.add(text);
+            }
+        }
+        return List.copyOf(results);
     }
 
     private String stringValue(Object value) {

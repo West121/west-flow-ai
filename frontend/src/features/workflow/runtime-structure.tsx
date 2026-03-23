@@ -1,0 +1,173 @@
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  buildRuntimeStructureTree,
+  mergeRuntimeStructureLinks,
+  resolveRuntimeStructureKindLabel,
+  resolveRuntimeStructureTargetInstanceId,
+  type RuntimeStructureTreeNode,
+  type RuntimeStructureLink,
+} from './runtime-structure-utils'
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return '--'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function resolveStructureTargetLabel(link: RuntimeStructureLink) {
+  if (link.triggerMode === 'DYNAMIC_BUILD') {
+    return '动态构建实例'
+  }
+
+  if (
+    link.triggerMode === 'APPEND' ||
+    link.runtimeLinkType === 'ADHOC_TASK' ||
+    link.appendType === 'TASK'
+  ) {
+    return '附属任务'
+  }
+
+  if (
+    link.runtimeLinkType === 'ADHOC_SUBPROCESS' ||
+    link.appendType === 'SUBPROCESS'
+  ) {
+    return '附属子流程实例'
+  }
+
+  return '子流程实例'
+}
+
+function RuntimeStructureItem({
+  node,
+  currentInstanceId,
+  depth,
+}: {
+  node: RuntimeStructureTreeNode
+  currentInstanceId: string
+  depth: number
+}) {
+  const { link, children } = node
+  const targetInstanceId = resolveRuntimeStructureTargetInstanceId(link)
+  const isCurrentParent = link.parentInstanceId === currentInstanceId
+  const isCurrentChild = targetInstanceId === currentInstanceId
+
+  return (
+    <div className='space-y-3'>
+      <div
+        className='space-y-2 rounded-lg border p-4'
+        style={{ marginLeft: depth > 0 ? `${depth * 20}px` : undefined }}
+      >
+        <div className='flex flex-wrap items-center gap-2'>
+          <Badge variant='secondary'>
+            {resolveRuntimeStructureKindLabel(link)}
+          </Badge>
+          <Badge variant='outline'>{link.status}</Badge>
+          {link.triggerMode ? (
+            <Badge variant='outline'>{link.triggerMode}</Badge>
+          ) : null}
+          {isCurrentParent ? (
+            <Badge variant='outline'>当前主流程</Badge>
+          ) : null}
+          {isCurrentChild ? (
+            <Badge variant='outline'>当前子流程</Badge>
+          ) : null}
+        </div>
+
+        <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
+          <div>主流程实例：{link.parentInstanceId}</div>
+          <div>
+            {resolveStructureTargetLabel(link)}：
+            {targetInstanceId ?? '--'}
+          </div>
+          <div>调用节点：{link.parentNodeId ?? link.sourceNodeId ?? '--'}</div>
+          <div>源任务：{link.sourceTaskId ?? '--'}</div>
+          <div>结构来源：{link.runtimeLinkType ?? link.linkType ?? '--'}</div>
+          <div>子流程编码：{link.calledProcessKey ?? '--'}</div>
+          <div>子流程定义：{link.calledDefinitionId ?? '--'}</div>
+          <div>目标用户：{link.targetUserId ?? '--'}</div>
+          <div>终止策略：{link.terminatePolicy ?? '--'}</div>
+          <div>完成策略：{link.childFinishPolicy ?? '--'}</div>
+          <div>创建时间：{formatDateTime(link.createdAt)}</div>
+          <div>结束时间：{formatDateTime(link.finishedAt)}</div>
+        </div>
+
+        {link.commentText ? (
+          <div className='rounded-md border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground'>
+            附言：{link.commentText}
+          </div>
+        ) : null}
+      </div>
+
+      {children.length > 0 ? (
+        <div className='space-y-3 border-l border-dashed pl-3'>
+          {children.map((child) => (
+            <RuntimeStructureItem
+              key={child.link.linkId}
+              node={child}
+              currentInstanceId={currentInstanceId}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function RuntimeStructureSection({
+  title = '运行态结构',
+  description = '展示主子流程、追加和动态构建形成的附属结构关系。',
+  links,
+  currentInstanceId,
+}: {
+  title?: string
+  description?: string
+  links: RuntimeStructureLink[]
+  currentInstanceId: string
+}) {
+  const visibleLinks = mergeRuntimeStructureLinks(links)
+
+  if (!visibleLinks.length) {
+    return null
+  }
+
+  const runtimeTree = buildRuntimeStructureTree(visibleLinks, currentInstanceId)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        <div className='rounded-lg border border-dashed bg-muted/10 p-3 text-sm text-muted-foreground'>
+          根流程实例：{runtimeTree.rootInstanceId}
+        </div>
+        {runtimeTree.rootChildren.map((node) => (
+          <RuntimeStructureItem
+            key={node.link.linkId}
+            node={node}
+            currentInstanceId={currentInstanceId}
+            depth={0}
+          />
+        ))}
+      </CardContent>
+    </Card>
+  )
+}

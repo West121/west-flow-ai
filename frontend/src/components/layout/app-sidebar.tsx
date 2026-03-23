@@ -32,8 +32,8 @@ export function AppSidebar() {
         {/* <AppTitle /> */}
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.map((props) => (
-          <NavGroup key={props.title} {...props} />
+        {navGroups.map((props, index) => (
+          <NavGroup key={props.title ?? `sidebar-group-${index}`} {...props} />
         ))}
       </SidebarContent>
       <SidebarFooter>

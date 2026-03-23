@@ -206,7 +206,7 @@ class SystemMenuControllerTest {
                 .getContentAsString();
         JsonNode treeData = objectMapper.readTree(treeResponse).path("data");
         assertThat(treeData.isArray()).isTrue();
-        assertThat(treeData.findValuesAsText("menuId")).contains("menu_workbench", "menu_system");
+        assertThat(treeData.findValuesAsText("menuId")).contains("menu_workbench", "menu_system", "menu_org", "menu_system_role");
 
         String sidebarResponse = mockMvc.perform(get("/api/v1/system/menus/sidebar-tree")
                         .header("Authorization", "Bearer " + token))
@@ -216,7 +216,11 @@ class SystemMenuControllerTest {
                 .getContentAsString();
         JsonNode sidebarData = objectMapper.readTree(sidebarResponse).path("data");
         assertThat(sidebarData.isArray()).isTrue();
-        assertThat(sidebarData.findValuesAsText("menuId")).contains("menu_workbench");
+        assertThat(sidebarData.findValuesAsText("menuId")).contains(
+                "menu_workbench",
+                "menu_workbench_dashboard",
+                "menu_org"
+        );
         assertThat(sidebarData.findValuesAsText("menuType")).doesNotContain("PERMISSION");
     }
 

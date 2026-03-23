@@ -19,21 +19,22 @@ type BaseNavItem = {
   requiredRoles?: string[]
 }
 
-// 折叠导航会把父级标题和子级链接一起保留下来，供侧边栏与命令菜单共用。
+// 叶子导航节点对应一个可直接跳转的页面。
 type NavLink = BaseNavItem & {
   url: LinkProps['to'] | (string & {})
   items?: never
 }
 
+// 树形导航节点允许继续嵌套更多目录或菜单。
 type NavCollapsible = BaseNavItem & {
-  items: (BaseNavItem & { url: LinkProps['to'] | (string & {}) })[]
-  url?: never
+  items: NavItem[]
+  url?: LinkProps['to'] | (string & {})
 }
 
 type NavItem = NavCollapsible | NavLink
 
 type NavGroup = {
-  title: string
+  title?: string
   items: NavItem[]
 }
 
