@@ -7,12 +7,18 @@ import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.api.ProcessTaskSnapshot;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.model.ProcessLinkRecord;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.identitylink.api.IdentityLink;
 import org.flowable.task.api.Task;
@@ -32,6 +38,7 @@ public class FlowableRuntimeStartService {
     private final ProcessDefinitionService processDefinitionService;
     private final WorkflowOperationLogService workflowOperationLogService;
     private final FlowableCountersignService flowableCountersignService;
+    private final ProcessLinkService processLinkService;
 
     /**
      * 启动指定流程定义的最新发布版本。
@@ -41,6 +48,7 @@ public class FlowableRuntimeStartService {
         Map<String, Object> variables = buildStartVariables(definition, request);
         ProcessInstance instance = flowableEngineFacade.runtimeService()
                 .startProcessInstanceByKey(definition.processKey(), request.businessKey(), variables);
+        persistSubprocessLinks(definition, instance);
         List<ProcessTaskSnapshot> activeTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(instance.getProcessInstanceId())
@@ -76,6 +84,73 @@ public class FlowableRuntimeStartService {
                 java.time.Instant.now()
         ));
         return new StartProcessResponse(definition.processDefinitionId(), instance.getProcessInstanceId(), status, activeTasks);
+    }
+
+    /**
+     * 主流程发起后扫描即时创建的 callActivity 子流程，并落平台关联表。
+     */
+    private void persistSubprocessLinks(PublishedProcessDefinition definition, ProcessInstance parentInstance) {
+        Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> subprocessNodesByKey =
+                buildSubprocessNodesByKey(definition);
+        if (subprocessNodesByKey.isEmpty()) {
+            return;
+        }
+        List<ProcessInstance> childInstances = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .superProcessInstanceId(parentInstance.getProcessInstanceId())
+                .list();
+        for (ProcessInstance childInstance : childInstances) {
+            ProcessDefinition childDefinition = flowableEngineFacade.repositoryService()
+                    .createProcessDefinitionQuery()
+                    .processDefinitionId(childInstance.getProcessDefinitionId())
+                    .singleResult();
+            if (childDefinition == null) {
+                continue;
+            }
+            Deque<com.westflow.processdef.model.ProcessDslPayload.Node> matchedNodes =
+                    subprocessNodesByKey.get(childDefinition.getKey());
+            if (matchedNodes == null || matchedNodes.isEmpty()) {
+                continue;
+            }
+            com.westflow.processdef.model.ProcessDslPayload.Node subprocessNode = matchedNodes.removeFirst();
+            Map<String, Object> config = mapValue(subprocessNode.config());
+            Instant now = Instant.now();
+            processLinkService.createLink(new ProcessLinkRecord(
+                    UUID.randomUUID().toString(),
+                    parentInstance.getProcessInstanceId(),
+                    parentInstance.getProcessInstanceId(),
+                    childInstance.getProcessInstanceId(),
+                    subprocessNode.id(),
+                    childDefinition.getKey(),
+                    childInstance.getProcessDefinitionId(),
+                    "CALL_ACTIVITY",
+                    "RUNNING",
+                    stringValue(config.get("terminatePolicy")),
+                    stringValue(config.get("childFinishPolicy")),
+                    now,
+                    null
+            ));
+        }
+    }
+
+    /**
+     * 预先按子流程 key 建立节点队列，便于一对多 callActivity 场景顺序匹配。
+     */
+    private Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> buildSubprocessNodesByKey(
+            PublishedProcessDefinition definition
+    ) {
+        Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> nodesByKey = new LinkedHashMap<>();
+        for (com.westflow.processdef.model.ProcessDslPayload.Node node : definition.dsl().nodes()) {
+            if (!"subprocess".equals(node.type())) {
+                continue;
+            }
+            String calledProcessKey = stringValue(mapValue(node.config()).get("calledProcessKey"));
+            if (calledProcessKey == null) {
+                continue;
+            }
+            nodesByKey.computeIfAbsent(calledProcessKey, unused -> new ArrayDeque<>()).addLast(node);
+        }
+        return nodesByKey;
     }
 
     /**
