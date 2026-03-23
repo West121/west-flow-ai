@@ -1,6 +1,8 @@
 # M1 Runtime Actions and Node Form Plan
 
 > **Scope:** Freeze the next executable batch after the current M0 baseline. This plan covers node form configuration expansion in the process designer and the first collaboration-oriented runtime actions: `claim`, `transfer`, and `return-to-previous`.
+>
+> **Archive note (2026-03-23):** 本计划中的 `/api/v1/process-runtime/demo/*` 仅表示当时冻结时的历史路径草案，当前正式接口已统一为 `/api/v1/process-runtime/*`。
 
 **Goal:** Extend the current process definition and runtime demo into a more realistic OA collaboration loop without introducing full rejection strategy, revoke semantics, or visual form design.
 

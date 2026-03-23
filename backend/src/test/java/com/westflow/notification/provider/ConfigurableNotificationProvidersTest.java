@@ -25,7 +25,7 @@ class ConfigurableNotificationProvidersTest {
         AtomicReference<String> authRef = new AtomicReference<>("");
         HttpServer server = startServer("/sms", exchange -> handle(exchange, bodyRef, authRef));
         try {
-            SmsMockNotificationProvider provider = new SmsMockNotificationProvider(new ObjectMapper());
+            SmsHttpNotificationProvider provider = new SmsHttpNotificationProvider(new ObjectMapper());
             NotificationSendResult result = provider.send(
                     channel(
                             "sms_ops",
@@ -64,7 +64,7 @@ class ConfigurableNotificationProvidersTest {
         AtomicReference<String> authRef = new AtomicReference<>("");
         HttpServer server = startServer("/wechat", exchange -> handle(exchange, bodyRef, authRef));
         try {
-            WechatMockNotificationProvider provider = new WechatMockNotificationProvider(new ObjectMapper());
+            WechatHttpNotificationProvider provider = new WechatHttpNotificationProvider(new ObjectMapper());
             NotificationSendResult result = provider.send(
                     channel(
                             "wechat_ops",
@@ -103,7 +103,7 @@ class ConfigurableNotificationProvidersTest {
         AtomicReference<String> authRef = new AtomicReference<>("");
         HttpServer server = startServer("/dingtalk", exchange -> handle(exchange, bodyRef, authRef));
         try {
-            DingTalkMockNotificationProvider provider = new DingTalkMockNotificationProvider(new ObjectMapper());
+            DingTalkHttpNotificationProvider provider = new DingTalkHttpNotificationProvider(new ObjectMapper());
             NotificationSendResult result = provider.send(
                     channel(
                             "ding_ops",

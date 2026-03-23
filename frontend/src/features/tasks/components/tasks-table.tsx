@@ -34,6 +34,8 @@ type DataTableProps = {
 
 // 任务表格，负责 URL 同步筛选、排序和分页。
 export function TasksTable({ data }: DataTableProps) {
+  'use no memo'
+
   // 本地 UI 状态。
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState<SortingState>([])
@@ -45,7 +47,8 @@ export function TasksTable({ data }: DataTableProps) {
     pageSize: 10,
   })
 
-  // react-table 与当前状态绑定。
+  // react-table 当前会触发 React Compiler 的兼容性告警，这里显式保留非 memo 边界。
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

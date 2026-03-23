@@ -82,6 +82,8 @@ export function ResourceListPage<TData>({
   createAction,
   extraActions,
 }: ResourceListPageProps<TData>) {
+  'use no memo'
+
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>(() =>
@@ -126,6 +128,7 @@ export function ResourceListPage<TData>({
     })
   }
 
+  // TanStack Table 当前会触发 React Compiler 的兼容性告警，这里显式保留非 memo 边界。
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,

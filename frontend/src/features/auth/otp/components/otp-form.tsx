@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { z } from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { showSubmittedData } from '@/lib/show-submitted-data'
@@ -40,8 +40,11 @@ export function OtpForm({ className, ...props }: OtpFormProps) {
     defaultValues: { otp: '' },
   })
 
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const otp = form.watch('otp')
+  const otp = useWatch({
+    control: form.control,
+    name: 'otp',
+    defaultValue: '',
+  })
 
   function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true)

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm, type UseFormReturn } from 'react-hook-form'
+import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import {
   AlertCircle,
   ArrowLeft,
@@ -555,7 +555,16 @@ function MessageFormPage({ mode, messageId }: { mode: 'create' | 'edit'; message
     }
   }
 
-  const targetType = form.watch('targetType')
+  const targetType = useWatch({
+    control: form.control,
+    name: 'targetType',
+    defaultValue: '',
+  })
+  const status = useWatch({
+    control: form.control,
+    name: 'status',
+    defaultValue: 'DRAFT',
+  })
   const statusOptions = useMemo(() => optionsQuery.data?.statusOptions ?? [], [optionsQuery.data?.statusOptions])
   const targetTypeOptions = useMemo(() => optionsQuery.data?.targetTypeOptions ?? [], [optionsQuery.data?.targetTypeOptions])
 
@@ -638,7 +647,7 @@ function MessageFormPage({ mode, messageId }: { mode: 'create' | 'edit'; message
         <CardHeader>
           <CardTitle>{pageTitle}</CardTitle>
           <CardDescription>
-            当前选中状态：{statusLabelMap.get(form.watch('status')) ?? resolveMessageStatusLabel(form.watch('status') as MessageStatus)}
+            当前选中状态：{statusLabelMap.get(status) ?? resolveMessageStatusLabel(status as MessageStatus)}
           </CardDescription>
           {errorMessage ? (
             <Alert variant='destructive'>

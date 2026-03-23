@@ -8,19 +8,19 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-@Component
 /**
- * 钉钉渠道适配器，默认走真实发送，mockMode=true 时回退到显式 mock。
+ * 企业微信通知适配器，默认走真实发送，mockMode=true 时回退到显式 mock。
  */
-public class DingTalkMockNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
+@Component
+public class WechatHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
 
-    public DingTalkMockNotificationProvider(ObjectMapper objectMapper) {
+    public WechatHttpNotificationProvider(ObjectMapper objectMapper) {
         super(objectMapper);
     }
 
     @Override
     public NotificationChannelType type() {
-        return NotificationChannelType.DINGTALK;
+        return NotificationChannelType.WECHAT;
     }
 
     @Override
@@ -29,53 +29,53 @@ public class DingTalkMockNotificationProvider extends AbstractConfigurableHttpNo
             NotificationDispatchRequest request,
             Map<String, Object> config
     ) {
-        Map<String, Object> msgParam = new LinkedHashMap<>();
-        msgParam.put("title", request.title());
-        msgParam.put("content", request.content());
+        Map<String, Object> text = new LinkedHashMap<>();
+        text.put("content", request.content());
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("channelCode", channel.channelCode());
-        body.put("userid_list", request.recipient());
-        body.put("agent_id", requireString(config, "agentId", validationMessage(), false));
-        body.put("appKey", config.get("appKey"));
-        body.put("msg_key", config.getOrDefault("msgKey", "sampleText"));
-        body.put("msg_param", msgParam);
+        body.put("touser", request.recipient());
+        body.put("msgtype", "text");
+        body.put("agentid", requireString(config, "agentId", validationMessage(), false));
+        body.put("corpId", config.get("corpId"));
+        body.put("title", request.title());
+        body.put("text", text);
         body.put("payload", request.payload());
         return body;
     }
 
     @Override
     protected String validationMessage() {
-        return "钉钉渠道配置缺少必要参数";
+        return "企业微信渠道配置缺少必要参数";
     }
 
     @Override
     protected String errorCode() {
-        return "NOTIFICATION.DINGTALK_FAILED";
+        return "NOTIFICATION.WECHAT_FAILED";
     }
 
     @Override
     protected String failureMessage() {
-        return "钉钉发送失败";
+        return "企业微信发送失败";
     }
 
     @Override
     protected String successMessage() {
-        return "钉钉发送成功";
+        return "企业微信发送成功";
     }
 
     @Override
     protected String successProviderName() {
-        return "DINGTALK";
+        return "WECHAT";
     }
 
     @Override
     protected String mockProviderName() {
-        return "DINGTALK_MOCK";
+        return "WECHAT_MOCK";
     }
 
     @Override
     protected String mockSuccessMessage() {
-        return "钉钉 mock 发送成功";
+        return "微信 mock 发送成功";
     }
 }

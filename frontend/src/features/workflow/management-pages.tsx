@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import {
   ArrowLeft,
   FilePenLine,
@@ -1063,6 +1063,16 @@ function ApprovalOpinionConfigFormPage({
     resolver: zodResolver(opinionConfigFormSchema),
     defaultValues: toOpinionConfigFormValues(),
   })
+  const toolbarActions = useWatch({
+    control: form.control,
+    name: 'toolbarActions',
+    defaultValue: [],
+  })
+  const buttonStrategies = useWatch({
+    control: form.control,
+    name: 'buttonStrategies',
+    defaultValue: {},
+  })
 
   useEffect(() => {
     if (detailQuery.data) {
@@ -1228,7 +1238,7 @@ function ApprovalOpinionConfigFormPage({
                         {(optionsQuery.data?.toolbarActions ?? []).map((item) => (
                           <label key={item.value} className='flex items-center gap-3 rounded-lg border p-3 text-sm'>
                             <Checkbox
-                              checked={form.watch('toolbarActions').includes(item.value)}
+                              checked={toolbarActions.includes(item.value)}
                               onCheckedChange={(checked) => {
                                 const current = form.getValues('toolbarActions')
                                 form.setValue(
@@ -1264,7 +1274,7 @@ function ApprovalOpinionConfigFormPage({
                     <p className='text-xs text-muted-foreground'>{item.value}</p>
                   </div>
                   <Switch
-                    checked={Boolean(form.watch('buttonStrategies')[item.value])}
+                    checked={Boolean(buttonStrategies[item.value])}
                     onCheckedChange={(checked) => {
                       form.setValue(
                         'buttonStrategies',

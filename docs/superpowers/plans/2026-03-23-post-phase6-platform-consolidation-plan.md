@@ -45,7 +45,7 @@
 - Modify: `backend/src/main/java/com/westflow/plm/api/PlmLaunchResponse.java`
 - Test: `backend/src/test/java/com/westflow/processruntime/**`
 
-- [ ] Step 1: 写出命名替换清单并确定新名称为 `ProcessTaskView`
+- [ ] Step 1: 写出命名替换清单并确定收口名称为 `ProcessTaskSnapshot`
 - [ ] Step 2: 修改响应模型与引用点，保持 JSON 字段不变
 - [ ] Step 3: 跑运行态相关测试，确认无接口回归
 - [ ] Step 4: 提交本任务改动

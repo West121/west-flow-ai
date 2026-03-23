@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm, type UseFormReturn } from 'react-hook-form'
+import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import {
   AlertCircle,
   ArrowLeft,
@@ -557,6 +557,11 @@ function DictTypeFormPage({ mode, dictTypeId }: { mode: 'create' | 'edit'; dictT
     },
   })
 
+  const enabled = useWatch({
+    control: form.control,
+    name: 'enabled',
+    defaultValue: false,
+  })
   const isSubmitting = createMutation.isPending || updateMutation.isPending
   const isInitialLoading = optionsQuery.isLoading || (isEdit && detailQuery.isLoading)
 
@@ -628,9 +633,9 @@ function DictTypeFormPage({ mode, dictTypeId }: { mode: 'create' | 'edit'; dictT
   }
 
   const enabledOption = (optionsQuery.data?.statusOptions ?? []).find(
-    (option) => option.code === (form.watch('enabled') ? 'ENABLED' : 'DISABLED')
+    (option) => option.code === (enabled ? 'ENABLED' : 'DISABLED')
   )
-  const enabledLabel = enabledOption?.name ?? (form.watch('enabled') ? '启用' : '停用')
+  const enabledLabel = enabledOption?.name ?? (enabled ? '启用' : '停用')
   const pageTitle = isEdit ? '编辑字典类型' : '新建字典类型'
   const pageDescription = isEdit
     ? '编辑字典类型后会影响列表和字典项归属关系。'
@@ -1065,8 +1070,13 @@ function DictItemFormPage({ mode, dictItemId }: { mode: 'create' | 'edit'; dictI
     [optionsQuery.data?.statusOptions]
   )
 
+  const enabled = useWatch({
+    control: form.control,
+    name: 'enabled',
+    defaultValue: false,
+  })
   const statusLabel = statusOptions.find(
-    (item) => item.code === (form.watch('enabled') ? 'ENABLED' : 'DISABLED')
+    (item) => item.code === (enabled ? 'ENABLED' : 'DISABLED')
   )?.name
 
   if (isInitialLoading) {

@@ -12,9 +12,9 @@ import org.springframework.stereotype.Component;
 /**
  * 短信渠道适配器，默认走真实发送，mockMode=true 时回退到显式 mock。
  */
-public class SmsMockNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
+public class SmsHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
 
-    public SmsMockNotificationProvider(ObjectMapper objectMapper) {
+    public SmsHttpNotificationProvider(ObjectMapper objectMapper) {
         super(objectMapper);
     }
 

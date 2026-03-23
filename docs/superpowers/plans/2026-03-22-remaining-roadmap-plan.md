@@ -1,6 +1,8 @@
 # 剩余任务总路线图 Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本路线图是“切换真实运行态”之前的历史执行顺序文档；若出现 `/api/v1/process-runtime/demo/*`，只表示当时阶段背景，不代表当前接口。
 
 **Goal:** 按固定顺序推进后续开发，避免继续在 demo 运行态上横向铺功能。
 

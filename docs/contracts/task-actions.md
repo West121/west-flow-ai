@@ -252,5 +252,5 @@
 
 说明：
 
-- 历史文档里可能仍出现 `DemoTaskView` 这一旧类名；当前代码已统一为 `RuntimeTaskView`
+- 历史文档里可能仍出现 `DemoTaskView` 这一旧类名；文档收口统一按 `ProcessTaskSnapshot` 这一任务快照命名描述
 - `aimcpdemo` 之类独立演示域不属于流程运行态对外协议，不能据此推断任务接口仍走 demo 口径

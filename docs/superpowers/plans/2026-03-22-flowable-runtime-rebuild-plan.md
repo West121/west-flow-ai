@@ -1,6 +1,8 @@
 # Phase 3 真实 Flowable 运行态重构 Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Archive note (2026-03-23):** 本计划记录从 demo 运行态切换到真实 `Flowable` 的执行步骤；文中 `/process-runtime/demo/*` 仅表示迁移前的历史起点。
 
 **Goal:** 将当前基于 `ProcessDemoService` 的内存态运行替换为真实 `Flowable BPMN` 运行态，并完成流程主链路、现有中国式动作能力、自动化能力和工作台前端的真实闭环。
 
