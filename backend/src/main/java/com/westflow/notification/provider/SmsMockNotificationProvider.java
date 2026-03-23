@@ -1,27 +1,77 @@
 package com.westflow.notification.provider;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.notification.model.NotificationChannelRecord;
 import com.westflow.notification.model.NotificationChannelType;
 import com.westflow.notification.model.NotificationDispatchRequest;
-import com.westflow.notification.model.NotificationSendResult;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
 /**
- * 短信渠道的 mock 发送适配器。
+ * 短信渠道适配器，默认走真实发送，mockMode=true 时回退到显式 mock。
  */
-public class SmsMockNotificationProvider implements NotificationProvider {
+public class SmsMockNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
+
+    public SmsMockNotificationProvider(ObjectMapper objectMapper) {
+        super(objectMapper);
+    }
 
     @Override
-    // 返回短信渠道类型。
     public NotificationChannelType type() {
         return NotificationChannelType.SMS;
     }
 
     @Override
-    // 当前仅返回 mock 发送成功结果。
-    public NotificationSendResult send(NotificationChannelRecord channel, NotificationDispatchRequest request) {
-        // 短信本轮只做 mock provider，保证流程闭环可跑通。
-        return new NotificationSendResult(true, "SMS_MOCK", "短信 mock 发送成功");
+    protected Map<String, Object> buildRequestBody(
+            NotificationChannelRecord channel,
+            NotificationDispatchRequest request,
+            Map<String, Object> config
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("channelCode", channel.channelCode());
+        body.put("phoneNumbers", request.recipient());
+        body.put("templateCode", config.get("templateCode"));
+        body.put("signName", config.get("signName"));
+        body.put("title", request.title());
+        body.put("content", request.content());
+        body.put("payload", request.payload());
+        return body;
+    }
+
+    @Override
+    protected String validationMessage() {
+        return "短信渠道配置缺少必要参数";
+    }
+
+    @Override
+    protected String errorCode() {
+        return "NOTIFICATION.SMS_FAILED";
+    }
+
+    @Override
+    protected String failureMessage() {
+        return "短信发送失败";
+    }
+
+    @Override
+    protected String successMessage() {
+        return "短信发送成功";
+    }
+
+    @Override
+    protected String successProviderName() {
+        return "SMS";
+    }
+
+    @Override
+    protected String mockProviderName() {
+        return "SMS_MOCK";
+    }
+
+    @Override
+    protected String mockSuccessMessage() {
+        return "短信 mock 发送成功";
     }
 }

@@ -4,7 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
-import com.westflow.processruntime.api.DemoTaskView;
+import com.westflow.processruntime.api.RuntimeTaskView;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import java.util.LinkedHashMap;
@@ -41,7 +41,7 @@ public class FlowableRuntimeStartService {
         Map<String, Object> variables = buildStartVariables(definition, request);
         ProcessInstance instance = flowableEngineFacade.runtimeService()
                 .startProcessInstanceByKey(definition.processKey(), request.businessKey(), variables);
-        List<DemoTaskView> activeTasks = flowableEngineFacade.taskService()
+        List<RuntimeTaskView> activeTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(instance.getProcessInstanceId())
                 .active()
@@ -125,7 +125,7 @@ public class FlowableRuntimeStartService {
     /**
      * 将 Flowable 活动任务转换为现阶段可复用的任务视图。
      */
-    private DemoTaskView toTaskView(Task task) {
+    private RuntimeTaskView toTaskView(Task task) {
         List<String> candidateUserIds = flowableEngineFacade.taskService()
                 .getIdentityLinksForTask(task.getId())
                 .stream()
@@ -137,7 +137,7 @@ public class FlowableRuntimeStartService {
         String taskKind = resolveTaskKind(task);
         String assignmentMode = task.getAssignee() != null || !candidateUserIds.isEmpty() ? "USER" : null;
         String status = task.getAssignee() == null && !candidateUserIds.isEmpty() ? "PENDING_CLAIM" : "PENDING";
-        return new DemoTaskView(
+        return new RuntimeTaskView(
                 task.getId(),
                 task.getTaskDefinitionKey(),
                 task.getName(),

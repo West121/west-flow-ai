@@ -7,6 +7,6 @@ public record StartProcessResponse(
         String processDefinitionId,
         String instanceId,
         String status,
-        List<DemoTaskView> activeTasks
+        List<RuntimeTaskView> activeTasks
 ) {
 }

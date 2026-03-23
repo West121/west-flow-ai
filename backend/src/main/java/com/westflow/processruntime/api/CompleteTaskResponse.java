@@ -7,6 +7,6 @@ public record CompleteTaskResponse(
         String instanceId,
         String completedTaskId,
         String status,
-        List<DemoTaskView> nextTasks
+        List<RuntimeTaskView> nextTasks
 ) {
 }

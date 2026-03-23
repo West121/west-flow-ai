@@ -86,7 +86,7 @@ public class NotificationChannelService {
     public NotificationChannelMutationResponse create(SaveNotificationChannelRequest request) {
         validateChannelCode(request.channelCode(), null);
         NotificationChannelType type = resolveType(request.channelType());
-        validateConfig(type, request.config());
+        validateConfig(type, request.config(), Boolean.TRUE.equals(request.mockMode()));
         String channelId = buildId("nch");
         Instant now = Instant.now();
         notificationChannelMapper.upsert(buildRecord(channelId, request, now, now, null));
@@ -99,7 +99,7 @@ public class NotificationChannelService {
         requireChannel(channelId);
         validateChannelCode(request.channelCode(), channelId);
         NotificationChannelType type = resolveType(request.channelType());
-        validateConfig(type, request.config());
+        validateConfig(type, request.config(), Boolean.TRUE.equals(request.mockMode()));
         NotificationChannelRecord existing = requireChannel(channelId);
         Instant now = Instant.now();
         notificationChannelMapper.upsert(new NotificationChannelRecord(
@@ -262,8 +262,11 @@ public class NotificationChannelService {
     }
 
     // 校验渠道配置是否满足类型要求。
-    private void validateConfig(NotificationChannelType type, Map<String, Object> config) {
+    private void validateConfig(NotificationChannelType type, Map<String, Object> config, boolean mockMode) {
         Map<String, Object> normalized = normalizeConfig(config);
+        if (mockMode) {
+            return;
+        }
         switch (type) {
             case EMAIL -> {
                 requireField(normalized, "smtpHost");
@@ -271,6 +274,22 @@ public class NotificationChannelService {
                 requireField(normalized, "fromAddress");
             }
             case WEBHOOK -> requireField(normalized, "url");
+            case SMS -> {
+                requireField(normalized, "endpoint", "url");
+                requireField(normalized, "accessToken");
+            }
+            case WECHAT -> {
+                requireField(normalized, "endpoint", "url");
+                requireField(normalized, "accessToken");
+                requireField(normalized, "agentId");
+                requireField(normalized, "corpId");
+            }
+            case DINGTALK -> {
+                requireField(normalized, "endpoint", "url");
+                requireField(normalized, "accessToken");
+                requireField(normalized, "agentId");
+                requireField(normalized, "appKey");
+            }
             default -> {
             }
         }
@@ -278,7 +297,15 @@ public class NotificationChannelService {
 
     // 读取必须配置项，缺失时直接报错。
     private void requireField(Map<String, Object> config, String key) {
+        requireField(config, key, key);
+    }
+
+    // 允许 endpoint/url 这类兼容字段共用一个校验入口。
+    private void requireField(Map<String, Object> config, String key, String alternateKey) {
         Object value = config.get(key);
+        if ((value == null || String.valueOf(value).isBlank()) && !key.equals(alternateKey)) {
+            value = config.get(alternateKey);
+        }
         if (value == null || String.valueOf(value).isBlank()) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",

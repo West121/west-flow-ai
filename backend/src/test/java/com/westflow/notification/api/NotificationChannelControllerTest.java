@@ -165,6 +165,52 @@ class NotificationChannelControllerTest {
         assertThat(optionsBody.path("channelTypes").get(0).path("code").asText()).isNotBlank();
     }
 
+    @Test
+    void shouldRejectRealSmsChannelWithoutRequiredConfigAndAllowMockMode() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/notification/channels")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "channelCode": "sms_real_invalid",
+                                  "channelType": "SMS",
+                                  "channelName": "真实短信",
+                                  "enabled": true,
+                                  "mockMode": false,
+                                  "config": {
+                                    "templateCode": "SMS_001"
+                                  },
+                                  "remark": "缺少真实发送配置"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        String createMockResponse = mockMvc.perform(post("/api/v1/notification/channels")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "channelCode": "sms_mock_ok",
+                                  "channelType": "SMS",
+                                  "channelName": "短信 mock",
+                                  "enabled": true,
+                                  "mockMode": true,
+                                  "config": {
+                                    "mockResponseMessage": "本地 mock"
+                                  },
+                                  "remark": "允许 mock 联调"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertThat(objectMapper.readTree(createMockResponse).path("data").path("channelId").asText()).isNotBlank();
+    }
+
     private String login() throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

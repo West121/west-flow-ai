@@ -1,10 +1,13 @@
 package com.westflow.processruntime.service;
 
 import com.westflow.processdef.model.ProcessDslPayload;
+import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
+import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -13,8 +16,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class FlowableProcessRuntimeTraceStoreTest {
 
+    private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
+
     @Test
-    void shouldReturnEmptyInTraceSkeletonAndAcceptNoopWrites() {
+    void shouldKeepAppendedInstanceEventsOrderedByTime() {
+        FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore();
+        OffsetDateTime earlier = OffsetDateTime.now(TIME_ZONE).minusSeconds(30);
+        OffsetDateTime later = OffsetDateTime.now(TIME_ZONE);
+
+        store.appendInstanceEvent(event("evt_2", "instance_1", "task_2", "node_2", "TASK", "Later", "usr_002", later));
+        store.appendInstanceEvent(event("evt_1", "instance_1", "task_1", "node_1", "TASK", "Earlier", "usr_001", earlier));
+
+        List<ProcessInstanceEventResponse> events = store.queryInstanceEvents("instance_1");
+        assertThat(events).extracting(ProcessInstanceEventResponse::eventId).containsExactly("evt_1", "evt_2");
+    }
+
+    @Test
+    void shouldProjectAutomationAndNotificationRecordsFromDslPayload() {
         FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore();
         ProcessDslPayload payload = new ProcessDslPayload(
                 "1.0.0",
@@ -25,17 +43,87 @@ class FlowableProcessRuntimeTraceStoreTest {
                 "1.0.0",
                 List.of(),
                 Map.of(),
-                List.of(),
-                List.of()
+                List.of(
+                        new ProcessDslPayload.Node(
+                                "n_approver",
+                                "approver",
+                                "审批人",
+                                null,
+                                Map.of(),
+                                Map.of(
+                                        "timeoutPolicy", Map.of("enabled", true, "action", "AUTO_APPROVE"),
+                                        "reminderPolicy", Map.of("enabled", true, "channels", List.of("IN_APP", "EMAIL"))
+                                ),
+                                Map.of()
+                        ),
+                        new ProcessDslPayload.Node(
+                                "n_timer",
+                                "timer",
+                                "定时节点",
+                                null,
+                                Map.of(),
+                                Map.of(),
+                                Map.of()
+                        ),
+                        new ProcessDslPayload.Node(
+                                "n_trigger",
+                                "trigger",
+                                "触发节点",
+                                null,
+                                Map.of(),
+                                Map.of("triggerKey", "demo.trigger"),
+                                Map.of()
+                        )
+                ),
+                List.of(
+                        new ProcessDslPayload.Edge("e1", "n_approver", "n_timer", 1, "to timer", Map.of()),
+                        new ProcessDslPayload.Edge("e2", "n_timer", "n_trigger", 1, "to trigger", Map.of())
+                )
         );
 
-        store.appendInstanceEvent(event("evt_1", "instance_1", "task_1", "node_1", "TASK", "演示事件", "usr_001", OffsetDateTime.now(ZoneId.of("Asia/Shanghai"))));
+        List<ProcessAutomationTraceItemResponse> automationTraces = store.queryAutomationTraces(
+                "instance_1",
+                "PENDING",
+                "usr_001",
+                payload,
+                OffsetDateTime.now(TIME_ZONE)
+        );
+
+        assertThat(automationTraces)
+                .extracting(ProcessAutomationTraceItemResponse::traceType)
+                .containsExactlyInAnyOrder("TIMEOUT_APPROVAL", "AUTO_REMINDER", "TIMER_NODE", "TRIGGER_NODE");
+        assertThat(automationTraces)
+                .extracting(ProcessAutomationTraceItemResponse::nodeId)
+                .anyMatch(nodeId -> nodeId.endsWith("n_approver"));
+        assertThat(automationTraces)
+                .extracting(ProcessAutomationTraceItemResponse::nodeId)
+                .anyMatch(nodeId -> nodeId.endsWith("n_timer"));
+        assertThat(automationTraces)
+                .extracting(ProcessAutomationTraceItemResponse::nodeId)
+                .anyMatch(nodeId -> nodeId.endsWith("n_trigger"));
+
+        List<ProcessNotificationSendRecordResponse> notificationRecords = store.queryNotificationSendRecords(
+                "instance_1",
+                "PENDING",
+                "usr_001",
+                payload,
+                OffsetDateTime.now(TIME_ZONE).truncatedTo(ChronoUnit.MILLIS)
+        );
+
+        assertThat(notificationRecords).hasSize(2);
+        assertThat(notificationRecords)
+                .extracting(ProcessNotificationSendRecordResponse::channelName)
+                .containsExactlyInAnyOrder("站内通知", "邮件通知");
+    }
+
+    @Test
+    void shouldClearEventsWhenReset() {
+        FlowableProcessRuntimeTraceStore store = new FlowableProcessRuntimeTraceStore();
+        store.appendInstanceEvent(event("evt_1", "instance_1", null, null, "INSTANCE", "实例启动", "usr_001", OffsetDateTime.now(TIME_ZONE)));
+
+        store.reset();
 
         assertThat(store.queryInstanceEvents("instance_1")).isEmpty();
-        assertThat(store.queryAutomationTraces("instance_1", "PENDING", "usr_001", payload, OffsetDateTime.now(ZoneId.of("Asia/Shanghai"))))
-                .isEmpty();
-        assertThat(store.queryNotificationSendRecords("instance_1", "PENDING", "usr_001", payload, OffsetDateTime.now(ZoneId.of("Asia/Shanghai"))))
-                .isEmpty();
     }
 
     private ProcessInstanceEventResponse event(

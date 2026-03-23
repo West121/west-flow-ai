@@ -12,7 +12,7 @@ public record HandoverExecutionResponse(
         String instanceId,
         String completedTaskId,
         String status,
-        List<DemoTaskView> nextTasks,
+        List<RuntimeTaskView> nextTasks,
         List<HandoverExecutionTaskItemResponse> executionTasks
 ) {
 }

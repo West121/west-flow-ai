@@ -54,7 +54,7 @@ class NotificationDispatchServiceTest {
         server.start();
         try {
             String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/hook";
-            createChannel("webhook_ops", "WEBHOOK", Map.of("url", url, "headers", Map.of("X-Flow", "west")));
+            createChannel("webhook_ops", "WEBHOOK", false, Map.of("url", url, "headers", Map.of("X-Flow", "west")));
 
             var result = notificationDispatchService.dispatchByChannelCode(
                     "webhook_ops",
@@ -75,7 +75,7 @@ class NotificationDispatchServiceTest {
 
     @Test
     void shouldDispatchSmsThroughMockProviderAndPersistLog() {
-        createChannel("sms_ops", "SMS", Map.of("gateway", "mock-gateway"));
+        createChannel("sms_ops", "SMS", true, Map.of("mockResponseMessage", "短信 mock 发送成功"));
 
         var result = notificationDispatchService.dispatchByChannelCode(
                 "sms_ops",
@@ -89,6 +89,45 @@ class NotificationDispatchServiceTest {
         assertThat(notificationLogMapper.selectAll().get(0).providerName()).isEqualTo("SMS_MOCK");
     }
 
+    @Test
+    void shouldPersistFailedLogWhenRealSmsProviderReturnsFailure() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/sms", exchange -> {
+            byte[] response = "{\"message\":\"gateway failed\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(502, response.length);
+            try (OutputStream outputStream = exchange.getResponseBody()) {
+                outputStream.write(response);
+            }
+        });
+        server.start();
+        try {
+            createChannel(
+                    "sms_real",
+                    "SMS",
+                    false,
+                    Map.of(
+                            "endpoint", "http://127.0.0.1:" + server.getAddress().getPort() + "/sms",
+                            "accessToken", "sms-token"
+                    )
+            );
+
+            var result = notificationDispatchService.dispatchByChannelCode(
+                    "sms_real",
+                    new NotificationDispatchRequest("13800138000", "短信提醒", "真实短信失败回写", Map.of("taskId", "task_001"))
+            );
+
+            assertThat(result.success()).isFalse();
+            assertThat(result.providerName()).isEqualTo("SMS");
+            assertThat(result.responseMessage()).contains("短信发送失败");
+            assertThat(notificationLogMapper.selectAll()).hasSize(1);
+            assertThat(notificationLogMapper.selectAll().get(0).status()).isEqualTo("FAILED");
+            assertThat(notificationLogMapper.selectAll().get(0).providerName()).isEqualTo("SMS");
+            assertThat(notificationLogMapper.selectAll().get(0).responseMessage()).contains("短信发送失败");
+        } finally {
+            server.stop(0);
+        }
+    }
+
     private void handleWebhook(HttpExchange exchange) throws IOException {
         byte[] body = exchange.getRequestBody().readAllBytes();
         String payload = new String(body, StandardCharsets.UTF_8);
@@ -100,14 +139,14 @@ class NotificationDispatchServiceTest {
         }
     }
 
-    private void createChannel(String channelCode, String channelType, Map<String, Object> config) {
+    private void createChannel(String channelCode, String channelType, boolean mockMode, Map<String, Object> config) {
         NotificationChannelMutationResponse response = notificationChannelService.create(
                 new SaveNotificationChannelRequest(
                         channelCode,
                         channelType,
                         channelCode + " 渠道",
                         true,
-                        false,
+                        mockMode,
                         config,
                         "测试渠道"
                 )

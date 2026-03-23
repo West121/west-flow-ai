@@ -1,6 +1,6 @@
 package com.westflow.plm.api;
 
-import com.westflow.processruntime.api.DemoTaskView;
+import com.westflow.processruntime.api.RuntimeTaskView;
 import java.util.List;
 
 /**
@@ -10,7 +10,7 @@ public record PlmLaunchResponse(
         String billId,
         String billNo,
         String processInstanceId,
-        DemoTaskView firstActiveTask,
-        List<DemoTaskView> activeTasks
+        RuntimeTaskView firstActiveTask,
+        List<RuntimeTaskView> activeTasks
 ) {
 }

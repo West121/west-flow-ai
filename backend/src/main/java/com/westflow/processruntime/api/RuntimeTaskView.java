@@ -2,8 +2,8 @@ package com.westflow.processruntime.api;
 
 import java.util.List;
 
-// 演示态任务视图。
-public record DemoTaskView(
+// 运行态任务视图。
+public record RuntimeTaskView(
         String taskId,
         String nodeId,
         String nodeName,

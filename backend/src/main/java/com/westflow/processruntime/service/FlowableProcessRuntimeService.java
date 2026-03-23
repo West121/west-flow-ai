@@ -19,7 +19,7 @@ import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.CompleteTaskResponse;
 import com.westflow.processruntime.api.CountersignTaskGroupResponse;
 import com.westflow.processruntime.api.DelegateTaskRequest;
-import com.westflow.processruntime.api.DemoTaskView;
+import com.westflow.processruntime.api.RuntimeTaskView;
 import com.westflow.processruntime.api.HandoverExecutionResponse;
 import com.westflow.processruntime.api.HandoverExecutionTaskItemResponse;
 import com.westflow.processruntime.api.HandoverPreviewResponse;
@@ -431,7 +431,7 @@ public class FlowableProcessRuntimeService {
                 task.getProcessInstanceId(),
                 taskId
         );
-        List<DemoTaskView> nextTasks = flowableEngineFacade.taskService()
+        List<RuntimeTaskView> nextTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(task.getProcessInstanceId())
                 .active()
@@ -861,7 +861,7 @@ public class FlowableProcessRuntimeService {
         List<Task> sourceTasks = activeTasksAssignedTo(normalizedSourceUserId);
 
         List<HandoverExecutionTaskItemResponse> executionTasks = new ArrayList<>();
-        List<DemoTaskView> nextTasks = new ArrayList<>();
+        List<RuntimeTaskView> nextTasks = new ArrayList<>();
         for (Task task : sourceTasks) {
             appendComment(task, comment);
             flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowAction", "HANDOVER");
@@ -1735,7 +1735,7 @@ public class FlowableProcessRuntimeService {
     }
 
     private CompleteTaskResponse nextTaskResponse(String processInstanceId, String completedTaskId) {
-        List<DemoTaskView> nextTasks = flowableEngineFacade.taskService()
+        List<RuntimeTaskView> nextTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(processInstanceId)
                 .active()
@@ -1861,8 +1861,8 @@ public class FlowableProcessRuntimeService {
         );
     }
 
-    private DemoTaskView toTaskView(Task task) {
-        return new DemoTaskView(
+    private RuntimeTaskView toTaskView(Task task) {
+        return new RuntimeTaskView(
                 task.getId(),
                 task.getTaskDefinitionKey(),
                 task.getName(),
@@ -2053,7 +2053,7 @@ public class FlowableProcessRuntimeService {
         return true;
     }
 
-    private List<DemoTaskView> blockingTaskViews(List<DemoTaskView> nextTasks) {
+    private List<RuntimeTaskView> blockingTaskViews(List<RuntimeTaskView> nextTasks) {
         return nextTasks.stream()
                 .filter(task -> !"CC".equals(task.taskKind()))
                 .toList();

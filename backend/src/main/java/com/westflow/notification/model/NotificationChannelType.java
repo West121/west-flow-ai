@@ -7,9 +7,9 @@ public enum NotificationChannelType {
     IN_APP("站内通知", true, false),
     EMAIL("邮件", true, false),
     WEBHOOK("回调", true, false),
-    SMS("短信", false, true),
-    WECHAT("微信", false, true),
-    DINGTALK("钉钉", false, true);
+    SMS("短信", true, false),
+    WECHAT("微信", true, false),
+    DINGTALK("钉钉", true, false);
 
     private final String label;
     private final boolean realSend;

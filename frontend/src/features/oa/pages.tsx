@@ -40,7 +40,10 @@ import {
   createOALeaveBill,
   type OALaunchResponse,
 } from '@/lib/api/oa'
-import { listApprovalSheets } from '@/lib/api/workbench'
+import {
+  listApprovalSheets,
+  WORKBENCH_RUNTIME_ENDPOINTS,
+} from '@/lib/api/workbench'
 
 const leaveFormSchema = z.object({
   days: z
@@ -530,7 +533,7 @@ export function OAQueryPage() {
       <ResourceListPage
         title='OA 流程查询'
         description='按审批单维度查看我发起的 OA 业务，详情页直接展示业务表单、流程轨迹和流程图回顾。'
-        endpoint='/api/v1/process-runtime/demo/approval-sheets/page'
+        endpoint={WORKBENCH_RUNTIME_ENDPOINTS.approvalSheetsPage}
         searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
         search={search}
         navigate={navigate}

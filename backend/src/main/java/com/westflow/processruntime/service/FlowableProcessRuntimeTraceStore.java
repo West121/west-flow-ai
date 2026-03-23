@@ -5,28 +5,45 @@ import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Component;
 
 /**
- * TODO(Phase 3C): 迁移到 Flowable 历史事件表后使用此实现。
- * 当前保留最小骨架，先提供可注入的查询与重放接口，不破坏现有调用面。
+ * Flowable 运行态轨迹存储。
+ *
+ * <p>当前阶段仍未接入独立历史轨迹表，因此最小实现保留运行期事件缓存，
+ * 并复用流程 DSL 中已有的自动化/通知配置推导详情页所需轨迹。</p>
  */
+@Component
+@Primary
 public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStore {
 
+    private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
+
+    private final Map<String, List<ProcessInstanceEventResponse>> eventsByInstance = new ConcurrentHashMap<>();
+
     @Override
-    public void appendInstanceEvent(ProcessInstanceEventResponse event) {
-        // TODO(Phase 3C): 写入 Flowable 历史事件记录表。
+    public synchronized void appendInstanceEvent(ProcessInstanceEventResponse event) {
+        eventsByInstance.computeIfAbsent(event.instanceId(), ignored -> new ArrayList<>()).add(event);
     }
 
     @Override
-    public void reset() {
-        // TODO(Phase 3C): 对接 Flowable 时可按测试隔离要求清理临时快照。
+    public synchronized void reset() {
+        eventsByInstance.clear();
     }
 
     @Override
-    public List<ProcessInstanceEventResponse> queryInstanceEvents(String instanceId) {
-        // TODO(Phase 3C): 从 Flowable 实例历史查询事件。
-        return List.of();
+    public synchronized List<ProcessInstanceEventResponse> queryInstanceEvents(String instanceId) {
+        return eventsByInstance.getOrDefault(instanceId, List.of()).stream()
+                .sorted((left, right) -> left.occurredAt().compareTo(right.occurredAt()))
+                .toList();
     }
 
     @Override
@@ -37,8 +54,70 @@ public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
             ProcessDslPayload payload,
             OffsetDateTime occurredAt
     ) {
-        // TODO(Phase 3C): 从监控与自动化执行记录聚合触发明细。
-        return List.of();
+        if (payload == null) {
+            return List.of();
+        }
+        String status = statusOrPending(automationStatus);
+        String normalizedInstanceId = instanceId == null ? "" : instanceId;
+        OffsetDateTime at = occurredAt == null ? OffsetDateTime.now(TIME_ZONE) : occurredAt;
+        List<ProcessAutomationTraceItemResponse> traces = new ArrayList<>();
+        for (ProcessDslPayload.Node node : payload.nodes()) {
+            Map<String, Object> config = safeConfig(node);
+            if ("approver".equals(node.type())) {
+                Map<String, Object> timeoutPolicy = mapValue(config.get("timeoutPolicy"));
+                if (Boolean.TRUE.equals(timeoutPolicy.get("enabled"))) {
+                    traces.add(new ProcessAutomationTraceItemResponse(
+                            newId("auto_trace"),
+                            "TIMEOUT_APPROVAL",
+                            node.name() + " 超时审批",
+                            status,
+                            "system",
+                            at,
+                            "超时动作：" + stringValue(timeoutPolicy.get("action")),
+                            normalizedInstanceId + "::" + node.id()
+                    ));
+                }
+                Map<String, Object> reminderPolicy = mapValue(config.get("reminderPolicy"));
+                if (Boolean.TRUE.equals(reminderPolicy.get("enabled"))) {
+                    traces.add(new ProcessAutomationTraceItemResponse(
+                            newId("auto_trace"),
+                            "AUTO_REMINDER",
+                            node.name() + " 自动提醒",
+                            status,
+                            "system",
+                            at,
+                            "提醒渠道：" + String.join("、", stringListValue(reminderPolicy.get("channels"))),
+                            normalizedInstanceId + "::" + node.id()
+                    ));
+                }
+                continue;
+            }
+            if ("timer".equals(node.type())) {
+                traces.add(new ProcessAutomationTraceItemResponse(
+                        newId("auto_trace"),
+                        "TIMER_NODE",
+                        node.name(),
+                        status,
+                        "system",
+                        at,
+                        "定时节点等待到点后自动推进",
+                        normalizedInstanceId + "::" + node.id()
+                ));
+            }
+            if ("trigger".equals(node.type())) {
+                traces.add(new ProcessAutomationTraceItemResponse(
+                        newId("auto_trace"),
+                        "TRIGGER_NODE",
+                        node.name(),
+                        status,
+                        "system",
+                        at,
+                        "触发器：" + stringValue(config.get("triggerKey")),
+                        normalizedInstanceId + "::" + node.id()
+                ));
+            }
+        }
+        return traces;
     }
 
     @Override
@@ -49,7 +128,97 @@ public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
             ProcessDslPayload payload,
             OffsetDateTime occurredAt
     ) {
-        // TODO(Phase 3C): 从通知服务/审计表补齐发送轨迹。
-        return List.of();
+        if (payload == null) {
+            return List.of();
+        }
+        String status = "SUCCESS".equals(automationStatus) ? "SUCCESS" : "PENDING";
+        int attemptCount = "SUCCESS".equals(status) ? 1 : 0;
+        OffsetDateTime sentAt = "SUCCESS".equals(status) ? occurredAt : null;
+
+        List<ProcessNotificationSendRecordResponse> records = new ArrayList<>();
+        for (ProcessDslPayload.Node node : payload.nodes()) {
+            if (!"approver".equals(node.type())) {
+                continue;
+            }
+            Map<String, Object> reminderPolicy = mapValue(safeConfig(node).get("reminderPolicy"));
+            if (!Boolean.TRUE.equals(reminderPolicy.get("enabled"))) {
+                continue;
+            }
+            List<String> channels = stringListValue(reminderPolicy.get("channels"));
+            for (String channel : channels) {
+                records.add(new ProcessNotificationSendRecordResponse(
+                        newId("notify"),
+                        resolveNotificationChannelName(channel),
+                        channel,
+                        resolveNotificationTarget(channel, initiatorUserId),
+                        status,
+                        attemptCount,
+                        sentAt,
+                        null
+                ));
+            }
+        }
+        return records;
+    }
+
+    private Map<String, Object> mapValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new HashMap<>();
+            map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
+            return result;
+        }
+        return Map.of();
+    }
+
+    private Map<String, Object> safeConfig(ProcessDslPayload.Node node) {
+        return node.config() == null ? Map.of() : node.config();
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String stringValue = String.valueOf(value);
+        return stringValue.isBlank() ? null : stringValue;
+    }
+
+    private List<String> stringListValue(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        return values.stream().map(String::valueOf).toList();
+    }
+
+    private String statusOrPending(String status) {
+        return status == null ? "PENDING" : status;
+    }
+
+    private String resolveNotificationChannelName(String channel) {
+        return switch (channel) {
+            case "IN_APP" -> "站内通知";
+            case "EMAIL" -> "邮件通知";
+            case "WEBHOOK" -> "Webhook 通知";
+            case "SMS" -> "短信通知";
+            case "WECHAT" -> "企业微信";
+            case "DINGTALK" -> "钉钉";
+            default -> channel;
+        };
+    }
+
+    private String resolveNotificationTarget(String channel, String initiatorUserId) {
+        String userId = initiatorUserId == null ? "system" : initiatorUserId;
+        return switch (channel) {
+            case "IN_APP" -> userId;
+            case "EMAIL" -> userId + "@westflow.local";
+            case "WEBHOOK" -> "https://webhook.westflow.local/process/" + userId;
+            case "SMS" -> "mobile:" + userId;
+            case "WECHAT" -> "wechat:" + userId;
+            case "DINGTALK" -> "dingtalk:" + userId;
+            default -> userId;
+        };
+    }
+
+    private String newId(String prefix) {
+        return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }
 }
