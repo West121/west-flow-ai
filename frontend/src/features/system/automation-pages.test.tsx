@@ -14,6 +14,7 @@ const {
   routeNavigateMock: vi.fn(),
   notificationChannelApiMocks: {
     createNotificationChannel: vi.fn(),
+    getNotificationChannelDiagnostic: vi.fn(),
     getNotificationChannelDetail: vi.fn(),
     getNotificationChannelFormOptions: vi.fn(),
     listNotificationChannels: vi.fn(),
@@ -156,6 +157,25 @@ describe('automation pages', () => {
       createdAt: '2026-03-22T09:00:00+08:00',
       updatedAt: '2026-03-22T09:10:00+08:00',
     })
+    notificationChannelApiMocks.getNotificationChannelDiagnostic.mockResolvedValue({
+      channelId: 'chn_001',
+      channelCode: 'wechat_ops',
+      channelType: 'WECHAT_WORK',
+      channelName: '企业微信通知',
+      enabled: true,
+      mockMode: false,
+      configurationComplete: true,
+      missingConfigFields: [],
+      healthStatus: 'HEALTHY',
+      lastSentAt: '2026-03-23T09:20:00+08:00',
+      lastDispatchSuccess: true,
+      lastDispatchStatus: 'SUCCESS',
+      lastProviderName: 'WechatWorkNotificationProvider',
+      lastResponseMessage: 'ok',
+      lastDispatchAt: '2026-03-23T09:20:00+08:00',
+      lastFailureAt: null,
+      lastFailureMessage: null,
+    })
     notificationChannelApiMocks.getNotificationChannelFormOptions.mockResolvedValue({
       channelTypes: [
         { value: 'EMAIL', label: '邮件' },
@@ -235,6 +255,10 @@ describe('automation pages', () => {
     renderWithQuery(<NotificationChannelDetailPage channelId='chn_001' />)
     expect(await screen.findByText('通知渠道详情')).toBeInTheDocument()
     expect(screen.getByText('企业微信通知')).toBeInTheDocument()
+    expect(await screen.findByText('渠道诊断')).toBeInTheDocument()
+    expect(screen.getByText('HEALTHY')).toBeInTheDocument()
+    expect(screen.getByText('WechatWorkNotificationProvider')).toBeInTheDocument()
+    expect(screen.getByText('ok')).toBeInTheDocument()
 
     renderWithQuery(<NotificationChannelCreatePage />)
     fireEvent.change(await screen.findByLabelText('渠道名称'), {

@@ -77,6 +77,27 @@ describe('notification channels api', () => {
       )
       .mockResolvedValueOnce(
         okResponse({
+          channelId: 'chn_001',
+          channelCode: 'wechat_ops',
+          channelType: 'WECHAT_WORK',
+          channelName: '企业微信通知',
+          enabled: true,
+          mockMode: false,
+          configurationComplete: true,
+          missingConfigFields: [],
+          healthStatus: 'HEALTHY',
+          lastSentAt: '2026-03-23T09:20:00+08:00',
+          lastDispatchSuccess: true,
+          lastDispatchStatus: 'SUCCESS',
+          lastProviderName: 'WechatWorkNotificationProvider',
+          lastResponseMessage: 'ok',
+          lastDispatchAt: '2026-03-23T09:20:00+08:00',
+          lastFailureAt: null,
+          lastFailureMessage: null,
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
           channelTypes: [
             { value: 'EMAIL', label: '邮件' },
             { value: 'WEBHOOK', label: 'Webhook' },
@@ -88,6 +109,7 @@ describe('notification channels api', () => {
 
     const {
       createNotificationChannel,
+      getNotificationChannelDiagnostic,
       getNotificationChannelDetail,
       getNotificationChannelFormOptions,
       listNotificationChannels,
@@ -111,6 +133,13 @@ describe('notification channels api', () => {
     await expect(getNotificationChannelDetail('chn_001')).resolves.toMatchObject({
       channelName: '企业微信通知',
       channelType: 'WECHAT_WORK',
+    })
+
+    await expect(getNotificationChannelDiagnostic('chn_001')).resolves.toMatchObject({
+      channelCode: 'wechat_ops',
+      healthStatus: 'HEALTHY',
+      lastDispatchStatus: 'SUCCESS',
+      lastProviderName: 'WechatWorkNotificationProvider',
     })
 
     await expect(getNotificationChannelFormOptions()).resolves.toMatchObject({
@@ -138,5 +167,9 @@ describe('notification channels api', () => {
         enabled: false,
       })
     ).resolves.toEqual({ channelId: 'chn_new' })
+
+    expect(getMock).toHaveBeenNthCalledWith(1, '/system/notification-channels/chn_001')
+    expect(getMock).toHaveBeenNthCalledWith(2, '/notification/channels/chn_001/diagnostic')
+    expect(getMock).toHaveBeenNthCalledWith(3, '/system/notification-channels/options')
   })
 })

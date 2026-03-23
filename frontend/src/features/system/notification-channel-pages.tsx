@@ -42,8 +42,10 @@ import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { getApiErrorResponse } from '@/lib/api/client'
 import {
   createNotificationChannel,
+  getNotificationChannelDiagnostic,
   getNotificationChannelDetail,
   getNotificationChannelFormOptions,
+  type NotificationChannelDiagnostic,
   listNotificationChannels,
   type NotificationChannelDetail,
   type NotificationChannelRecord,
@@ -600,6 +602,130 @@ function ChannelDetailMetric({
   )
 }
 
+function resolveHealthLabel(status: string | null | undefined) {
+  if (!status) {
+    return '未诊断'
+  }
+
+  return status
+}
+
+function resolveHealthVariant(status: string | null | undefined) {
+  switch (status) {
+    case 'HEALTHY':
+    case 'SUCCESS':
+      return 'secondary' as const
+    case 'DEGRADED':
+    case 'WARNING':
+      return 'outline' as const
+    case 'UNHEALTHY':
+    case 'FAILED':
+      return 'destructive' as const
+    default:
+      return 'outline' as const
+  }
+}
+
+function resolveBooleanLabel(
+  value: boolean | null | undefined,
+  positive = '是',
+  negative = '否'
+) {
+  if (value == null) {
+    return '--'
+  }
+
+  return value ? positive : negative
+}
+
+function NotificationChannelDiagnosticCard({
+  diagnostic,
+}: {
+  diagnostic: NotificationChannelDiagnostic
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>渠道诊断</CardTitle>
+        <CardDescription>
+          查看当前渠道配置完整性、最近发送状态和 provider 回执。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='grid gap-4'>
+        <div className='flex flex-wrap items-center gap-2'>
+          <Badge variant={resolveHealthVariant(diagnostic.healthStatus)}>
+            {resolveHealthLabel(diagnostic.healthStatus)}
+          </Badge>
+          <Badge
+            variant={diagnostic.configurationComplete ? 'secondary' : 'outline'}
+          >
+            {diagnostic.configurationComplete ? '配置完整' : '配置缺失'}
+          </Badge>
+          <Badge variant={diagnostic.mockMode ? 'outline' : 'secondary'}>
+            {diagnostic.mockMode ? 'Mock 模式' : '真实 Provider'}
+          </Badge>
+        </div>
+        <div className='grid gap-3 text-sm'>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>渠道编码</span>
+            <span>{diagnostic.channelCode || '--'}</span>
+          </div>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>最近发送结果</span>
+            <span>{diagnostic.lastDispatchStatus || '--'}</span>
+          </div>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>最近发送成功</span>
+            <span>
+              {resolveBooleanLabel(diagnostic.lastDispatchSuccess, '成功', '失败')}
+            </span>
+          </div>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>Provider</span>
+            <span>{diagnostic.lastProviderName || '--'}</span>
+          </div>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>最近发送时间</span>
+            <span>{formatDateTime(diagnostic.lastDispatchAt)}</span>
+          </div>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>最近成功时间</span>
+            <span>{formatDateTime(diagnostic.lastSentAt)}</span>
+          </div>
+          <div className='flex items-center justify-between gap-3'>
+            <span className='text-muted-foreground'>最近失败时间</span>
+            <span>{formatDateTime(diagnostic.lastFailureAt)}</span>
+          </div>
+        </div>
+        <div className='rounded-lg border bg-muted/20 p-4 text-sm leading-6'>
+          <p className='text-xs text-muted-foreground'>最近回执</p>
+          <p className='mt-2 break-words'>
+            {diagnostic.lastResponseMessage || '--'}
+          </p>
+        </div>
+        <div className='rounded-lg border bg-muted/20 p-4 text-sm leading-6'>
+          <p className='text-xs text-muted-foreground'>最近失败原因</p>
+          <p className='mt-2 break-words'>
+            {diagnostic.lastFailureMessage || '--'}
+          </p>
+        </div>
+        <div className='rounded-lg border bg-muted/20 p-4 text-sm leading-6'>
+          <p className='text-xs text-muted-foreground'>缺失配置</p>
+          {diagnostic.missingConfigFields.length > 0 ? (
+            <ul className='mt-2 list-disc pl-5'>
+              {diagnostic.missingConfigFields.map((field) => (
+                <li key={field}>{field}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className='mt-2'>无</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function NotificationChannelsListPage() {
   const search = notificationChannelsRoute.useSearch()
   const navigate = notificationChannelsRoute.useNavigate()
@@ -669,6 +795,10 @@ export function NotificationChannelDetailPage({ channelId }: { channelId: string
     queryKey: ['system', 'notification-channel-detail', channelId],
     queryFn: () => getNotificationChannelDetail(channelId),
   })
+  const diagnosticQuery = useQuery({
+    queryKey: ['system', 'notification-channel-diagnostic', channelId],
+    queryFn: () => getNotificationChannelDiagnostic(channelId),
+  })
 
   if (detailQuery.isLoading) {
     return (
@@ -716,18 +846,45 @@ export function NotificationChannelDetailPage({ channelId }: { channelId: string
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
-        <Card>
-          <CardHeader>
-            <CardTitle>基础信息</CardTitle>
-            <CardDescription>通知渠道用于承接系统自动化动作发送的消息。</CardDescription>
-          </CardHeader>
-          <CardContent className='grid gap-4 md:grid-cols-2'>
-            <ChannelDetailMetric icon={Zap} label='渠道名称' value={detail.channelName} />
-            <ChannelDetailMetric icon={Zap} label='渠道类型' value={detail.channelType} />
-            <ChannelDetailMetric icon={Zap} label='通知地址' value={detail.endpoint} />
-            <ChannelDetailMetric icon={Zap} label='状态' value={resolveStatusLabel(detail.status)} />
-          </CardContent>
-        </Card>
+        <div className='grid gap-4'>
+          <Card>
+            <CardHeader>
+              <CardTitle>基础信息</CardTitle>
+              <CardDescription>
+                通知渠道用于承接系统自动化动作发送的消息。
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='grid gap-4 md:grid-cols-2'>
+              <ChannelDetailMetric icon={Zap} label='渠道名称' value={detail.channelName} />
+              <ChannelDetailMetric icon={Zap} label='渠道类型' value={detail.channelType} />
+              <ChannelDetailMetric icon={Zap} label='通知地址' value={detail.endpoint} />
+              <ChannelDetailMetric icon={Zap} label='状态' value={resolveStatusLabel(detail.status)} />
+            </CardContent>
+          </Card>
+          {diagnosticQuery.isLoading ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>渠道诊断</CardTitle>
+                <CardDescription>正在加载最近一次诊断和发送状态。</CardDescription>
+              </CardHeader>
+              <CardContent className='grid gap-3'>
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className='h-14 w-full' />
+                ))}
+              </CardContent>
+            </Card>
+          ) : diagnosticQuery.isError || !diagnosticQuery.data ? (
+            <Alert variant='destructive'>
+              <AlertCircle />
+              <AlertTitle>诊断结果加载失败</AlertTitle>
+              <AlertDescription>
+                无法读取该通知渠道的诊断信息，请稍后重试。
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <NotificationChannelDiagnosticCard diagnostic={diagnosticQuery.data} />
+          )}
+        </div>
 
         <Card>
           <CardHeader>

@@ -36,6 +36,26 @@ export type NotificationChannelDetail = NotificationChannelRecord & {
   updatedAt: string
 }
 
+export type NotificationChannelDiagnostic = {
+  channelId: string
+  channelCode: string | null
+  channelType: NotificationChannelType | string
+  channelName: string
+  enabled: boolean
+  mockMode: boolean
+  configurationComplete: boolean
+  missingConfigFields: string[]
+  healthStatus: string | null
+  lastSentAt: string | null
+  lastDispatchSuccess: boolean | null
+  lastDispatchStatus: string | null
+  lastProviderName: string | null
+  lastResponseMessage: string | null
+  lastDispatchAt: string | null
+  lastFailureAt: string | null
+  lastFailureMessage: string | null
+}
+
 export type NotificationChannelFormOptions = {
   channelTypes: Array<{
     value: NotificationChannelType | string
@@ -68,6 +88,16 @@ export async function getNotificationChannelDetail(
   const response = await apiClient.get<ApiSuccessResponse<NotificationChannelDetail>>(
     `/system/notification-channels/${channelId}`
   )
+
+  return unwrapResponse(response)
+}
+
+export async function getNotificationChannelDiagnostic(
+  channelId: string
+): Promise<NotificationChannelDiagnostic> {
+  const response = await apiClient.get<
+    ApiSuccessResponse<NotificationChannelDiagnostic>
+  >(`/notification/channels/${channelId}/diagnostic`)
 
   return unwrapResponse(response)
 }

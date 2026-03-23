@@ -95,7 +95,7 @@ vi.mock('@/features/shared/page-shell', () => ({
     <div>
       <h1>{title}</h1>
       <p>{description}</p>
-      {actions}
+      {actions ? <div>{Children.toArray(actions)}</div> : null}
       {children}
     </div>
   ),
@@ -114,7 +114,8 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
     extraActions?: React.ReactNode
     total?: number
     data: Array<{
-      instanceId: string
+      instanceId?: string | null
+      billId?: string | null
       businessTitle?: string | null
       billNo?: string | null
     }>
@@ -125,7 +126,9 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
       <span>total:{total ?? data.length}</span>
       {data.map((item) => (
-        <div key={item.instanceId}>{item.businessTitle ?? item.billNo}</div>
+        <div key={item.instanceId ?? item.billId ?? item.billNo}>
+          {item.businessTitle ?? item.billNo}
+        </div>
       ))}
     </div>
   ),
