@@ -302,6 +302,7 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedEdgeIds").toString()).contains("edge_2");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("金额超限");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("10");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedDecisionReasons").toString()).contains("DEFAULT_POLICY_PRIORITY");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isFalse();
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("decisionSummary").asText()).contains("已激活 1/2 条分支", "命中候选 1 条", "策略 DEFAULT_BRANCH");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("activatedTargetNodeNames").get(0).asText()).isEqualTo("财务审批");
@@ -343,6 +344,7 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedEdgeIds").toString()).contains("edge_3");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("长假");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("10");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedDecisionReasons").toString()).contains("REQUIRED_COUNT_PRIORITY");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isFalse();
     }
 
@@ -379,6 +381,7 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedEdgeIds").toString()).contains("edge_4");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("默认分支");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("30");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedDecisionReasons").toString()).contains("DEFAULT_BRANCH_FALLBACK");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isTrue();
     }
 

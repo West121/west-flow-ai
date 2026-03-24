@@ -120,10 +120,11 @@ public class FlowableProcessRuntimeService {
             List<String> selectedEdgeIds,
             List<String> selectedBranchLabels,
             List<Integer> selectedBranchPriorities,
+            List<String> selectedDecisionReasons,
             boolean defaultBranchSelected
     ) {
         private static InclusiveSelectionSummary empty() {
-            return new InclusiveSelectionSummary(null, List.of(), List.of(), List.of(), false);
+            return new InclusiveSelectionSummary(null, List.of(), List.of(), List.of(), List.of(), false);
         }
     }
 
@@ -2124,6 +2125,7 @@ public class FlowableProcessRuntimeService {
             List<String> selectedEdgeIds = new ArrayList<>();
             List<String> selectedBranchLabels = new ArrayList<>();
             List<Integer> selectedBranchPriorities = new ArrayList<>();
+            List<String> selectedDecisionReasons = new ArrayList<>();
             boolean defaultBranchSelected = false;
             OffsetDateTime firstActivatedAt = null;
             int branchIndex = 1;
@@ -2156,6 +2158,12 @@ public class FlowableProcessRuntimeService {
                     selectedEdgeIds.add(edge.id());
                     selectedBranchLabels.add(edge.label() == null || edge.label().isBlank() ? targetNodeId : edge.label());
                     selectedBranchPriorities.add(edge.priority() == null ? branchIndex : edge.priority());
+                    if (!selectionSummary.selectedDecisionReasons().isEmpty()) {
+                        int selectedIndex = selectionSummary.selectedEdgeIds().indexOf(edge.id());
+                        if (selectedIndex >= 0 && selectedIndex < selectionSummary.selectedDecisionReasons().size()) {
+                            selectedDecisionReasons.add(selectionSummary.selectedDecisionReasons().get(selectedIndex));
+                        }
+                    }
                     if (defaultBranchId != null && defaultBranchId.equals(edge.id())) {
                         defaultBranchSelected = true;
                     }
@@ -2216,6 +2224,9 @@ public class FlowableProcessRuntimeService {
                     selectionSummary.selectedBranchPriorities().isEmpty()
                             ? List.copyOf(selectedBranchPriorities)
                             : selectionSummary.selectedBranchPriorities(),
+                    selectionSummary.selectedDecisionReasons().isEmpty()
+                            ? List.copyOf(selectedDecisionReasons)
+                            : selectionSummary.selectedDecisionReasons(),
                     selectionSummary.selectedEdgeIds().isEmpty()
                             ? defaultBranchSelected
                             : selectionSummary.defaultBranchSelected(),
@@ -2268,6 +2279,7 @@ public class FlowableProcessRuntimeService {
                 selectedEdgeIds,
                 stringListValue(summary.get("selectedLabels")),
                 integerListValue(summary.get("selectedPriorities")),
+                stringListValue(summary.get("selectedDecisionReasons")),
                 resolvedDefaultBranchId != null && selectedEdgeIds.contains(resolvedDefaultBranchId)
         );
     }
@@ -2354,6 +2366,7 @@ public class FlowableProcessRuntimeService {
         details.put("selectedEdgeIds", hit.selectedEdgeIds());
         details.put("selectedBranchLabels", hit.selectedBranchLabels());
         details.put("selectedBranchPriorities", hit.selectedBranchPriorities());
+        details.put("selectedDecisionReasons", hit.selectedDecisionReasons());
         details.put("defaultBranchSelected", hit.defaultBranchSelected());
         details.put("activatedTargetNodeIds", hit.activatedTargetNodeIds());
         details.put("activatedTargetNodeNames", hit.activatedTargetNodeNames());

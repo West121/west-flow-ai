@@ -16,6 +16,7 @@ type InclusiveGatewayHit = {
   selectedEdgeIds?: string[]
   selectedBranchLabels?: string[]
   selectedBranchPriorities?: number[]
+  selectedDecisionReasons?: string[]
   defaultBranchSelected?: boolean
   decisionSummary?: string | null
   gatewayStatus: string
@@ -115,6 +116,12 @@ export function InclusiveGatewaySection({
                 最终命中优先级：{joinOrDash(hit.selectedBranchPriorities?.map(String))}
               </div>
             </div>
+
+            {hit.selectedDecisionReasons?.length ? (
+              <div className='grid gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground md:grid-cols-1'>
+                <div>命中原因：{joinOrDash(hit.selectedDecisionReasons)}</div>
+              </div>
+            ) : null}
 
             {hit.decisionSummary ? (
               <div className='rounded-md border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground'>

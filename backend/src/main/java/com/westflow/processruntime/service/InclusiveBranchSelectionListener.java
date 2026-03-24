@@ -75,7 +75,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
         String defaultBranchId = attributeValue(gateway, "defaultBranchId");
         Integer requiredBranchCount = integerValue(attributeValue(gateway, "requiredBranchCount"));
 
-        List<BranchCandidate> selectedCandidates = selectCandidates(
+        List<SelectedBranchDecision> selectedDecisions = selectCandidates(
                 eligibleCandidates,
                 outgoingFlows,
                 mergePolicy,
@@ -83,7 +83,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
                 requiredBranchCount
         );
 
-        if (selectedCandidates.isEmpty()) {
+        if (selectedDecisions.isEmpty()) {
             Map<String, Object> details = new LinkedHashMap<>();
             details.put("splitNodeId", gateway.getId());
             details.put("branchMergePolicy", mergePolicy);
@@ -97,6 +97,9 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
             );
         }
 
+        List<BranchCandidate> selectedCandidates = selectedDecisions.stream()
+                .map(SelectedBranchDecision::candidate)
+                .toList();
         Set<String> selectedEdgeIds = new LinkedHashSet<>();
         for (BranchCandidate candidate : selectedCandidates) {
             selectedEdgeIds.add(candidate.edgeId());
@@ -112,6 +115,9 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
         List<Integer> selectedPriorities = selectedCandidates.stream()
                 .map(BranchCandidate::priority)
                 .toList();
+        List<String> selectedReasons = selectedDecisions.stream()
+                .map(SelectedBranchDecision::reason)
+                .toList();
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("splitNodeId", gateway.getId());
         summary.put("branchMergePolicy", mergePolicy);
@@ -123,11 +129,12 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
         summary.put("selectedEdgeIds", List.copyOf(selectedEdgeIds));
         summary.put("selectedLabels", selectedLabels);
         summary.put("selectedPriorities", selectedPriorities);
+        summary.put("selectedDecisionReasons", selectedReasons);
         execution.setVariable(selectionListName(gateway.getId()), List.copyOf(selectedEdgeIds));
         execution.setVariable(selectionSummaryName(gateway.getId()), summary);
     }
 
-    private List<BranchCandidate> selectCandidates(
+    private List<SelectedBranchDecision> selectCandidates(
             List<BranchCandidate> eligibleCandidates,
             List<SequenceFlow> outgoingFlows,
             String mergePolicy,
@@ -138,8 +145,9 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
             int count = requiredBranchCount == null || requiredBranchCount <= 0
                     ? eligibleCandidates.size()
                     : requiredBranchCount;
-            List<BranchCandidate> selected = new ArrayList<>(eligibleCandidates.stream()
+            List<SelectedBranchDecision> selected = new ArrayList<>(eligibleCandidates.stream()
                     .limit(count)
+                    .map(candidate -> new SelectedBranchDecision(candidate, "REQUIRED_COUNT_PRIORITY"))
                     .toList());
             if (selected.isEmpty()) {
                 addDefaultBranchIfPresent(selected, outgoingFlows, defaultBranchId);
@@ -148,13 +156,15 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
         }
         if ("DEFAULT_BRANCH".equals(mergePolicy)) {
             if (!eligibleCandidates.isEmpty()) {
-                return List.of(eligibleCandidates.get(0));
+                return List.of(new SelectedBranchDecision(eligibleCandidates.get(0), "DEFAULT_POLICY_PRIORITY"));
             }
-            List<BranchCandidate> selected = new ArrayList<>();
+            List<SelectedBranchDecision> selected = new ArrayList<>();
             addDefaultBranchIfPresent(selected, outgoingFlows, defaultBranchId);
             return selected;
         }
-        List<BranchCandidate> selected = new ArrayList<>(eligibleCandidates);
+        List<SelectedBranchDecision> selected = new ArrayList<>(eligibleCandidates.stream()
+                .map(candidate -> new SelectedBranchDecision(candidate, "ELIGIBLE_MATCH"))
+                .toList());
         if (selected.isEmpty()) {
             addDefaultBranchIfPresent(selected, outgoingFlows, defaultBranchId);
         }
@@ -162,7 +172,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
     }
 
     private void addDefaultBranchIfPresent(
-            List<BranchCandidate> selected,
+            List<SelectedBranchDecision> selected,
             List<SequenceFlow> outgoingFlows,
             String defaultBranchId
     ) {
@@ -179,6 +189,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
                         true,
                         attributeValue(flow, "branchConditionExpression")
                 ))
+                .map(candidate -> new SelectedBranchDecision(candidate, "DEFAULT_BRANCH_FALLBACK"))
                 .ifPresent(selected::add);
     }
 
@@ -336,6 +347,12 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
             Integer priority,
             boolean eligible,
             String conditionExpression
+    ) {
+    }
+
+    private record SelectedBranchDecision(
+            BranchCandidate candidate,
+            String reason
     ) {
     }
 

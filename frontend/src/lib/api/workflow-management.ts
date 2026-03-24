@@ -99,6 +99,7 @@ export type WorkflowInclusiveGatewayHit = {
   selectedEdgeIds: string[]
   selectedBranchLabels: string[]
   selectedBranchPriorities: number[]
+  selectedDecisionReasons: string[]
   defaultBranchSelected: boolean
   decisionSummary: string
   firstActivatedAt: string | null

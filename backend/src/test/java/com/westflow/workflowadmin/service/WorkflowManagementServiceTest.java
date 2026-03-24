@@ -161,6 +161,7 @@ class WorkflowManagementServiceTest {
                     List.of("edge_2"),
                     List.of("金额超限"),
                     List.of(10),
+                    List.of("DEFAULT_POLICY_PRIORITY"),
                     true,
                     "已激活 1/2 条分支",
                     OffsetDateTime.now(),

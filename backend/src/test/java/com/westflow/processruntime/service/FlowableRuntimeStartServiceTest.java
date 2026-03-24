@@ -499,6 +499,7 @@ class FlowableRuntimeStartServiceTest {
                     assertThat(hit.selectedEdgeIds()).containsExactly("edge_3");
                     assertThat(hit.selectedBranchLabels()).containsExactly("长假");
                     assertThat(hit.selectedBranchPriorities()).containsExactly(10);
+                    assertThat(hit.selectedDecisionReasons()).containsExactly("REQUIRED_COUNT_PRIORITY");
                     assertThat(hit.defaultBranchSelected()).isFalse();
                     assertThat(hit.decisionSummary()).contains("命中候选 2 条", "策略 REQUIRED_COUNT");
                 });
@@ -537,6 +538,7 @@ class FlowableRuntimeStartServiceTest {
                     assertThat(hit.selectedEdgeIds()).containsExactly("edge_4");
                     assertThat(hit.selectedBranchLabels()).containsExactly("默认分支");
                     assertThat(hit.selectedBranchPriorities()).containsExactly(30);
+                    assertThat(hit.selectedDecisionReasons()).containsExactly("DEFAULT_BRANCH_FALLBACK");
                     assertThat(hit.defaultBranchSelected()).isTrue();
                     assertThat(hit.decisionSummary()).contains("命中候选 0 条", "已走默认分支");
                 });
