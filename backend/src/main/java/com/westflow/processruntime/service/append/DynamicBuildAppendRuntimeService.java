@@ -324,6 +324,7 @@ public class DynamicBuildAppendRuntimeService {
                 stringValue(config.get("manualTemplateCode")),
                 stringValue(config.get("sceneCode")),
                 stringValue(config.get("businessType")),
+                mapValue(config.get("targets")),
                 processVariables
         );
         DynamicBuildSelectionResult preferred = switch (executionStrategy) {
@@ -546,6 +547,7 @@ public class DynamicBuildAppendRuntimeService {
             String manualTemplateCode,
             String sceneCode,
             String configuredBusinessType,
+            Map<String, Object> targets,
             Map<String, Object> processVariables
     ) {
         if (manualTemplateCode != null && !manualTemplateCode.isBlank()) {
@@ -573,7 +575,15 @@ public class DynamicBuildAppendRuntimeService {
                     "businessType", businessType == null ? "" : businessType
             ));
         } else {
-            items = List.of(Map.of("userId", sceneCode, "sceneCode", sceneCode));
+            List<String> resolvedUserIds = countersignAssigneeResolver.resolve(targets, processVariables);
+            if (resolvedUserIds.isEmpty()) {
+                return DynamicBuildTemplateSelection.empty();
+            }
+            List<Map<String, Object>> resolvedItems = new ArrayList<>();
+            for (String userId : resolvedUserIds) {
+                resolvedItems.add(Map.of("userId", userId, "sceneCode", sceneCode));
+            }
+            items = List.copyOf(resolvedItems);
         }
         return new DynamicBuildTemplateSelection(
                 "MODEL_DRIVEN",
