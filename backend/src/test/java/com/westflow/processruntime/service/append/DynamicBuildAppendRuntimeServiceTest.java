@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -102,6 +103,26 @@ class DynamicBuildAppendRuntimeServiceTest {
             dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
         }
 
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> localVariablesCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(flowableTaskActionService).createAdhocTask(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                any(),
+                localVariablesCaptor.capture()
+        );
+        assertThat(localVariablesCaptor.getValue())
+                .containsEntry("westflowDynamicResolvedSourceMode", "MANUAL_TEMPLATE")
+                .containsEntry("westflowDynamicResolutionPath", "TEMPLATE_PRIMARY")
+                .containsEntry("westflowDynamicTemplateSource", "MANUAL_TEMPLATE")
+                .containsEntry("westflowDynamicExecutionStrategy", "TEMPLATE_FIRST")
+                .containsEntry("westflowDynamicFallbackStrategy", "KEEP_CURRENT");
+
         ArgumentCaptor<RuntimeAppendLinkRecord> recordCaptor = ArgumentCaptor.forClass(RuntimeAppendLinkRecord.class);
         verify(runtimeAppendLinkService).createLink(recordCaptor.capture());
         RuntimeAppendLinkRecord record = recordCaptor.getValue();
@@ -137,6 +158,14 @@ class DynamicBuildAppendRuntimeServiceTest {
             mockedStpUtil.when(StpUtil::isLogin).thenReturn(false);
             dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
         }
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> childVariablesCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(runtimeService).startProcessInstanceByKey(anyString(), anyString(), childVariablesCaptor.capture());
+        assertThat(childVariablesCaptor.getValue())
+                .containsEntry("westflowDynamicResolvedSourceMode", "MANUAL_TEMPLATE")
+                .containsEntry("westflowDynamicResolutionPath", "TEMPLATE_PRIMARY")
+                .containsEntry("westflowDynamicTemplateSource", "MANUAL_TEMPLATE");
 
         ArgumentCaptor<RuntimeAppendLinkRecord> recordCaptor = ArgumentCaptor.forClass(RuntimeAppendLinkRecord.class);
         verify(runtimeAppendLinkService).createLink(recordCaptor.capture());
@@ -174,6 +203,14 @@ class DynamicBuildAppendRuntimeServiceTest {
             mockedStpUtil.when(StpUtil::isLogin).thenReturn(false);
             dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
         }
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> childVariablesCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(runtimeService).startProcessInstanceByKey(anyString(), anyString(), childVariablesCaptor.capture());
+        assertThat(childVariablesCaptor.getValue())
+                .containsEntry("westflowDynamicResolvedSourceMode", "MODEL_DRIVEN")
+                .containsEntry("westflowDynamicResolutionPath", "TEMPLATE_PRIMARY")
+                .containsEntry("westflowDynamicTemplateSource", "SCENE_CODE");
 
         ArgumentCaptor<RuntimeAppendLinkRecord> recordCaptor = ArgumentCaptor.forClass(RuntimeAppendLinkRecord.class);
         verify(runtimeAppendLinkService).createLink(recordCaptor.capture());
@@ -219,10 +256,101 @@ class DynamicBuildAppendRuntimeServiceTest {
             dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
         }
 
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> localVariablesCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(flowableTaskActionService).createAdhocTask(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                any(),
+                localVariablesCaptor.capture()
+        );
+        assertThat(localVariablesCaptor.getValue())
+                .containsEntry("westflowDynamicResolvedSourceMode", "MANUAL_TEMPLATE")
+                .containsEntry("westflowDynamicResolutionPath", "FALLBACK_TEMPLATE")
+                .containsEntry("westflowDynamicTemplateSource", "MANUAL_TEMPLATE")
+                .containsEntry("westflowDynamicExecutionStrategy", "RULE_ONLY")
+                .containsEntry("westflowDynamicFallbackStrategy", "USE_TEMPLATE");
+
         ArgumentCaptor<RuntimeAppendLinkRecord> recordCaptor = ArgumentCaptor.forClass(RuntimeAppendLinkRecord.class);
         verify(runtimeAppendLinkService).createLink(recordCaptor.capture());
         RuntimeAppendLinkRecord record = recordCaptor.getValue();
         assertThat(record.targetUserId()).isEqualTo("usr_002");
+    }
+
+    @Test
+    void shouldSkipGenerationWhenRuleOnlyStrategyHasNoRuleResult() {
+        when(flowableEngineFacade.runtimeService()).thenReturn(runtimeService);
+        when(runtimeService.getVariables("instance_1")).thenReturn(Map.of(
+                "westflowProcessDefinitionId", "pd_001",
+                "westflowProcessKey", "oa_dynamic_append_tasks",
+                "westflowBusinessKey", "biz_001",
+                "westflowInitiatorUserId", "usr_001",
+                "leaveDays", 1
+        ));
+        when(processDefinitionService.getById("pd_001")).thenReturn(buildRuleOnlyParentDefinition());
+
+        try (MockedStatic<StpUtil> mockedStpUtil = org.mockito.Mockito.mockStatic(StpUtil.class)) {
+            mockedStpUtil.when(StpUtil::isLogin).thenReturn(false);
+            dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
+        }
+
+        verify(flowableTaskActionService, never()).createAdhocTask(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                any(),
+                anyMap()
+        );
+        verify(runtimeAppendLinkService, never()).createLink(any());
+    }
+
+    @Test
+    void shouldPreferTemplateWhenExecutionStrategyIsTemplateOnly() {
+        when(flowableEngineFacade.runtimeService()).thenReturn(runtimeService);
+        when(runtimeService.createProcessInstanceQuery()).thenReturn(processInstanceQuery);
+        when(processInstanceQuery.processInstanceId("instance_1")).thenReturn(processInstanceQuery);
+        when(processInstanceQuery.singleResult()).thenReturn(processInstance);
+        when(processInstance.getProcessDefinitionId()).thenReturn("pd_001");
+        when(runtimeService.getVariables("instance_1")).thenReturn(Map.of(
+                "westflowProcessDefinitionId", "pd_001",
+                "westflowProcessKey", "oa_dynamic_append_tasks",
+                "westflowBusinessKey", "biz_001",
+                "westflowInitiatorUserId", "usr_001",
+                "dynamicApproverUserIds", List.of("usr_003")
+        ));
+        when(processLinkService.getByChildInstanceId("instance_1")).thenReturn(null);
+        when(runtimeAppendLinkService.getByTargetInstanceId("instance_1")).thenReturn(null);
+        when(processDefinitionService.getById("pd_001")).thenReturn(buildTemplateOnlyParentDefinition());
+        when(flowableTaskActionService.createAdhocTask(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                any(),
+                anyMap()
+        )).thenReturn(createdTask);
+        when(createdTask.getId()).thenReturn("task_001");
+
+        try (MockedStatic<StpUtil> mockedStpUtil = org.mockito.Mockito.mockStatic(StpUtil.class)) {
+            mockedStpUtil.when(StpUtil::isLogin).thenReturn(false);
+            dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
+        }
+
+        ArgumentCaptor<RuntimeAppendLinkRecord> recordCaptor = ArgumentCaptor.forClass(RuntimeAppendLinkRecord.class);
+        verify(runtimeAppendLinkService).createLink(recordCaptor.capture());
+        assertThat(recordCaptor.getValue().targetUserId()).isEqualTo("usr_002");
     }
 
     private PublishedProcessDefinition buildDynamicBuilderParentDefinition() {
@@ -376,9 +504,95 @@ class DynamicBuildAppendRuntimeServiceTest {
                                         Map.of(
                                                 "buildMode", "APPROVER_TASKS",
                                                 "sourceMode", "RULE",
-                                                "executionStrategy", "RULE_FIRST",
+                                                "executionStrategy", "RULE_ONLY",
                                                 "fallbackStrategy", "USE_TEMPLATE",
                                                 "ruleExpression", "leaveDays > 3",
+                                                "manualTemplateCode", "append_manager_review",
+                                                "appendPolicy", "SERIAL_AFTER_CURRENT",
+                                                "maxGeneratedCount", 1
+                                        ),
+                                        Map.of()
+                                )
+                        ),
+                        List.of(new ProcessDslPayload.Edge("e1", "dynamic_builder_1", "next_1", 1, "next", Map.of()))
+                ),
+                "<xml/>"
+        );
+    }
+
+    private PublishedProcessDefinition buildRuleOnlyParentDefinition() {
+        return new PublishedProcessDefinition(
+                "pd_001",
+                "oa_dynamic_append_tasks",
+                "动态附属任务流程",
+                "OA",
+                1,
+                "PUBLISHED",
+                OffsetDateTime.parse("2026-03-23T00:00:00+08:00"),
+                new ProcessDslPayload(
+                        "1.0.0",
+                        "oa_dynamic_append_tasks",
+                        "动态附属任务流程",
+                        "OA",
+                        null,
+                        null,
+                        List.of(),
+                        Map.of(),
+                        List.of(
+                                new ProcessDslPayload.Node(
+                                        "dynamic_builder_1",
+                                        "dynamic-builder",
+                                        "动态构建",
+                                        null,
+                                        Map.of(),
+                                        Map.of(
+                                                "buildMode", "APPROVER_TASKS",
+                                                "sourceMode", "RULE",
+                                                "executionStrategy", "RULE_ONLY",
+                                                "ruleExpression", "leaveDays > 3",
+                                                "manualTemplateCode", "append_manager_review",
+                                                "appendPolicy", "SERIAL_AFTER_CURRENT",
+                                                "maxGeneratedCount", 1
+                                        ),
+                                        Map.of()
+                                )
+                        ),
+                        List.of(new ProcessDslPayload.Edge("e1", "dynamic_builder_1", "next_1", 1, "next", Map.of()))
+                ),
+                "<xml/>"
+        );
+    }
+
+    private PublishedProcessDefinition buildTemplateOnlyParentDefinition() {
+        return new PublishedProcessDefinition(
+                "pd_001",
+                "oa_dynamic_append_tasks",
+                "动态附属任务流程",
+                "OA",
+                1,
+                "PUBLISHED",
+                OffsetDateTime.parse("2026-03-23T00:00:00+08:00"),
+                new ProcessDslPayload(
+                        "1.0.0",
+                        "oa_dynamic_append_tasks",
+                        "动态附属任务流程",
+                        "OA",
+                        null,
+                        null,
+                        List.of(),
+                        Map.of(),
+                        List.of(
+                                new ProcessDslPayload.Node(
+                                        "dynamic_builder_1",
+                                        "dynamic-builder",
+                                        "动态构建",
+                                        null,
+                                        Map.of(),
+                                        Map.of(
+                                                "buildMode", "APPROVER_TASKS",
+                                                "sourceMode", "RULE",
+                                                "executionStrategy", "TEMPLATE_ONLY",
+                                                "ruleExpression", "dynamicApproverUserIds",
                                                 "manualTemplateCode", "append_manager_review",
                                                 "appendPolicy", "SERIAL_AFTER_CURRENT",
                                                 "maxGeneratedCount", 1

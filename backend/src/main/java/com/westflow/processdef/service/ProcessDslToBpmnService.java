@@ -17,6 +17,7 @@ import org.flowable.bpmn.model.ExclusiveGateway;
 import org.flowable.bpmn.model.InclusiveGateway;
 import org.flowable.bpmn.model.ExtensionAttribute;
 import org.flowable.bpmn.model.FlowElement;
+import org.flowable.bpmn.model.FlowableListener;
 import org.flowable.bpmn.model.IOParameter;
 import org.flowable.bpmn.model.ImplementationType;
 import org.flowable.bpmn.model.IntermediateCatchEvent;
@@ -227,7 +228,18 @@ public class ProcessDslToBpmnService {
         gateway.setId(node.id());
         gateway.setName(node.name());
         addExtensionAttribute(gateway, "gatewayType", gatewayType);
+        if ("split".equals(gatewayType)) {
+            gateway.setExecutionListeners(buildInclusiveBranchSelectionListeners());
+        }
         return gateway;
+    }
+
+    private List<FlowableListener> buildInclusiveBranchSelectionListeners() {
+        FlowableListener listener = new FlowableListener();
+        listener.setEvent("start");
+        listener.setImplementationType(ImplementationType.IMPLEMENTATION_TYPE_DELEGATEEXPRESSION);
+        listener.setImplementation("${inclusiveBranchSelectionListener}");
+        return List.of(listener);
     }
 
     // 定时节点映射为中间捕获事件。
@@ -299,9 +311,6 @@ public class ProcessDslToBpmnService {
         flow.setName(edge.label());
         Map<String, Object> condition = mapValue(edge.condition());
         String expression = resolveConditionExpression(condition);
-        if (expression != null) {
-            flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression));
-        }
         addExtensionAttribute(flow, "priority", edge.priority() == null ? null : String.valueOf(edge.priority()));
         addExtensionAttribute(flow, "branchPriority", edge.priority() == null ? null : String.valueOf(edge.priority()));
         if (sourceNode != null && "inclusive_split".equals(sourceNode.type())) {
@@ -309,10 +318,15 @@ public class ProcessDslToBpmnService {
             addExtensionAttribute(flow, "defaultBranchId", stringValue(sourceConfig.get("defaultBranchId")));
             addExtensionAttribute(flow, "requiredBranchCount", stringValue(sourceConfig.get("requiredBranchCount")));
             addExtensionAttribute(flow, "branchMergePolicy", stringValue(sourceConfig.get("branchMergePolicy")));
+            addExtensionAttribute(flow, "branchConditionExpression", expression);
+            flow.setConditionExpression(inclusiveSelectionExpression(edge.id()));
             addExtensionElement(flow, "branchPriority", edge.priority() == null ? null : String.valueOf(edge.priority()));
             addExtensionElement(flow, "defaultBranchId", stringValue(sourceConfig.get("defaultBranchId")));
             addExtensionElement(flow, "requiredBranchCount", stringValue(sourceConfig.get("requiredBranchCount")));
             addExtensionElement(flow, "branchMergePolicy", stringValue(sourceConfig.get("branchMergePolicy")));
+            addExtensionElement(flow, "branchConditionExpression", expression);
+        } else if (expression != null) {
+            flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression));
         }
         String conditionType = stringValue(condition.get("type"));
         if (conditionType != null) {
@@ -371,6 +385,10 @@ public class ProcessDslToBpmnService {
 
     private String normalizeSequenceFlowConditionExpression(String expression) {
         return wrapExpression(expression);
+    }
+
+    private String inclusiveSelectionExpression(String edgeId) {
+        return "${westflowInclusiveSelected_" + edgeId + "}";
     }
 
     private String wrapExpression(String expression) {

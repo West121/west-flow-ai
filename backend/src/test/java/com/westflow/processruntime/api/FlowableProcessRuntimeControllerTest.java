@@ -617,6 +617,8 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("buildMode").asText()).isEqualTo("APPROVER_TASKS");
         assertThat(detailBody.path("appendLinks").get(0).path("sourceMode").asText()).isEqualTo("RULE_DRIVEN");
         assertThat(detailBody.path("appendLinks").get(0).path("ruleExpression").asText()).isEqualTo("${dynamicApproverUserIds}");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolvedSourceMode").asText()).isEqualTo("RULE_DRIVEN");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("RULE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("targetTaskName").asText()).isEqualTo("动态构建 / 动态生成审批");
         assertThat(detailBody.path("appendLinks").get(0).path("targetUserId").asText()).isEqualTo("usr_003");
     }
@@ -659,6 +661,8 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("buildMode").asText()).isEqualTo("SUBPROCESS_CALLS");
         assertThat(detailBody.path("appendLinks").get(0).path("sourceMode").asText()).isEqualTo("RULE_DRIVEN");
         assertThat(detailBody.path("appendLinks").get(0).path("ruleExpression").asText()).isEqualTo("${dynamicSubprocessKeys}");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolvedSourceMode").asText()).isEqualTo("RULE_DRIVEN");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("RULE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("targetProcessName").asText()).isEqualTo("子流程审批");
         assertThat(detailBody.path("appendLinks").get(0).path("targetProcessVersion").asInt()).isEqualTo(1);
         assertThat(detailBody.path("appendLinks").get(0).path("targetInstanceId").asText()).isNotBlank();

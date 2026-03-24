@@ -3385,14 +3385,15 @@ public class FlowableProcessRuntimeService {
         }
         return switch (sourceMode.trim().toUpperCase()) {
             case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
-            case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
+            case "MANUAL_TEMPLATE" -> "MANUAL_TEMPLATE";
+            case "MODEL_DRIVEN" -> "MODEL_DRIVEN";
             default -> "RULE_DRIVEN";
         };
     }
 
     private String normalizeDynamicBuilderExecutionStrategy(String executionStrategy, String sourceMode) {
         if (executionStrategy == null || executionStrategy.isBlank()) {
-            return "MODEL_DRIVEN".equals(sourceMode) ? "TEMPLATE_FIRST" : "RULE_FIRST";
+            return "RULE_DRIVEN".equals(sourceMode) ? "RULE_FIRST" : "TEMPLATE_FIRST";
         }
         return switch (executionStrategy.trim().toUpperCase()) {
             case "RULE_ONLY", "TEMPLATE_FIRST", "TEMPLATE_ONLY" -> executionStrategy.trim().toUpperCase();
@@ -3577,6 +3578,7 @@ public class FlowableProcessRuntimeService {
         Map<String, Object> sourceNodeConfig = resolveNodeConfig(record.parentInstanceId(), record.sourceNodeId());
         DefinitionMetadata targetDefinition = resolveTargetProcessDefinition(record);
         String targetTaskName = resolveTaskName(record.targetTaskId());
+        Map<String, Object> runtimeMetadata = resolveDynamicBuildRuntimeMetadata(record);
         return new RuntimeAppendLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
@@ -3605,6 +3607,9 @@ public class FlowableProcessRuntimeService {
                 stringValue(sourceNodeConfig.get("sceneCode")),
                 stringValue(sourceNodeConfig.get("executionStrategy")),
                 stringValue(sourceNodeConfig.get("fallbackStrategy")),
+                stringValue(runtimeMetadata.get("westflowDynamicResolvedSourceMode")),
+                stringValue(runtimeMetadata.get("westflowDynamicResolutionPath")),
+                stringValue(runtimeMetadata.get("westflowDynamicTemplateSource")),
                 record.operatorUserId(),
                 record.commentText(),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
@@ -3992,8 +3997,30 @@ public class FlowableProcessRuntimeService {
     }
 
     private Map<String, Object> taskLocalVariables(String taskId) {
-        Map<String, Object> variables = flowableEngineFacade.taskService().getVariablesLocal(taskId);
+        Map<String, Object> variables;
+        try {
+            variables = flowableEngineFacade.taskService().getVariablesLocal(taskId);
+        } catch (FlowableObjectNotFoundException ignored) {
+            // 已完成任务可能已经从运行时表移除，详情接口应回退到历史变量而不是直接失败。
+            return Map.of();
+        }
         return variables == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(variables));
+    }
+
+    private Map<String, Object> resolveDynamicBuildRuntimeMetadata(RuntimeAppendLinkRecord record) {
+        if (record.targetTaskId() != null && !record.targetTaskId().isBlank()) {
+            Map<String, Object> runtimeValues = taskLocalVariables(record.targetTaskId());
+            if (!runtimeValues.isEmpty()) {
+                return runtimeValues;
+            }
+            Map<String, Object> historicValues = historicTaskLocalVariables(record.targetTaskId());
+            return historicValues.isEmpty() ? Map.of() : historicValues;
+        }
+        if (record.targetInstanceId() != null && !record.targetInstanceId().isBlank()) {
+            Map<String, Object> values = runtimeOrHistoricVariables(record.targetInstanceId());
+            return values.isEmpty() ? Map.of() : values;
+        }
+        return Map.of();
     }
 
     private Map<String, Object> historicTaskLocalVariables(String taskId) {

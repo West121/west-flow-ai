@@ -426,6 +426,8 @@ class ProcessDslToBpmnServiceTest {
                 "<inclusiveGateway",
                 "id=\"inclusive_split_1\"",
                 "id=\"inclusive_join_1\"",
+                "<flowable:executionListener",
+                "inclusiveBranchSelectionListener",
                 "<westflow:defaultBranchId",
                 "edge_2",
                 "<westflow:requiredBranchCount",
@@ -433,7 +435,9 @@ class ProcessDslToBpmnServiceTest {
                 "<westflow:branchMergePolicy",
                 "DEFAULT_BRANCH",
                 "<westflow:branchPriority",
-                "2"
+                "2",
+                "westflowInclusiveSelected_edge_2",
+                "branchConditionExpression"
         );
         assertThat(xml).contains("amount > 1000", "days > 3");
     }

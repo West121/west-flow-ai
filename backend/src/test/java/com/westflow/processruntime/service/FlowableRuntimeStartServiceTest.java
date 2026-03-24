@@ -145,6 +145,8 @@ class FlowableRuntimeStartServiceTest {
             assertThat(link.triggerMode()).isEqualTo("DYNAMIC_BUILD");
             assertThat(link.appendType()).isEqualTo("TASK");
             assertThat(link.targetTaskId()).isNotBlank();
+            assertThat(link.resolvedSourceMode()).isEqualTo("RULE_DRIVEN");
+            assertThat(link.resolutionPath()).isEqualTo("KEEP_CURRENT_RULE");
         });
     }
 
@@ -172,10 +174,37 @@ class FlowableRuntimeStartServiceTest {
         assertThat(link.appendType()).isEqualTo("SUBPROCESS");
         assertThat(link.targetInstanceId()).isNotBlank();
         assertThat(link.calledProcessKey()).isEqualTo("oa_dynamic_sub_review");
+        assertThat(link.resolvedSourceMode()).isEqualTo("RULE_DRIVEN");
+        assertThat(link.resolutionPath()).isEqualTo("KEEP_CURRENT_RULE");
         assertThat(flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .processInstanceId(link.targetInstanceId())
                 .singleResult()).isNotNull();
+    }
+
+    @Test
+    void shouldExposeDynamicBuilderTemplateFallbackResolutionMetadata() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildDynamicBuilderTemplateFallbackTaskPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_dynamic_append_tasks_fallback",
+                "dynamic_append_task_002",
+                "OA_LEAVE",
+                Map.of(
+                        "days", 1,
+                        "reason", "动态构建模板兜底"
+                )
+        ));
+
+        List<RuntimeAppendLinkResponse> appendLinks = flowableProcessRuntimeService.appendLinks(response.instanceId());
+        assertThat(appendLinks).hasSize(1);
+        RuntimeAppendLinkResponse link = appendLinks.get(0);
+        assertThat(link.appendType()).isEqualTo("TASK");
+        assertThat(link.targetUserId()).isEqualTo("usr_002");
+        assertThat(link.resolvedSourceMode()).isEqualTo("MANUAL_TEMPLATE");
+        assertThat(link.resolutionPath()).isEqualTo("FALLBACK_TEMPLATE");
+        assertThat(link.templateSource()).isEqualTo("MANUAL_TEMPLATE");
     }
 
     @Test
@@ -363,6 +392,60 @@ class FlowableRuntimeStartServiceTest {
 
         assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
                 .containsExactlyInAnyOrder("usr_001", "usr_002");
+    }
+
+    @Test
+    void shouldSelectHighestPriorityBranchWhenInclusiveSplitRequiresFixedCount() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildInclusiveRequiredCountPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_inclusive_required_count",
+                "inclusive_required_001",
+                "OA_LEAVE",
+                java.util.Map.of(
+                        "amount", 2000,
+                        "days", 10,
+                        "reason", "包容分支固定数量"
+                )
+        ));
+
+        List<Task> activeTasks = flowableEngineTasks(response.instanceId());
+        assertThat(activeTasks).hasSize(1);
+        assertThat(activeTasks.get(0).getTaskDefinitionKey()).isEqualTo("approve_hr");
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowInclusiveSelected_edge_2"))
+                .isEqualTo(Boolean.FALSE);
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowInclusiveSelected_edge_3"))
+                .isEqualTo(Boolean.TRUE);
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowInclusiveSelected_edge_4"))
+                .isEqualTo(Boolean.FALSE);
+    }
+
+    @Test
+    void shouldFallbackToDefaultBranchWhenInclusiveSplitHasNoEligibleBranch() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildInclusiveDefaultBranchPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_inclusive_default_branch",
+                "inclusive_default_001",
+                "OA_LEAVE",
+                java.util.Map.of(
+                        "amount", 100,
+                        "days", 1,
+                        "reason", "包容分支默认兜底"
+                )
+        ));
+
+        List<Task> activeTasks = flowableEngineTasks(response.instanceId());
+        assertThat(activeTasks).hasSize(1);
+        assertThat(activeTasks.get(0).getTaskDefinitionKey()).isEqualTo("approve_default");
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowInclusiveSelected_edge_2"))
+                .isEqualTo(Boolean.FALSE);
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowInclusiveSelected_edge_3"))
+                .isEqualTo(Boolean.FALSE);
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowInclusiveSelected_edge_4"))
+                .isEqualTo(Boolean.TRUE);
     }
 
     @Test
@@ -898,6 +981,240 @@ class FlowableRuntimeStartServiceTest {
                         assignmentJson,
                         voteRuleFragment(approvalMode)
                 ), ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildInclusiveRequiredCountPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_inclusive_required_count",
+                  "processName": "包容分支固定数量",
+                  "category": "OA",
+                  "processFormKey": "oa_inclusive_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "inclusive_split_1",
+                      "type": "inclusive_split",
+                      "name": "包容分支",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "requiredBranchCount": 1,
+                        "branchMergePolicy": "REQUIRED_COUNT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_finance",
+                      "type": "approver",
+                      "name": "财务审批",
+                      "position": {"x": 540, "y": 40},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_hr",
+                      "type": "approver",
+                      "name": "人事审批",
+                      "position": {"x": 540, "y": 180},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_default",
+                      "type": "approver",
+                      "name": "默认审批",
+                      "position": {"x": 540, "y": 320},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_004"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "inclusive_join_1",
+                      "type": "inclusive_join",
+                      "name": "包容汇聚",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 980, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "inclusive_split_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "inclusive_split_1", "target": "approve_finance", "priority": 20, "label": "金额超限", "condition": {"type": "EXPRESSION", "expression": "amount > 1000"}},
+                    {"id": "edge_3", "source": "inclusive_split_1", "target": "approve_hr", "priority": 10, "label": "长假", "condition": {"type": "EXPRESSION", "expression": "days > 3"}},
+                    {"id": "edge_4", "source": "inclusive_split_1", "target": "approve_default", "priority": 30, "label": "默认分支", "condition": {"type": "EXPRESSION", "expression": "amount > 99999"}},
+                    {"id": "edge_5", "source": "approve_finance", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_6", "source": "approve_hr", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_7", "source": "approve_default", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_8", "source": "inclusive_join_1", "target": "end_1", "priority": 10, "label": "完成"}
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildInclusiveDefaultBranchPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_inclusive_default_branch",
+                  "processName": "包容分支默认兜底",
+                  "category": "OA",
+                  "processFormKey": "oa_inclusive_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "inclusive_split_1",
+                      "type": "inclusive_split",
+                      "name": "包容分支",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "defaultBranchId": "edge_4",
+                        "branchMergePolicy": "DEFAULT_BRANCH"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_finance",
+                      "type": "approver",
+                      "name": "财务审批",
+                      "position": {"x": 540, "y": 40},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_hr",
+                      "type": "approver",
+                      "name": "人事审批",
+                      "position": {"x": 540, "y": 180},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_default",
+                      "type": "approver",
+                      "name": "默认审批",
+                      "position": {"x": 540, "y": 320},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_004"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "inclusive_join_1",
+                      "type": "inclusive_join",
+                      "name": "包容汇聚",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 980, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "inclusive_split_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "inclusive_split_1", "target": "approve_finance", "priority": 20, "label": "金额超限", "condition": {"type": "EXPRESSION", "expression": "amount > 1000"}},
+                    {"id": "edge_3", "source": "inclusive_split_1", "target": "approve_hr", "priority": 10, "label": "长假", "condition": {"type": "EXPRESSION", "expression": "days > 3"}},
+                    {"id": "edge_4", "source": "inclusive_split_1", "target": "approve_default", "priority": 30, "label": "默认分支", "condition": {"type": "EXPRESSION", "expression": "amount > 99999"}},
+                    {"id": "edge_5", "source": "approve_finance", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_6", "source": "approve_hr", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_7", "source": "approve_default", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_8", "source": "inclusive_join_1", "target": "end_1", "priority": 10, "label": "完成"}
+                  ]
+                }
+                """, ProcessDslPayload.class);
     }
 
     private ProcessDslPayload buildSubprocessChildPayload() throws Exception {
@@ -1562,6 +1879,103 @@ class FlowableRuntimeStartServiceTest {
                       "target": "end_1",
                       "priority": 10,
                       "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderTemplateFallbackTaskPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_append_tasks_fallback",
+                  "processName": "动态构建模板兜底附属任务",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_append_task_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "APPROVER_TASKS",
+                        "sourceMode": "RULE",
+                        "executionStrategy": "RULE_ONLY",
+                        "fallbackStrategy": "USE_TEMPLATE",
+                        "ruleExpression": "days > 3",
+                        "manualTemplateCode": "append_manager_review",
+                        "appendPolicy": "PARALLEL_WITH_CURRENT",
+                        "maxGeneratedCount": 1,
+                        "terminatePolicy": "TERMINATE_GENERATED_ONLY"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_004"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SINGLE"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "dynamic_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "dynamic_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "完成"
+                    },
+                    {
+                      "id": "edge_3",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
                     }
                   ]
                 }
