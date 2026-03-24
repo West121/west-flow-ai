@@ -50,7 +50,7 @@ class ProcessTerminationTopologyServiceTest {
                         "RUNNING",
                         "TERMINATE_SUBPROCESS_ONLY",
                         "RETURN_TO_PARENT",
-                        "CHILD_ONLY",
+                        "CHILD_AND_DESCENDANTS",
                         "AUTO_RETURN",
                         "LATEST_PUBLISHED",
                         "AUTO_RETURN",
@@ -149,6 +149,66 @@ class ProcessTerminationTopologyServiceTest {
     }
 
     @Test
+    void shouldStopDescendingWhenCallScopeIsChildOnly() {
+        when(processLinkService.listByRootInstanceId("root_1")).thenReturn(List.of(
+                new ProcessLinkRecord(
+                        "plink_001",
+                        "root_1",
+                        "root_1",
+                        "child_1",
+                        "node_1",
+                        "subflow_1",
+                        "subflow_1:1",
+                        "CALL_ACTIVITY",
+                        "RUNNING",
+                        "TERMINATE_SUBPROCESS_ONLY",
+                        "RETURN_TO_PARENT",
+                        "CHILD_ONLY",
+                        "AUTO_RETURN",
+                        "LATEST_PUBLISHED",
+                        "AUTO_RETURN",
+                        Instant.parse("2026-03-23T01:00:00Z"),
+                        null
+                ),
+                new ProcessLinkRecord(
+                        "plink_002",
+                        "root_1",
+                        "child_1",
+                        "child_2",
+                        "node_2",
+                        "subflow_2",
+                        "subflow_2:1",
+                        "CALL_ACTIVITY",
+                        "RUNNING",
+                        "TERMINATE_SUBPROCESS_ONLY",
+                        "RETURN_TO_PARENT",
+                        "CHILD_ONLY",
+                        "AUTO_RETURN",
+                        "LATEST_PUBLISHED",
+                        "AUTO_RETURN",
+                        Instant.parse("2026-03-23T01:05:00Z"),
+                        null
+                )
+        ));
+        when(runtimeAppendLinkService.listByRootInstanceId("root_1")).thenReturn(List.of());
+
+        ProcessTerminationPlanResponse plan = topologyService.preview(new ProcessTerminationCommand(
+                "root_1",
+                null,
+                ProcessTerminationScope.ROOT,
+                ProcessTerminationPropagationPolicy.CASCADE_CHILDREN,
+                "终止测试",
+                "usr_admin"
+        ));
+
+        assertThat(plan.targetCount()).isEqualTo(1);
+        assertThat(plan.nodes()).singleElement().satisfies(node -> {
+            assertThat(node.targetId()).isEqualTo("child_1");
+            assertThat(node.children()).isEmpty();
+        });
+    }
+
+    @Test
     void shouldPreviewChildSubtreeOnlyWhenScopeIsChild() {
         when(processLinkService.listByRootInstanceId("root_1")).thenReturn(List.of(
                 new ProcessLinkRecord(
@@ -205,9 +265,7 @@ class ProcessTerminationTopologyServiceTest {
         assertThat(plan.nodes()).singleElement().satisfies(node -> {
             assertThat(node.targetId()).isEqualTo("child_1");
             assertThat(node.targetKind()).isEqualTo(ProcessTerminationNodeKind.SUBPROCESS.name());
-            assertThat(node.children()).singleElement().satisfies(child -> {
-                assertThat(child.targetId()).isEqualTo("child_2");
-            });
+            assertThat(node.children()).isEmpty();
         });
     }
 

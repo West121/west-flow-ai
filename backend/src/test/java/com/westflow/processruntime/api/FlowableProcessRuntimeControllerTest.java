@@ -295,13 +295,18 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchId").asText()).isEqualTo("edge_3");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("requiredBranchCount").asInt()).isEqualTo(1);
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchMergePolicy").asText()).isEqualTo("DEFAULT_BRANCH");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("eligibleTargetCount").asInt()).isEqualTo(1);
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchPriorities").toString()).contains("10", "20");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchLabels").toString()).contains("金额超限", "长假");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchExpressions").toString()).contains("amount > 1000", "days > 3");
-        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("decisionSummary").asText()).contains("已激活 1/2 条分支");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedEdgeIds").toString()).contains("edge_2");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("金额超限");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("10");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isFalse();
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("decisionSummary").asText()).contains("已激活 1/2 条分支", "命中候选 1 条", "策略 DEFAULT_BRANCH");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("activatedTargetNodeNames").get(0).asText()).isEqualTo("财务审批");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("skippedTargetNodeNames").get(0).asText()).isEqualTo("人事审批");
-        assertThat(detailBody.path("instanceEvents").toString()).contains("INCLUSIVE_BRANCH_ACTIVATED");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("INCLUSIVE_BRANCH_ACTIVATED", "\"selectedEdgeIds\":[\"edge_2\"]");
     }
 
     @Test
@@ -426,6 +431,79 @@ class FlowableProcessRuntimeControllerTest {
                 String.class,
                 linkId
         )).isEqualTo("FINISHED");
+    }
+
+    @Test
+    void shouldWaitForConfirmationWhenParentResumeStrategyRequestsItEvenIfJoinModeIsAutoReturn() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildParentResumeStrategyWaitConfirmPayload());
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_parent_with_subprocess",
+                                  "businessKey": "parent_bill_resume_strategy_001",
+                                  "businessType": "OA_COMMON",
+                                  "formData": {
+                                    "billNo": "BILL-RESUME-STRATEGY-001"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String instanceId = startBody.path("instanceId").asText();
+        String childInstanceId = jdbcTemplate.queryForObject(
+                "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ?",
+                String.class,
+                instanceId
+        );
+        String linkId = jdbcTemplate.queryForObject(
+                "SELECT id FROM wf_process_link WHERE parent_instance_id = ?",
+                String.class,
+                instanceId
+        );
+        String childTaskId = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(childInstanceId)
+                .singleResult()
+                .getId();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", childTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "子流程审批通过"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode linksBeforeConfirm = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/instances/{instanceId}/links", instanceId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(linksBeforeConfirm.get(0).path("status").asText()).isEqualTo("WAIT_PARENT_CONFIRM");
+
+        JsonNode confirmBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/links/{linkId}/confirm-parent-resume", instanceId, linkId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(confirmBody.path("linkId").asText()).isEqualTo(linkId);
+        assertThat(confirmBody.path("status").asText()).isEqualTo("FINISHED");
     }
 
     @Test
@@ -2589,6 +2667,76 @@ class FlowableProcessRuntimeControllerTest {
                         "childFinishPolicy": "RETURN_TO_PARENT",
                         "callScope": "CHILD_ONLY",
                         "joinMode": "WAIT_PARENT_CONFIRM",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "WAIT_PARENT_CONFIRM"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildParentResumeStrategyWaitConfirmPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_parent_with_subprocess",
+                  "processName": "主流程带子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
                         "childStartStrategy": "LATEST_PUBLISHED",
                         "parentResumeStrategy": "WAIT_PARENT_CONFIRM"
                       },

@@ -121,15 +121,17 @@ public class ProcessTerminationTopologyService {
         if (propagationPolicy.includesChildProcesses()) {
             childProcessMap.getOrDefault(parentInstanceId, List.of()).forEach(link -> {
                 List<ProcessTerminationNodeResponse> children = new ArrayList<>();
-                collectChildren(
-                        link.childInstanceId(),
-                        rootInstanceId,
-                        link.parentNodeId(),
-                        propagationPolicy,
-                        childProcessMap,
-                        appendMap,
-                        children
-                );
+                if (shouldTraverseDescendants(link)) {
+                    collectChildren(
+                            link.childInstanceId(),
+                            rootInstanceId,
+                            link.parentNodeId(),
+                            propagationPolicy,
+                            childProcessMap,
+                            appendMap,
+                            children
+                    );
+                }
                 targetNodes.add(processLinkNode(link, parentInstanceId, parentNodeId, children));
             });
         }
@@ -165,19 +167,23 @@ public class ProcessTerminationTopologyService {
         for (ProcessLinkRecord link : processLinks) {
             if (targetInstanceId.equals(link.childInstanceId())) {
                 List<ProcessTerminationNodeResponse> children = new ArrayList<>();
-                collectChildren(link.childInstanceId(), rootInstanceId, link.parentNodeId(), propagationPolicy, childProcessMap, appendMap, children);
+                if (shouldTraverseDescendants(link)) {
+                    collectChildren(link.childInstanceId(), rootInstanceId, link.parentNodeId(), propagationPolicy, childProcessMap, appendMap, children);
+                }
                 return Optional.of(processLinkNode(link, rootInstanceId, parentNodeId, children));
             }
-            Optional<ProcessTerminationNodeResponse> nested = findSubtreeNode(
-                    targetInstanceId,
-                    link.childInstanceId(),
-                    link.parentNodeId(),
-                    propagationPolicy,
-                    childProcessMap,
-                    appendMap
-            );
-            if (nested.isPresent()) {
-                return nested;
+            if (shouldTraverseDescendants(link)) {
+                Optional<ProcessTerminationNodeResponse> nested = findSubtreeNode(
+                        targetInstanceId,
+                        link.childInstanceId(),
+                        link.parentNodeId(),
+                        propagationPolicy,
+                        childProcessMap,
+                        appendMap
+                );
+                if (nested.isPresent()) {
+                    return nested;
+                }
             }
         }
 
@@ -276,6 +282,11 @@ public class ProcessTerminationTopologyService {
             return ProcessTerminationNodeKind.APPEND_SUBPROCESS;
         }
         return ProcessTerminationNodeKind.APPEND_TASK;
+    }
+
+    private boolean shouldTraverseDescendants(ProcessLinkRecord link) {
+        String callScope = link.callScope();
+        return callScope == null || callScope.isBlank() || "CHILD_AND_DESCENDANTS".equals(callScope);
     }
 
     private String resolveAppendTargetId(RuntimeAppendLinkRecord link) {

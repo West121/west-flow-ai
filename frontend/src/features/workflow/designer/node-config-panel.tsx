@@ -485,15 +485,6 @@ const nodeConfigFormSchema = z
         ['SEQUENTIAL', 'PARALLEL', 'OR_SIGN', 'VOTE'].includes(values.approver.approvalPolicyType)
       ) {
         if (
-          values.approver.approvalPolicyType === 'VOTE' &&
-          values.approver.assignmentMode !== 'USER'
-        ) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: '当前阶段票签模式仅支持指定人员',
-            path: ['approver', 'assignmentMode'],
-          })
-        } else if (
           values.approver.assignmentMode === 'USER' &&
           parseListValue(values.approver.userIds).length < 2
         ) {

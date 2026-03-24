@@ -567,6 +567,55 @@ describe('workflow designer node config panel', () => {
     )
   })
 
+  it('allows role based vote countersign configuration', async () => {
+    const onApply = vi.fn()
+    const node = buildApproverNode('ROLE')
+    const approverConfig = node.data.config as WorkflowApproverNodeConfig
+    node.data.config = {
+      ...approverConfig,
+      approvalMode: 'VOTE',
+      approvalPolicy: {
+        type: 'VOTE',
+        voteThreshold: 60,
+      },
+      assignment: {
+        ...approverConfig.assignment,
+        userIds: [],
+        roleCodes: ['OA_USER'],
+      },
+      voteRule: {
+        thresholdPercent: 60,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [],
+      },
+    } as typeof node.data.config
+
+    render(<NodeConfigPanel node={node} edges={edges} onApply={onApply} />)
+
+    await waitFor(() => expect(screen.getByDisplayValue('OA 用户')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
+    await waitFor(() => expect(screen.getByText('部门负责人')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('部门负责人'))
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          approvalMode: 'VOTE',
+          assignment: expect.objectContaining({
+            mode: 'ROLE',
+            roleCodes: ['OA_USER', 'role_manager'],
+          }),
+        }),
+      }),
+      undefined
+    )
+  })
+
   it('submits approver field bindings back to the canvas patch', async () => {
     const onApply = vi.fn()
 

@@ -150,6 +150,7 @@ class WorkflowManagementServiceTest {
                     "IN_PROGRESS",
                     2,
                     1,
+                    1,
                     List.of("approve_finance"),
                     List.of("财务审批"),
                     List.of("approve_hr"),
@@ -157,6 +158,10 @@ class WorkflowManagementServiceTest {
                     List.of(10, 20),
                     List.of("金额超限", "长假"),
                     List.of("amount > 1000", "days > 3"),
+                    List.of("edge_2"),
+                    List.of("金额超限"),
+                    List.of(10),
+                    true,
                     "已激活 1/2 条分支",
                     OffsetDateTime.now(),
                     null

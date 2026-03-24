@@ -95,6 +95,8 @@ import java.util.regex.Pattern;
 @ConditionalOnBean(FlowableEngineFacade.class)
 public class FlowableProcessRuntimeService {
 
+    private static final String INCLUSIVE_SELECTION_SUMMARY_PREFIX = "westflowInclusiveSelectionSummary_";
+
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern SIMPLE_COMPARISON_PATTERN = Pattern.compile("^([A-Za-z0-9_\\.]+)\\s*(==|!=|>=|<=|>|<)\\s*(.+)$");
 
@@ -110,6 +112,18 @@ public class FlowableProcessRuntimeService {
             String childStartStrategy,
             String parentResumeStrategy
     ) {
+    }
+
+    private record InclusiveSelectionSummary(
+            Integer eligibleTargetCount,
+            List<String> selectedEdgeIds,
+            List<String> selectedBranchLabels,
+            List<Integer> selectedBranchPriorities,
+            boolean defaultBranchSelected
+    ) {
+        private static InclusiveSelectionSummary empty() {
+            return new InclusiveSelectionSummary(null, List.of(), List.of(), List.of(), false);
+        }
     }
 
     private final FlowableEngineFacade flowableEngineFacade;
@@ -1104,6 +1118,11 @@ public class FlowableProcessRuntimeService {
                     null
             );
         }
+        com.westflow.processruntime.model.ProcessLinkRecord subprocessLink =
+                processLinkService.getByChildInstanceId(task.getProcessInstanceId());
+        if (subprocessLink != null) {
+            synchronizeProcessLinks(subprocessLink.rootInstanceId());
+        }
         flowableCountersignService.syncAfterTaskCompleted(
                 task.getProcessDefinitionId(),
                 task.getProcessInstanceId(),
@@ -2002,6 +2021,7 @@ public class FlowableProcessRuntimeService {
         for (ProcessDslPayload.Edge edge : payload.edges()) {
             outgoingEdges.computeIfAbsent(edge.source(), ignored -> new ArrayList<>()).add(edge);
         }
+        Map<String, Object> processVariables = runtimeOrHistoricVariables(processInstanceId);
 
         Map<String, OffsetDateTime> firstOccurredAtByNodeId = new HashMap<>();
         Set<String> reachedNodeIds = new LinkedHashSet<>();
@@ -2048,6 +2068,7 @@ public class FlowableProcessRuntimeService {
             String defaultBranchId = stringValue(splitConfig.get("defaultBranchId"));
             Integer requiredBranchCount = integerValue(splitConfig.get("requiredBranchCount"));
             String branchMergePolicy = stringValueOrDefault(splitConfig.get("branchMergePolicy"), "ALL_SELECTED");
+            InclusiveSelectionSummary selectionSummary = inclusiveSelectionSummary(processVariables, split.id(), defaultBranchId);
             List<String> activatedTargetNodeIds = new ArrayList<>();
             List<String> activatedTargetNodeNames = new ArrayList<>();
             List<String> skippedTargetNodeIds = new ArrayList<>();
@@ -2055,6 +2076,10 @@ public class FlowableProcessRuntimeService {
             List<Integer> branchPriorities = new ArrayList<>();
             List<String> branchLabels = new ArrayList<>();
             List<String> branchExpressions = new ArrayList<>();
+            List<String> selectedEdgeIds = new ArrayList<>();
+            List<String> selectedBranchLabels = new ArrayList<>();
+            List<Integer> selectedBranchPriorities = new ArrayList<>();
+            boolean defaultBranchSelected = false;
             OffsetDateTime firstActivatedAt = null;
             int branchIndex = 1;
 
@@ -2073,14 +2098,22 @@ public class FlowableProcessRuntimeService {
                     branchExpressions.add(expression);
                 }
                 ProcessDslPayload.Node targetNode = nodeById.get(targetNodeId);
-                boolean activated = hasReachedInclusiveBranchTarget(
-                        targetNodeId,
-                        join == null ? null : join.id(),
-                        outgoingEdges,
-                        reachedNodeIds,
-                        new LinkedHashSet<>()
-                );
+                boolean activated = selectionSummary.selectedEdgeIds().isEmpty()
+                        ? hasReachedInclusiveBranchTarget(
+                                targetNodeId,
+                                join == null ? null : join.id(),
+                                outgoingEdges,
+                                reachedNodeIds,
+                                new LinkedHashSet<>()
+                        )
+                        : selectionSummary.selectedEdgeIds().contains(edge.id());
                 if (activated) {
+                    selectedEdgeIds.add(edge.id());
+                    selectedBranchLabels.add(edge.label() == null || edge.label().isBlank() ? targetNodeId : edge.label());
+                    selectedBranchPriorities.add(edge.priority() == null ? branchIndex : edge.priority());
+                    if (defaultBranchId != null && defaultBranchId.equals(edge.id())) {
+                        defaultBranchSelected = true;
+                    }
                     activatedTargetNodeIds.add(targetNodeId);
                     activatedTargetNodeNames.add(targetNode == null ? targetNodeId : targetNode.name());
                     OffsetDateTime occurredAt = resolveInclusiveBranchOccurredAt(
@@ -2118,6 +2151,9 @@ public class FlowableProcessRuntimeService {
                     branchMergePolicy,
                     gatewayStatus,
                     branchEdges.size(),
+                    selectionSummary.eligibleTargetCount() == null
+                            ? activatedTargetNodeIds.size()
+                            : selectionSummary.eligibleTargetCount(),
                     activatedTargetNodeIds.size(),
                     List.copyOf(activatedTargetNodeIds),
                     List.copyOf(activatedTargetNodeNames),
@@ -2126,7 +2162,30 @@ public class FlowableProcessRuntimeService {
                     List.copyOf(branchPriorities),
                     List.copyOf(branchLabels),
                     List.copyOf(branchExpressions),
-                    buildInclusiveDecisionSummary(branchEdges.size(), activatedTargetNodeIds.size(), join != null),
+                    selectionSummary.selectedEdgeIds().isEmpty()
+                            ? List.copyOf(selectedEdgeIds)
+                            : selectionSummary.selectedEdgeIds(),
+                    selectionSummary.selectedBranchLabels().isEmpty()
+                            ? List.copyOf(selectedBranchLabels)
+                            : selectionSummary.selectedBranchLabels(),
+                    selectionSummary.selectedBranchPriorities().isEmpty()
+                            ? List.copyOf(selectedBranchPriorities)
+                            : selectionSummary.selectedBranchPriorities(),
+                    selectionSummary.selectedEdgeIds().isEmpty()
+                            ? defaultBranchSelected
+                            : selectionSummary.defaultBranchSelected(),
+                    buildInclusiveDecisionSummary(
+                            branchEdges.size(),
+                            selectionSummary.eligibleTargetCount() == null
+                                    ? activatedTargetNodeIds.size()
+                                    : selectionSummary.eligibleTargetCount(),
+                            activatedTargetNodeIds.size(),
+                            branchMergePolicy,
+                            selectionSummary.selectedEdgeIds().isEmpty()
+                                    ? defaultBranchSelected
+                                    : selectionSummary.defaultBranchSelected(),
+                            join != null
+                    ),
                     firstActivatedAt,
                     finishedAt
             ));
@@ -2146,6 +2205,26 @@ public class FlowableProcessRuntimeService {
         } catch (NumberFormatException ignored) {
             return null;
         }
+    }
+
+    private InclusiveSelectionSummary inclusiveSelectionSummary(
+            Map<String, Object> processVariables,
+            String splitNodeId,
+            String defaultBranchId
+    ) {
+        Map<String, Object> summary = mapValue(processVariables.get(INCLUSIVE_SELECTION_SUMMARY_PREFIX + splitNodeId));
+        if (summary.isEmpty()) {
+            return InclusiveSelectionSummary.empty();
+        }
+        String resolvedDefaultBranchId = stringValueOrDefault(summary.get("defaultBranchId"), defaultBranchId);
+        List<String> selectedEdgeIds = stringListValue(summary.get("selectedEdgeIds"));
+        return new InclusiveSelectionSummary(
+                integerValue(summary.get("eligibleBranchCount")),
+                selectedEdgeIds,
+                stringListValue(summary.get("selectedLabels")),
+                integerListValue(summary.get("selectedPriorities")),
+                resolvedDefaultBranchId != null && selectedEdgeIds.contains(resolvedDefaultBranchId)
+        );
     }
 
     private List<ProcessInstanceEventResponse> buildInclusiveGatewayEvents(
@@ -2171,14 +2250,7 @@ public class FlowableProcessRuntimeService {
                         null,
                         null,
                         hit.firstActivatedAt(),
-                        Map.of(
-                                "joinNodeId", hit.joinNodeId(),
-                                "joinNodeName", hit.joinNodeName(),
-                                "activatedTargetNodeIds", hit.activatedTargetNodeIds(),
-                                "activatedTargetNodeNames", hit.activatedTargetNodeNames(),
-                                "skippedTargetNodeIds", hit.skippedTargetNodeIds(),
-                                "skippedTargetNodeNames", hit.skippedTargetNodeNames()
-                        ),
+                        inclusiveGatewayEventDetails(hit, false),
                         null,
                         hit.joinNodeId(),
                         null,
@@ -2202,12 +2274,7 @@ public class FlowableProcessRuntimeService {
                         null,
                         null,
                         hit.finishedAt(),
-                        Map.of(
-                                "splitNodeId", hit.splitNodeId(),
-                                "splitNodeName", hit.splitNodeName(),
-                                "activatedTargetNodeIds", hit.activatedTargetNodeIds(),
-                                "activatedTargetNodeNames", hit.activatedTargetNodeNames()
-                        ),
+                        inclusiveGatewayEventDetails(hit, true),
                         null,
                         hit.joinNodeId(),
                         null,
@@ -2219,6 +2286,33 @@ public class FlowableProcessRuntimeService {
             }
         }
         return events;
+    }
+
+    private Map<String, Object> inclusiveGatewayEventDetails(
+            InclusiveGatewayHitResponse hit,
+            boolean joined
+    ) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        if (joined) {
+            details.put("splitNodeId", hit.splitNodeId());
+            details.put("splitNodeName", hit.splitNodeName());
+        } else {
+            details.put("joinNodeId", hit.joinNodeId());
+            details.put("joinNodeName", hit.joinNodeName());
+            details.put("skippedTargetNodeIds", hit.skippedTargetNodeIds());
+            details.put("skippedTargetNodeNames", hit.skippedTargetNodeNames());
+        }
+        details.put("branchMergePolicy", hit.branchMergePolicy());
+        details.put("defaultBranchId", hit.defaultBranchId());
+        details.put("requiredBranchCount", hit.requiredBranchCount());
+        details.put("eligibleTargetCount", hit.eligibleTargetCount());
+        details.put("selectedEdgeIds", hit.selectedEdgeIds());
+        details.put("selectedBranchLabels", hit.selectedBranchLabels());
+        details.put("selectedBranchPriorities", hit.selectedBranchPriorities());
+        details.put("defaultBranchSelected", hit.defaultBranchSelected());
+        details.put("activatedTargetNodeIds", hit.activatedTargetNodeIds());
+        details.put("activatedTargetNodeNames", hit.activatedTargetNodeNames());
+        return details;
     }
 
     private List<ProcessInstanceEventResponse> mergeInstanceEvents(
@@ -2928,7 +3022,8 @@ public class FlowableProcessRuntimeService {
     }
 
     private void synchronizeProcessLinks(String rootInstanceId) {
-        processLinkService.listByRootInstanceId(rootInstanceId).stream()
+        List<com.westflow.processruntime.model.ProcessLinkRecord> rootLinks = processLinkService.listByRootInstanceId(rootInstanceId);
+        rootLinks.stream()
                 .filter(record -> "RUNNING".equals(record.status()))
                 .forEach(record -> {
                     ProcessInstance runtimeChild = flowableEngineFacade.runtimeService()
@@ -2946,9 +3041,13 @@ public class FlowableProcessRuntimeService {
                         return;
                     }
                     SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(record);
+                    boolean terminateParentAfterFinish = "TERMINATE_PARENT".equals(record.childFinishPolicy())
+                            && !isTerminatedProcess(historicChild);
                     String resolvedStatus = isTerminatedProcess(historicChild)
                             ? "TERMINATED"
-                            : "WAIT_PARENT_CONFIRM".equals(structureMetadata.joinMode())
+                            : terminateParentAfterFinish
+                            ? "FINISHED"
+                            : requiresParentConfirmation(structureMetadata)
                             ? "WAIT_PARENT_CONFIRM"
                             : "FINISHED";
                     processLinkService.updateStatus(record.childInstanceId(), resolvedStatus, historicChild.getEndTime().toInstant());
@@ -2984,7 +3083,74 @@ public class FlowableProcessRuntimeService {
                             null,
                             null
                     );
+                    if (terminateParentAfterFinish) {
+                        terminateParentProcessOnChildFinish(record, historicChild.getEndTime().toInstant(), rootLinks);
+                    }
                 });
+    }
+
+    private void terminateParentProcessOnChildFinish(
+            com.westflow.processruntime.model.ProcessLinkRecord record,
+            Instant finishedAt,
+            List<com.westflow.processruntime.model.ProcessLinkRecord> rootLinks
+    ) {
+        ProcessInstance runtimeParent = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(record.parentInstanceId())
+                .singleResult();
+        if (runtimeParent == null) {
+            return;
+        }
+        flowableTaskActionService.revokeProcessInstance(
+                record.parentInstanceId(),
+                "WESTFLOW_SUBPROCESS_FINISH_POLICY:" + record.parentNodeId()
+        );
+        Map<String, List<com.westflow.processruntime.model.ProcessLinkRecord>> linksByParentInstanceId = rootLinks.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        com.westflow.processruntime.model.ProcessLinkRecord::parentInstanceId,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        List<com.westflow.processruntime.model.ProcessLinkRecord> subtreeLinks = new ArrayList<>();
+        collectVisibleSubprocessLinks(record.parentInstanceId(), linksByParentInstanceId, subtreeLinks);
+        for (com.westflow.processruntime.model.ProcessLinkRecord subtreeLink : subtreeLinks) {
+            if (record.childInstanceId().equals(subtreeLink.childInstanceId())) {
+                continue;
+            }
+            if (!"TERMINATED".equals(subtreeLink.status())) {
+                processLinkService.updateStatus(subtreeLink.childInstanceId(), "TERMINATED", finishedAt);
+            }
+        }
+        LinkedHashSet<String> subtreeInstanceIds = new LinkedHashSet<>();
+        subtreeInstanceIds.add(record.parentInstanceId());
+        subtreeLinks.stream()
+                .map(com.westflow.processruntime.model.ProcessLinkRecord::childInstanceId)
+                .filter(childInstanceId -> !record.childInstanceId().equals(childInstanceId))
+                .forEach(subtreeInstanceIds::add);
+        subtreeInstanceIds.forEach(instanceId -> runtimeAppendLinkService.markTerminatedByParentInstanceId(instanceId, finishedAt));
+        appendInstanceEvent(
+                record.parentInstanceId(),
+                null,
+                record.parentNodeId(),
+                "SUBPROCESS_FINISH_TERMINATE_PARENT",
+                "子流程完成后终止父流程",
+                "INSTANCE",
+                null,
+                record.childInstanceId(),
+                null,
+                eventDetails(
+                        "childInstanceId", record.childInstanceId(),
+                        "parentNodeId", record.parentNodeId(),
+                        "childFinishPolicy", record.childFinishPolicy()
+                ),
+                null,
+                record.parentNodeId(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private String resolveRuntimeTreeRootInstanceId(String instanceId) {
@@ -4038,6 +4204,11 @@ public class FlowableProcessRuntimeService {
         );
     }
 
+    private boolean requiresParentConfirmation(SubprocessStructureMetadata structureMetadata) {
+        return "WAIT_PARENT_CONFIRM".equals(structureMetadata.parentResumeStrategy())
+                || "WAIT_PARENT_CONFIRM".equals(structureMetadata.joinMode());
+    }
+
     private String resolveTaskName(String taskId) {
         if (taskId == null || taskId.isBlank()) {
             return null;
@@ -4064,12 +4235,27 @@ public class FlowableProcessRuntimeService {
         return stringValue(expression);
     }
 
-    private String buildInclusiveDecisionSummary(int branchCount, int activatedCount, boolean hasJoin) {
+    private String buildInclusiveDecisionSummary(
+            int branchCount,
+            int eligibleCount,
+            int activatedCount,
+            String branchMergePolicy,
+            boolean defaultBranchSelected,
+            boolean hasJoin
+    ) {
         String base = "已激活 " + activatedCount + "/" + branchCount + " 条分支";
-        if (!hasJoin) {
-            return base + "，未找到汇聚节点";
+        StringBuilder summary = new StringBuilder(base)
+                .append("，命中候选 ").append(eligibleCount).append(" 条");
+        if (branchMergePolicy != null && !branchMergePolicy.isBlank()) {
+            summary.append("，策略 ").append(branchMergePolicy);
         }
-        return base;
+        if (defaultBranchSelected) {
+            summary.append("，已走默认分支");
+        }
+        if (!hasJoin) {
+            return summary.append("，未找到汇聚节点").toString();
+        }
+        return summary.toString();
     }
 
     private HistoricProcessInstance requireHistoricProcessInstance(String processInstanceId) {
@@ -4669,6 +4855,20 @@ public class FlowableProcessRuntimeService {
         return List.copyOf(results);
     }
 
+    private List<Integer> integerListValue(Object value) {
+        if (!(value instanceof List<?> values) || values.isEmpty()) {
+            return List.of();
+        }
+        List<Integer> results = new ArrayList<>();
+        for (Object item : values) {
+            Integer resolved = integerValue(item);
+            if (resolved != null) {
+                results.add(resolved);
+            }
+        }
+        return List.copyOf(results);
+    }
+
     private String stringValue(Object value) {
         if (value == null) {
             return null;
@@ -4874,4 +5074,5 @@ public class FlowableProcessRuntimeService {
             String targetUserId
     ) {
     }
+
 }
