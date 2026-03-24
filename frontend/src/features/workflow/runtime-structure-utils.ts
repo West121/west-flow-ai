@@ -8,6 +8,8 @@ export type RuntimeStructureLink = {
   calledDefinitionId?: string | null
   calledVersionPolicy?: string | null
   calledVersion?: number | null
+  targetBusinessType?: string | null
+  targetSceneCode?: string | null
   linkType?: string | null
   runtimeLinkType?: string | null
   triggerMode?: string | null
@@ -16,12 +18,14 @@ export type RuntimeStructureLink = {
   callScope?: string | null
   joinMode?: string | null
   childStartStrategy?: string | null
+  childStartDecisionReason?: string | null
   parentResumeStrategy?: string | null
   resumeDecisionReason?: string | null
   executionStrategy?: string | null
   fallbackStrategy?: string | null
   buildMode?: string | null
   sourceMode?: string | null
+  resolvedTargetMode?: string | null
   resolvedSourceMode?: string | null
   resolutionPath?: string | null
   templateSource?: string | null

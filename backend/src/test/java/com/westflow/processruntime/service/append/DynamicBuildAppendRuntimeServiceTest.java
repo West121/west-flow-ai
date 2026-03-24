@@ -180,6 +180,9 @@ class DynamicBuildAppendRuntimeServiceTest {
         assertThat(record.targetInstanceId()).isEqualTo("child_001");
         assertThat(record.calledProcessKey()).isEqualTo("oa_sub_review");
         assertThat(record.calledDefinitionId()).isEqualTo("child_pd_001");
+        assertThat(record.calledVersionPolicy()).isEqualTo("LATEST_PUBLISHED");
+        assertThat(record.resolvedTargetMode()).isEqualTo("PROCESS_KEY");
+        assertThat(record.targetBusinessType()).isEqualTo("OA_COMMON");
         assertThat(record.rootInstanceId()).isEqualTo("instance_1");
         assertThat(record.parentInstanceId()).isEqualTo("instance_1");
         assertThat(record.sourceNodeId()).isEqualTo("dynamic_builder_1");
@@ -219,6 +222,10 @@ class DynamicBuildAppendRuntimeServiceTest {
         ArgumentCaptor<RuntimeAppendLinkRecord> recordCaptor = ArgumentCaptor.forClass(RuntimeAppendLinkRecord.class);
         verify(runtimeAppendLinkService).createLink(recordCaptor.capture());
         RuntimeAppendLinkRecord record = recordCaptor.getValue();
+        assertThat(record.calledVersionPolicy()).isEqualTo("LATEST_PUBLISHED");
+        assertThat(record.resolvedTargetMode()).isEqualTo("PROCESS_KEY");
+        assertThat(record.targetBusinessType()).isEqualTo("OA_COMMON");
+        assertThat(record.targetSceneCode()).isEqualTo("oa_sub_review");
         assertThat(record.appendType()).isEqualTo("SUBPROCESS");
         assertThat(record.calledProcessKey()).isEqualTo("oa_sub_review");
         assertThat(record.targetInstanceId()).isEqualTo("child_001");

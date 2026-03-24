@@ -146,6 +146,7 @@ public class FlowableRuntimeStartService {
                     stringValueOrDefault(config.get("callScope"), "CHILD_ONLY"),
                     stringValueOrDefault(config.get("joinMode"), "AUTO_RETURN"),
                     stringValueOrDefault(config.get("childStartStrategy"), "LATEST_PUBLISHED"),
+                    resolveChildStartDecisionReason(config, resolveProcessBusinessType(parentInstance.getProcessInstanceId())),
                     stringValueOrDefault(config.get("parentResumeStrategy"), "AUTO_RETURN"),
                     now,
                     null
@@ -370,6 +371,27 @@ public class FlowableRuntimeStartService {
             throw new IllegalStateException("SCENE_BINDING 子流程缺少业务类型或场景码: nodeId=" + nodeId);
         }
         return businessProcessBindingService.resolveProcessKey(businessType, sceneCode);
+    }
+
+    private String resolveChildStartDecisionReason(Map<String, Object> config, String businessType) {
+        String childStartStrategy = stringValueOrDefault(config.get("childStartStrategy"), "LATEST_PUBLISHED");
+        return switch (childStartStrategy) {
+            case "SCENE_BINDING" -> {
+                String sceneCode = stringValue(config.get("sceneCode"));
+                String resolvedBusinessType = businessType == null || businessType.isBlank() ? "UNKNOWN" : businessType;
+                yield sceneCode == null || sceneCode.isBlank()
+                        ? "SCENE_BINDING"
+                        : "SCENE_BINDING:" + resolvedBusinessType + "/" + sceneCode;
+            }
+            case "FIXED_VERSION" -> {
+                String calledProcessKey = stringValue(config.get("calledProcessKey"));
+                Object calledVersion = config.get("calledVersion");
+                yield calledProcessKey == null || calledProcessKey.isBlank()
+                        ? "FIXED_VERSION"
+                        : calledProcessKey + "@" + String.valueOf(calledVersion == null ? "LATEST" : calledVersion);
+            }
+            default -> "LATEST_PUBLISHED";
+        };
     }
 
     private String subprocessCalledElementVariable(String nodeId) {

@@ -18,6 +18,7 @@ public record ProcessLinkRecord(
         String callScope,
         String joinMode,
         String childStartStrategy,
+        String childStartDecisionReason,
         String parentResumeStrategy,
         Instant createdAt,
         Instant finishedAt
@@ -53,6 +54,48 @@ public record ProcessLinkRecord(
                 null,
                 null,
                 null,
+                null,
+                createdAt,
+                finishedAt
+        );
+    }
+
+    public ProcessLinkRecord(
+            String id,
+            String rootInstanceId,
+            String parentInstanceId,
+            String childInstanceId,
+            String parentNodeId,
+            String calledProcessKey,
+            String calledDefinitionId,
+            String linkType,
+            String status,
+            String terminatePolicy,
+            String childFinishPolicy,
+            String callScope,
+            String joinMode,
+            String childStartStrategy,
+            String parentResumeStrategy,
+            Instant createdAt,
+            Instant finishedAt
+    ) {
+        this(
+                id,
+                rootInstanceId,
+                parentInstanceId,
+                childInstanceId,
+                parentNodeId,
+                calledProcessKey,
+                calledDefinitionId,
+                linkType,
+                status,
+                terminatePolicy,
+                childFinishPolicy,
+                callScope,
+                joinMode,
+                childStartStrategy,
+                null,
+                parentResumeStrategy,
                 createdAt,
                 finishedAt
         );

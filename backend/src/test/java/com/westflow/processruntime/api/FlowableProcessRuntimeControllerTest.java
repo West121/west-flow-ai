@@ -428,6 +428,7 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(linksBody.get(0).path("callScope").asText()).isEqualTo("CHILD_ONLY");
         assertThat(linksBody.get(0).path("joinMode").asText()).isEqualTo("AUTO_RETURN");
         assertThat(linksBody.get(0).path("childStartStrategy").asText()).isEqualTo("LATEST_PUBLISHED");
+        assertThat(linksBody.get(0).path("childStartDecisionReason").asText()).isEqualTo("LATEST_PUBLISHED");
         assertThat(linksBody.get(0).path("parentResumeStrategy").asText()).isEqualTo("AUTO_RETURN");
         assertThat(linksBody.get(0).path("calledVersionPolicy").asText()).isEqualTo("LATEST_PUBLISHED");
         assertThat(linksBody.get(0).path("resumeDecisionReason").asText()).isEqualTo("AUTO_RETURN");
@@ -1226,8 +1227,11 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("triggerMode").asText()).isEqualTo("DYNAMIC_BUILD");
         assertThat(detailBody.path("appendLinks").get(0).path("appendType").asText()).isEqualTo("TASK");
         assertThat(detailBody.path("appendLinks").get(0).path("resolvedSourceMode").asText()).isEqualTo("MODEL_DRIVEN");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolvedTargetMode").asText()).isEqualTo("USER");
         assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("TEMPLATE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("templateSource").asText()).isEqualTo("SCENE_CODE");
+        assertThat(detailBody.path("appendLinks").get(0).path("targetBusinessType").asText()).isEqualTo("OA_LEAVE");
+        assertThat(detailBody.path("appendLinks").get(0).path("targetSceneCode").asText()).isEqualTo("leave_model_scene");
         assertThat(detailBody.path("appendLinks").get(0).path("targetUserId").asText()).isEqualTo("usr_003");
     }
 
@@ -1283,9 +1287,13 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").size()).isEqualTo(1);
         assertThat(detailBody.path("appendLinks").get(0).path("appendType").asText()).isEqualTo("SUBPROCESS");
         assertThat(detailBody.path("appendLinks").get(0).path("calledProcessKey").asText()).isEqualTo("oa_sub_review");
+        assertThat(detailBody.path("appendLinks").get(0).path("calledVersionPolicy").asText()).isEqualTo("LATEST_PUBLISHED");
         assertThat(detailBody.path("appendLinks").get(0).path("resolvedSourceMode").asText()).isEqualTo("MODEL_DRIVEN");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolvedTargetMode").asText()).isEqualTo("PROCESS_KEY");
         assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("TEMPLATE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("templateSource").asText()).isEqualTo("SCENE_CODE");
+        assertThat(detailBody.path("appendLinks").get(0).path("targetBusinessType").asText()).isEqualTo("OA_LEAVE");
+        assertThat(detailBody.path("appendLinks").get(0).path("targetSceneCode").asText()).isEqualTo("leave_sub_review_scene");
         assertThat(detailBody.path("appendLinks").get(0).path("targetInstanceId").asText()).isNotBlank();
     }
 

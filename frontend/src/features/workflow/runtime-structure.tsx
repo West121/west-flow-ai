@@ -156,6 +156,8 @@ function RuntimeStructureItem({
           <div>子流程定义：{link.calledDefinitionId ?? '--'}</div>
           <div>调用版本策略：{link.calledVersionPolicy ?? '--'}</div>
           <div>调用版本：{link.calledVersion ?? '--'}</div>
+          <div>业务类型：{link.targetBusinessType ?? '--'}</div>
+          <div>场景编码：{link.targetSceneCode ?? '--'}</div>
           <div>目标用户：{link.targetUserId ?? '--'}</div>
           <div>终止策略：{link.terminatePolicy ?? '--'}</div>
           <div>完成策略：{link.childFinishPolicy ?? '--'}</div>
@@ -167,6 +169,7 @@ function RuntimeStructureItem({
           'callScope',
           'joinMode',
           'childStartStrategy',
+          'childStartDecisionReason',
           'parentResumeStrategy',
           'resumeDecisionReason',
         ]) ? (
@@ -179,6 +182,10 @@ function RuntimeStructureItem({
                 {
                   label: '子流程启动策略',
                   value: resolveLinkField(link, 'childStartStrategy'),
+                },
+                {
+                  label: '启动决策',
+                  value: resolveLinkField(link, 'childStartDecisionReason'),
                 },
                 {
                   label: '父流程恢复策略',
@@ -196,6 +203,7 @@ function RuntimeStructureItem({
         {hasAnyLinkField(link, [
           'buildMode',
           'sourceMode',
+          'resolvedTargetMode',
           'executionStrategy',
           'fallbackStrategy',
           'resolvedSourceMode',
@@ -213,6 +221,10 @@ function RuntimeStructureItem({
                 {
                   label: '来源模式',
                   value: resolveLinkField(link, 'sourceMode'),
+                },
+                {
+                  label: '目标模式',
+                  value: resolveLinkField(link, 'resolvedTargetMode'),
                 },
                 {
                   label: '执行策略',

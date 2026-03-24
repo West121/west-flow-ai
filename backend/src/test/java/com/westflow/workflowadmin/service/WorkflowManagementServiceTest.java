@@ -103,6 +103,7 @@ class WorkflowManagementServiceTest {
                 "CHILD_AND_DESCENDANTS",
                 "WAIT_PARENT_CONFIRM",
                 "SCENE_BINDING",
+                "SCENE_BINDING:OA_COMMON/leave_sub_review_scene",
                 "WAIT_PARENT_CONFIRM",
                 "WAIT_PARENT_CONFIRM",
                 OffsetDateTime.now(),

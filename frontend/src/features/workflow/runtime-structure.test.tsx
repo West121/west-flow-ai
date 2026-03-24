@@ -23,6 +23,7 @@ describe('runtime structure section', () => {
             callScope: 'CHILD_AND_DESCENDANTS',
             joinMode: 'WAIT_PARENT_CONFIRM',
             childStartStrategy: 'FIXED_VERSION',
+            childStartDecisionReason: 'oa_sub_review@1',
             parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
             resumeDecisionReason: 'PARENT_CONFIRM_RESUMED',
             terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
@@ -63,6 +64,8 @@ describe('runtime structure section', () => {
             parentNodeId: 'dynamic_builder_002',
             calledProcessKey: 'oa_leave_dynamic_subflow',
             calledDefinitionId: 'oa_leave_dynamic_subflow:2:1009',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: null,
             linkType: 'ADHOC',
             runtimeLinkType: 'ADHOC_SUBPROCESS',
             triggerMode: 'DYNAMIC_BUILD',
@@ -70,11 +73,14 @@ describe('runtime structure section', () => {
             status: 'COMPLETED',
             buildMode: 'SUBPROCESS_CALLS',
             sourceMode: 'MODEL_DRIVEN',
+            resolvedTargetMode: 'PROCESS_KEY',
             executionStrategy: 'TEMPLATE_FIRST',
             fallbackStrategy: 'USE_TEMPLATE',
             resolvedSourceMode: 'MODEL_DRIVEN',
             resolutionPath: 'TEMPLATE_PRIMARY',
             templateSource: 'SCENE_CODE',
+            targetBusinessType: 'OA_LEAVE',
+            targetSceneCode: 'leave_sub_review_scene',
             terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
             childFinishPolicy: 'TERMINATE_PARENT',
             sourceTaskId: 'task_root_001',
@@ -130,16 +136,20 @@ describe('runtime structure section', () => {
     expect(screen.getByText('调用范围：CHILD_AND_DESCENDANTS')).toBeInTheDocument()
     expect(screen.getByText('汇合模式：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
     expect(screen.getByText('子流程启动策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('启动决策：oa_sub_review@1')).toBeInTheDocument()
     expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
     expect(screen.getByText('恢复决策：PARENT_CONFIRM_RESUMED')).toBeInTheDocument()
     expect(screen.getByText('动态构建策略')).toBeInTheDocument()
     expect(screen.getByText('构建模式：SUBPROCESS_CALLS')).toBeInTheDocument()
     expect(screen.getByText('来源模式：MODEL_DRIVEN')).toBeInTheDocument()
+    expect(screen.getByText('目标模式：PROCESS_KEY')).toBeInTheDocument()
     expect(screen.getByText('执行策略：TEMPLATE_FIRST')).toBeInTheDocument()
     expect(screen.getByText('回退策略：USE_TEMPLATE')).toBeInTheDocument()
     expect(screen.getByText('实际来源：MODEL_DRIVEN')).toBeInTheDocument()
     expect(screen.getByText('解析路径：TEMPLATE_PRIMARY')).toBeInTheDocument()
     expect(screen.getByText('模板来源：SCENE_CODE')).toBeInTheDocument()
+    expect(screen.getByText('业务类型：OA_LEAVE')).toBeInTheDocument()
+    expect(screen.getByText('场景编码：leave_sub_review_scene')).toBeInTheDocument()
     expect(screen.getByText('附言：追加一位串行复核人')).toBeInTheDocument()
   })
 

@@ -789,6 +789,7 @@ public class FlowableProcessRuntimeService {
         if (!"NORMAL".equals(resolveTaskKind(sourceTask))) {
             throw actionNotAllowed("当前任务不支持追加", Map.of("taskId", taskId));
         }
+        Map<String, Object> parentVariables = runtimeVariables(sourceTask.getProcessInstanceId());
         List<String> targetUserIds = normalizeTargetUserIds(request.targetUserIds(), taskId);
         String appendPolicy = normalizeAppendPolicy(request.appendPolicy());
         String sourceNodeId = sourceTask.getTaskDefinitionKey();
@@ -835,6 +836,11 @@ public class FlowableProcessRuntimeService {
                 null,
                 targetUserId,
                 null,
+                null,
+                null,
+                null,
+                "USER",
+                stringValue(parentVariables.get("westflowBusinessType")),
                 null,
                 "RUNNING",
                 "APPEND",
@@ -948,6 +954,11 @@ public class FlowableProcessRuntimeService {
                 null,
                 definition.processKey(),
                 definition.processDefinitionId(),
+                versionPolicy,
+                "FIXED_VERSION".equals(versionPolicy) ? request.calledVersion() : null,
+                "PROCESS_KEY",
+                stringValue(parentVariables.get("westflowBusinessType")),
+                null,
                 "RUNNING",
                 "APPEND",
                 currentUserId(),
@@ -3312,6 +3323,11 @@ public class FlowableProcessRuntimeService {
                     targetUserId,
                     null,
                     null,
+                    null,
+                    null,
+                    "USER",
+                    null,
+                    null,
                     "RUNNING",
                     "DYNAMIC_BUILD",
                     operatorUserId,
@@ -3413,6 +3429,11 @@ public class FlowableProcessRuntimeService {
                     null,
                     childDefinition.processKey(),
                     childDefinition.processDefinitionId(),
+                    versionPolicy,
+                    calledVersion,
+                    null,
+                    stringValue(processVariables.get("westflowBusinessType")),
+                    stringValue(item.get("sceneCode")),
                     "RUNNING",
                     "DYNAMIC_BUILD",
                     operatorUserId,
@@ -3929,6 +3950,7 @@ public class FlowableProcessRuntimeService {
                 structureMetadata.callScope(),
                 structureMetadata.joinMode(),
                 structureMetadata.childStartStrategy(),
+                record.childStartDecisionReason(),
                 structureMetadata.parentResumeStrategy(),
                 resolveSubprocessResumeDecisionReason(record, structureMetadata),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
@@ -3978,12 +4000,17 @@ public class FlowableProcessRuntimeService {
                 record.targetUserId(),
                 record.calledProcessKey(),
                 record.calledDefinitionId(),
+                record.calledVersionPolicy(),
+                record.calledVersion(),
                 targetDefinition.processName(),
                 targetDefinition.version(),
                 record.status(),
                 record.triggerMode(),
                 stringValue(sourceNodeConfig.get("buildMode")),
                 normalizeDynamicBuilderSourceMode(stringValue(sourceNodeConfig.get("sourceMode"))),
+                stringValueOrDefault(record.resolvedTargetMode(), resolveDynamicBuilderTargetMode(record, sourceNodeConfig)),
+                stringValueOrDefault(record.targetBusinessType(), stringValue(runtimeOrHistoricVariables(record.parentInstanceId()).get("westflowBusinessType"))),
+                stringValueOrDefault(record.targetSceneCode(), stringValue(sourceNodeConfig.get("sceneCode"))),
                 stringValue(sourceNodeConfig.get("ruleExpression")),
                 stringValue(sourceNodeConfig.get("manualTemplateCode")),
                 stringValue(sourceNodeConfig.get("sceneCode")),
@@ -3997,6 +4024,22 @@ public class FlowableProcessRuntimeService {
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
                 record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
         );
+    }
+
+    private String resolveDynamicBuilderTargetMode(
+            RuntimeAppendLinkRecord record,
+            Map<String, Object> sourceNodeConfig
+    ) {
+        if (record.resolvedTargetMode() != null && !record.resolvedTargetMode().isBlank()) {
+            return record.resolvedTargetMode();
+        }
+        if (record.targetUserId() != null && !record.targetUserId().isBlank()) {
+            return "USER";
+        }
+        if (record.calledProcessKey() != null && !record.calledProcessKey().isBlank()) {
+            return "PROCESS_KEY";
+        }
+        return normalizeDynamicBuilderSourceMode(stringValue(sourceNodeConfig.get("sourceMode")));
     }
 
     private List<ProcessTaskSnapshot> activeAppendTasks(String processInstanceId) {

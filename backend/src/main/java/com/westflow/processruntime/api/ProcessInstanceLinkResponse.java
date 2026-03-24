@@ -25,6 +25,7 @@ public record ProcessInstanceLinkResponse(
         String callScope,
         String joinMode,
         String childStartStrategy,
+        String childStartDecisionReason,
         String parentResumeStrategy,
         String resumeDecisionReason,
         OffsetDateTime createdAt,

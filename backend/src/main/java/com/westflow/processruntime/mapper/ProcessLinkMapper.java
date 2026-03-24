@@ -29,6 +29,7 @@ public interface ProcessLinkMapper {
               call_scope,
               join_mode,
               child_start_strategy,
+              child_start_decision_reason,
               parent_resume_strategy,
               created_at,
               finished_at,
@@ -48,6 +49,7 @@ public interface ProcessLinkMapper {
               #{callScope},
               #{joinMode},
               #{childStartStrategy},
+              #{childStartDecisionReason},
               #{parentResumeStrategy},
               #{createdAt},
               #{finishedAt},
@@ -72,6 +74,7 @@ public interface ProcessLinkMapper {
               call_scope AS callScope,
               join_mode AS joinMode,
               child_start_strategy AS childStartStrategy,
+              child_start_decision_reason AS childStartDecisionReason,
               parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
@@ -97,6 +100,7 @@ public interface ProcessLinkMapper {
               call_scope AS callScope,
               join_mode AS joinMode,
               child_start_strategy AS childStartStrategy,
+              child_start_decision_reason AS childStartDecisionReason,
               parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
@@ -122,6 +126,7 @@ public interface ProcessLinkMapper {
               call_scope AS callScope,
               join_mode AS joinMode,
               child_start_strategy AS childStartStrategy,
+              child_start_decision_reason AS childStartDecisionReason,
               parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
@@ -147,6 +152,7 @@ public interface ProcessLinkMapper {
               call_scope AS callScope,
               join_mode AS joinMode,
               child_start_strategy AS childStartStrategy,
+              child_start_decision_reason AS childStartDecisionReason,
               parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
