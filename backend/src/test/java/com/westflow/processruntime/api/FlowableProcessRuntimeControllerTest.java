@@ -621,6 +621,8 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("RULE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("targetTaskName").asText()).isEqualTo("动态构建 / 动态生成审批");
         assertThat(detailBody.path("appendLinks").get(0).path("targetUserId").asText()).isEqualTo("usr_003");
+        assertThat(detailBody.path("activeTaskIds").size()).isEqualTo(2);
+        assertThat(detailBody.path("nodeId").asText()).isEqualTo("approve_manager");
     }
 
     @Test
@@ -666,6 +668,60 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("targetProcessName").asText()).isEqualTo("子流程审批");
         assertThat(detailBody.path("appendLinks").get(0).path("targetProcessVersion").asInt()).isEqualTo(1);
         assertThat(detailBody.path("appendLinks").get(0).path("targetInstanceId").asText()).isNotBlank();
+        assertThat(detailBody.path("instanceStatus").asText()).isEqualTo("RUNNING");
+        assertThat(detailBody.path("activeTaskIds").size()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldUnblockNextTaskAfterDynamicBuildSubprocessFinishesWhenSerialBeforeNext() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildDynamicBuilderSubprocessPayload());
+        seedLeaveBill("leave_029");
+
+        objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_dynamic_builder_subprocess",
+                                  "businessKey": "leave_029",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "动态构建附属子流程串行阻塞",
+                                    "dynamicSubprocessKeys": ["oa_sub_review"]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode detailBeforeTerminate = approvalDetailByBusiness(applicantToken, "leave_029");
+        String childInstanceId = detailBeforeTerminate.path("appendLinks").get(0).path("targetInstanceId").asText();
+        assertThat(childInstanceId).isNotBlank();
+        assertThat(detailBeforeTerminate.path("activeTaskIds").size()).isEqualTo(0);
+        assertThat(detailBeforeTerminate.path("instanceStatus").asText()).isEqualTo("RUNNING");
+
+        mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/terminate", childInstanceId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "terminateScope": "CHILD",
+                                  "childInstanceId": "%s",
+                                  "reason": "动态构建子流程已结束"
+                                }
+                                """.formatted(childInstanceId)))
+                .andExpect(status().isOk());
+
+        JsonNode detailAfterTerminate = approvalDetailByBusiness(applicantToken, "leave_029");
+        assertThat(detailAfterTerminate.path("appendLinks").get(0).path("status").asText()).isEqualTo("TERMINATED");
+        assertThat(detailAfterTerminate.path("activeTaskIds").size()).isEqualTo(1);
+        assertThat(detailAfterTerminate.path("nodeId").asText()).isEqualTo("approve_manager");
     }
 
     @Test

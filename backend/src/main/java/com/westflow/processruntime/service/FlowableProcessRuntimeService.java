@@ -194,16 +194,21 @@ public class FlowableProcessRuntimeService {
         Optional<BusinessLinkSnapshot> link = findBusinessLink(businessType, businessId);
         String processInstanceId = link.map(BusinessLinkSnapshot::processInstanceId)
                 .orElseGet(() -> resolveProcessInstanceIdByBusinessKey(businessId));
-        Task activeTask = flowableEngineFacade.taskService()
+        List<Task> activeTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(processInstanceId)
                 .active()
                 .orderByTaskCreateTime()
                 .asc()
-                .list()
-                .stream()
+                .list();
+        Task activeTask = activeTasks.stream()
+                .filter(this::isBlockingTask)
+                .filter(task -> !"APPEND".equals(resolveTaskKind(task)))
                 .findFirst()
-                .orElse(null);
+                .orElse(activeTasks.stream()
+                        .filter(this::isBlockingTask)
+                        .findFirst()
+                        .orElse(null));
         HistoricTaskInstance latestHistoricTask = flowableEngineFacade.historyService()
                 .createHistoricTaskInstanceQuery()
                 .processInstanceId(processInstanceId)
@@ -457,26 +462,27 @@ public class FlowableProcessRuntimeService {
         boolean isAssignee = currentUserId().equals(task.getAssignee());
         boolean canHandle = isAssignee || isCandidate;
         boolean blockedByAddSign = isNormalTask && hasActiveAddSignChild(task.getId());
+        boolean blockedByAppendPolicy = isNormalTask && isBlockedByPendingAppendStructures(task);
         boolean canTakeBack = isNormalTask && canTakeBack(task);
-        boolean canAddSign = isNormalTask && canHandle && !blockedByAddSign;
-        boolean canRemoveSign = isNormalTask && canHandle && blockedByAddSign;
+        boolean canAddSign = isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy;
+        boolean canRemoveSign = isNormalTask && canHandle && blockedByAddSign && !blockedByAppendPolicy;
         boolean canRead = "CC".equals(taskKind) && canHandle && "CC_PENDING".equals(resolveTaskStatus(task));
         return new TaskActionAvailabilityResponse(
                 isFlowHandleTask && task.getAssignee() == null && isCandidate,
-                isFlowHandleTask && canHandle && !blockedByAddSign,
-                isNormalTask && canHandle && !blockedByAddSign,
+                isFlowHandleTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
+                isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 isFlowHandleTask && canHandle,
-                isNormalTask && canHandle && !blockedByAddSign,
+                isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 canAddSign,
                 canRemoveSign,
                 canRevoke(task),
                 canUrge(task),
                 canRead,
-                isNormalTask && canHandle && !blockedByAddSign,
+                isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 isNormalTask && canHandle,
                 canTakeBack,
                 false,
-                isNormalTask && canHandle,
+                isNormalTask && canHandle && !blockedByAppendPolicy,
                 false
         );
     }
@@ -1686,7 +1692,10 @@ public class FlowableProcessRuntimeService {
                 .list();
         Task referenceActiveTask = activeTask != null
                 ? activeTask
-                : blockingActiveTasks.stream().findFirst().orElse(activeTasks.stream().findFirst().orElse(null));
+                : blockingActiveTasks.stream()
+                        .filter(task -> !"APPEND".equals(resolveTaskKind(task)))
+                        .findFirst()
+                        .orElse(blockingActiveTasks.stream().findFirst().orElse(activeTasks.stream().findFirst().orElse(null)));
         HistoricTaskInstance referenceHistoricTask = fallbackHistoricTask != null
                 ? fallbackHistoricTask
                 : historicTasks.stream().max(Comparator.comparing(HistoricTaskInstance::getCreateTime, Comparator.nullsLast(Comparator.naturalOrder()))).orElse(null);
@@ -3651,7 +3660,7 @@ public class FlowableProcessRuntimeService {
         return new CompleteTaskResponse(
                 processInstanceId,
                 completedTaskId,
-                blockingTaskViews(nextTasks).isEmpty() ? "COMPLETED" : "RUNNING",
+                blockingTaskViews(nextTasks).isEmpty() && !hasRunningAppendStructures(processInstanceId) ? "COMPLETED" : "RUNNING",
                 nextTasks
         );
     }
@@ -4125,7 +4134,9 @@ public class FlowableProcessRuntimeService {
         if (processInstance.getDeleteReason() != null) {
             return "WESTFLOW_REVOKED".equals(processInstance.getDeleteReason()) ? "REVOKED" : "COMPLETED";
         }
-        return activeTasks.stream().anyMatch(this::isBlockingTask) ? "RUNNING" : "COMPLETED";
+        return activeTasks.stream().anyMatch(this::isBlockingTask) || hasRunningAppendStructures(processInstance.getId())
+                ? "RUNNING"
+                : "COMPLETED";
     }
 
     private boolean hasActiveAddSignChild(String taskId) {
@@ -4138,11 +4149,57 @@ public class FlowableProcessRuntimeService {
     }
 
     private boolean isBlockingTask(Task task) {
-        return !"CC".equals(resolveTaskKind(task));
+        return isVisibleTask(task) && !"CC".equals(resolveTaskKind(task));
     }
 
     private boolean isVisibleTask(Task task) {
-        return true;
+        if (task == null) {
+            return false;
+        }
+        if (!"NORMAL".equals(resolveTaskKind(task))) {
+            return true;
+        }
+        return !isBlockedByPendingAppendStructures(task);
+    }
+
+    private boolean isBlockedByPendingAppendStructures(Task task) {
+        if (task == null) {
+            return false;
+        }
+        return blockingDynamicBuilderNodeIds(task.getProcessInstanceId(), task.getTaskDefinitionKey()).stream()
+                .anyMatch(sourceNodeId -> runtimeAppendLinkService.listByParentInstanceId(task.getProcessInstanceId()).stream()
+                        .anyMatch(link -> "RUNNING".equals(link.status()) && sourceNodeId.equals(link.sourceNodeId())));
+    }
+
+    private List<String> blockingDynamicBuilderNodeIds(String processInstanceId, String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return List.of();
+        }
+        return resolvePublishedDefinitionByInstance(processInstanceId)
+                .map(definition -> definition.dsl().edges().stream()
+                        .filter(edge -> nodeId.equals(edge.target()))
+                        .map(edge -> definition.dsl().nodes().stream()
+                                .filter(node -> edge.source().equals(node.id()))
+                                .findFirst()
+                                .orElse(null))
+                        .filter(Objects::nonNull)
+                        .filter(node -> "dynamic-builder".equals(node.type()))
+                        .filter(node -> {
+                            String appendPolicy = normalizeAppendPolicy(stringValue(nodeConfig(definition.dsl(), node.id()).get("appendPolicy")));
+                            return !"PARALLEL_WITH_CURRENT".equals(appendPolicy);
+                        })
+                        .map(ProcessDslPayload.Node::id)
+                        .distinct()
+                        .toList())
+                .orElse(List.of());
+    }
+
+    private boolean hasRunningAppendStructures(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return false;
+        }
+        return runtimeAppendLinkService.listByParentInstanceId(processInstanceId).stream()
+                .anyMatch(link -> "RUNNING".equals(link.status()));
     }
 
     private List<ProcessTaskSnapshot> blockingTaskViews(List<ProcessTaskSnapshot> nextTasks) {
