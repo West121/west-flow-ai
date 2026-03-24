@@ -51,6 +51,7 @@ import com.westflow.processruntime.api.TransferTaskRequest;
 import com.westflow.processruntime.api.WakeUpInstanceRequest;
 import com.westflow.processruntime.api.WorkflowFieldBinding;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
+import com.westflow.processruntime.service.append.DynamicBuildAppendRuntimeService;
 import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -137,6 +138,7 @@ public class FlowableProcessRuntimeService {
     private final ProcessRuntimeTraceStore traceStore;
     private final JdbcTemplate jdbcTemplate;
     private final WorkflowOperationLogService workflowOperationLogService;
+    private final DynamicBuildAppendRuntimeService dynamicBuildAppendRuntimeService;
 
     /**
      * 发起真实 Flowable 流程实例。
@@ -862,100 +864,7 @@ public class FlowableProcessRuntimeService {
      */
     @Transactional
     public void executeDynamicBuilder(String processInstanceId, String sourceNodeId) {
-        Map<String, Object> processVariables = runtimeOrHistoricVariables(processInstanceId);
-        // 先做一次显式流程实例/执行查询，确保当前命令中的运行时实体已刷新到数据库，
-        // 避免附属任务在同一事务里插入时碰到 proc_inst_id 外键约束。
-        flowableEngineFacade.runtimeService()
-                .createProcessInstanceQuery()
-                .processInstanceId(processInstanceId)
-                .singleResult();
-        flowableEngineFacade.runtimeService()
-                .createExecutionQuery()
-                .processInstanceId(processInstanceId)
-                .singleResult();
-        PublishedProcessDefinition definition = resolvePublishedDefinition(
-                stringValue(processVariables.get("westflowProcessDefinitionId")),
-                stringValue(processVariables.get("westflowProcessDefinitionId")),
-                stringValue(processVariables.get("westflowProcessKey")),
-                processInstanceId
-        );
-        ProcessDslPayload payload = definition.dsl();
-        Map<String, Object> config = nodeConfig(payload, sourceNodeId);
-        if (config.isEmpty()) {
-            return;
-        }
-        if (runtimeAppendLinkService.listByParentInstanceId(processInstanceId).stream()
-                .anyMatch(record -> "DYNAMIC_BUILD".equals(record.triggerMode()) && sourceNodeId.equals(record.sourceNodeId()))) {
-            return;
-        }
-        String buildMode = stringValue(config.get("buildMode"));
-        String appendPolicy = normalizeAppendPolicy(stringValue(config.get("appendPolicy")));
-        Integer maxGeneratedCount = Optional.ofNullable((Integer) config.get("maxGeneratedCount")).orElse(1);
-        String operatorUserId = resolveRuntimeOperatorUserId(processVariables);
-        String nodeName = payload.nodes().stream()
-                .filter(node -> sourceNodeId.equals(node.id()))
-                .findFirst()
-                .map(ProcessDslPayload.Node::name)
-                .orElse(sourceNodeId);
-        List<Map<String, Object>> generatedItems = resolveDynamicBuilderItems(buildMode, config, processVariables, maxGeneratedCount);
-        if (generatedItems.isEmpty()) {
-            appendInstanceEvent(
-                    processInstanceId,
-                    null,
-                    sourceNodeId,
-                    "DYNAMIC_BUILD_TRIGGERED",
-                    "动态构建已触发",
-                    "INSTANCE",
-                    null,
-                    null,
-                    null,
-                    eventDetails(
-                            "sourceNodeId", sourceNodeId,
-                            "buildMode", buildMode,
-                            "appendPolicy", appendPolicy,
-                            "generatedCount", 0
-                    ),
-                    null,
-                    sourceNodeId,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    operatorUserId
-            );
-            return;
-        }
-        appendInstanceEvent(
-                processInstanceId,
-                null,
-                sourceNodeId,
-                "DYNAMIC_BUILD_TRIGGERED",
-                "动态构建已触发",
-                "INSTANCE",
-                null,
-                null,
-                null,
-                eventDetails(
-                        "sourceNodeId", sourceNodeId,
-                        "buildMode", buildMode,
-                        "appendPolicy", appendPolicy,
-                        "generatedCount", generatedItems.size()
-                ),
-                null,
-                sourceNodeId,
-                null,
-                null,
-                null,
-                null,
-                null,
-                operatorUserId
-        );
-        if ("SUBPROCESS_CALLS".equals(buildMode)) {
-            createDynamicBuildSubprocesses(processInstanceId, sourceNodeId, nodeName, definition, appendPolicy, processVariables, generatedItems, operatorUserId);
-            return;
-        }
-        createDynamicBuildTasks(processInstanceId, sourceNodeId, nodeName, appendPolicy, generatedItems, operatorUserId);
+        dynamicBuildAppendRuntimeService.executeDynamicBuilder(processInstanceId, sourceNodeId);
     }
 
     /**

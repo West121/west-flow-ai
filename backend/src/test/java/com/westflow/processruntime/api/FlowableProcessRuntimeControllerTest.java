@@ -881,6 +881,99 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldGenerateModelDrivenDynamicBuildTaskLinksOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildDynamicBuilderTaskModelDrivenPayload());
+        seedLeaveBill("leave_030");
+
+        objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_dynamic_builder_tasks_model",
+                                  "businessKey": "leave_030",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "动态构建模型驱动附属任务"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_030");
+        assertThat(detailBody.path("appendLinks").size()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("triggerMode").asText()).isEqualTo("DYNAMIC_BUILD");
+        assertThat(detailBody.path("appendLinks").get(0).path("appendType").asText()).isEqualTo("TASK");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolvedSourceMode").asText()).isEqualTo("MODEL_DRIVEN");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("TEMPLATE_PRIMARY");
+        assertThat(detailBody.path("appendLinks").get(0).path("templateSource").asText()).isEqualTo("SCENE_CODE");
+        assertThat(detailBody.path("appendLinks").get(0).path("targetUserId").asText()).isEqualTo("usr_003");
+    }
+
+    @Test
+    void shouldGenerateModelDrivenDynamicBuildSubprocessLinksOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildDynamicBuilderSubprocessModelDrivenPayload());
+        String childProcessDefinitionId = processDefinitionService.getLatestByProcessKey("oa_sub_review").processDefinitionId();
+        jdbcTemplate.update(
+                """
+                INSERT INTO wf_business_process_binding (
+                  id,
+                  business_type,
+                  scene_code,
+                  process_key,
+                  process_definition_id,
+                  enabled,
+                  priority,
+                  created_at,
+                  updated_at
+                ) VALUES (?, ?, ?, ?, ?, TRUE, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "binding_dynamic_model_sub",
+                "OA_LEAVE",
+                "leave_sub_review_scene",
+                "oa_sub_review",
+                childProcessDefinitionId,
+                100
+        );
+        seedLeaveBill("leave_031");
+
+        objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_dynamic_builder_subprocess_model",
+                                  "businessKey": "leave_031",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "动态构建模型驱动附属子流程"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_031");
+        assertThat(detailBody.path("appendLinks").size()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("appendType").asText()).isEqualTo("SUBPROCESS");
+        assertThat(detailBody.path("appendLinks").get(0).path("calledProcessKey").asText()).isEqualTo("oa_sub_review");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolvedSourceMode").asText()).isEqualTo("MODEL_DRIVEN");
+        assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("TEMPLATE_PRIMARY");
+        assertThat(detailBody.path("appendLinks").get(0).path("templateSource").asText()).isEqualTo("SCENE_CODE");
+        assertThat(detailBody.path("appendLinks").get(0).path("targetInstanceId").asText()).isNotBlank();
+    }
+
+    @Test
     void shouldExposeOrSignAutoFinishedMembersOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -3019,6 +3112,151 @@ class FlowableProcessRuntimeControllerTest {
                         "sourceMode": "RULE",
                         "ruleExpression": "${dynamicSubprocessKeys}",
                         "manualTemplateCode": "",
+                        "appendPolicy": "SERIAL_BEFORE_NEXT",
+                        "maxGeneratedCount": 1,
+                        "terminatePolicy": "TERMINATE_GENERATED_ONLY"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "领导审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "dynamic_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "dynamic_1", "target": "approve_manager", "priority": 10, "label": "继续"},
+                    {"id": "edge_3", "source": "approve_manager", "target": "end_1", "priority": 10, "label": "完成"}
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderTaskModelDrivenPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_builder_tasks_model",
+                  "processName": "动态构建模型驱动附属任务",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_builder_tasks_model_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "APPROVER_TASKS",
+                        "sourceMode": "MODEL_DRIVEN",
+                        "sceneCode": "usr_003",
+                        "appendPolicy": "PARALLEL_WITH_CURRENT",
+                        "maxGeneratedCount": 1,
+                        "terminatePolicy": "TERMINATE_GENERATED_ONLY"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "领导审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "dynamic_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "dynamic_1", "target": "approve_manager", "priority": 10, "label": "继续"},
+                    {"id": "edge_3", "source": "approve_manager", "target": "end_1", "priority": 10, "label": "完成"}
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderSubprocessModelDrivenPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_builder_subprocess_model",
+                  "processName": "动态构建模型驱动附属子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_builder_subprocess_model_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "SUBPROCESS_CALLS",
+                        "sourceMode": "MODEL_DRIVEN",
+                        "sceneCode": "leave_sub_review_scene",
+                        "businessType": "OA_LEAVE",
                         "appendPolicy": "SERIAL_BEFORE_NEXT",
                         "maxGeneratedCount": 1,
                         "terminatePolicy": "TERMINATE_GENERATED_ONLY"
