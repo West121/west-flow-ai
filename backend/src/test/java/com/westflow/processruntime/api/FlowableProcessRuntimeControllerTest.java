@@ -3992,7 +3992,14 @@ class FlowableProcessRuntimeControllerTest {
                       "config": {
                         "buildMode": "APPROVER_TASKS",
                         "sourceMode": "MODEL_DRIVEN",
-                        "sceneCode": "usr_003",
+                        "sceneCode": "leave_model_scene",
+                        "targets": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
                         "appendPolicy": "PARALLEL_WITH_CURRENT",
                         "maxGeneratedCount": 1,
                         "terminatePolicy": "TERMINATE_GENERATED_ONLY"
