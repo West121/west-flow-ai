@@ -13,7 +13,7 @@ import com.westflow.processruntime.service.CountersignAssigneeResolver;
 import com.westflow.processruntime.service.FlowableTaskActionService;
 import com.westflow.processruntime.service.ProcessLinkService;
 import com.westflow.processruntime.service.RuntimeAppendLinkService;
-import java.math.BigDecimal;
+import com.westflow.processruntime.service.WorkflowFormulaEvaluator;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,8 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
@@ -42,7 +40,6 @@ import org.springframework.stereotype.Service;
 @ConditionalOnBean(FlowableEngineFacade.class)
 public class DynamicBuildAppendRuntimeService {
 
-    private static final Pattern SIMPLE_COMPARISON_PATTERN = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*(==|!=|>=|<=|>|<)\\s*(.+)$");
     private static final String DYNAMIC_RESOLVED_SOURCE_MODE = "westflowDynamicResolvedSourceMode";
     private static final String DYNAMIC_RESOLUTION_PATH = "westflowDynamicResolutionPath";
     private static final String DYNAMIC_TEMPLATE_SOURCE = "westflowDynamicTemplateSource";
@@ -421,31 +418,7 @@ public class DynamicBuildAppendRuntimeService {
 
     private Object evaluateDynamicBuilderRule(String ruleExpression, Map<String, Object> processVariables) {
         try {
-            String normalizedExpression = ruleExpression;
-            if (normalizedExpression.startsWith("${") && normalizedExpression.endsWith("}")) {
-                normalizedExpression = normalizedExpression.substring(2, normalizedExpression.length() - 1).trim();
-            }
-            if (processVariables.containsKey(normalizedExpression)) {
-                return processVariables.get(normalizedExpression);
-            }
-            Matcher matcher = SIMPLE_COMPARISON_PATTERN.matcher(normalizedExpression);
-            if (matcher.matches()) {
-                String variableName = matcher.group(1);
-                String operator = matcher.group(2);
-                String rightOperand = matcher.group(3).trim();
-                Object leftValue = processVariables.get(variableName);
-                if (leftValue == null) {
-                    return false;
-                }
-                return compareDynamicBuilderValues(leftValue, operator, rightOperand);
-            }
-            if ("true".equalsIgnoreCase(normalizedExpression)) {
-                return true;
-            }
-            if ("false".equalsIgnoreCase(normalizedExpression)) {
-                return false;
-            }
-            return processVariables.get(normalizedExpression);
+            return WorkflowFormulaEvaluator.execute(ruleExpression, processVariables);
         } catch (RuntimeException exception) {
             throw new ContractException(
                     "PROCESS.DYNAMIC_BUILD_RULE_FAILED",
@@ -457,56 +430,6 @@ public class DynamicBuildAppendRuntimeService {
                     )
             );
         }
-    }
-
-    private boolean compareDynamicBuilderValues(Object leftValue, String operator, String rightOperand) {
-        if (leftValue instanceof Number numberValue && isNumeric(rightOperand)) {
-            BigDecimal leftNumber = new BigDecimal(String.valueOf(numberValue));
-            BigDecimal rightNumber = new BigDecimal(rightOperand);
-            return switch (operator) {
-                case ">" -> leftNumber.compareTo(rightNumber) > 0;
-                case ">=" -> leftNumber.compareTo(rightNumber) >= 0;
-                case "<" -> leftNumber.compareTo(rightNumber) < 0;
-                case "<=" -> leftNumber.compareTo(rightNumber) <= 0;
-                case "==" -> leftNumber.compareTo(rightNumber) == 0;
-                case "!=" -> leftNumber.compareTo(rightNumber) != 0;
-                default -> false;
-            };
-        }
-        String leftText = String.valueOf(leftValue);
-        String rightText = normalizeQuotedText(rightOperand);
-        return switch (operator) {
-            case "==" -> leftText.equals(rightText);
-            case "!=" -> !leftText.equals(rightText);
-            case ">" -> leftText.compareTo(rightText) > 0;
-            case ">=" -> leftText.compareTo(rightText) >= 0;
-            case "<" -> leftText.compareTo(rightText) < 0;
-            case "<=" -> leftText.compareTo(rightText) <= 0;
-            default -> false;
-        };
-    }
-
-    private boolean isNumeric(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        try {
-            new BigDecimal(normalizeQuotedText(value));
-            return true;
-        } catch (NumberFormatException exception) {
-            return false;
-        }
-    }
-
-    private String normalizeQuotedText(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-            return trimmed.substring(1, trimmed.length() - 1);
-        }
-        return trimmed;
     }
 
     private List<?> resolveDynamicBuilderFallbackItems(

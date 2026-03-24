@@ -1,9 +1,5 @@
 package com.westflow.processruntime.service;
 
-import com.googlecode.aviator.AviatorEvaluator;
-import com.googlecode.aviator.runtime.function.AbstractFunction;
-import com.googlecode.aviator.runtime.function.FunctionUtils;
-import com.googlecode.aviator.runtime.type.AviatorObject;
 import com.westflow.common.error.ContractException;
 import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
 import com.westflow.system.user.mapper.SystemUserMapper;
@@ -24,10 +20,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class CountersignAssigneeResolver {
-
-    static {
-        AviatorEvaluator.addFunction(new IfElseFunction());
-    }
 
     private final SystemUserMapper systemUserMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
@@ -60,7 +52,7 @@ public class CountersignAssigneeResolver {
             return null;
         }
         try {
-            return AviatorEvaluator.execute(expression, startVariables, true);
+            return WorkflowFormulaEvaluator.execute(expression, startVariables);
         } catch (RuntimeException exception) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
@@ -146,21 +138,5 @@ public class CountersignAssigneeResolver {
         }
         String stringValue = String.valueOf(value).trim();
         return stringValue.isBlank() ? null : stringValue;
-    }
-
-    /**
-     * 受控公式编辑器里统一支持 ifElse(condition, whenTrue, whenFalse)。
-     */
-    private static final class IfElseFunction extends AbstractFunction {
-
-        @Override
-        public String getName() {
-            return "ifElse";
-        }
-
-        @Override
-        public AviatorObject call(Map<String, Object> env, AviatorObject condition, AviatorObject whenTrue, AviatorObject whenFalse) {
-            return FunctionUtils.getBooleanValue(condition, env) ? whenTrue : whenFalse;
-        }
     }
 }
