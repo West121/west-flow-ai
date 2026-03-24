@@ -53,6 +53,40 @@ function resolveStructureTargetLabel(link: RuntimeStructureLink) {
   return '子流程实例'
 }
 
+function resolveLinkField(link: RuntimeStructureLink, field: string) {
+  const value = (link as RuntimeStructureLink & Record<string, unknown>)[field]
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim()
+  }
+
+  return null
+}
+
+function hasAnyLinkField(link: RuntimeStructureLink, fields: string[]) {
+  return fields.some((field) => resolveLinkField(link, field))
+}
+
+function RuntimeStructureFieldGrid({
+  items,
+}: {
+  items: Array<{ label: string; value: string | null | undefined }>
+}) {
+  const visibleItems = items.filter((item) => Boolean(item.value))
+  if (!visibleItems.length) {
+    return null
+  }
+
+  return (
+    <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
+      {visibleItems.map((item) => (
+        <div key={item.label}>
+          {item.label}：{item.value ?? '--'}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function RuntimeStructureItem({
   node,
   currentInstanceId,
@@ -106,6 +140,49 @@ function RuntimeStructureItem({
           <div>创建时间：{formatDateTime(link.createdAt)}</div>
           <div>结束时间：{formatDateTime(link.finishedAt)}</div>
         </div>
+
+        {hasAnyLinkField(link, [
+          'callScope',
+          'joinMode',
+          'childStartStrategy',
+          'parentResumeStrategy',
+        ]) ? (
+          <div className='space-y-2 rounded-md border bg-muted/20 p-3'>
+            <div className='text-sm font-medium'>子流程策略</div>
+            <RuntimeStructureFieldGrid
+              items={[
+                { label: '调用范围', value: resolveLinkField(link, 'callScope') },
+                { label: '汇合模式', value: resolveLinkField(link, 'joinMode') },
+                {
+                  label: '子流程启动策略',
+                  value: resolveLinkField(link, 'childStartStrategy'),
+                },
+                {
+                  label: '父流程恢复策略',
+                  value: resolveLinkField(link, 'parentResumeStrategy'),
+                },
+              ]}
+            />
+          </div>
+        ) : null}
+
+        {hasAnyLinkField(link, ['executionStrategy', 'fallbackStrategy']) ? (
+          <div className='space-y-2 rounded-md border bg-muted/20 p-3'>
+            <div className='text-sm font-medium'>动态构建策略</div>
+            <RuntimeStructureFieldGrid
+              items={[
+                {
+                  label: '执行策略',
+                  value: resolveLinkField(link, 'executionStrategy'),
+                },
+                {
+                  label: '回退策略',
+                  value: resolveLinkField(link, 'fallbackStrategy'),
+                },
+              ]}
+            />
+          </div>
+        ) : null}
 
         {link.commentText ? (
           <div className='rounded-md border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground'>

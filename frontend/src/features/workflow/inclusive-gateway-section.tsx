@@ -6,6 +6,13 @@ type InclusiveGatewayHit = {
   splitNodeName: string
   joinNodeId?: string | null
   joinNodeName?: string | null
+  defaultBranchId?: string | null
+  requiredBranchCount?: number | null
+  branchMergePolicy?: string | null
+  branchPriorities?: number[]
+  branchLabels?: string[]
+  branchExpressions?: string[]
+  decisionSummary?: string | null
   gatewayStatus: string
   totalTargetCount: number
   activatedTargetCount: number
@@ -36,6 +43,10 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date)
 }
 
+function joinOrDash(values: string[] | undefined) {
+  return values && values.length > 0 ? values.join('、') : '--'
+}
+
 export function InclusiveGatewaySection({
   hits,
   title = '包容分支命中',
@@ -63,6 +74,9 @@ export function InclusiveGatewaySection({
             <div className='flex flex-wrap items-center gap-2'>
               <Badge variant='secondary'>包容分支</Badge>
               <Badge variant='outline'>{hit.gatewayStatus}</Badge>
+              {hit.branchMergePolicy ? (
+                <Badge variant='outline'>{hit.branchMergePolicy}</Badge>
+              ) : null}
               <span className='text-sm font-medium'>{hit.splitNodeName}</span>
               {hit.joinNodeName ? (
                 <span className='text-sm text-muted-foreground'>
@@ -74,9 +88,24 @@ export function InclusiveGatewaySection({
             <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
               <div>总路径：{hit.totalTargetCount}</div>
               <div>命中路径：{hit.activatedTargetCount}</div>
+              <div>汇聚策略：{hit.branchMergePolicy ?? '--'}</div>
+              <div>默认分支：{hit.defaultBranchId ?? '--'}</div>
+              <div>必选分支数：{hit.requiredBranchCount ?? '--'}</div>
               <div>首次命中：{formatDateTime(hit.firstActivatedAt)}</div>
               <div>汇聚完成：{formatDateTime(hit.finishedAt)}</div>
             </div>
+
+            <div className='grid gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground md:grid-cols-3'>
+              <div>分支优先级：{joinOrDash(hit.branchPriorities?.map(String))}</div>
+              <div>分支名称：{joinOrDash(hit.branchLabels)}</div>
+              <div>分支表达式：{joinOrDash(hit.branchExpressions)}</div>
+            </div>
+
+            {hit.decisionSummary ? (
+              <div className='rounded-md border border-dashed bg-muted/20 p-3 text-sm text-muted-foreground'>
+                决策摘要：{hit.decisionSummary}
+              </div>
+            ) : null}
 
             <div className='grid gap-3 md:grid-cols-2'>
               <div className='rounded-md border border-dashed p-3'>

@@ -18,6 +18,10 @@ describe('runtime structure section', () => {
             calledDefinitionId: 'oa_sub_review:1:1004',
             linkType: 'CALL_ACTIVITY',
             status: 'RUNNING',
+            callScope: 'CHILD_AND_DESCENDANTS',
+            joinMode: 'WAIT_PARENT_CONFIRM',
+            childStartStrategy: 'FIXED_VERSION',
+            parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
             terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
             childFinishPolicy: 'RETURN_TO_PARENT',
             createdAt: '2026-03-23T10:10:00+08:00',
@@ -61,6 +65,8 @@ describe('runtime structure section', () => {
             triggerMode: 'DYNAMIC_BUILD',
             appendType: 'SUBPROCESS',
             status: 'COMPLETED',
+            executionStrategy: 'TEMPLATE_FIRST',
+            fallbackStrategy: 'USE_TEMPLATE',
             terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
             childFinishPolicy: 'TERMINATE_PARENT',
             sourceTaskId: 'task_root_001',
@@ -110,6 +116,14 @@ describe('runtime structure section', () => {
     expect(screen.getByText('结构来源：ADHOC_TASK')).toBeInTheDocument()
     expect(screen.getByText('结构来源：ADHOC_SUBPROCESS')).toBeInTheDocument()
     expect(screen.getByText('终止策略：TERMINATE_PARENT_AND_SUBPROCESS')).toBeInTheDocument()
+    expect(screen.getByText('子流程策略')).toBeInTheDocument()
+    expect(screen.getByText('调用范围：CHILD_AND_DESCENDANTS')).toBeInTheDocument()
+    expect(screen.getByText('汇合模式：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('子流程启动策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('动态构建策略')).toBeInTheDocument()
+    expect(screen.getByText('执行策略：TEMPLATE_FIRST')).toBeInTheDocument()
+    expect(screen.getByText('回退策略：USE_TEMPLATE')).toBeInTheDocument()
     expect(screen.getByText('附言：追加一位串行复核人')).toBeInTheDocument()
   })
 })

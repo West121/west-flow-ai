@@ -82,6 +82,9 @@ export type WorkflowInclusiveGatewayHit = {
   splitNodeName: string
   joinNodeId: string | null
   joinNodeName: string | null
+  defaultBranchId: string | null
+  requiredBranchCount: number | null
+  branchMergePolicy: string
   gatewayStatus: string
   totalTargetCount: number
   activatedTargetCount: number
@@ -89,6 +92,10 @@ export type WorkflowInclusiveGatewayHit = {
   activatedTargetNodeNames: string[]
   skippedTargetNodeIds: string[]
   skippedTargetNodeNames: string[]
+  branchPriorities: number[]
+  branchLabels: string[]
+  branchExpressions: string[]
+  decisionSummary: string
   firstActivatedAt: string | null
   finishedAt: string | null
 }
