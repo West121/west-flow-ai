@@ -439,11 +439,12 @@ public class ProcessDslValidator {
     ) {
         String assignmentMode = asString(assignment.get("mode"));
         List<String> userIds = stringList(assignment.get("userIds"));
+        List<Map<String, Object>> voteWeights = listMapValue(mapValue(config.get("voteRule")).get("weights"));
         boolean isCountersignMode = List.of("SEQUENTIAL", "PARALLEL", "OR_SIGN", "VOTE").contains(approvalMode)
                 && config.containsKey("approvalMode");
         if (isCountersignMode) {
             if ("VOTE".equals(approvalMode)) {
-                if (!"USER".equals(assignmentMode) || userIds.size() < 2) {
+                if ("USER".equals(assignmentMode) && userIds.size() < 2) {
                     throw invalid("approver 节点票签模式至少配置 2 名指定处理人", Map.of("nodeId", node.id(), "approvalMode", approvalMode));
                 }
             } else if ("USER".equals(assignmentMode) && userIds.size() < 2) {
@@ -460,7 +461,15 @@ public class ProcessDslValidator {
             if (threshold == null || threshold < 1 || threshold > 100) {
                 throw invalid("approver 节点票签阈值必须在 1-100 之间", Map.of("nodeId", node.id()));
             }
-            validateVoteWeights(node, userIds, voteRule);
+            if (!"USER".equals(assignmentMode) && !voteWeights.isEmpty()) {
+                throw invalid(
+                        "approver 节点非指定人员票签不允许配置自定义权重",
+                        Map.of("nodeId", node.id(), "assignmentMode", assignmentMode)
+                );
+            }
+            if ("USER".equals(assignmentMode)) {
+                validateVoteWeights(node, userIds, voteRule);
+            }
             return;
         }
 

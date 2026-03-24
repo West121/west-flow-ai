@@ -240,6 +240,7 @@ public class FlowableCountersignService {
         for (int index = 0; index < metadata.userIds().size(); index++) {
             String userId = metadata.userIds().get(index);
             Task activeTask = activeTaskByAssignee.get(userId);
+            Integer voteWeight = resolveVoteWeight(metadata, userId);
             jdbcTemplate.update(
                     """
                     INSERT INTO wf_task_group_member (
@@ -264,7 +265,7 @@ public class FlowableCountersignService {
                     activeTask == null ? null : activeTask.getId(),
                     userId,
                     index + 1,
-                    metadata.voteWeights().get(userId),
+                    voteWeight,
                     activeTask == null ? "WAITING" : "ACTIVE",
                     null
             );
@@ -539,7 +540,9 @@ public class FlowableCountersignService {
         if (existing != null) {
             return existing;
         }
-        int totalWeight = metadata.voteWeights().values().stream().mapToInt(Integer::intValue).sum();
+        int totalWeight = metadata.userIds().stream()
+                .mapToInt(userId -> resolveVoteWeight(metadata, userId))
+                .sum();
         VoteSnapshotRecord snapshot = new VoteSnapshotRecord(
                 "tvs_" + UUID.randomUUID().toString().replace("-", ""),
                 processInstanceId,
@@ -629,6 +632,13 @@ public class FlowableCountersignService {
 
     private String countersignElementVariable(String nodeId) {
         return "wfCountersignAssignee_" + nodeId;
+    }
+
+    private int resolveVoteWeight(CountersignNodeMetadata metadata, String userId) {
+        if (!"VOTE".equals(metadata.approvalMode())) {
+            return 0;
+        }
+        return Optional.ofNullable(metadata.voteWeights().get(userId)).orElse(1);
     }
 
     private String extensionValue(BaseElement element, String name) {

@@ -396,6 +396,76 @@ class FlowableRuntimeStartServiceTest {
     }
 
     @Test
+    void shouldResolveRoleBasedVoteCountersignWithDefaultWeights() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload(
+                "VOTE",
+                """
+                {
+                  "mode": "ROLE",
+                  "userIds": [],
+                  "roleCodes": ["OA_USER"],
+                  "departmentRef": "",
+                  "formFieldKey": "",
+                  "formulaExpression": ""
+                }
+                """,
+                """
+                        ,
+                        "voteRule": {
+                          "thresholdPercent": 60,
+                          "passCondition": "GREATER_THAN_OR_EQUAL",
+                          "rejectCondition": "GREATER_THAN_OR_EQUAL",
+                          "weights": []
+                        }
+                """
+        ));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_vote_role_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 2, "reason", "角色票签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
+                .containsExactlyInAnyOrder("usr_001", "usr_002");
+
+        String firstTaskId = response.activeTasks().stream()
+                .filter(task -> "usr_001".equals(task.assigneeUserId()))
+                .findFirst()
+                .orElseThrow()
+                .taskId();
+        var firstComplete = flowableProcessRuntimeService.complete(firstTaskId, new CompleteTaskRequest(
+                "APPROVE",
+                "usr_001",
+                "角色票签首票",
+                java.util.Map.of()
+        ));
+        assertThat(firstComplete.status()).isEqualTo("RUNNING");
+
+        String secondTaskId = flowableEngineTasks(response.instanceId()).stream()
+                .filter(task -> "usr_002".equals(task.getAssignee()))
+                .findFirst()
+                .orElseThrow()
+                .getId();
+        StpUtil.login("lisi");
+        var secondComplete = flowableProcessRuntimeService.complete(secondTaskId, new CompleteTaskRequest(
+                "APPROVE",
+                "usr_002",
+                "角色票签第二票",
+                java.util.Map.of()
+        ));
+        assertThat(secondComplete.status()).isEqualTo("COMPLETED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT total_weight FROM wf_task_vote_snapshot WHERE process_instance_id = ? AND node_id = ?",
+                Integer.class,
+                response.instanceId(),
+                "approve_countersign"
+        )).isEqualTo(2);
+    }
+
+    @Test
     void shouldSelectHighestPriorityBranchWhenInclusiveSplitRequiresFixedCount() throws Exception {
         StpUtil.login("zhangsan");
         processDefinitionService.publish(buildInclusiveRequiredCountPayload());
@@ -1029,6 +1099,10 @@ class FlowableRuntimeStartServiceTest {
     }
 
     private ProcessDslPayload buildCountersignPayload(String approvalMode, String assignmentJson) throws Exception {
+        return buildCountersignPayload(approvalMode, assignmentJson, voteRuleFragment(approvalMode));
+    }
+
+    private ProcessDslPayload buildCountersignPayload(String approvalMode, String assignmentJson, String voteRuleJson) throws Exception {
         return objectMapper.readValue("""
                 {
                   "dslVersion": "1.0.0",
@@ -1095,7 +1169,7 @@ class FlowableRuntimeStartServiceTest {
                         approvalMode,
                         requiresAutoFinishRemaining(approvalMode),
                         assignmentJson,
-                        voteRuleFragment(approvalMode)
+                        voteRuleJson
                 ), ProcessDslPayload.class);
     }
 

@@ -1097,7 +1097,39 @@ class ProcessDslValidatorTest {
     }
 
     @Test
-    void shouldRejectVoteCountersignWithoutExplicitUsers() {
+    void shouldAcceptRoleBasedVoteCountersignWithoutExplicitWeights() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("OA_USER"),
+                                        "departmentRef", "",
+                                        "formFieldKey", "",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalMode", "VOTE",
+                                "voteRule", Map.of(
+                                        "thresholdPercent", 60,
+                                        "weights", List.of()
+                                )
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldRejectCustomVoteWeightsForRoleBasedVoteCountersign() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),
                 List.of(
@@ -1128,7 +1160,7 @@ class ProcessDslValidatorTest {
                 )
         );
 
-        assertValidationFailure(dsl, "票签模式至少配置 2 名指定处理人");
+        assertValidationFailure(dsl, "非指定人员票签不允许配置自定义权重");
     }
 
     private void assertValidationFailure(ProcessDslPayload dsl, String messagePart) {
