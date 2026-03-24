@@ -181,6 +181,7 @@ export type WorkbenchInclusiveGatewayHit = {
   branchMergePolicy: string
   gatewayStatus: string
   totalTargetCount: number
+  eligibleTargetCount: number
   activatedTargetCount: number
   activatedTargetNodeIds: string[]
   activatedTargetNodeNames: string[]
@@ -189,6 +190,10 @@ export type WorkbenchInclusiveGatewayHit = {
   branchPriorities: number[]
   branchLabels: string[]
   branchExpressions: string[]
+  selectedEdgeIds: string[]
+  selectedBranchLabels: string[]
+  selectedBranchPriorities: number[]
+  defaultBranchSelected: boolean
   decisionSummary: string
   firstActivatedAt: string | null
   finishedAt: string | null

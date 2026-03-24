@@ -65,8 +65,13 @@ describe('runtime structure section', () => {
             triggerMode: 'DYNAMIC_BUILD',
             appendType: 'SUBPROCESS',
             status: 'COMPLETED',
+            buildMode: 'SUBPROCESS_CALLS',
+            sourceMode: 'MODEL_DRIVEN',
             executionStrategy: 'TEMPLATE_FIRST',
             fallbackStrategy: 'USE_TEMPLATE',
+            resolvedSourceMode: 'MODEL_DRIVEN',
+            resolutionPath: 'TEMPLATE_PRIMARY',
+            templateSource: 'SCENE_CODE',
             terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
             childFinishPolicy: 'TERMINATE_PARENT',
             sourceTaskId: 'task_root_001',
@@ -122,8 +127,13 @@ describe('runtime structure section', () => {
     expect(screen.getByText('子流程启动策略：FIXED_VERSION')).toBeInTheDocument()
     expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
     expect(screen.getByText('动态构建策略')).toBeInTheDocument()
+    expect(screen.getByText('构建模式：SUBPROCESS_CALLS')).toBeInTheDocument()
+    expect(screen.getByText('来源模式：MODEL_DRIVEN')).toBeInTheDocument()
     expect(screen.getByText('执行策略：TEMPLATE_FIRST')).toBeInTheDocument()
     expect(screen.getByText('回退策略：USE_TEMPLATE')).toBeInTheDocument()
+    expect(screen.getByText('实际来源：MODEL_DRIVEN')).toBeInTheDocument()
+    expect(screen.getByText('解析路径：TEMPLATE_PRIMARY')).toBeInTheDocument()
+    expect(screen.getByText('模板来源：SCENE_CODE')).toBeInTheDocument()
     expect(screen.getByText('附言：追加一位串行复核人')).toBeInTheDocument()
   })
 

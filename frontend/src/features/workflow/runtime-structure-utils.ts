@@ -17,6 +17,11 @@ export type RuntimeStructureLink = {
   parentResumeStrategy?: string | null
   executionStrategy?: string | null
   fallbackStrategy?: string | null
+  buildMode?: string | null
+  sourceMode?: string | null
+  resolvedSourceMode?: string | null
+  resolutionPath?: string | null
+  templateSource?: string | null
   terminatePolicy?: string | null
   childFinishPolicy?: string | null
   sourceTaskId?: string | null

@@ -9,9 +9,14 @@ type InclusiveGatewayHit = {
   defaultBranchId?: string | null
   requiredBranchCount?: number | null
   branchMergePolicy?: string | null
+  eligibleTargetCount?: number
   branchPriorities?: number[]
   branchLabels?: string[]
   branchExpressions?: string[]
+  selectedEdgeIds?: string[]
+  selectedBranchLabels?: string[]
+  selectedBranchPriorities?: number[]
+  defaultBranchSelected?: boolean
   decisionSummary?: string | null
   gatewayStatus: string
   totalTargetCount: number
@@ -87,10 +92,12 @@ export function InclusiveGatewaySection({
 
             <div className='grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
               <div>总路径：{hit.totalTargetCount}</div>
+              <div>候选路径：{hit.eligibleTargetCount ?? '--'}</div>
               <div>命中路径：{hit.activatedTargetCount}</div>
               <div>汇聚策略：{hit.branchMergePolicy ?? '--'}</div>
               <div>默认分支：{hit.defaultBranchId ?? '--'}</div>
               <div>必选分支数：{hit.requiredBranchCount ?? '--'}</div>
+              <div>默认已命中：{hit.defaultBranchSelected ? '是' : '否'}</div>
               <div>首次命中：{formatDateTime(hit.firstActivatedAt)}</div>
               <div>汇聚完成：{formatDateTime(hit.finishedAt)}</div>
             </div>
@@ -99,6 +106,14 @@ export function InclusiveGatewaySection({
               <div>分支优先级：{joinOrDash(hit.branchPriorities?.map(String))}</div>
               <div>分支名称：{joinOrDash(hit.branchLabels)}</div>
               <div>分支表达式：{joinOrDash(hit.branchExpressions)}</div>
+            </div>
+
+            <div className='grid gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground md:grid-cols-3'>
+              <div>最终命中边：{joinOrDash(hit.selectedEdgeIds)}</div>
+              <div>最终命中分支：{joinOrDash(hit.selectedBranchLabels)}</div>
+              <div>
+                最终命中优先级：{joinOrDash(hit.selectedBranchPriorities?.map(String))}
+              </div>
             </div>
 
             {hit.decisionSummary ? (

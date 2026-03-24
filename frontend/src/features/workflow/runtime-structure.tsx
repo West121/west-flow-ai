@@ -186,11 +186,27 @@ function RuntimeStructureItem({
           </div>
         ) : null}
 
-        {hasAnyLinkField(link, ['executionStrategy', 'fallbackStrategy']) ? (
+        {hasAnyLinkField(link, [
+          'buildMode',
+          'sourceMode',
+          'executionStrategy',
+          'fallbackStrategy',
+          'resolvedSourceMode',
+          'resolutionPath',
+          'templateSource',
+        ]) ? (
           <div className='space-y-2 rounded-md border bg-muted/20 p-3'>
             <div className='text-sm font-medium'>动态构建策略</div>
             <RuntimeStructureFieldGrid
               items={[
+                {
+                  label: '构建模式',
+                  value: resolveLinkField(link, 'buildMode'),
+                },
+                {
+                  label: '来源模式',
+                  value: resolveLinkField(link, 'sourceMode'),
+                },
                 {
                   label: '执行策略',
                   value: resolveLinkField(link, 'executionStrategy'),
@@ -198,6 +214,18 @@ function RuntimeStructureItem({
                 {
                   label: '回退策略',
                   value: resolveLinkField(link, 'fallbackStrategy'),
+                },
+                {
+                  label: '实际来源',
+                  value: resolveLinkField(link, 'resolvedSourceMode'),
+                },
+                {
+                  label: '解析路径',
+                  value: resolveLinkField(link, 'resolutionPath'),
+                },
+                {
+                  label: '模板来源',
+                  value: resolveLinkField(link, 'templateSource'),
                 },
               ]}
             />

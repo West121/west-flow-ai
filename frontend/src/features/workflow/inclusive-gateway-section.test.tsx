@@ -15,9 +15,14 @@ describe('InclusiveGatewaySection', () => {
             defaultBranchId: 'edge_urgent',
             requiredBranchCount: 1,
             branchMergePolicy: 'DEFAULT_BRANCH',
+            eligibleTargetCount: 1,
             branchPriorities: [10, 20],
             branchLabels: ['金额超限', '长假'],
             branchExpressions: ['amount > 1000', 'days > 3'],
+            selectedEdgeIds: ['edge_urgent'],
+            selectedBranchLabels: ['默认分支'],
+            selectedBranchPriorities: [30],
+            defaultBranchSelected: true,
             decisionSummary: '2 条候选路径，已命中 1 条，等待默认分支决策。',
             gatewayStatus: 'IN_PROGRESS',
             totalTargetCount: 2,
@@ -33,11 +38,16 @@ describe('InclusiveGatewaySection', () => {
 
     expect(screen.getAllByText('包容分支').length).toBeGreaterThan(0)
     expect(screen.getByText('DEFAULT_BRANCH')).toBeInTheDocument()
+    expect(screen.getByText('候选路径：1')).toBeInTheDocument()
     expect(screen.getByText('默认分支：edge_urgent')).toBeInTheDocument()
     expect(screen.getByText('必选分支数：1')).toBeInTheDocument()
+    expect(screen.getByText('默认已命中：是')).toBeInTheDocument()
     expect(screen.getByText('分支优先级：10、20')).toBeInTheDocument()
     expect(screen.getByText('分支名称：金额超限、长假')).toBeInTheDocument()
     expect(screen.getByText('分支表达式：amount > 1000、days > 3')).toBeInTheDocument()
+    expect(screen.getByText('最终命中边：edge_urgent')).toBeInTheDocument()
+    expect(screen.getByText('最终命中分支：默认分支')).toBeInTheDocument()
+    expect(screen.getByText('最终命中优先级：30')).toBeInTheDocument()
     expect(screen.getByText('决策摘要：2 条候选路径，已命中 1 条，等待默认分支决策。')).toBeInTheDocument()
     expect(screen.getByText('命中路径')).toBeInTheDocument()
     expect(screen.getByText('财务审批')).toBeInTheDocument()
