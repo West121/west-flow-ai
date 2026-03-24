@@ -4,6 +4,65 @@ import { NodeConfigPanel } from './node-config-panel'
 import { workflowNodeTemplates } from './palette'
 import { type WorkflowApproverNodeConfig, type WorkflowEdge, type WorkflowNode } from './types'
 
+vi.mock('./selection-api', () => ({
+  searchPrincipalOptions: vi.fn(async (kind: string) => {
+    if (kind === 'ROLE') {
+      return [
+        {
+          id: 'role_manager',
+          label: '部门负责人',
+          description: 'OA 审批角色',
+          kind: 'ROLE',
+        },
+        {
+          id: 'OA_USER',
+          label: 'OA 用户',
+          description: 'OA 基础角色',
+          kind: 'ROLE',
+        },
+      ]
+    }
+
+    if (kind === 'DEPARTMENT') {
+      return [
+        {
+          id: 'dept_root',
+          label: '总部',
+          description: '西流科技',
+          kind: 'DEPARTMENT',
+          companyId: 'cmp_001',
+          parentId: null,
+          groupLabel: '西流科技',
+        },
+        {
+          id: 'dept_child',
+          label: '人事部',
+          description: '西流科技',
+          kind: 'DEPARTMENT',
+          companyId: 'cmp_001',
+          parentId: 'dept_root',
+          groupLabel: '西流科技',
+        },
+      ]
+    }
+
+    return [
+      {
+        id: 'usr_002',
+        label: '张三',
+        description: 'zhangsan · 行政中心 · 部门负责人',
+        kind: 'USER',
+      },
+      {
+        id: 'usr_003',
+        label: '李四',
+        description: 'lisi · 行政中心 · 审批专员',
+        kind: 'USER',
+      },
+    ]
+  }),
+}))
+
 function buildTimerNode(): WorkflowNode {
   return {
     id: 'timer_1',
@@ -25,7 +84,13 @@ function buildTimerNode(): WorkflowNode {
 }
 
 function buildApproverNode(
-  assignmentMode: 'USER' | 'ROLE' | 'DEPARTMENT' | 'DEPARTMENT_AND_CHILDREN' | 'FORM_FIELD' = 'USER'
+  assignmentMode:
+    | 'USER'
+    | 'ROLE'
+    | 'DEPARTMENT'
+    | 'DEPARTMENT_AND_CHILDREN'
+    | 'FORM_FIELD'
+    | 'FORMULA' = 'USER'
 ): WorkflowNode {
   return {
     id: 'approve_1',
@@ -94,6 +159,10 @@ function buildSubprocessNode(): WorkflowNode {
         calledProcessKey: 'plm_purchase_review',
         calledVersionPolicy: 'FIXED_VERSION',
         calledVersion: 3,
+        callScope: 'CHILD_AND_DESCENDANTS',
+        joinMode: 'WAIT_PARENT_CONFIRM',
+        childStartStrategy: 'SCENE_BINDING',
+        parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
         businessBindingMode: 'OVERRIDE',
         terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
         childFinishPolicy: 'TERMINATE_PARENT',
@@ -117,6 +186,9 @@ function buildDynamicBuilderNode(): WorkflowNode {
       config: {
         buildMode: 'APPROVER_TASKS',
         sourceMode: 'MANUAL_TEMPLATE',
+        sceneCode: 'leave_review',
+        executionStrategy: 'TEMPLATE_FIRST',
+        fallbackStrategy: 'USE_TEMPLATE',
         ruleExpression: '',
         manualTemplateCode: 'append_purchase_review',
         appendPolicy: 'SERIAL_AFTER_CURRENT',
@@ -127,7 +199,10 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
-function buildInclusiveNode(direction: 'SPLIT' | 'JOIN' = 'JOIN'): WorkflowNode {
+function buildInclusiveNode(
+  direction: 'SPLIT' | 'JOIN' = 'JOIN',
+  config: Record<string, unknown> = {}
+): WorkflowNode {
   return {
     id: 'inclusive_1',
     type: 'workflow',
@@ -139,6 +214,7 @@ function buildInclusiveNode(direction: 'SPLIT' | 'JOIN' = 'JOIN'): WorkflowNode 
       tone: 'warning',
       config: {
         gatewayDirection: direction,
+        ...config,
       } as never,
     },
   }
@@ -264,9 +340,9 @@ describe('workflow designer node config panel', () => {
     const node = buildApproverNode('FORM_FIELD')
     node.data.config = {
       ...node.data.config,
-      approvalMode: 'SINGLE',
+      approvalMode: 'SEQUENTIAL',
       approvalPolicy: {
-        type: 'SINGLE',
+        type: 'SEQUENTIAL',
         voteThreshold: null,
       },
       voteRule: {
@@ -298,6 +374,111 @@ describe('workflow designer node config panel', () => {
           assignment: expect.objectContaining({
             mode: 'FORM_FIELD',
             formFieldKey: 'departmentId',
+          }),
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('supports department countersign assignment in or-sign mode', async () => {
+    const onApply = vi.fn()
+
+    const node = buildApproverNode('DEPARTMENT_AND_CHILDREN')
+    const approverConfig = node.data.config as WorkflowApproverNodeConfig
+    node.data.config = {
+      ...approverConfig,
+      assignment: {
+        ...approverConfig.assignment,
+        departmentRef: 'dept_root',
+      },
+      approvalMode: 'OR_SIGN',
+      approvalPolicy: {
+        type: 'OR_SIGN',
+        voteThreshold: null,
+      },
+      voteRule: {
+        thresholdPercent: null,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [],
+      },
+      autoFinishRemaining: true,
+    } as typeof node.data.config
+
+    render(<NodeConfigPanel node={node} edges={edges} onApply={onApply} />)
+
+    expect(screen.getByText('部门编码')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByDisplayValue('总部')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /人事部/ })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /总部/ }))
+    fireEvent.click(screen.getByRole('button', { name: /人事部/ }))
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          approvalMode: 'OR_SIGN',
+          autoFinishRemaining: true,
+          assignment: expect.objectContaining({
+            mode: 'DEPARTMENT_AND_CHILDREN',
+            departmentRef: 'dept_child',
+          }),
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('supports formula countersign assignment in sequential mode', async () => {
+    const onApply = vi.fn()
+
+    const node = buildApproverNode('FORMULA')
+    const approverConfig = node.data.config as WorkflowApproverNodeConfig
+    node.data.config = {
+      ...approverConfig,
+      approvalMode: 'SEQUENTIAL',
+      approvalPolicy: {
+        type: 'SEQUENTIAL',
+        voteThreshold: null,
+      },
+      voteRule: {
+        thresholdPercent: null,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [],
+      },
+      assignment: {
+        ...approverConfig.assignment,
+        formulaExpression: 'leaveDays >= 5 ? "usr_003" : managerUserId',
+      },
+    } as typeof node.data.config
+
+    render(<NodeConfigPanel node={node} edges={edges} onApply={onApply} />)
+
+    expect(screen.getByText('处理人公式')).toBeInTheDocument()
+    const formulaInput = screen.getByDisplayValue('leaveDays >= 5 ? "usr_003" : managerUserId')
+    fireEvent.change(formulaInput, {
+      target: { value: 'ifElse(leaveDays >= 5, "usr_003", managerUserId)' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          approvalMode: 'SEQUENTIAL',
+          assignment: expect.objectContaining({
+            mode: 'FORMULA',
+            formulaExpression: 'ifElse(leaveDays >= 5, "usr_003", managerUserId)',
           }),
         }),
       }),
@@ -359,6 +540,15 @@ describe('workflow designer node config panel', () => {
 
     render(<NodeConfigPanel node={node} edges={edges} onApply={onApply} />)
 
+    await waitFor(() => expect(screen.getByDisplayValue('OA 用户')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
+    await waitFor(() => expect(screen.getByText('部门负责人')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('部门负责人'))
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue('OA 用户, 部门负责人')).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
 
     await waitFor(() => expect(onApply).toHaveBeenCalled())
@@ -369,7 +559,7 @@ describe('workflow designer node config panel', () => {
           approvalMode: 'PARALLEL',
           assignment: expect.objectContaining({
             mode: 'ROLE',
-            roleCodes: ['OA_USER'],
+            roleCodes: ['OA_USER', 'role_manager'],
           }),
         }),
       }),
@@ -470,6 +660,10 @@ describe('workflow designer node config panel', () => {
           calledProcessKey: 'oa_common_subflow',
           calledVersionPolicy: 'FIXED_VERSION',
           calledVersion: 5,
+          callScope: 'CHILD_AND_DESCENDANTS',
+          joinMode: 'WAIT_PARENT_CONFIRM',
+          childStartStrategy: 'SCENE_BINDING',
+          parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
           businessBindingMode: 'OVERRIDE',
           terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
           childFinishPolicy: 'TERMINATE_PARENT',
@@ -492,8 +686,12 @@ describe('workflow designer node config panel', () => {
 
     expect(screen.getByText('动态构建节点')).toBeInTheDocument()
     expect(screen.getByDisplayValue('append_purchase_review')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('leave_review')).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: '最大生成数量' })).toHaveValue(1)
 
+    fireEvent.change(screen.getByPlaceholderText('leave_overtime_approval'), {
+      target: { value: 'leave_overtime_scene' },
+    })
     fireEvent.change(screen.getByRole('spinbutton', { name: '最大生成数量' }), {
       target: { value: '2' },
     })
@@ -510,6 +708,9 @@ describe('workflow designer node config panel', () => {
         config: expect.objectContaining({
           buildMode: 'APPROVER_TASKS',
           sourceMode: 'MANUAL_TEMPLATE',
+          sceneCode: 'leave_overtime_scene',
+          executionStrategy: 'TEMPLATE_FIRST',
+          fallbackStrategy: 'USE_TEMPLATE',
           ruleExpression: '',
           manualTemplateCode: 'append_leave_chain',
           appendPolicy: 'SERIAL_AFTER_CURRENT',
@@ -552,6 +753,7 @@ describe('workflow designer node config panel', () => {
         {
           edgeId: 'edge_yes',
           label: '金额超标',
+          priority: 1,
           condition: {
             type: 'EXPRESSION',
             expression: 'amount > 10000',
@@ -560,6 +762,7 @@ describe('workflow designer node config panel', () => {
         {
           edgeId: 'edge_urgent',
           label: '紧急场景',
+          priority: 2,
           condition: {
             type: 'EXPRESSION',
             expression: 'urgent == true',
@@ -602,6 +805,7 @@ describe('workflow designer node config panel', () => {
         {
           edgeId: 'edge_yes',
           label: '金额超标并会签',
+          priority: 1,
           condition: {
             type: 'EXPRESSION',
             expression: 'amount >= 20000',
@@ -610,6 +814,7 @@ describe('workflow designer node config panel', () => {
         {
           edgeId: 'edge_urgent',
           label: '紧急场景',
+          priority: 2,
           condition: {
             type: 'EXPRESSION',
             expression: 'urgent == true',
@@ -617,6 +822,87 @@ describe('workflow designer node config panel', () => {
         },
       ]
     )
+  })
+
+  it('hydrates and submits inclusive split branch strategy fields', async () => {
+    const onApply = vi.fn()
+
+    render(
+      <NodeConfigPanel
+        node={buildInclusiveNode('SPLIT', {
+          defaultBranchId: 'edge_urgent',
+          requiredBranchCount: 2,
+          branchMergePolicy: 'REQUIRED_COUNT',
+        })}
+        edges={inclusiveSplitEdges}
+        onApply={onApply}
+      />
+    )
+
+    expect(screen.getByText('分支汇聚策略')).toBeInTheDocument()
+    expect(screen.getByText('必选分支数')).toBeInTheDocument()
+    expect(screen.getAllByLabelText('分支优先级')).toHaveLength(2)
+    expect(screen.getAllByLabelText('必选分支数')[0]).toHaveValue('2')
+
+    fireEvent.change(screen.getAllByLabelText('必选分支数')[0]!, { target: { value: '1' } })
+    fireEvent.change(screen.getAllByLabelText('分支优先级')[0]!, {
+      target: { value: '3' },
+    })
+    fireEvent.change(screen.getAllByLabelText('分支优先级')[1]!, {
+      target: { value: '4' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'inclusive_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          gatewayDirection: 'SPLIT',
+          defaultBranchId: 'edge_urgent',
+          requiredBranchCount: 1,
+          branchMergePolicy: 'REQUIRED_COUNT',
+        }),
+      }),
+      [
+        expect.objectContaining({
+          edgeId: 'edge_yes',
+          priority: 3,
+        }),
+        expect.objectContaining({
+          edgeId: 'edge_urgent',
+          priority: 4,
+        }),
+      ]
+    )
+  })
+
+  it('keeps parallel gateway simple without branch strategy fields', () => {
+    render(
+      <NodeConfigPanel
+        node={{
+          id: 'parallel_1',
+          type: 'workflow',
+          position: { x: 100, y: 100 },
+          data: {
+            kind: 'parallel',
+            label: '并行网关',
+            description: '并发分支',
+            tone: 'neutral',
+            config: {
+              gatewayDirection: 'SPLIT',
+            },
+          },
+        }}
+        edges={edges}
+        onApply={vi.fn()}
+      />
+    )
+
+    expect(screen.getAllByText('并行网关')[0]).toBeInTheDocument()
+    expect(screen.queryByText('分支汇聚策略')).not.toBeInTheDocument()
+    expect(screen.queryByText('默认分支')).not.toBeInTheDocument()
+    expect(screen.queryByText('必选分支数')).not.toBeInTheDocument()
   })
 
   it('supports formula mode for condition branches', async () => {

@@ -3063,9 +3063,13 @@ public class FlowableProcessRuntimeService {
             int maxGeneratedCount
     ) {
         List<?> rawItems;
-        String sourceMode = stringValue(config.get("sourceMode"));
-        if ("MANUAL_TEMPLATE".equals(sourceMode)) {
-            rawItems = resolveDynamicBuilderManualTemplate(buildMode, stringValue(config.get("manualTemplateCode")));
+        String sourceMode = normalizeDynamicBuilderSourceMode(stringValue(config.get("sourceMode")));
+        if ("MODEL_DRIVEN".equals(sourceMode)) {
+            rawItems = resolveDynamicBuilderModelItems(
+                    buildMode,
+                    stringValue(config.get("manualTemplateCode")),
+                    stringValue(config.get("sceneCode"))
+            );
         } else {
             rawItems = resolveDynamicBuilderRuleItems(buildMode, config, processVariables, stringValue(config.get("ruleExpression")));
         }
@@ -3266,6 +3270,29 @@ public class FlowableProcessRuntimeService {
         };
     }
 
+    private List<?> resolveDynamicBuilderModelItems(String buildMode, String manualTemplateCode, String sceneCode) {
+        if (manualTemplateCode != null && !manualTemplateCode.isBlank()) {
+            return resolveDynamicBuilderManualTemplate(buildMode, manualTemplateCode);
+        }
+        if (sceneCode == null || sceneCode.isBlank()) {
+            return List.of();
+        }
+        return "SUBPROCESS_CALLS".equals(buildMode)
+                ? List.of(Map.of("calledProcessKey", sceneCode))
+                : List.of(Map.of("userId", sceneCode));
+    }
+
+    private String normalizeDynamicBuilderSourceMode(String sourceMode) {
+        if (sourceMode == null || sourceMode.isBlank()) {
+            return "RULE_DRIVEN";
+        }
+        return switch (sourceMode.trim().toUpperCase()) {
+            case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
+            case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
+            default -> "RULE_DRIVEN";
+        };
+    }
+
     private String buildGeneratedSubprocessRuntimeBusinessKey(String parentBusinessKey, String sourceNodeId, int index) {
         String normalizedParentBusinessKey = parentBusinessKey == null || parentBusinessKey.isBlank()
                 ? "instance"
@@ -3458,9 +3485,12 @@ public class FlowableProcessRuntimeService {
                 record.status(),
                 record.triggerMode(),
                 stringValue(sourceNodeConfig.get("buildMode")),
-                stringValue(sourceNodeConfig.get("sourceMode")),
+                normalizeDynamicBuilderSourceMode(stringValue(sourceNodeConfig.get("sourceMode"))),
                 stringValue(sourceNodeConfig.get("ruleExpression")),
                 stringValue(sourceNodeConfig.get("manualTemplateCode")),
+                stringValue(sourceNodeConfig.get("sceneCode")),
+                stringValue(sourceNodeConfig.get("executionStrategy")),
+                stringValue(sourceNodeConfig.get("fallbackStrategy")),
                 record.operatorUserId(),
                 record.commentText(),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),

@@ -12,7 +12,14 @@ describe('workflow designer store', () => {
     store.addStructurePreset('SUBPROCESS_CHAIN')
 
     const snapshot = useWorkflowDesignerStore.getState().history.present
-    expect(snapshot.nodes.some((node) => node.data.label === '销假子流程')).toBe(true)
+    const subprocess = snapshot.nodes.find((node) => node.data.label === '销假子流程')
+    expect(subprocess).toBeTruthy()
+    expect(subprocess?.data.config).toMatchObject({
+      callScope: 'CHILD_ONLY',
+      joinMode: 'AUTO_RETURN',
+      childStartStrategy: 'LATEST_PUBLISHED',
+      parentResumeStrategy: 'AUTO_RETURN',
+    })
     expect(
       snapshot.edges.some((edge) => edge.label === '进入子流程')
     ).toBe(true)

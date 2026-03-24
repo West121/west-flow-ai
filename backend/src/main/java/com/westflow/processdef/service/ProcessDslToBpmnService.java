@@ -377,9 +377,12 @@ public class ProcessDslToBpmnService {
             attrs.put("parentResumeStrategy", resolveSubprocessParentResumeStrategy(config));
         }
         attrs.put("buildMode", stringValue(config.get("buildMode")));
-        attrs.put("sourceMode", stringValue(config.get("sourceMode")));
+        attrs.put("sourceMode", normalizeDynamicBuilderSourceMode(stringValue(config.get("sourceMode"))));
         attrs.put("ruleExpression", stringValue(config.get("ruleExpression")));
         attrs.put("manualTemplateCode", stringValue(config.get("manualTemplateCode")));
+        attrs.put("sceneCode", stringValue(config.get("sceneCode")));
+        attrs.put("executionStrategy", stringValue(config.get("executionStrategy")));
+        attrs.put("fallbackStrategy", stringValue(config.get("fallbackStrategy")));
         attrs.put("appendPolicy", stringValue(config.get("appendPolicy")));
         attrs.put("maxGeneratedCount", stringValue(config.get("maxGeneratedCount")));
         attrs.put("inputMappings", serializeMappings(config.get("inputMappings")));
@@ -479,6 +482,17 @@ public class ProcessDslToBpmnService {
         }
         Map<String, Object> approvalPolicy = mapValue(config.get("approvalPolicy"));
         return stringValue(approvalPolicy.get("type"));
+    }
+
+    private String normalizeDynamicBuilderSourceMode(String sourceMode) {
+        if (sourceMode == null || sourceMode.isBlank()) {
+            return null;
+        }
+        return switch (sourceMode.trim().toUpperCase()) {
+            case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
+            case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
+            default -> sourceMode;
+        };
     }
 
     private boolean isCountersignApprovalMode(Map<String, Object> config, String approvalMode) {

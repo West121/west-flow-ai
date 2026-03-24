@@ -6,13 +6,17 @@ import {
   type WorkflowEdgeConditionType,
   type WorkflowFieldBinding,
   type WorkflowGatewayDirection,
-  type WorkflowGatewayNodeConfig,
+  type WorkflowInclusiveBranchMergePolicy,
+  type WorkflowInclusiveGatewayNodeConfig,
+  type WorkflowParallelGatewayNodeConfig,
   type WorkflowReapprovePolicy,
   type WorkflowVoteWeight,
   type WorkflowNodeConfigMap,
   type WorkflowNodeKind,
   type WorkflowNodeTone,
   type WorkflowDynamicBuilderAppendPolicy,
+  type WorkflowDynamicBuilderExecutionStrategy,
+  type WorkflowDynamicBuilderFallbackStrategy,
   type WorkflowDynamicBuilderNodeConfig,
   type WorkflowDynamicBuilderSourceMode,
   type WorkflowDynamicBuilderTerminatePolicy,
@@ -21,6 +25,10 @@ import {
   type WorkflowStartNodeConfig,
   type WorkflowReminderChannel,
   type WorkflowSubprocessNodeConfig,
+  type WorkflowSubprocessCallScope,
+  type WorkflowSubprocessJoinMode,
+  type WorkflowSubprocessChildStartStrategy,
+  type WorkflowSubprocessParentResumeStrategy,
   type WorkflowTimerNodeConfig,
   type WorkflowTriggerNodeConfig,
 } from './types'
@@ -40,11 +48,11 @@ export type WorkflowNodeConfigRecord = {
   subprocess: WorkflowSubprocessNodeConfig
   dynamicBuilder: WorkflowDynamicBuilderNodeConfig
   condition: WorkflowConditionNodeConfig
-  inclusive: WorkflowGatewayNodeConfig
+  inclusive: WorkflowInclusiveGatewayNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
   trigger: WorkflowTriggerNodeConfig
-  parallel: WorkflowGatewayNodeConfig
+  parallel: WorkflowParallelGatewayNodeConfig
   end: Record<string, never>
 }
 
@@ -141,6 +149,10 @@ const defaultSubprocessConfig: WorkflowSubprocessNodeConfig = {
   calledProcessKey: '',
   calledVersionPolicy: 'LATEST_PUBLISHED',
   calledVersion: null,
+  callScope: 'CHILD_ONLY',
+  joinMode: 'AUTO_RETURN',
+  childStartStrategy: 'LATEST_PUBLISHED',
+  parentResumeStrategy: 'AUTO_RETURN',
   businessBindingMode: 'INHERIT_PARENT',
   terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
   childFinishPolicy: 'RETURN_TO_PARENT',
@@ -151,6 +163,9 @@ const defaultSubprocessConfig: WorkflowSubprocessNodeConfig = {
 const defaultDynamicBuilderConfig: WorkflowDynamicBuilderNodeConfig = {
   buildMode: 'APPROVER_TASKS',
   sourceMode: 'RULE',
+  sceneCode: '',
+  executionStrategy: 'RULE_FIRST',
+  fallbackStrategy: 'KEEP_CURRENT',
   ruleExpression: '',
   manualTemplateCode: '',
   appendPolicy: 'SERIAL_AFTER_CURRENT',
@@ -158,7 +173,14 @@ const defaultDynamicBuilderConfig: WorkflowDynamicBuilderNodeConfig = {
   terminatePolicy: 'TERMINATE_GENERATED_ONLY',
 }
 
-const defaultGatewayConfig: WorkflowGatewayNodeConfig = {
+const defaultInclusiveConfig: WorkflowInclusiveGatewayNodeConfig = {
+  gatewayDirection: 'SPLIT',
+  defaultBranchId: '',
+  requiredBranchCount: null,
+  branchMergePolicy: 'ALL_SELECTED',
+}
+
+const defaultParallelConfig: WorkflowParallelGatewayNodeConfig = {
   gatewayDirection: 'SPLIT',
 }
 
@@ -251,6 +273,35 @@ function normalizeDynamicBuilderSourceMode(
   return value === 'MANUAL_TEMPLATE' ? 'MANUAL_TEMPLATE' : 'RULE'
 }
 
+function normalizeDynamicBuilderExecutionStrategy(
+  value: unknown,
+  sourceMode: WorkflowDynamicBuilderSourceMode
+): WorkflowDynamicBuilderExecutionStrategy {
+  if (
+    value === 'RULE_FIRST' ||
+    value === 'RULE_ONLY' ||
+    value === 'TEMPLATE_FIRST' ||
+    value === 'TEMPLATE_ONLY'
+  ) {
+    return value
+  }
+  return sourceMode === 'MANUAL_TEMPLATE' ? 'TEMPLATE_FIRST' : 'RULE_FIRST'
+}
+
+function normalizeDynamicBuilderFallbackStrategy(
+  value: unknown
+): WorkflowDynamicBuilderFallbackStrategy {
+  if (
+    value === 'KEEP_CURRENT' ||
+    value === 'USE_RULE' ||
+    value === 'USE_TEMPLATE' ||
+    value === 'SKIP_GENERATION'
+  ) {
+    return value
+  }
+  return 'KEEP_CURRENT'
+}
+
 function normalizeDynamicBuilderAppendPolicy(
   value: unknown
 ): WorkflowDynamicBuilderAppendPolicy {
@@ -269,8 +320,44 @@ function normalizeDynamicBuilderTerminatePolicy(
     : 'TERMINATE_GENERATED_ONLY'
 }
 
+function normalizeSubprocessCallScope(
+  value: unknown
+): WorkflowSubprocessCallScope {
+  return value === 'CHILD_AND_DESCENDANTS' ? 'CHILD_AND_DESCENDANTS' : 'CHILD_ONLY'
+}
+
+function normalizeSubprocessJoinMode(value: unknown): WorkflowSubprocessJoinMode {
+  return value === 'WAIT_PARENT_CONFIRM' ? 'WAIT_PARENT_CONFIRM' : 'AUTO_RETURN'
+}
+
+function normalizeSubprocessChildStartStrategy(
+  value: unknown
+): WorkflowSubprocessChildStartStrategy {
+  if (value === 'FIXED_VERSION' || value === 'SCENE_BINDING') {
+    return value
+  }
+
+  return 'LATEST_PUBLISHED'
+}
+
+function normalizeSubprocessParentResumeStrategy(
+  value: unknown
+): WorkflowSubprocessParentResumeStrategy {
+  return value === 'WAIT_PARENT_CONFIRM' ? 'WAIT_PARENT_CONFIRM' : 'AUTO_RETURN'
+}
+
 function normalizeGatewayDirection(value: unknown): WorkflowGatewayDirection {
   return value === 'JOIN' ? 'JOIN' : 'SPLIT'
+}
+
+function normalizeInclusiveBranchMergePolicy(
+  value: unknown
+): WorkflowInclusiveBranchMergePolicy {
+  if (value === 'REQUIRED_COUNT' || value === 'DEFAULT_BRANCH') {
+    return value
+  }
+
+  return 'ALL_SELECTED'
 }
 
 function normalizeConditionMode(value: unknown): WorkflowConditionNodeConfig['expressionMode'] {
@@ -317,7 +404,7 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
     case 'condition':
       return defaultConditionConfig as WorkflowNodeConfigMap[K]
     case 'inclusive':
-      return defaultGatewayConfig as WorkflowNodeConfigMap[K]
+      return defaultInclusiveConfig as WorkflowNodeConfigMap[K]
     case 'cc':
       return defaultCcConfig as WorkflowNodeConfigMap[K]
     case 'timer':
@@ -325,7 +412,7 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
     case 'trigger':
       return defaultTriggerConfig as WorkflowNodeConfigMap[K]
     case 'parallel':
-      return defaultGatewayConfig as WorkflowNodeConfigMap[K]
+      return defaultParallelConfig as WorkflowNodeConfigMap[K]
     case 'end':
       return emptyConfig as WorkflowNodeConfigMap[K]
   }
@@ -428,8 +515,23 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
     } as WorkflowNodeConfigMap[K]
   }
 
-  if (kind === 'parallel' || kind === 'inclusive') {
-    const value = config as Partial<WorkflowGatewayNodeConfig> | null | undefined
+  if (kind === 'inclusive') {
+    const value = config as Partial<WorkflowInclusiveGatewayNodeConfig> | null | undefined
+    return {
+      gatewayDirection: normalizeGatewayDirection(value?.gatewayDirection),
+      defaultBranchId: value?.defaultBranchId ? String(value.defaultBranchId) : '',
+      requiredBranchCount:
+        typeof value?.requiredBranchCount === 'number' &&
+        Number.isFinite(value.requiredBranchCount) &&
+        value.requiredBranchCount > 0
+          ? value.requiredBranchCount
+          : defaultInclusiveConfig.requiredBranchCount,
+      branchMergePolicy: normalizeInclusiveBranchMergePolicy(value?.branchMergePolicy),
+    } as WorkflowNodeConfigMap[K]
+  }
+
+  if (kind === 'parallel') {
+    const value = config as Partial<WorkflowParallelGatewayNodeConfig> | null | undefined
     return {
       gatewayDirection: normalizeGatewayDirection(value?.gatewayDirection),
     } as WorkflowNodeConfigMap[K]
@@ -535,6 +637,12 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
           ? 'FIXED_VERSION'
           : defaultSubprocessConfig.calledVersionPolicy,
       calledVersion: normalizeNumber(value?.calledVersion, defaultSubprocessConfig.calledVersion),
+      callScope: normalizeSubprocessCallScope(value?.callScope),
+      joinMode: normalizeSubprocessJoinMode(value?.joinMode),
+      childStartStrategy: normalizeSubprocessChildStartStrategy(value?.childStartStrategy),
+      parentResumeStrategy: normalizeSubprocessParentResumeStrategy(
+        value?.parentResumeStrategy
+      ),
       businessBindingMode:
         value?.businessBindingMode === 'OVERRIDE' ? 'OVERRIDE' : 'INHERIT_PARENT',
       terminatePolicy:
@@ -568,9 +676,16 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
 
   if (kind === 'dynamic-builder') {
     const value = config as Partial<WorkflowDynamicBuilderNodeConfig> | null | undefined
+    const sourceMode = normalizeDynamicBuilderSourceMode(value?.sourceMode)
     return {
       buildMode: normalizeDynamicBuilderBuildMode(value?.buildMode),
-      sourceMode: normalizeDynamicBuilderSourceMode(value?.sourceMode),
+      sourceMode,
+      sceneCode: value?.sceneCode ? String(value.sceneCode) : '',
+      executionStrategy: normalizeDynamicBuilderExecutionStrategy(
+        value?.executionStrategy,
+        sourceMode
+      ),
+      fallbackStrategy: normalizeDynamicBuilderFallbackStrategy(value?.fallbackStrategy),
       ruleExpression: value?.ruleExpression ? String(value.ruleExpression) : '',
       manualTemplateCode: value?.manualTemplateCode ? String(value.manualTemplateCode) : '',
       appendPolicy: normalizeDynamicBuilderAppendPolicy(value?.appendPolicy),

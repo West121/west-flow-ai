@@ -91,6 +91,12 @@ export type ProcessDefinitionDetailResponse = {
 const DEFAULT_NODE_WIDTH = 220
 const DEFAULT_NODE_HEIGHT = 96
 
+function normalizeEdgePriority(value: unknown, fallback: number) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : fallback
+}
+
 // 画布节点类型和流程定义节点类型不是完全一一对应，需要先做归一化。
 // 画布节点种类和流程定义节点类型需要先做映射。
 function nodeTypeFor(kind: string, config?: Record<string, unknown>): ProcessDefinitionDslNodeType {
@@ -201,7 +207,7 @@ export function workflowSnapshotToProcessDefinitionDsl(
       id: edge.id,
       source: edge.source,
       target: edge.target,
-      priority: index + 1,
+      priority: normalizeEdgePriority(edge.data?.priority, index + 1),
       label: typeof edge.label === 'string' ? edge.label : edge.id,
       condition: normalizeEdgeCondition(edge.data?.condition),
     })),
@@ -240,6 +246,7 @@ export function processDefinitionDetailToWorkflowSnapshot(
       label: edge.label,
       data: {
         condition: normalizeEdgeCondition(edge.condition),
+        priority: edge.priority,
       },
     })),
     selectedNodeId: null,

@@ -64,9 +64,32 @@ export type WorkflowSubprocessTerminatePolicy =
 export type WorkflowSubprocessChildFinishPolicy =
   | 'RETURN_TO_PARENT'
   | 'TERMINATE_PARENT'
+export type WorkflowSubprocessCallScope =
+  | 'CHILD_ONLY'
+  | 'CHILD_AND_DESCENDANTS'
+export type WorkflowSubprocessJoinMode =
+  | 'AUTO_RETURN'
+  | 'WAIT_PARENT_CONFIRM'
+export type WorkflowSubprocessChildStartStrategy =
+  | 'LATEST_PUBLISHED'
+  | 'FIXED_VERSION'
+  | 'SCENE_BINDING'
+export type WorkflowSubprocessParentResumeStrategy =
+  | 'AUTO_RETURN'
+  | 'WAIT_PARENT_CONFIRM'
 
 export type WorkflowDynamicBuildMode = 'APPROVER_TASKS' | 'SUBPROCESS_CALLS'
 export type WorkflowDynamicBuilderSourceMode = 'RULE' | 'MANUAL_TEMPLATE'
+export type WorkflowDynamicBuilderExecutionStrategy =
+  | 'RULE_FIRST'
+  | 'RULE_ONLY'
+  | 'TEMPLATE_FIRST'
+  | 'TEMPLATE_ONLY'
+export type WorkflowDynamicBuilderFallbackStrategy =
+  | 'KEEP_CURRENT'
+  | 'USE_RULE'
+  | 'USE_TEMPLATE'
+  | 'SKIP_GENERATION'
 export type WorkflowDynamicBuilderAppendPolicy =
   | 'SERIAL_AFTER_CURRENT'
   | 'PARALLEL_WITH_CURRENT'
@@ -76,10 +99,17 @@ export type WorkflowDynamicBuilderTerminatePolicy =
   | 'TERMINATE_PARENT_AND_GENERATED'
 
 export type WorkflowGatewayDirection = 'SPLIT' | 'JOIN'
+export type WorkflowInclusiveBranchMergePolicy =
+  | 'ALL_SELECTED'
+  | 'REQUIRED_COUNT'
+  | 'DEFAULT_BRANCH'
 
 export type WorkflowDynamicBuilderNodeConfig = {
   buildMode: WorkflowDynamicBuildMode
   sourceMode: WorkflowDynamicBuilderSourceMode
+  sceneCode: string
+  executionStrategy: WorkflowDynamicBuilderExecutionStrategy
+  fallbackStrategy: WorkflowDynamicBuilderFallbackStrategy
   ruleExpression: string
   manualTemplateCode: string
   appendPolicy: WorkflowDynamicBuilderAppendPolicy
@@ -190,6 +220,10 @@ export type WorkflowSubprocessNodeConfig = {
   calledProcessKey: string
   calledVersionPolicy: WorkflowSubprocessVersionPolicy
   calledVersion: number | null
+  callScope: WorkflowSubprocessCallScope
+  joinMode: WorkflowSubprocessJoinMode
+  childStartStrategy: WorkflowSubprocessChildStartStrategy
+  parentResumeStrategy: WorkflowSubprocessParentResumeStrategy
   businessBindingMode: WorkflowSubprocessBusinessBindingMode
   terminatePolicy: WorkflowSubprocessTerminatePolicy
   childFinishPolicy: WorkflowSubprocessChildFinishPolicy
@@ -213,7 +247,14 @@ export type WorkflowCcNodeConfig = {
   readRequired: boolean
 }
 
-export type WorkflowGatewayNodeConfig = {
+export type WorkflowInclusiveGatewayNodeConfig = {
+  gatewayDirection: WorkflowGatewayDirection
+  defaultBranchId?: string
+  requiredBranchCount?: number | null
+  branchMergePolicy?: WorkflowInclusiveBranchMergePolicy
+}
+
+export type WorkflowParallelGatewayNodeConfig = {
   gatewayDirection: WorkflowGatewayDirection
 }
 
@@ -224,11 +265,11 @@ export type WorkflowNodeConfigMap = {
   subprocess: WorkflowSubprocessNodeConfig
   'dynamic-builder': WorkflowDynamicBuilderNodeConfig
   condition: WorkflowConditionNodeConfig
-  inclusive: WorkflowGatewayNodeConfig
+  inclusive: WorkflowInclusiveGatewayNodeConfig
   cc: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
   trigger: WorkflowTriggerNodeConfig
-  parallel: WorkflowGatewayNodeConfig
+  parallel: WorkflowParallelGatewayNodeConfig
   end: Record<string, never>
 }
 
@@ -250,6 +291,7 @@ export type WorkflowEdgeData = {
     value?: string | number | boolean | null
     formulaExpression?: string
   }
+  priority?: number
 }
 
 export type WorkflowEdge = Edge<WorkflowEdgeData>

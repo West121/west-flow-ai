@@ -65,12 +65,26 @@ public class ProcessDslValidator {
     );
     private static final List<String> SUPPORTED_DYNAMIC_BUILDER_SOURCE_MODES = List.of(
             "RULE",
+            "RULE_DRIVEN",
+            "MODEL_DRIVEN",
             "MANUAL_TEMPLATE"
     );
     private static final List<String> SUPPORTED_DYNAMIC_BUILDER_APPEND_POLICIES = List.of(
             "SERIAL_AFTER_CURRENT",
             "PARALLEL_WITH_CURRENT",
             "SERIAL_BEFORE_NEXT"
+    );
+    private static final List<String> SUPPORTED_DYNAMIC_BUILDER_EXECUTION_STRATEGIES = List.of(
+            "RULE_FIRST",
+            "RULE_ONLY",
+            "TEMPLATE_FIRST",
+            "TEMPLATE_ONLY"
+    );
+    private static final List<String> SUPPORTED_DYNAMIC_BUILDER_FALLBACK_STRATEGIES = List.of(
+            "KEEP_CURRENT",
+            "USE_RULE",
+            "USE_TEMPLATE",
+            "SKIP_GENERATION"
     );
     private static final List<String> SUPPORTED_DYNAMIC_BUILDER_TERMINATE_POLICIES = List.of(
             "TERMINATE_GENERATED_ONLY",
@@ -178,9 +192,19 @@ public class ProcessDslValidator {
             List<String> supportedValues,
             String nodeId
     ) {
+        validateOptionalEnum(config, fieldName, supportedValues, nodeId, "subprocess");
+    }
+
+    private void validateOptionalEnum(
+            Map<String, Object> config,
+            String fieldName,
+            List<String> supportedValues,
+            String nodeId,
+            String nodeType
+    ) {
         String value = asString(config.get(fieldName));
         if (value != null && !supportedValues.contains(value)) {
-            throw invalid("subprocess 节点 " + fieldName + " 不合法", Map.of("nodeId", nodeId, fieldName, value));
+            throw invalid(nodeType + " 节点 " + fieldName + " 不合法", Map.of("nodeId", nodeId, fieldName, value));
         }
     }
 
@@ -326,17 +350,35 @@ public class ProcessDslValidator {
                 throw invalid("dynamic-builder 节点 buildMode 不合法", details("nodeId", node.id(), "buildMode", buildMode));
             }
 
-            String sourceMode = asString(config.get("sourceMode"));
+            String sourceMode = normalizeDynamicBuilderSourceMode(asString(config.get("sourceMode")));
             if (sourceMode == null || !SUPPORTED_DYNAMIC_BUILDER_SOURCE_MODES.contains(sourceMode)) {
                 throw invalid("dynamic-builder 节点 sourceMode 不合法", details("nodeId", node.id(), "sourceMode", sourceMode));
             }
 
-            if ("RULE".equals(sourceMode) && asString(config.get("ruleExpression")) == null) {
+            if ("RULE_DRIVEN".equals(sourceMode) && asString(config.get("ruleExpression")) == null) {
                 throw invalid("dynamic-builder 节点 ruleExpression 不能为空", details("nodeId", node.id()));
             }
-            if ("MANUAL_TEMPLATE".equals(sourceMode) && asString(config.get("manualTemplateCode")) == null) {
-                throw invalid("dynamic-builder 节点 manualTemplateCode 不能为空", details("nodeId", node.id()));
+            if (
+                    "MODEL_DRIVEN".equals(sourceMode)
+                            && asString(config.get("manualTemplateCode")) == null
+                            && asString(config.get("sceneCode")) == null
+            ) {
+                throw invalid("dynamic-builder 节点 MODEL_DRIVEN 模式必须配置 manualTemplateCode 或 sceneCode", details("nodeId", node.id()));
             }
+            validateOptionalEnum(
+                    config,
+                    "executionStrategy",
+                    SUPPORTED_DYNAMIC_BUILDER_EXECUTION_STRATEGIES,
+                    node.id(),
+                    "dynamic-builder"
+            );
+            validateOptionalEnum(
+                    config,
+                    "fallbackStrategy",
+                    SUPPORTED_DYNAMIC_BUILDER_FALLBACK_STRATEGIES,
+                    node.id(),
+                    "dynamic-builder"
+            );
 
             String appendPolicy = asString(config.get("appendPolicy"));
             if (appendPolicy == null || !SUPPORTED_DYNAMIC_BUILDER_APPEND_POLICIES.contains(appendPolicy)) {
@@ -364,6 +406,17 @@ public class ProcessDslValidator {
                 }
             }
         }
+    }
+
+    private String normalizeDynamicBuilderSourceMode(String sourceMode) {
+        if (sourceMode == null || sourceMode.isBlank()) {
+            return null;
+        }
+        return switch (sourceMode.trim().toUpperCase()) {
+            case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
+            case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
+            default -> sourceMode;
+        };
     }
 
     // 校验审批节点的会签模式、票签规则和自动结束配置。

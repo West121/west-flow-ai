@@ -708,6 +708,43 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldAcceptModelDrivenDynamicBuilderDslBySceneCode() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("buildMode", "SUBPROCESS_CALLS");
+        dynamicConfig.put("sourceMode", "MODEL_DRIVEN");
+        dynamicConfig.put("sceneCode", "oa_leave_long_vacation");
+        dynamicConfig.put("appendPolicy", "SERIAL_AFTER_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 1);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_GENERATED_ONLY");
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        node("approve_1", "approver", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", Map.of("type", "SINGLE"),
+                                "operations", List.of("APPROVE")
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "approve_1"),
+                        edge("edge_3", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
     void shouldRejectDynamicBuilderTaskModeThatEndsImmediately() {
         Map<String, Object> dynamicConfig = new LinkedHashMap<>();
         dynamicConfig.put("buildMode", "APPROVER_TASKS");

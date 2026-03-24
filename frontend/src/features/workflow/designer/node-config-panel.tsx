@@ -32,10 +32,13 @@ import {
   type WorkflowFieldBinding,
   type WorkflowConditionOperator,
   type WorkflowGatewayDirection,
+  type WorkflowInclusiveBranchMergePolicy,
   type WorkflowApproverApprovalPolicyType,
   type WorkflowApproverAssignmentMode,
   type WorkflowCcTargetMode,
   type WorkflowDynamicBuilderAppendPolicy,
+  type WorkflowDynamicBuilderExecutionStrategy,
+  type WorkflowDynamicBuilderFallbackStrategy,
   type WorkflowDynamicBuilderSourceMode,
   type WorkflowDynamicBuilderTerminatePolicy,
   type WorkflowDynamicBuildMode,
@@ -46,8 +49,12 @@ import {
   type WorkflowReminderChannel,
   type WorkflowFieldBindingSource,
   type WorkflowSubprocessBusinessBindingMode,
+  type WorkflowSubprocessCallScope,
   type WorkflowSubprocessChildFinishPolicy,
+  type WorkflowSubprocessChildStartStrategy,
+  type WorkflowSubprocessJoinMode,
   type WorkflowSubprocessTerminatePolicy,
+  type WorkflowSubprocessParentResumeStrategy,
   type WorkflowSubprocessVariableMapping,
   type WorkflowSubprocessVersionPolicy,
   type WorkflowTimeoutApprovalAction,
@@ -98,6 +105,27 @@ const subprocessVersionPolicies = [
   { value: 'FIXED_VERSION', label: '固定版本' },
 ] satisfies Array<{ value: WorkflowSubprocessVersionPolicy; label: string }>
 
+const subprocessCallScopes = [
+  { value: 'CHILD_ONLY', label: '仅子流程' },
+  { value: 'CHILD_AND_DESCENDANTS', label: '子流程及其后代' },
+] satisfies Array<{ value: WorkflowSubprocessCallScope; label: string }>
+
+const subprocessJoinModes = [
+  { value: 'AUTO_RETURN', label: '自动回传' },
+  { value: 'WAIT_PARENT_CONFIRM', label: '等待父流程确认' },
+] satisfies Array<{ value: WorkflowSubprocessJoinMode; label: string }>
+
+const subprocessChildStartStrategies = [
+  { value: 'LATEST_PUBLISHED', label: '最新已发布版本' },
+  { value: 'FIXED_VERSION', label: '固定版本' },
+  { value: 'SCENE_BINDING', label: '场景绑定' },
+] satisfies Array<{ value: WorkflowSubprocessChildStartStrategy; label: string }>
+
+const subprocessParentResumeStrategies = [
+  { value: 'AUTO_RETURN', label: '自动回到父流程' },
+  { value: 'WAIT_PARENT_CONFIRM', label: '等待父流程确认后恢复' },
+] satisfies Array<{ value: WorkflowSubprocessParentResumeStrategy; label: string }>
+
 const subprocessBusinessBindingModes = [
   { value: 'INHERIT_PARENT', label: '继承父流程业务上下文' },
   { value: 'OVERRIDE', label: '覆盖为子流程独立业务上下文' },
@@ -123,6 +151,20 @@ const dynamicBuilderSourceModes = [
   { value: 'MANUAL_TEMPLATE', label: '人工模板' },
 ] satisfies Array<{ value: WorkflowDynamicBuilderSourceMode; label: string }>
 
+const dynamicBuilderExecutionStrategies = [
+  { value: 'RULE_FIRST', label: '规则优先' },
+  { value: 'RULE_ONLY', label: '仅规则' },
+  { value: 'TEMPLATE_FIRST', label: '模板优先' },
+  { value: 'TEMPLATE_ONLY', label: '仅模板' },
+] satisfies Array<{ value: WorkflowDynamicBuilderExecutionStrategy; label: string }>
+
+const dynamicBuilderFallbackStrategies = [
+  { value: 'KEEP_CURRENT', label: '保留当前节点' },
+  { value: 'USE_RULE', label: '回退到规则结果' },
+  { value: 'USE_TEMPLATE', label: '回退到模板结果' },
+  { value: 'SKIP_GENERATION', label: '跳过生成' },
+] satisfies Array<{ value: WorkflowDynamicBuilderFallbackStrategy; label: string }>
+
 const dynamicBuilderAppendPolicies = [
   { value: 'SERIAL_AFTER_CURRENT', label: '当前节点后串行追加' },
   { value: 'PARALLEL_WITH_CURRENT', label: '与当前节点并行追加' },
@@ -138,6 +180,12 @@ const gatewayDirections = [
   { value: 'SPLIT', label: '分支' },
   { value: 'JOIN', label: '汇聚' },
 ] satisfies Array<{ value: WorkflowGatewayDirection; label: string }>
+
+const inclusiveBranchMergePolicies = [
+  { value: 'ALL_SELECTED', label: '所有命中的分支都保留' },
+  { value: 'REQUIRED_COUNT', label: '命中指定数量后汇聚' },
+  { value: 'DEFAULT_BRANCH', label: '优先默认分支汇聚' },
+] satisfies Array<{ value: WorkflowInclusiveBranchMergePolicy; label: string }>
 
 const reminderChannels = [
   { value: 'IN_APP', label: '站内信' },
@@ -169,6 +217,7 @@ const conditionTypeOptions = [
 const branchSchema = z.object({
   edgeId: z.string(),
   label: z.string(),
+  branchPriority: z.string(),
   conditionType: z.enum(['EXPRESSION', 'FIELD', 'FORMULA']),
   conditionExpression: z.string(),
   conditionFieldKey: z.string(),
@@ -255,6 +304,10 @@ const nodeConfigFormSchema = z
       calledProcessKey: z.string(),
       calledVersionPolicy: z.enum(['LATEST_PUBLISHED', 'FIXED_VERSION']),
       calledVersion: z.string(),
+      callScope: z.enum(['CHILD_ONLY', 'CHILD_AND_DESCENDANTS']),
+      joinMode: z.enum(['AUTO_RETURN', 'WAIT_PARENT_CONFIRM']),
+      childStartStrategy: z.enum(['LATEST_PUBLISHED', 'FIXED_VERSION', 'SCENE_BINDING']),
+      parentResumeStrategy: z.enum(['AUTO_RETURN', 'WAIT_PARENT_CONFIRM']),
       businessBindingMode: z.enum(['INHERIT_PARENT', 'OVERRIDE']),
       terminatePolicy: z.enum([
         'TERMINATE_SUBPROCESS_ONLY',
@@ -267,6 +320,19 @@ const nodeConfigFormSchema = z
     dynamicBuilder: z.object({
       buildMode: z.enum(['APPROVER_TASKS', 'SUBPROCESS_CALLS']),
       sourceMode: z.enum(['RULE', 'MANUAL_TEMPLATE']),
+      sceneCode: z.string(),
+      executionStrategy: z.enum([
+        'RULE_FIRST',
+        'RULE_ONLY',
+        'TEMPLATE_FIRST',
+        'TEMPLATE_ONLY',
+      ]),
+      fallbackStrategy: z.enum([
+        'KEEP_CURRENT',
+        'USE_RULE',
+        'USE_TEMPLATE',
+        'SKIP_GENERATION',
+      ]),
       ruleExpression: z.string(),
       manualTemplateCode: z.string(),
       appendPolicy: z.enum([
@@ -311,6 +377,9 @@ const nodeConfigFormSchema = z
       }),
     inclusive: z.object({
       gatewayDirection: z.enum(['SPLIT', 'JOIN']),
+      defaultBranchId: z.string(),
+      requiredBranchCount: z.string(),
+      branchMergePolicy: z.enum(['ALL_SELECTED', 'REQUIRED_COUNT', 'DEFAULT_BRANCH']),
       branches: z.array(branchSchema),
     }),
     parallel: z.object({
@@ -792,7 +861,70 @@ const nodeConfigFormSchema = z
         })
       }
 
+      if (
+        values.inclusive.branchMergePolicy === 'REQUIRED_COUNT' &&
+        !values.inclusive.requiredBranchCount.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '命中指定数量模式需要填写必选分支数',
+          path: ['inclusive', 'requiredBranchCount'],
+        })
+      } else if (values.inclusive.branchMergePolicy === 'REQUIRED_COUNT') {
+        const requiredBranchCount = Number(values.inclusive.requiredBranchCount)
+        if (
+          !Number.isFinite(requiredBranchCount) ||
+          requiredBranchCount <= 0 ||
+          requiredBranchCount > values.inclusive.branches.length
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '必选分支数必须是介于 1 和当前分支数之间的数字',
+            path: ['inclusive', 'requiredBranchCount'],
+          })
+        }
+      }
+
+      if (
+        values.inclusive.branchMergePolicy === 'DEFAULT_BRANCH' &&
+        !values.inclusive.defaultBranchId.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '优先默认分支模式需要选择默认分支',
+          path: ['inclusive', 'defaultBranchId'],
+        })
+      }
+
+      if (
+        values.inclusive.defaultBranchId.trim() &&
+        !values.inclusive.branches.some((branch) => branch.edgeId === values.inclusive.defaultBranchId.trim())
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '默认分支必须选择当前节点的出边',
+          path: ['inclusive', 'defaultBranchId'],
+        })
+      }
+
       values.inclusive.branches.forEach((branch, index) => {
+        if (!branch.branchPriority.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '包容网关每条出边都需要填写分支优先级',
+            path: ['inclusive', 'branches', index, 'branchPriority'],
+          })
+        } else {
+          const branchPriority = Number(branch.branchPriority)
+          if (!Number.isFinite(branchPriority) || branchPriority <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '分支优先级必须是正整数',
+              path: ['inclusive', 'branches', index, 'branchPriority'],
+            })
+          }
+        }
+
         if (branch.conditionType === 'EXPRESSION' && !branch.conditionExpression.trim()) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -1167,12 +1299,16 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
   const targets = (config.targets ?? {}) as Record<string, unknown>
   const timerConfig = config as Record<string, unknown>
   const triggerConfig = config as Record<string, unknown>
-  const branchDefaults = outgoingEdges.map((edge) => ({
+  const branchDefaults = outgoingEdges.map((edge, index) => ({
     ...buildConditionFormDefaults(
       edge.id,
       typeof edge.label === 'string' ? edge.label : edge.id,
       edge.data?.condition
     ),
+    branchPriority:
+      typeof edge.data?.priority === 'number' && Number.isFinite(edge.data.priority)
+        ? String(edge.data.priority)
+        : String(index + 1),
   }))
 
   return {
@@ -1279,6 +1415,17 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
         config.calledVersion === null || config.calledVersion === undefined
           ? ''
           : String(config.calledVersion),
+      callScope: config.callScope === 'CHILD_AND_DESCENDANTS' ? 'CHILD_AND_DESCENDANTS' : 'CHILD_ONLY',
+      joinMode: config.joinMode === 'WAIT_PARENT_CONFIRM' ? 'WAIT_PARENT_CONFIRM' : 'AUTO_RETURN',
+      childStartStrategy:
+        config.childStartStrategy === 'FIXED_VERSION' ||
+        config.childStartStrategy === 'SCENE_BINDING'
+          ? config.childStartStrategy
+          : 'LATEST_PUBLISHED',
+      parentResumeStrategy:
+        config.parentResumeStrategy === 'WAIT_PARENT_CONFIRM'
+          ? 'WAIT_PARENT_CONFIRM'
+          : 'AUTO_RETURN',
       businessBindingMode:
         config.businessBindingMode === 'OVERRIDE' ? 'OVERRIDE' : 'INHERIT_PARENT',
       terminatePolicy:
@@ -1304,6 +1451,21 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
       buildMode:
         config.buildMode === 'SUBPROCESS_CALLS' ? 'SUBPROCESS_CALLS' : 'APPROVER_TASKS',
       sourceMode: config.sourceMode === 'MANUAL_TEMPLATE' ? 'MANUAL_TEMPLATE' : 'RULE',
+      sceneCode: String(config.sceneCode ?? ''),
+      executionStrategy:
+        config.executionStrategy === 'RULE_ONLY' ||
+        config.executionStrategy === 'TEMPLATE_FIRST' ||
+        config.executionStrategy === 'TEMPLATE_ONLY'
+          ? config.executionStrategy
+          : config.sourceMode === 'MANUAL_TEMPLATE'
+            ? 'TEMPLATE_FIRST'
+            : 'RULE_FIRST',
+      fallbackStrategy:
+        config.fallbackStrategy === 'USE_RULE' ||
+        config.fallbackStrategy === 'USE_TEMPLATE' ||
+        config.fallbackStrategy === 'SKIP_GENERATION'
+          ? config.fallbackStrategy
+          : 'KEEP_CURRENT',
       ruleExpression: String(config.ruleExpression ?? ''),
       manualTemplateCode: String(config.manualTemplateCode ?? ''),
       appendPolicy:
@@ -1345,6 +1507,16 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
     },
     inclusive: {
       gatewayDirection: config.gatewayDirection === 'JOIN' ? 'JOIN' : 'SPLIT',
+      defaultBranchId: String(config.defaultBranchId ?? ''),
+      requiredBranchCount:
+        config.requiredBranchCount === null || config.requiredBranchCount === undefined
+          ? ''
+          : String(config.requiredBranchCount),
+      branchMergePolicy:
+        config.branchMergePolicy === 'REQUIRED_COUNT' ||
+        config.branchMergePolicy === 'DEFAULT_BRANCH'
+          ? config.branchMergePolicy
+          : 'ALL_SELECTED',
       branches: branchDefaults,
     },
     timer: {
@@ -1490,6 +1662,10 @@ function buildNodePatch(values: NodeConfigFormValues) {
             values.subprocess.calledVersionPolicy === 'FIXED_VERSION'
               ? parseNumber(values.subprocess.calledVersion)
               : null,
+          callScope: values.subprocess.callScope,
+          joinMode: values.subprocess.joinMode,
+          childStartStrategy: values.subprocess.childStartStrategy,
+          parentResumeStrategy: values.subprocess.parentResumeStrategy,
           businessBindingMode: values.subprocess.businessBindingMode,
           terminatePolicy: values.subprocess.terminatePolicy,
           childFinishPolicy: values.subprocess.childFinishPolicy,
@@ -1502,6 +1678,9 @@ function buildNodePatch(values: NodeConfigFormValues) {
         config: {
           buildMode: values.dynamicBuilder.buildMode,
           sourceMode: values.dynamicBuilder.sourceMode,
+          sceneCode: values.dynamicBuilder.sceneCode.trim(),
+          executionStrategy: values.dynamicBuilder.executionStrategy,
+          fallbackStrategy: values.dynamicBuilder.fallbackStrategy,
           ruleExpression: values.dynamicBuilder.ruleExpression.trim(),
           manualTemplateCode: values.dynamicBuilder.manualTemplateCode.trim(),
           appendPolicy: values.dynamicBuilder.appendPolicy,
@@ -1533,6 +1712,12 @@ function buildNodePatch(values: NodeConfigFormValues) {
       return {
         config: {
           gatewayDirection: values.inclusive.gatewayDirection,
+          defaultBranchId: values.inclusive.defaultBranchId.trim(),
+          requiredBranchCount:
+            values.inclusive.branchMergePolicy === 'REQUIRED_COUNT'
+              ? parseNumber(values.inclusive.requiredBranchCount)
+              : null,
+          branchMergePolicy: values.inclusive.branchMergePolicy,
         },
       }
     case 'timer':
@@ -1589,19 +1774,20 @@ export function NodeConfigPanel({
 }: {
   node: WorkflowNode | null
   edges: WorkflowEdge[]
-  onApply: (
-    nodeId: string,
-    patch: {
-      label: string
-      description: string
-      config: unknown
-    },
-    edgePatches?: Array<{
-      edgeId: string
-      label?: string
-      condition?: unknown
-    }>
-  ) => void
+    onApply: (
+      nodeId: string,
+      patch: {
+        label: string
+        description: string
+        config: unknown
+      },
+      edgePatches?: Array<{
+        edgeId: string
+        label?: string
+        condition?: unknown
+        priority?: number
+      }>
+    ) => void
   onReset?: () => void
   processFormFields?: WorkflowProcessFormField[]
 }) {
@@ -1667,6 +1853,10 @@ export function NodeConfigPanel({
             calledProcessKey: '',
             calledVersionPolicy: 'LATEST_PUBLISHED',
             calledVersion: '',
+            callScope: 'CHILD_ONLY',
+            joinMode: 'AUTO_RETURN',
+            childStartStrategy: 'LATEST_PUBLISHED',
+            parentResumeStrategy: 'AUTO_RETURN',
             businessBindingMode: 'INHERIT_PARENT',
             terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
             childFinishPolicy: 'RETURN_TO_PARENT',
@@ -1676,6 +1866,9 @@ export function NodeConfigPanel({
           dynamicBuilder: {
             buildMode: 'APPROVER_TASKS',
             sourceMode: 'RULE',
+            sceneCode: '',
+            executionStrategy: 'RULE_FIRST',
+            fallbackStrategy: 'KEEP_CURRENT',
             ruleExpression: '',
             manualTemplateCode: '',
             appendPolicy: 'SERIAL_AFTER_CURRENT',
@@ -1713,6 +1906,9 @@ export function NodeConfigPanel({
           },
           inclusive: {
             gatewayDirection: 'SPLIT',
+            defaultBranchId: '',
+            requiredBranchCount: '',
+            branchMergePolicy: 'ALL_SELECTED',
             branches: [],
           },
           parallel: {
@@ -1774,6 +1970,10 @@ export function NodeConfigPanel({
   const selectedInclusiveDirection = useWatch({
     control: form.control,
     name: 'inclusive.gatewayDirection',
+  })
+  const selectedInclusiveMergePolicy = useWatch({
+    control: form.control,
+    name: 'inclusive.branchMergePolicy',
   })
   const selectedInclusiveBranches = useWatch({
     control: form.control,
@@ -1840,6 +2040,7 @@ export function NodeConfigPanel({
           ? values.inclusive.branches.map((branch) => ({
               edgeId: branch.edgeId,
               label: branch.label.trim() || branch.edgeId,
+              priority: parseNumber(branch.branchPriority) ?? undefined,
               condition:
                 branch.conditionType === 'FIELD'
                   ? {
@@ -1977,11 +2178,11 @@ export function NodeConfigPanel({
             />
 
             <div className='grid gap-4 md:grid-cols-2'>
-              <FormField
-                control={form.control}
-                name='subprocess.calledVersionPolicy'
-                render={({ field }) => (
-                  <FormItem>
+            <FormField
+              control={form.control}
+              name='subprocess.calledVersionPolicy'
+              render={({ field }) => (
+                <FormItem>
                     <FormLabel>版本策略</FormLabel>
                     <FormControl>
                       <Select value={field.value} onValueChange={field.onChange}>
@@ -2016,6 +2217,110 @@ export function NodeConfigPanel({
                         placeholder='3'
                         disabled={form.getValues('subprocess.calledVersionPolicy') !== 'FIXED_VERSION'}
                       />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='subprocess.callScope'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>调用范围</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择调用范围' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessCallScopes.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='subprocess.joinMode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>父子协同方式</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择协同方式' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessJoinModes.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className='grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='subprocess.childStartStrategy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>子流程启动策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择启动策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessChildStartStrategies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='subprocess.parentResumeStrategy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>父流程恢复策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择恢复策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {subprocessParentResumeStrategies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -2199,6 +2504,81 @@ export function NodeConfigPanel({
                         </SelectContent>
                       </Select>
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className='grid gap-4 rounded-xl border border-dashed p-3 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.sceneCode'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>场景编码</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder='leave_overtime_approval' />
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      用于区分不同动态构建场景，后续可映射成规则模板、模型能力或执行编排。
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.executionStrategy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>执行策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择执行策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dynamicBuilderExecutionStrategies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      决定优先走规则、模板还是预留的更深层策略。
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='dynamicBuilder.fallbackStrategy'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>回退策略</FormLabel>
+                    <FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className='w-full'>
+                          <SelectValue placeholder='请选择回退策略' />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {dynamicBuilderFallbackStrategies.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <p className='text-xs text-muted-foreground'>
+                      上游规则命中失败或模板缺失时的默认处理方式。
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -3440,15 +3820,125 @@ export function NodeConfigPanel({
                 {selectedKind === 'inclusive' && selectedInclusiveDirection === 'SPLIT' ? (
                   <>
                     <Separator />
+                    <div className='grid gap-4 rounded-xl border bg-muted/20 p-4'>
+                      <div className='grid gap-4 md:grid-cols-2'>
+                        <FormField
+                          control={form.control}
+                          name='inclusive.branchMergePolicy'
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>分支汇聚策略</FormLabel>
+                              <FormControl>
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                  <SelectTrigger className='w-full'>
+                                    <SelectValue placeholder='请选择汇聚策略' />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {inclusiveBranchMergePolicies.map((item) => (
+                                      <SelectItem key={item.value} value={item.value}>
+                                        {item.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </FormControl>
+                              <p className='text-xs text-muted-foreground'>
+                                包容网关分支命中后如何回收与汇聚。
+                              </p>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name='inclusive.defaultBranchId'
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>默认分支</FormLabel>
+                              <FormControl>
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                  <SelectTrigger className='w-full'>
+                                    <SelectValue placeholder='请选择默认分支' />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {selectedInclusiveBranches.map((branch) => (
+                                      <SelectItem key={branch.edgeId} value={branch.edgeId}>
+                                        {branch.label || branch.edgeId}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </FormControl>
+                              <p className='text-xs text-muted-foreground'>
+                                仅在默认分支汇聚策略下启用。
+                              </p>
+                              {field.value ? (
+                                <Button
+                                  type='button'
+                                  variant='ghost'
+                                  size='sm'
+                                  className='px-0 text-left'
+                                  onClick={() => field.onChange('')}
+                                >
+                                  清除默认分支
+                                </Button>
+                              ) : null}
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      {selectedInclusiveMergePolicy === 'REQUIRED_COUNT' ? (
+                        <div className='grid gap-4 md:grid-cols-2'>
+                          <FormField
+                            control={form.control}
+                            name='inclusive.requiredBranchCount'
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>必选分支数</FormLabel>
+                                <FormControl>
+                                  <Input {...field} inputMode='numeric' placeholder='2' />
+                                </FormControl>
+                                <p className='text-xs text-muted-foreground'>
+                                  命中指定数量后即可进入汇聚节点。
+                                </p>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <div className='rounded-xl border border-dashed p-3 text-xs text-muted-foreground'>
+                            当前分支总数：{selectedInclusiveBranches.length}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
                     <div className='flex flex-col gap-4'>
                       {selectedInclusiveBranches.map((branch, index) => (
                         <div
                           key={branch.edgeId}
                           className='flex flex-col gap-3 rounded-xl border p-3 text-foreground'
                         >
-                          <div>
-                            <p className='text-sm font-medium'>条件分支</p>
-                            <p className='text-xs text-muted-foreground'>连线：{branch.edgeId}</p>
+                          <div className='flex items-start justify-between gap-3'>
+                            <div>
+                              <p className='text-sm font-medium'>条件分支</p>
+                              <p className='text-xs text-muted-foreground'>连线：{branch.edgeId}</p>
+                            </div>
+                            <FormField
+                              control={form.control}
+                              name={`inclusive.branches.${index}.branchPriority`}
+                              render={({ field }) => (
+                                <FormItem className='w-32'>
+                                  <FormLabel>分支优先级</FormLabel>
+                                  <FormControl>
+                                    <Input {...field} inputMode='numeric' placeholder='1' />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
                           </div>
 
                           <FormField

@@ -104,6 +104,9 @@ function buildDynamicBuilderNode(): WorkflowNode {
       config: {
         buildMode: 'SUBPROCESS_CALLS',
         sourceMode: 'MANUAL_TEMPLATE',
+        sceneCode: 'purchase_review_scene',
+        executionStrategy: 'TEMPLATE_FIRST',
+        fallbackStrategy: 'USE_TEMPLATE',
         ruleExpression: '',
         manualTemplateCode: 'append_purchase_review',
         appendPolicy: 'PARALLEL_WITH_CURRENT',
@@ -114,7 +117,41 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
-function buildInclusiveNode(direction: 'SPLIT' | 'JOIN'): WorkflowNode {
+function buildSubprocessNode(): WorkflowNode {
+  return {
+    id: 'subprocess_1',
+    type: 'workflow',
+    position: { x: 320, y: 100 },
+    data: {
+      kind: 'subprocess',
+      label: '子流程调用',
+      description: '调用下游流程并回传',
+      tone: 'brand',
+      config: {
+        calledProcessKey: 'plm_purchase_review',
+        calledVersionPolicy: 'FIXED_VERSION',
+        calledVersion: 3,
+        callScope: 'CHILD_AND_DESCENDANTS',
+        joinMode: 'WAIT_PARENT_CONFIRM',
+        childStartStrategy: 'SCENE_BINDING',
+        parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+        businessBindingMode: 'OVERRIDE',
+        terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
+        childFinishPolicy: 'TERMINATE_PARENT',
+        inputMappings: [
+          { source: 'billNo', target: 'sourceBillNo' },
+          { source: 'leaveDays', target: 'leaveDays' },
+        ],
+        outputMappings: [{ source: 'approvedResult', target: 'purchaseResult' }],
+      } as never,
+    },
+  }
+}
+
+function buildInclusiveNode(
+  direction: 'SPLIT' | 'JOIN',
+  config: Record<string, unknown> = {}
+): WorkflowNode {
   return {
     id: `inclusive_${direction.toLowerCase()}`,
     type: 'workflow',
@@ -126,6 +163,7 @@ function buildInclusiveNode(direction: 'SPLIT' | 'JOIN'): WorkflowNode {
       tone: 'warning',
       config: {
         gatewayDirection: direction,
+        ...config,
       } as never,
     },
   }
@@ -314,6 +352,9 @@ describe('workflow designer dsl mapping', () => {
     expect(dsl.nodes[1]?.config).toMatchObject({
       buildMode: 'SUBPROCESS_CALLS',
       sourceMode: 'MANUAL_TEMPLATE',
+      sceneCode: 'purchase_review_scene',
+      executionStrategy: 'TEMPLATE_FIRST',
+      fallbackStrategy: 'USE_TEMPLATE',
       manualTemplateCode: 'append_purchase_review',
       appendPolicy: 'PARALLEL_WITH_CURRENT',
       maxGeneratedCount: 2,
@@ -366,7 +407,11 @@ describe('workflow designer dsl mapping', () => {
     const inclusiveSnapshot: WorkflowSnapshot = {
       nodes: [
         snapshot.nodes[0]!,
-        buildInclusiveNode('SPLIT'),
+        buildInclusiveNode('SPLIT', {
+          defaultBranchId: 'edge_urgent',
+          requiredBranchCount: 2,
+          branchMergePolicy: 'REQUIRED_COUNT',
+        }),
         {
           ...snapshot.nodes[1]!,
           id: 'approve_yes',
@@ -394,6 +439,7 @@ describe('workflow designer dsl mapping', () => {
           target: 'approve_yes',
           type: 'smoothstep',
           data: {
+            priority: 2,
             condition: {
               type: 'EXPRESSION',
               expression: 'amount > 10000',
@@ -406,6 +452,7 @@ describe('workflow designer dsl mapping', () => {
           target: 'approve_urgent',
           type: 'smoothstep',
           data: {
+            priority: 1,
             condition: {
               type: 'EXPRESSION',
               expression: 'urgent == true',
@@ -428,6 +475,14 @@ describe('workflow designer dsl mapping', () => {
       formFields: [],
     })
 
+    expect(dsl.nodes.find((node) => node.id === 'inclusive_split')?.config).toMatchObject({
+      gatewayDirection: 'SPLIT',
+      defaultBranchId: 'edge_urgent',
+      requiredBranchCount: 2,
+      branchMergePolicy: 'REQUIRED_COUNT',
+    })
+    expect(dsl.edges.find((edge) => edge.id === 'edge_yes')?.priority).toBe(2)
+    expect(dsl.edges.find((edge) => edge.id === 'edge_urgent')?.priority).toBe(1)
     expect(dsl.edges.find((edge) => edge.id === 'edge_yes')?.condition).toMatchObject({
       type: 'EXPRESSION',
       expression: 'amount > 10000',
@@ -451,6 +506,8 @@ describe('workflow designer dsl mapping', () => {
         type: 'EXPRESSION',
         expression: 'urgent == true',
       })
+    expect(hydrated.edges.find((edge) => edge.id === 'edge_urgent')?.data?.priority).toBe(1)
+    expect(hydrated.edges.find((edge) => edge.id === 'edge_yes')?.data?.priority).toBe(2)
   })
 
   it('round-trips formula branch expressions', () => {
@@ -639,6 +696,57 @@ describe('workflow designer dsl mapping', () => {
     })
   })
 
+  it('persists subprocess strategy fields in the DSL config', () => {
+    const snapshotWithSubprocess: WorkflowSnapshot = {
+      ...snapshot,
+      nodes: [snapshot.nodes[0]!, buildSubprocessNode(), snapshot.nodes[2]!],
+      edges: [
+        {
+          id: 'edge_1',
+          source: 'start_1',
+          target: 'subprocess_1',
+          type: 'smoothstep',
+        },
+        {
+          id: 'edge_2',
+          source: 'subprocess_1',
+          target: 'end_1',
+          type: 'smoothstep',
+        },
+      ],
+      selectedNodeId: 'subprocess_1',
+    }
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithSubprocess, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes).toHaveLength(3)
+    expect(dsl.nodes[1]?.type).toBe('subprocess')
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      calledProcessKey: 'plm_purchase_review',
+      calledVersionPolicy: 'FIXED_VERSION',
+      calledVersion: 3,
+      callScope: 'CHILD_AND_DESCENDANTS',
+      joinMode: 'WAIT_PARENT_CONFIRM',
+      childStartStrategy: 'SCENE_BINDING',
+      parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+      businessBindingMode: 'OVERRIDE',
+      terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
+      childFinishPolicy: 'TERMINATE_PARENT',
+      inputMappings: [
+        { source: 'billNo', target: 'sourceBillNo' },
+        { source: 'leaveDays', target: 'leaveDays' },
+      ],
+      outputMappings: [{ source: 'approvedResult', target: 'purchaseResult' }],
+    })
+  })
+
   it('hydrates dynamic builder nodes from the persisted process definition detail', () => {
     const hydrated = processDefinitionDetailToWorkflowSnapshot({
       processDefinitionId: 'oa_leave:3',
@@ -672,6 +780,9 @@ describe('workflow designer dsl mapping', () => {
             config: {
               buildMode: 'APPROVER_TASKS',
               sourceMode: 'RULE',
+              sceneCode: 'leave_overtime_scene',
+              executionStrategy: 'RULE_FIRST',
+              fallbackStrategy: 'KEEP_CURRENT',
               ruleExpression: '${amount > 1000}',
               manualTemplateCode: '',
               appendPolicy: 'SERIAL_AFTER_CURRENT',
@@ -694,6 +805,9 @@ describe('workflow designer dsl mapping', () => {
     expect(hydrated.nodes[0]?.data.config).toMatchObject({
       buildMode: 'APPROVER_TASKS',
       sourceMode: 'RULE',
+      sceneCode: 'leave_overtime_scene',
+      executionStrategy: 'RULE_FIRST',
+      fallbackStrategy: 'KEEP_CURRENT',
       ruleExpression: '${amount > 1000}',
       appendPolicy: 'SERIAL_AFTER_CURRENT',
       maxGeneratedCount: 1,

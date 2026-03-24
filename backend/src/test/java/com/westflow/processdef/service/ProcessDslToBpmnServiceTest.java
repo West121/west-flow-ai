@@ -557,7 +557,7 @@ class ProcessDslToBpmnServiceTest {
                         )),
                         node("dynamic_1", "dynamic-builder", "追加构建", Map.of(
                                 "buildMode", "APPROVER_TASKS",
-                                "sourceMode", "RULE",
+                                "sourceMode", "RULE_DRIVEN",
                                 "ruleExpression", "days > 3",
                                 "appendPolicy", "SERIAL_AFTER_CURRENT",
                                 "maxGeneratedCount", 4,

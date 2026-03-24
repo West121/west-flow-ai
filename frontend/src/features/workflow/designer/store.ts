@@ -344,6 +344,7 @@ type WorkflowDesignerState = {
       edgeId: string
       label?: string
       condition?: unknown
+      priority?: number
     }>
   ) => void
   setHelperLines: (helperLines: WorkflowHelperLines) => void
@@ -400,6 +401,10 @@ function createPresetNodes(
     subprocess.data.config = normalizeNodeConfig('subprocess', {
       calledProcessKey: 'oa_leave_cancel',
       calledVersionPolicy: 'LATEST_PUBLISHED',
+      callScope: 'CHILD_ONLY',
+      joinMode: 'AUTO_RETURN',
+      childStartStrategy: 'LATEST_PUBLISHED',
+      parentResumeStrategy: 'AUTO_RETURN',
       businessBindingMode: 'INHERIT_PARENT',
       terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
       childFinishPolicy: 'RETURN_TO_PARENT',
@@ -444,6 +449,9 @@ function createPresetNodes(
     dynamicBuilder.data.config = normalizeNodeConfig('dynamic-builder', {
       buildMode: 'APPROVER_TASKS',
       sourceMode: 'RULE',
+      sceneCode: 'leave_overtime_approval',
+      executionStrategy: 'RULE_FIRST',
+      fallbackStrategy: 'KEEP_CURRENT',
       ruleExpression: 'ifElse(leaveDays >= 5, "DIRECTOR_CHAIN", "HR_RECORD")',
       appendPolicy: 'SERIAL_AFTER_CURRENT',
       maxGeneratedCount: 3,
@@ -619,6 +627,10 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
               edgePatch,
               'condition'
             )
+            const hasPriorityPatch = Object.prototype.hasOwnProperty.call(
+              edgePatch,
+              'priority'
+            )
 
             return {
               ...edge,
@@ -628,6 +640,9 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
                 condition: normalizeEdgeCondition(
                   hasConditionPatch ? edgePatch.condition : edge.data?.condition
                 ),
+                priority: hasPriorityPatch
+                  ? edgePatch.priority
+                  : edge.data?.priority,
               },
             }
           }),

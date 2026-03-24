@@ -253,9 +253,13 @@ public class DynamicBuildAppendRuntimeService {
             int maxGeneratedCount
     ) {
         List<?> rawItems;
-        String sourceMode = stringValue(config.get("sourceMode"));
-        if ("MANUAL_TEMPLATE".equals(sourceMode)) {
-            rawItems = resolveDynamicBuilderManualTemplate(buildMode, stringValue(config.get("manualTemplateCode")));
+        String sourceMode = normalizeSourceMode(stringValue(config.get("sourceMode")));
+        if ("MODEL_DRIVEN".equals(sourceMode)) {
+            rawItems = resolveDynamicBuilderModelItems(
+                    buildMode,
+                    stringValue(config.get("manualTemplateCode")),
+                    stringValue(config.get("sceneCode"))
+            );
         } else {
             rawItems = resolveDynamicBuilderRuleItems(buildMode, config, processVariables, stringValue(config.get("ruleExpression")));
         }
@@ -456,6 +460,18 @@ public class DynamicBuildAppendRuntimeService {
         };
     }
 
+    private List<?> resolveDynamicBuilderModelItems(String buildMode, String manualTemplateCode, String sceneCode) {
+        if (manualTemplateCode != null && !manualTemplateCode.isBlank()) {
+            return resolveDynamicBuilderManualTemplate(buildMode, manualTemplateCode);
+        }
+        if (sceneCode == null || sceneCode.isBlank()) {
+            return List.of();
+        }
+        return "SUBPROCESS_CALLS".equals(buildMode)
+                ? List.of(Map.of("calledProcessKey", sceneCode))
+                : List.of(Map.of("userId", sceneCode));
+    }
+
     private String buildGeneratedSubprocessRuntimeBusinessKey(String parentBusinessKey, String sourceNodeId, int index) {
         String normalizedParentBusinessKey = parentBusinessKey == null || parentBusinessKey.isBlank()
                 ? "instance"
@@ -541,6 +557,17 @@ public class DynamicBuildAppendRuntimeService {
         }
         String normalized = buildMode.trim().toUpperCase();
         return List.of("APPROVER_TASKS", "SUBPROCESS_CALLS").contains(normalized) ? normalized : "APPROVER_TASKS";
+    }
+
+    private String normalizeSourceMode(String sourceMode) {
+        if (sourceMode == null || sourceMode.isBlank()) {
+            return "RULE_DRIVEN";
+        }
+        return switch (sourceMode.trim().toUpperCase()) {
+            case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
+            case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
+            default -> "RULE_DRIVEN";
+        };
     }
 
     private String normalizeAppendPolicy(String appendPolicy) {
