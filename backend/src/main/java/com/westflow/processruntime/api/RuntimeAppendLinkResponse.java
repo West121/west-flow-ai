@@ -1,10 +1,11 @@
 package com.westflow.processruntime.api;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.OffsetDateTime;
 
 // 运行时追加与动态构建的附属结构响应。
 public record RuntimeAppendLinkResponse(
-        String id,
+        @JsonProperty("linkId") String id,
         String rootInstanceId,
         String parentInstanceId,
         String sourceTaskId,

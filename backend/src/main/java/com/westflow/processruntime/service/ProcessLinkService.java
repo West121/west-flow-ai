@@ -34,6 +34,11 @@ public class ProcessLinkService {
         return processLinkMapper.selectByChildInstanceId(childInstanceId);
     }
 
+    // 按关联主键查询父子流程记录。
+    public ProcessLinkRecord getById(String id) {
+        return processLinkMapper.selectById(id);
+    }
+
     // 解析某个实例所属的根流程实例 id。
     public String resolveRootInstanceId(String instanceId) {
         if (instanceId == null || instanceId.isBlank()) {

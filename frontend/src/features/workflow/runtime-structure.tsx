@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   buildRuntimeStructureTree,
@@ -91,15 +92,23 @@ function RuntimeStructureItem({
   node,
   currentInstanceId,
   depth,
+  onConfirmParentResume,
+  pendingLinkId,
 }: {
   node: RuntimeStructureTreeNode
   currentInstanceId: string
   depth: number
+  onConfirmParentResume?: ((link: RuntimeStructureLink) => void) | undefined
+  pendingLinkId?: string | null
 }) {
   const { link, children } = node
   const targetInstanceId = resolveRuntimeStructureTargetInstanceId(link)
   const isCurrentParent = link.parentInstanceId === currentInstanceId
   const isCurrentChild = targetInstanceId === currentInstanceId
+  const canConfirmParentResume =
+    link.linkType === 'CALL_ACTIVITY' &&
+    link.status === 'WAIT_PARENT_CONFIRM' &&
+    typeof onConfirmParentResume === 'function'
 
   return (
     <div className='space-y-3'>
@@ -120,6 +129,17 @@ function RuntimeStructureItem({
           ) : null}
           {isCurrentChild ? (
             <Badge variant='outline'>当前子流程</Badge>
+          ) : null}
+          {canConfirmParentResume ? (
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              onClick={() => onConfirmParentResume?.(link)}
+              disabled={pendingLinkId === link.linkId}
+            >
+              {pendingLinkId === link.linkId ? '确认中...' : '父流程确认恢复'}
+            </Button>
           ) : null}
         </div>
 
@@ -199,6 +219,8 @@ function RuntimeStructureItem({
               node={child}
               currentInstanceId={currentInstanceId}
               depth={depth + 1}
+              onConfirmParentResume={onConfirmParentResume}
+              pendingLinkId={pendingLinkId}
             />
           ))}
         </div>
@@ -212,11 +234,15 @@ export function RuntimeStructureSection({
   description = '展示主子流程、追加和动态构建形成的附属结构关系。',
   links,
   currentInstanceId,
+  onConfirmParentResume,
+  pendingLinkId,
 }: {
   title?: string
   description?: string
   links: RuntimeStructureLink[]
   currentInstanceId: string
+  onConfirmParentResume?: ((link: RuntimeStructureLink) => void) | undefined
+  pendingLinkId?: string | null
 }) {
   const visibleLinks = mergeRuntimeStructureLinks(links)
 
@@ -242,6 +268,8 @@ export function RuntimeStructureSection({
             node={node}
             currentInstanceId={currentInstanceId}
             depth={0}
+            onConfirmParentResume={onConfirmParentResume}
+            pendingLinkId={pendingLinkId}
           />
         ))}
       </CardContent>

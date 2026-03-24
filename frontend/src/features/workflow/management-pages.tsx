@@ -70,6 +70,7 @@ import {
   type WorkflowBindingDetail,
 } from '@/lib/api/workflow-management'
 import {
+  confirmProcessLinkParentResume,
   getProcessTerminationSnapshot,
   listProcessCollaborationTrace,
   listProcessTerminationAuditTrail,
@@ -525,6 +526,7 @@ export function WorkflowInstancesListPage({
 }
 
 export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string }) {
+  const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['workflow-management-instance-detail', instanceId],
     queryFn: () => getWorkflowInstanceDetail(instanceId),
@@ -570,6 +572,17 @@ export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string 
     queryKey: ['workflow-management', 'termination-audit', rootInstanceId],
     queryFn: () => listProcessTerminationAuditTrail(rootInstanceId),
     enabled: Boolean(rootInstanceId),
+  })
+  const confirmParentResumeMutation = useMutation({
+    mutationFn: ({ currentInstanceId, linkId }: { currentInstanceId: string; linkId: string }) =>
+      confirmProcessLinkParentResume(currentInstanceId, linkId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['workflow-management-instance-detail', instanceId] }),
+        queryClient.invalidateQueries({ queryKey: ['workflow-management', 'termination-audit'] }),
+      ])
+    },
+    onError: handleServerError,
   })
   if (query.isLoading) return <DetailSkeleton />
   if (query.isError || !query.data) throw query.error
@@ -620,6 +633,17 @@ export function WorkflowInstanceDetailPage({ instanceId }: { instanceId: string 
           (detail.runtimeStructureLinks ?? []) as RuntimeStructureLink[]
         )}
         currentInstanceId={detail.processInstanceId}
+        onConfirmParentResume={(link) => {
+          confirmParentResumeMutation.mutate({
+            currentInstanceId: detail.processInstanceId,
+            linkId: link.linkId,
+          })
+        }}
+        pendingLinkId={
+          confirmParentResumeMutation.isPending
+            ? confirmParentResumeMutation.variables?.linkId ?? null
+            : null
+        }
       />
       <ProcessTerminationSection
         snapshot={terminationSnapshotQuery.data ?? null}

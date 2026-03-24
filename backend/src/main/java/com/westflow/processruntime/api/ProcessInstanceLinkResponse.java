@@ -1,10 +1,11 @@
 package com.westflow.processruntime.api;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.OffsetDateTime;
 
 // 主子流程实例关联响应。
 public record ProcessInstanceLinkResponse(
-        String id,
+        @JsonProperty("linkId") String id,
         String rootInstanceId,
         String parentInstanceId,
         String childInstanceId,

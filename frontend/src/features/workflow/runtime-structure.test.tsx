@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { RuntimeStructureSection } from './runtime-structure'
 
@@ -125,5 +125,39 @@ describe('runtime structure section', () => {
     expect(screen.getByText('执行策略：TEMPLATE_FIRST')).toBeInTheDocument()
     expect(screen.getByText('回退策略：USE_TEMPLATE')).toBeInTheDocument()
     expect(screen.getByText('附言：追加一位串行复核人')).toBeInTheDocument()
+  })
+
+  it('allows confirming wait-parent-confirm subprocess links', () => {
+    const confirmedLinkIds: string[] = []
+    render(
+      <RuntimeStructureSection
+        currentInstanceId='pi_root'
+        onConfirmParentResume={(link) => confirmedLinkIds.push(link.linkId)}
+        links={[
+          {
+            linkId: 'subprocess_wait_confirm_001',
+            rootInstanceId: 'pi_root',
+            parentInstanceId: 'pi_root',
+            childInstanceId: 'pi_sub_001',
+            parentNodeId: 'subprocess_review',
+            calledProcessKey: 'oa_sub_review',
+            calledDefinitionId: 'oa_sub_review:1:1004',
+            linkType: 'CALL_ACTIVITY',
+            status: 'WAIT_PARENT_CONFIRM',
+            callScope: 'CHILD_ONLY',
+            joinMode: 'WAIT_PARENT_CONFIRM',
+            childStartStrategy: 'LATEST_PUBLISHED',
+            parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+            terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
+            childFinishPolicy: 'RETURN_TO_PARENT',
+            createdAt: '2026-03-24T10:10:00+08:00',
+            finishedAt: '2026-03-24T10:20:00+08:00',
+          },
+        ]}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '父流程确认恢复' }))
+    expect(confirmedLinkIds).toEqual(['subprocess_wait_confirm_001'])
   })
 })

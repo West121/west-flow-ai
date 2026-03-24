@@ -77,6 +77,16 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.links(instanceId));
     }
 
+    @PostMapping("/instances/{instanceId}/links/{linkId}/confirm-parent-resume")
+    @SaCheckLogin
+    // 父流程确认子流程完成，收口等待确认状态。
+    public ApiResponse<ProcessInstanceLinkResponse> confirmParentResume(
+            @PathVariable String instanceId,
+            @PathVariable String linkId
+    ) {
+        return ApiResponse.success(flowableProcessRuntimeService.confirmParentResume(instanceId, linkId));
+    }
+
     @GetMapping("/instances/{instanceId}/append-links")
     @SaCheckLogin
     // 查询流程实例下挂载的运行时追加与动态构建关联。

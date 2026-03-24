@@ -120,6 +120,7 @@ import {
   type WorkbenchTaskListItem,
 } from '@/lib/api/workbench'
 import {
+  confirmProcessLinkParentResume,
   getProcessTerminationSnapshot,
   listProcessCollaborationTrace,
   listProcessTerminationAuditTrail,
@@ -533,9 +534,13 @@ function ApprovalSheetCountersignSection({
 function ApprovalSheetProcessLinkSection({
   links,
   currentInstanceId,
+  onConfirmParentResume,
+  pendingLinkId,
 }: {
   links: RuntimeStructureLink[]
   currentInstanceId: string
+  onConfirmParentResume?: ((link: RuntimeStructureLink) => void) | undefined
+  pendingLinkId?: string | null
 }) {
   return (
     <RuntimeStructureSection
@@ -543,6 +548,8 @@ function ApprovalSheetProcessLinkSection({
       description='展示当前审批单所在的主子流程、追加和动态构建关系，回查触发方式、终止策略和运行状态。'
       links={links}
       currentInstanceId={currentInstanceId}
+      onConfirmParentResume={onConfirmParentResume}
+      pendingLinkId={pendingLinkId}
     />
   )
 }
@@ -1509,6 +1516,12 @@ export function WorkbenchTodoDetailPage({
     queryFn: () => listProcessTerminationAuditTrail(rootInstanceId as string),
     enabled: Boolean(rootInstanceId),
   })
+  const confirmParentResumeMutation = useMutation({
+    mutationFn: ({ instanceId, linkId }: { instanceId: string; linkId: string }) =>
+      confirmProcessLinkParentResume(instanceId, linkId),
+    onSuccess: refreshWorkbenchQueries,
+    onError: handleServerError,
+  })
 
   function requireActionTaskId() {
     if (!resolvedTaskId) {
@@ -2247,6 +2260,17 @@ export function WorkbenchTodoDetailPage({
                       detail.runtimeStructureLinks ?? []
                     )}
                     currentInstanceId={detail.instanceId}
+                    onConfirmParentResume={(link) => {
+                      confirmParentResumeMutation.mutate({
+                        instanceId: detail.instanceId,
+                        linkId: link.linkId,
+                      })
+                    }}
+                    pendingLinkId={
+                      confirmParentResumeMutation.isPending
+                        ? confirmParentResumeMutation.variables?.linkId ?? null
+                        : null
+                    }
                   />
                   <ProcessTerminationSection
                     snapshot={terminationSnapshotQuery.data ?? null}

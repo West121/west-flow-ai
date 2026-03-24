@@ -131,6 +131,31 @@ public interface ProcessLinkMapper {
             """)
     ProcessLinkRecord selectByChildInstanceId(@Param("childInstanceId") String childInstanceId);
 
+    @Select("""
+            SELECT
+              id,
+              root_instance_id AS rootInstanceId,
+              parent_instance_id AS parentInstanceId,
+              child_instance_id AS childInstanceId,
+              parent_node_id AS parentNodeId,
+              called_process_key AS calledProcessKey,
+              called_definition_id AS calledDefinitionId,
+              link_type AS linkType,
+              status,
+              terminate_policy AS terminatePolicy,
+              child_finish_policy AS childFinishPolicy,
+              call_scope AS callScope,
+              join_mode AS joinMode,
+              child_start_strategy AS childStartStrategy,
+              parent_resume_strategy AS parentResumeStrategy,
+              created_at AS createdAt,
+              finished_at AS finishedAt
+            FROM wf_process_link
+            WHERE id = #{id}
+            LIMIT 1
+            """)
+    ProcessLinkRecord selectById(@Param("id") String id);
+
     @Update("""
             UPDATE wf_process_link
                SET status = #{status},

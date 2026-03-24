@@ -173,3 +173,13 @@ export async function listProcessTerminationAuditTrail(rootInstanceId: string) {
   )
   return unwrapResponse(response)
 }
+
+export async function confirmProcessLinkParentResume(
+  instanceId: string,
+  linkId: string
+) {
+  const response = await apiClient.post<ApiSuccessResponse<unknown>>(
+    `/process-runtime/instances/${instanceId}/links/${linkId}/confirm-parent-resume`
+  )
+  return unwrapResponse(response)
+}

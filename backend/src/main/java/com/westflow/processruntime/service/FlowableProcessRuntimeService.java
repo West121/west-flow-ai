@@ -266,6 +266,90 @@ public class FlowableProcessRuntimeService {
     }
 
     /**
+     * 父流程确认子流程完成并恢复后续状态。
+     */
+    @Transactional
+    public ProcessInstanceLinkResponse confirmParentResume(String instanceId, String linkId) {
+        String rootInstanceId = resolveRuntimeTreeRootInstanceId(instanceId);
+        synchronizeProcessLinks(rootInstanceId);
+        var link = processLinkService.getById(linkId);
+        if (link == null) {
+            throw new ContractException(
+                    "PROCESS.SUBPROCESS_LINK_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "主子流程关联不存在",
+                    Map.of("linkId", linkId)
+            );
+        }
+        if (!Objects.equals(link.rootInstanceId(), rootInstanceId) && !Objects.equals(link.parentInstanceId(), instanceId)) {
+            throw new ContractException(
+                    "PROCESS.SUBPROCESS_LINK_FORBIDDEN",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前实例无权确认该子流程关联",
+                    Map.of("instanceId", instanceId, "linkId", linkId)
+            );
+        }
+        if (!"WAIT_PARENT_CONFIRM".equals(link.status())) {
+            throw actionNotAllowed(
+                    "当前子流程不处于等待父流程确认状态",
+                    Map.of("linkId", linkId, "status", link.status())
+            );
+        }
+        Instant confirmedAt = link.finishedAt() != null ? link.finishedAt() : Instant.now();
+        processLinkService.updateStatus(link.childInstanceId(), "FINISHED", confirmedAt);
+        appendInstanceEvent(
+                link.parentInstanceId(),
+                null,
+                link.parentNodeId(),
+                "SUBPROCESS_PARENT_CONFIRMED",
+                "父流程已确认子流程完成",
+                "INSTANCE",
+                null,
+                link.childInstanceId(),
+                currentUserId(),
+                eventDetails(
+                        "linkId", link.id(),
+                        "childInstanceId", link.childInstanceId(),
+                        "parentNodeId", link.parentNodeId(),
+                        "joinMode", link.joinMode(),
+                        "parentResumeStrategy", link.parentResumeStrategy()
+                ),
+                null,
+                link.parentNodeId(),
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        workflowOperationLogService.record(new WorkflowOperationLogService.RecordCommand(
+                link.parentInstanceId(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                link.parentNodeId(),
+                "CONFIRM_SUBPROCESS_RESUME",
+                "父流程确认子流程完成",
+                "INSTANCE",
+                currentUserId(),
+                null,
+                null,
+                null,
+                null,
+                Map.of(
+                        "linkId", link.id(),
+                        "childInstanceId", link.childInstanceId(),
+                        "rootInstanceId", link.rootInstanceId()
+                ),
+                Instant.now()
+        ));
+        synchronizeProcessLinks(rootInstanceId);
+        return toProcessInstanceLinkResponse(requireProcessLink(linkId));
+    }
+
+    /**
      * 查询实例维度的追加与动态构建附属结构。
      */
     public List<RuntimeAppendLinkResponse> appendLinks(String instanceId) {
@@ -2815,6 +2899,19 @@ public class FlowableProcessRuntimeService {
         return visibleLinks.stream()
                 .map(this::toProcessInstanceLinkResponse)
                 .toList();
+    }
+
+    private com.westflow.processruntime.model.ProcessLinkRecord requireProcessLink(String linkId) {
+        com.westflow.processruntime.model.ProcessLinkRecord link = processLinkService.getById(linkId);
+        if (link == null) {
+            throw new ContractException(
+                    "PROCESS.SUBPROCESS_LINK_NOT_FOUND",
+                    HttpStatus.NOT_FOUND,
+                    "主子流程关联不存在",
+                    Map.of("linkId", linkId)
+            );
+        }
+        return link;
     }
 
     private void collectVisibleSubprocessLinks(
