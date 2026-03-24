@@ -614,7 +614,66 @@ public class FlowableProcessRuntimeService {
                 null,
                 null
         ));
+        String appendTerminatePolicy = appendLink == null ? null : resolveDynamicBuildTerminatePolicy(appendLink);
+        if (appendLink != null && shouldCascadeTerminateAppendParent(appendLink, appendTerminatePolicy, resolvedChildInstanceId)) {
+            appendInstanceEvent(
+                    resolvedParentInstanceId,
+                    null,
+                    appendLink.sourceNodeId(),
+                    "APPEND_TERMINATE_POLICY_TRIGGERED",
+                    "附属子流程终止已触发父流程级联终止",
+                    "INSTANCE",
+                    appendLink.sourceTaskId(),
+                    resolvedChildInstanceId,
+                    currentUserId(),
+                    eventDetails(
+                            "appendLinkId", appendLink.id(),
+                            "appendType", appendLink.appendType(),
+                            "policy", appendLink.policy(),
+                            "terminatePolicy", appendTerminatePolicy,
+                            "reason", reason,
+                            "parentInstanceId", resolvedParentInstanceId,
+                            "rootInstanceId", resolvedRootInstanceId
+                    ),
+                    null,
+                    appendLink.sourceNodeId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+            if (Objects.equals(resolvedRootInstanceId, resolvedParentInstanceId)) {
+                return terminateRootProcess(resolvedParentInstanceId, reason + "（附属结构终止策略触发）");
+            }
+            return terminateChildProcess(resolvedRootInstanceId, resolvedParentInstanceId, reason + "（附属结构终止策略触发）");
+        }
         return nextTaskResponse(resolvedParentInstanceId, null);
+    }
+
+    private boolean shouldCascadeTerminateAppendParent(
+            RuntimeAppendLinkRecord appendLink,
+            String terminatePolicy,
+            String resolvedChildInstanceId
+    ) {
+        if (appendLink == null) {
+            return false;
+        }
+        if (!"TERMINATE_PARENT_AND_GENERATED".equals(terminatePolicy)) {
+            return false;
+        }
+        String parentInstanceId = appendLink.parentInstanceId();
+        return parentInstanceId != null
+                && !parentInstanceId.isBlank()
+                && !Objects.equals(parentInstanceId, resolvedChildInstanceId);
+    }
+
+    private String resolveDynamicBuildTerminatePolicy(RuntimeAppendLinkRecord appendLink) {
+        if (appendLink == null || appendLink.sourceNodeId() == null || appendLink.sourceNodeId().isBlank()) {
+            return null;
+        }
+        Map<String, Object> nodeConfig = resolveNodeConfig(appendLink.parentInstanceId(), appendLink.sourceNodeId());
+        return stringValue(nodeConfig.get("terminatePolicy"));
     }
 
     private void revokeProcessInstanceQuietly(String processInstanceId, String reason) {
@@ -3919,7 +3978,10 @@ public class FlowableProcessRuntimeService {
 
     private boolean isTerminatedProcess(HistoricProcessInstance historicProcessInstance) {
         String deleteReason = historicProcessInstance.getDeleteReason();
-        return deleteReason != null && deleteReason.startsWith("WESTFLOW_TERMINATE:");
+        return deleteReason != null && (
+                deleteReason.startsWith("WESTFLOW_TERMINATE:")
+                        || deleteReason.startsWith("WESTFLOW_SUBPROCESS_FINISH_POLICY:")
+        );
     }
 
     private CompleteTaskResponse nextTaskResponse(String processInstanceId, String completedTaskId) {
@@ -4429,7 +4491,10 @@ public class FlowableProcessRuntimeService {
 
     private String resolveInstanceStatus(HistoricProcessInstance processInstance, List<Task> activeTasks) {
         if (processInstance.getDeleteReason() != null) {
-            return "WESTFLOW_REVOKED".equals(processInstance.getDeleteReason()) ? "REVOKED" : "COMPLETED";
+            if ("WESTFLOW_REVOKED".equals(processInstance.getDeleteReason())) {
+                return "REVOKED";
+            }
+            return isTerminatedProcess(processInstance) ? "TERMINATED" : "COMPLETED";
         }
         return activeTasks.stream().anyMatch(this::isBlockingTask) || hasRunningAppendStructures(processInstance.getId())
                 ? "RUNNING"
