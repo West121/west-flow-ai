@@ -130,6 +130,34 @@ function buildModelDrivenDynamicBuilderNode(): WorkflowNode {
   return node
 }
 
+function buildRoleTargetDynamicBuilderNode(): WorkflowNode {
+  const node = buildDynamicBuilderNode()
+  node.data.config = {
+    ...(node.data.config as Record<string, unknown>),
+    targets: {
+      mode: 'ROLE',
+      userIds: [],
+      roleCodes: ['role_manager'],
+      departmentRef: '',
+      formFieldKey: '',
+      formulaExpression: '',
+    },
+  } as never
+  return node
+}
+
+function buildFallbackSubprocessDynamicBuilderNode(): WorkflowNode {
+  const node = buildDynamicBuilderNode()
+  node.data.config = {
+    ...(node.data.config as Record<string, unknown>),
+    buildMode: 'SUBPROCESS_CALLS',
+    calledProcessKey: 'oa_sub_review',
+    calledVersionPolicy: 'FIXED_VERSION',
+    calledVersion: 3,
+  } as never
+  return node
+}
+
 function buildSubprocessNode(): WorkflowNode {
   return {
     id: 'subprocess_1',
@@ -398,6 +426,56 @@ describe('workflow designer dsl mapping', () => {
       executionStrategy: 'TEMPLATE_FIRST',
       fallbackStrategy: 'KEEP_CURRENT',
       manualTemplateCode: '',
+    })
+  })
+
+  it('persists dynamic builder fallback targets in the DSL config', () => {
+    const snapshotWithDynamicBuilder = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1' ? buildRoleTargetDynamicBuilderNode() : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithDynamicBuilder, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      targets: {
+        mode: 'ROLE',
+        roleCodes: ['role_manager'],
+      },
+    })
+  })
+
+  it('persists dynamic builder fallback subprocess fields in the DSL config', () => {
+    const snapshotWithDynamicBuilder = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1' ? buildFallbackSubprocessDynamicBuilderNode() : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithDynamicBuilder, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      buildMode: 'SUBPROCESS_CALLS',
+      calledProcessKey: 'oa_sub_review',
+      calledVersionPolicy: 'FIXED_VERSION',
+      calledVersion: 3,
     })
   })
 

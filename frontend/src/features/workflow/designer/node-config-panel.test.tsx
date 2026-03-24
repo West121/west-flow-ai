@@ -212,6 +212,34 @@ function buildModelDrivenDynamicBuilderNode(): WorkflowNode {
   return node
 }
 
+function buildRoleFallbackDynamicBuilderNode(): WorkflowNode {
+  const node = buildDynamicBuilderNode()
+  node.data.config = {
+    ...(node.data.config as Record<string, unknown>),
+    targets: {
+      mode: 'ROLE',
+      userIds: [],
+      roleCodes: ['role_manager'],
+      departmentRef: '',
+      formFieldKey: '',
+      formulaExpression: '',
+    },
+  } as never
+  return node
+}
+
+function buildFallbackSubprocessDynamicBuilderNode(): WorkflowNode {
+  const node = buildDynamicBuilderNode()
+  node.data.config = {
+    ...(node.data.config as Record<string, unknown>),
+    buildMode: 'SUBPROCESS_CALLS',
+    calledProcessKey: 'oa_sub_review',
+    calledVersionPolicy: 'FIXED_VERSION',
+    calledVersion: 3,
+  } as never
+  return node
+}
+
 function buildInclusiveNode(
   direction: 'SPLIT' | 'JOIN' = 'JOIN',
   config: Record<string, unknown> = {}
@@ -806,6 +834,65 @@ describe('workflow designer node config panel', () => {
           sceneCode: 'leave_model_scene',
           executionStrategy: 'TEMPLATE_FIRST',
           fallbackStrategy: 'KEEP_CURRENT',
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('hydrates and submits dynamic builder fallback role targets back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(
+      <NodeConfigPanel node={buildRoleFallbackDynamicBuilderNode()} edges={edges} onApply={onApply} />
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('部门负责人')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'dynamic_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          targets: expect.objectContaining({
+            mode: 'ROLE',
+            roleCodes: ['role_manager'],
+          }),
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('hydrates and submits dynamic builder fallback subprocess fields back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(
+      <NodeConfigPanel
+        node={buildFallbackSubprocessDynamicBuilderNode()}
+        edges={edges}
+        onApply={onApply}
+      />
+    )
+
+    expect(screen.getByDisplayValue('oa_sub_review')).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('oa_sub_review'), {
+      target: { value: 'oa_sub_review_leaf' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'dynamic_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          buildMode: 'SUBPROCESS_CALLS',
+          calledProcessKey: 'oa_sub_review_leaf',
+          calledVersionPolicy: 'FIXED_VERSION',
+          calledVersion: 3,
         }),
       }),
       undefined

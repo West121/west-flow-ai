@@ -822,6 +822,66 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectDynamicBuilderRoleTargetsWithoutRoleCodes() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("buildMode", "APPROVER_TASKS");
+        dynamicConfig.put("sourceMode", "RULE");
+        dynamicConfig.put("ruleExpression", "leaveDays > 3");
+        dynamicConfig.put("appendPolicy", "SERIAL_AFTER_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 1);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_GENERATED_ONLY");
+        dynamicConfig.put("targets", Map.of(
+                "mode", "ROLE",
+                "roleCodes", List.of()
+        ));
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        approverNode("approve_1"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "approve_1"),
+                        edge("edge_3", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "dynamic-builder 节点 ROLE 默认目标不能为空");
+    }
+
+    @Test
+    void shouldRejectDynamicBuilderFixedVersionFallbackWithoutCalledVersion() {
+        Map<String, Object> dynamicConfig = new LinkedHashMap<>();
+        dynamicConfig.put("buildMode", "SUBPROCESS_CALLS");
+        dynamicConfig.put("sourceMode", "MODEL_DRIVEN");
+        dynamicConfig.put("sceneCode", "oa_leave_long_vacation");
+        dynamicConfig.put("calledProcessKey", "oa_sub_review");
+        dynamicConfig.put("calledVersionPolicy", "FIXED_VERSION");
+        dynamicConfig.put("appendPolicy", "SERIAL_AFTER_CURRENT");
+        dynamicConfig.put("maxGeneratedCount", 1);
+        dynamicConfig.put("terminatePolicy", "TERMINATE_GENERATED_ONLY");
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("dynamic_1", "dynamic-builder", dynamicConfig),
+                        approverNode("approve_1"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "dynamic_1"),
+                        edge("edge_2", "dynamic_1", "approve_1"),
+                        edge("edge_3", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "dynamic-builder 节点 FIXED_VERSION 模式必须配置 calledVersion");
+    }
+
+    @Test
     void shouldRejectDynamicBuilderTaskModeThatEndsImmediately() {
         Map<String, Object> dynamicConfig = new LinkedHashMap<>();
         dynamicConfig.put("buildMode", "APPROVER_TASKS");

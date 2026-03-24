@@ -7,6 +7,7 @@ import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
+import com.westflow.processruntime.service.CountersignAssigneeResolver;
 import com.westflow.processruntime.service.FlowableTaskActionService;
 import com.westflow.processruntime.service.ProcessLinkService;
 import com.westflow.processruntime.service.RuntimeAppendLinkService;
@@ -53,6 +54,9 @@ class DynamicBuildAppendRuntimeServiceTest {
 
     @Mock
     private BusinessProcessBindingService businessProcessBindingService;
+
+    @Mock
+    private CountersignAssigneeResolver countersignAssigneeResolver;
 
     @Mock
     private RuntimeService runtimeService;
@@ -353,6 +357,56 @@ class DynamicBuildAppendRuntimeServiceTest {
         assertThat(recordCaptor.getValue().targetUserId()).isEqualTo("usr_002");
     }
 
+    @Test
+    void shouldResolveFallbackRoleTargetsWhenRuleDrivenResultIsEmpty() {
+        when(flowableEngineFacade.runtimeService()).thenReturn(runtimeService);
+        when(runtimeService.createProcessInstanceQuery()).thenReturn(processInstanceQuery);
+        when(processInstanceQuery.processInstanceId("instance_1")).thenReturn(processInstanceQuery);
+        when(processInstanceQuery.singleResult()).thenReturn(processInstance);
+        when(processInstance.getProcessDefinitionId()).thenReturn("pd_001");
+        when(runtimeService.getVariables("instance_1")).thenReturn(Map.of(
+                "westflowProcessDefinitionId", "pd_001",
+                "westflowProcessKey", "oa_dynamic_append_tasks",
+                "westflowBusinessKey", "biz_001",
+                "westflowInitiatorUserId", "usr_001",
+                "leaveDays", 1
+        ));
+        when(processLinkService.getByChildInstanceId("instance_1")).thenReturn(null);
+        when(runtimeAppendLinkService.getByTargetInstanceId("instance_1")).thenReturn(null);
+        when(processDefinitionService.getById("pd_001")).thenReturn(buildRoleFallbackParentDefinition());
+        when(countersignAssigneeResolver.resolve(anyMap(), anyMap())).thenReturn(List.of("usr_010", "usr_011"));
+        when(flowableTaskActionService.createAdhocTask(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                any(),
+                anyMap()
+        )).thenReturn(createdTask);
+        when(createdTask.getId()).thenReturn("task_001");
+
+        try (MockedStatic<StpUtil> mockedStpUtil = org.mockito.Mockito.mockStatic(StpUtil.class)) {
+            mockedStpUtil.when(StpUtil::isLogin).thenReturn(false);
+            dynamicBuildAppendRuntimeService.executeDynamicBuilder("instance_1", "dynamic_builder_1");
+        }
+
+        verify(countersignAssigneeResolver).resolve(anyMap(), anyMap());
+        verify(flowableTaskActionService, org.mockito.Mockito.times(2)).createAdhocTask(
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                anyString(),
+                any(),
+                any(),
+                anyMap()
+        );
+    }
+
     private PublishedProcessDefinition buildDynamicBuilderParentDefinition() {
         return new PublishedProcessDefinition(
                 "pd_001",
@@ -596,6 +650,53 @@ class DynamicBuildAppendRuntimeServiceTest {
                                                 "manualTemplateCode", "append_manager_review",
                                                 "appendPolicy", "SERIAL_AFTER_CURRENT",
                                                 "maxGeneratedCount", 1
+                                        ),
+                                        Map.of()
+                                )
+                        ),
+                        List.of(new ProcessDslPayload.Edge("e1", "dynamic_builder_1", "next_1", 1, "next", Map.of()))
+                ),
+                "<xml/>"
+        );
+    }
+
+    private PublishedProcessDefinition buildRoleFallbackParentDefinition() {
+        return new PublishedProcessDefinition(
+                "pd_001",
+                "oa_dynamic_append_tasks",
+                "动态附属任务流程",
+                "OA",
+                1,
+                "PUBLISHED",
+                OffsetDateTime.parse("2026-03-23T00:00:00+08:00"),
+                new ProcessDslPayload(
+                        "1.0.0",
+                        "oa_dynamic_append_tasks",
+                        "动态附属任务流程",
+                        "OA",
+                        null,
+                        null,
+                        List.of(),
+                        Map.of(),
+                        List.of(
+                                new ProcessDslPayload.Node(
+                                        "dynamic_builder_1",
+                                        "dynamic-builder",
+                                        "动态构建",
+                                        null,
+                                        Map.of(),
+                                        Map.of(
+                                                "buildMode", "APPROVER_TASKS",
+                                                "sourceMode", "RULE",
+                                                "executionStrategy", "RULE_ONLY",
+                                                "fallbackStrategy", "USE_RULE",
+                                                "ruleExpression", "leaveDays > 3",
+                                                "targets", Map.of(
+                                                        "mode", "ROLE",
+                                                        "roleCodes", List.of("role_manager")
+                                                ),
+                                                "appendPolicy", "SERIAL_AFTER_CURRENT",
+                                                "maxGeneratedCount", 2
                                         ),
                                         Map.of()
                                 )

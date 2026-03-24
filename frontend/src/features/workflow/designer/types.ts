@@ -115,6 +115,17 @@ export type WorkflowDynamicBuilderNodeConfig = {
   fallbackStrategy: WorkflowDynamicBuilderFallbackStrategy
   ruleExpression: string
   manualTemplateCode: string
+  targets: {
+    mode: WorkflowApproverAssignmentMode
+    userIds: string[]
+    roleCodes: string[]
+    departmentRef: string
+    formFieldKey: string
+    formulaExpression: string
+  }
+  calledProcessKey: string
+  calledVersionPolicy: WorkflowSubprocessVersionPolicy
+  calledVersion: number | null
   appendPolicy: WorkflowDynamicBuilderAppendPolicy
   maxGeneratedCount: number | null
   terminatePolicy: WorkflowDynamicBuilderTerminatePolicy

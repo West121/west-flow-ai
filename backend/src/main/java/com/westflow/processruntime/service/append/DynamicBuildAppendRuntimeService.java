@@ -9,6 +9,7 @@ import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processruntime.model.ProcessLinkRecord;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
+import com.westflow.processruntime.service.CountersignAssigneeResolver;
 import com.westflow.processruntime.service.FlowableTaskActionService;
 import com.westflow.processruntime.service.ProcessLinkService;
 import com.westflow.processruntime.service.RuntimeAppendLinkService;
@@ -54,6 +55,7 @@ public class DynamicBuildAppendRuntimeService {
     private final RuntimeAppendLinkService runtimeAppendLinkService;
     private final ProcessLinkService processLinkService;
     private final BusinessProcessBindingService businessProcessBindingService;
+    private final CountersignAssigneeResolver countersignAssigneeResolver;
 
     /**
      * 执行 dynamic-builder 节点，按配置生成附属任务或附属子流程。
@@ -363,14 +365,14 @@ public class DynamicBuildAppendRuntimeService {
             boolean allowFallback
     ) {
         if (ruleExpression == null || ruleExpression.isBlank()) {
-            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
+            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config, processVariables) : List.of();
         }
         Object value = evaluateDynamicBuilderRule(ruleExpression.trim(), processVariables);
         if (value instanceof Boolean booleanValue) {
             if (!booleanValue) {
-                return List.of();
+                return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config, processVariables) : List.of();
             }
-            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
+            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config, processVariables) : List.of();
         }
         if (value instanceof List<?> items) {
             return items;
@@ -394,7 +396,7 @@ public class DynamicBuildAppendRuntimeService {
             return List.of(map);
         }
         if (value == null) {
-            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
+            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config, processVariables) : List.of();
         }
         return List.of(value);
     }
@@ -489,7 +491,11 @@ public class DynamicBuildAppendRuntimeService {
         return trimmed;
     }
 
-    private List<?> resolveDynamicBuilderFallbackItems(String buildMode, Map<String, Object> config) {
+    private List<?> resolveDynamicBuilderFallbackItems(
+            String buildMode,
+            Map<String, Object> config,
+            Map<String, Object> processVariables
+    ) {
         if ("SUBPROCESS_CALLS".equals(buildMode)) {
             String calledProcessKey = stringValue(config.get("calledProcessKey"));
             if (calledProcessKey == null) {
@@ -508,7 +514,7 @@ public class DynamicBuildAppendRuntimeService {
             return List.of(item);
         }
         Map<String, Object> targets = mapValue(config.get("targets"));
-        List<String> userIds = stringListValue(targets.get("userIds"));
+        List<String> userIds = countersignAssigneeResolver.resolve(targets, processVariables);
         if (userIds.isEmpty()) {
             return List.of();
         }

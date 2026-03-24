@@ -406,6 +406,7 @@ public class ProcessDslValidator {
             }
 
             if ("APPROVER_TASKS".equals(buildMode)) {
+                validateDynamicBuilderTargets(node, config);
                 boolean hasNonEndSuccessor = outgoingEdges.getOrDefault(node.id(), List.of()).stream()
                         .map(ProcessDslPayload.Edge::target)
                         .map(nodeById::get)
@@ -415,6 +416,58 @@ public class ProcessDslValidator {
                     throw invalid("dynamic-builder 节点 APPROVER_TASKS 模式后续必须保留活跃等待节点", details("nodeId", node.id()));
                 }
             }
+
+            if ("SUBPROCESS_CALLS".equals(buildMode)) {
+                String calledVersionPolicy = asString(config.get("calledVersionPolicy"));
+                if (calledVersionPolicy != null && !SUPPORTED_SUBPROCESS_VERSION_POLICIES.contains(calledVersionPolicy)) {
+                    throw invalid(
+                            "dynamic-builder 节点 calledVersionPolicy 不合法",
+                            details("nodeId", node.id(), "calledVersionPolicy", calledVersionPolicy)
+                    );
+                }
+                if ("FIXED_VERSION".equals(calledVersionPolicy) && integerValue(config.get("calledVersion")) == null) {
+                    throw invalid("dynamic-builder 节点 FIXED_VERSION 模式必须配置 calledVersion", details("nodeId", node.id()));
+                }
+            }
+        }
+    }
+
+    private void validateDynamicBuilderTargets(ProcessDslPayload.Node node, Map<String, Object> config) {
+        Map<String, Object> targets = mapValue(config.get("targets"));
+        if (targets.isEmpty()) {
+            return;
+        }
+        String mode = asString(targets.get("mode"));
+        if (mode == null) {
+            throw invalid("dynamic-builder 节点 targets.mode 不能为空", details("nodeId", node.id()));
+        }
+        switch (mode) {
+            case "USER" -> {
+                if (stringList(targets.get("userIds")).isEmpty()) {
+                    throw invalid("dynamic-builder 节点 USER 默认目标不能为空", details("nodeId", node.id()));
+                }
+            }
+            case "ROLE" -> {
+                if (stringList(targets.get("roleCodes")).isEmpty()) {
+                    throw invalid("dynamic-builder 节点 ROLE 默认目标不能为空", details("nodeId", node.id()));
+                }
+            }
+            case "DEPARTMENT", "DEPARTMENT_AND_CHILDREN" -> {
+                if (asString(targets.get("departmentRef")) == null) {
+                    throw invalid("dynamic-builder 节点部门默认目标不能为空", details("nodeId", node.id()));
+                }
+            }
+            case "FORM_FIELD" -> {
+                if (asString(targets.get("formFieldKey")) == null) {
+                    throw invalid("dynamic-builder 节点表单字段默认目标不能为空", details("nodeId", node.id()));
+                }
+            }
+            case "FORMULA" -> {
+                if (asString(targets.get("formulaExpression")) == null) {
+                    throw invalid("dynamic-builder 节点自定义公式默认目标不能为空", details("nodeId", node.id()));
+                }
+            }
+            default -> throw invalid("dynamic-builder 节点 targets.mode 不合法", details("nodeId", node.id(), "mode", mode));
         }
     }
 

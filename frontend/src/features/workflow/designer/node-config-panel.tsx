@@ -39,6 +39,7 @@ import {
   type WorkflowDynamicBuilderAppendPolicy,
   type WorkflowDynamicBuilderExecutionStrategy,
   type WorkflowDynamicBuilderFallbackStrategy,
+  type WorkflowDynamicBuilderNodeConfig,
   type WorkflowDynamicBuilderSourceMode,
   type WorkflowDynamicBuilderTerminatePolicy,
   type WorkflowDynamicBuildMode,
@@ -336,6 +337,22 @@ const nodeConfigFormSchema = z
       ]),
       ruleExpression: z.string(),
       manualTemplateCode: z.string(),
+      targetMode: z.enum([
+        'USER',
+        'ROLE',
+        'DEPARTMENT',
+        'DEPARTMENT_AND_CHILDREN',
+        'FORM_FIELD',
+        'FORMULA',
+      ]),
+      userIds: z.string(),
+      roleCodes: z.string(),
+      departmentRef: z.string(),
+      formFieldKey: z.string(),
+      formulaExpression: z.string(),
+      calledProcessKey: z.string(),
+      calledVersionPolicy: z.enum(['LATEST_PUBLISHED', 'FIXED_VERSION']),
+      calledVersion: z.string(),
       appendPolicy: z.enum([
         'SERIAL_AFTER_CURRENT',
         'PARALLEL_WITH_CURRENT',
@@ -704,6 +721,79 @@ const nodeConfigFormSchema = z
           code: z.ZodIssueCode.custom,
           message: '人工模板需要填写模板编码',
           path: ['dynamicBuilder', 'manualTemplateCode'],
+        })
+      }
+
+      const hasDynamicTaskFallbackConfig =
+        values.dynamicBuilder.userIds.trim() ||
+        values.dynamicBuilder.roleCodes.trim() ||
+        values.dynamicBuilder.departmentRef.trim() ||
+        values.dynamicBuilder.formFieldKey.trim() ||
+        values.dynamicBuilder.formulaExpression.trim()
+
+      if (values.dynamicBuilder.buildMode === 'APPROVER_TASKS' && hasDynamicTaskFallbackConfig) {
+        if (
+          values.dynamicBuilder.targetMode === 'USER' &&
+          parseListValue(values.dynamicBuilder.userIds).length === 0
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '默认任务目标需要至少一个人员',
+            path: ['dynamicBuilder', 'userIds'],
+          })
+        }
+        if (
+          values.dynamicBuilder.targetMode === 'ROLE' &&
+          parseListValue(values.dynamicBuilder.roleCodes).length === 0
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '默认任务目标需要至少一个角色',
+            path: ['dynamicBuilder', 'roleCodes'],
+          })
+        }
+        if (
+          ['DEPARTMENT', 'DEPARTMENT_AND_CHILDREN'].includes(values.dynamicBuilder.targetMode) &&
+          !values.dynamicBuilder.departmentRef.trim()
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '默认任务目标需要选择部门',
+            path: ['dynamicBuilder', 'departmentRef'],
+          })
+        }
+        if (
+          values.dynamicBuilder.targetMode === 'FORM_FIELD' &&
+          !values.dynamicBuilder.formFieldKey.trim()
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '默认任务目标需要选择表单字段',
+            path: ['dynamicBuilder', 'formFieldKey'],
+          })
+        }
+        if (
+          values.dynamicBuilder.targetMode === 'FORMULA' &&
+          !values.dynamicBuilder.formulaExpression.trim()
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '默认任务目标需要填写自定义公式',
+            path: ['dynamicBuilder', 'formulaExpression'],
+          })
+        }
+      }
+
+      if (
+        values.dynamicBuilder.buildMode === 'SUBPROCESS_CALLS' &&
+        values.dynamicBuilder.calledVersionPolicy === 'FIXED_VERSION' &&
+        values.dynamicBuilder.calledProcessKey.trim() &&
+        !values.dynamicBuilder.calledVersion.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '固定版本模式需要填写默认子流程版本号',
+          path: ['dynamicBuilder', 'calledVersion'],
         })
       }
 
@@ -1294,6 +1384,10 @@ function FieldBindingEditor({
 function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigFormValues {
   const outgoingEdges = edges.filter((edge) => edge.source === node.id)
   const config = node.data.config as Record<string, unknown>
+  const dynamicBuilderConfig = config as Partial<WorkflowDynamicBuilderNodeConfig>
+  const dynamicTargets = (dynamicBuilderConfig.targets ?? {}) as Partial<
+    WorkflowDynamicBuilderNodeConfig['targets']
+  >
   const approvalPolicy = (config.approvalPolicy ?? {}) as Record<string, unknown>
   const voteRule = (config.voteRule ?? {}) as Record<string, unknown>
   const timeoutPolicy = (config.timeoutPolicy ?? {}) as Record<string, unknown>
@@ -1474,6 +1568,32 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
           : 'KEEP_CURRENT',
       ruleExpression: String(config.ruleExpression ?? ''),
       manualTemplateCode: String(config.manualTemplateCode ?? ''),
+      targetMode:
+        dynamicTargets.mode === 'ROLE' ||
+        dynamicTargets.mode === 'DEPARTMENT' ||
+        dynamicTargets.mode === 'DEPARTMENT_AND_CHILDREN' ||
+        dynamicTargets.mode === 'FORM_FIELD' ||
+        dynamicTargets.mode === 'FORMULA'
+          ? dynamicTargets.mode
+          : 'USER',
+      userIds: joinListValue(
+        Array.isArray(dynamicTargets.userIds) ? dynamicTargets.userIds.map(String) : []
+      ),
+      roleCodes: joinListValue(
+        Array.isArray(dynamicTargets.roleCodes) ? dynamicTargets.roleCodes.map(String) : []
+      ),
+      departmentRef: String(dynamicTargets.departmentRef ?? ''),
+      formFieldKey: String(dynamicTargets.formFieldKey ?? ''),
+      formulaExpression: String(dynamicTargets.formulaExpression ?? ''),
+      calledProcessKey: String(dynamicBuilderConfig.calledProcessKey ?? ''),
+      calledVersionPolicy:
+        dynamicBuilderConfig.calledVersionPolicy === 'FIXED_VERSION'
+          ? 'FIXED_VERSION'
+          : 'LATEST_PUBLISHED',
+      calledVersion:
+        dynamicBuilderConfig.calledVersion === null || dynamicBuilderConfig.calledVersion === undefined
+          ? ''
+          : String(dynamicBuilderConfig.calledVersion),
       appendPolicy:
         config.appendPolicy === 'PARALLEL_WITH_CURRENT' ||
         config.appendPolicy === 'SERIAL_BEFORE_NEXT'
@@ -1689,6 +1809,20 @@ function buildNodePatch(values: NodeConfigFormValues) {
           fallbackStrategy: values.dynamicBuilder.fallbackStrategy,
           ruleExpression: values.dynamicBuilder.ruleExpression.trim(),
           manualTemplateCode: values.dynamicBuilder.manualTemplateCode.trim(),
+          targets: {
+            mode: values.dynamicBuilder.targetMode,
+            userIds: parseListValue(values.dynamicBuilder.userIds),
+            roleCodes: parseListValue(values.dynamicBuilder.roleCodes),
+            departmentRef: values.dynamicBuilder.departmentRef.trim(),
+            formFieldKey: values.dynamicBuilder.formFieldKey.trim(),
+            formulaExpression: values.dynamicBuilder.formulaExpression.trim(),
+          },
+          calledProcessKey: values.dynamicBuilder.calledProcessKey.trim(),
+          calledVersionPolicy: values.dynamicBuilder.calledVersionPolicy,
+          calledVersion:
+            values.dynamicBuilder.calledVersionPolicy === 'FIXED_VERSION'
+              ? parseNumber(values.dynamicBuilder.calledVersion)
+              : null,
           appendPolicy: values.dynamicBuilder.appendPolicy,
           maxGeneratedCount: parseNumber(values.dynamicBuilder.maxGeneratedCount),
           terminatePolicy: values.dynamicBuilder.terminatePolicy,
@@ -1877,6 +2011,15 @@ export function NodeConfigPanel({
             fallbackStrategy: 'KEEP_CURRENT',
             ruleExpression: '',
             manualTemplateCode: '',
+            targetMode: 'USER',
+            userIds: '',
+            roleCodes: '',
+            departmentRef: '',
+            formFieldKey: '',
+            formulaExpression: '',
+            calledProcessKey: '',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: '',
             appendPolicy: 'SERIAL_AFTER_CURRENT',
             maxGeneratedCount: '1',
             terminatePolicy: 'TERMINATE_GENERATED_ONLY',
@@ -1964,6 +2107,14 @@ export function NodeConfigPanel({
   const selectedDynamicBuilderSourceMode = useWatch({
     control: form.control,
     name: 'dynamicBuilder.sourceMode',
+  })
+  const selectedDynamicBuilderBuildMode = useWatch({
+    control: form.control,
+    name: 'dynamicBuilder.buildMode',
+  })
+  const selectedDynamicBuilderTargetMode = useWatch({
+    control: form.control,
+    name: 'dynamicBuilder.targetMode',
   })
   const selectedCcMode = useWatch({ control: form.control, name: 'cc.targetMode' })
   const selectedCcUserIds = useWatch({ control: form.control, name: 'cc.userIds' })
@@ -2703,6 +2854,215 @@ export function NodeConfigPanel({
                   </FormItem>
                 )}
               />
+            ) : null}
+
+            {selectedDynamicBuilderBuildMode === 'APPROVER_TASKS' ? (
+              <div className='grid gap-4 rounded-xl border border-dashed p-3'>
+                <div className='grid gap-1'>
+                  <p className='text-sm font-medium'>默认任务目标</p>
+                  <p className='text-xs text-muted-foreground'>
+                    规则未命中、保留当前或回退到规则时，按这里的目标生成附属任务。
+                  </p>
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name='dynamicBuilder.targetMode'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>目标来源</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className='w-full'>
+                            <SelectValue placeholder='请选择目标来源' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {assignmentModes.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {selectedDynamicBuilderTargetMode === 'USER' ? (
+                  <FormField
+                    control={form.control}
+                    name='dynamicBuilder.userIds'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowPrincipalPickerField
+                            kind='USER'
+                            label='默认人员'
+                            description='附属任务默认发给这些人员。'
+                            value={parseListValue(field.value)}
+                            onChange={(next) => field.onChange(joinListValue(next))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                {selectedDynamicBuilderTargetMode === 'ROLE' ? (
+                  <FormField
+                    control={form.control}
+                    name='dynamicBuilder.roleCodes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowPrincipalPickerField
+                            kind='ROLE'
+                            label='默认角色'
+                            description='运行时会按角色解析成真实用户。'
+                            value={parseListValue(field.value)}
+                            onChange={(next) => field.onChange(joinListValue(next))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                {selectedDynamicBuilderTargetMode === 'DEPARTMENT' ||
+                selectedDynamicBuilderTargetMode === 'DEPARTMENT_AND_CHILDREN' ? (
+                  <FormField
+                    control={form.control}
+                    name='dynamicBuilder.departmentRef'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowPrincipalPickerField
+                            kind='DEPARTMENT'
+                            label='默认部门'
+                            description='运行时会按部门解析成启用中的用户。'
+                            value={field.value ? [field.value] : []}
+                            onChange={(next) => field.onChange(next[0] ?? '')}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                {selectedDynamicBuilderTargetMode === 'FORM_FIELD' ? (
+                  <FormField
+                    control={form.control}
+                    name='dynamicBuilder.formFieldKey'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowFieldSelector
+                            label='默认任务字段来源'
+                            description='从流程表单字段中解析附属任务目标。'
+                            value={field.value}
+                            onChange={field.onChange}
+                            options={processFieldOptions}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+
+                {selectedDynamicBuilderTargetMode === 'FORMULA' ? (
+                  <FormField
+                    control={form.control}
+                    name='dynamicBuilder.formulaExpression'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowFormulaEditor
+                            label='默认任务公式'
+                            description='公式返回用户 ID 或用户 ID 列表。'
+                            value={field.value}
+                            onChange={field.onChange}
+                            fieldOptions={processFieldOptions}
+                            placeholder='例如：ifElse(leaveDays >= 5, "usr_005", managerUserId)'
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+
+            {selectedDynamicBuilderBuildMode === 'SUBPROCESS_CALLS' ? (
+              <div className='grid gap-4 rounded-xl border border-dashed p-3 md:grid-cols-2'>
+                <FormField
+                  control={form.control}
+                  name='dynamicBuilder.calledProcessKey'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>默认子流程 Key</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder='oa_sub_review' />
+                      </FormControl>
+                      <p className='text-xs text-muted-foreground'>
+                        规则或模板未命中时，用这个子流程作为默认附属链路。
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='dynamicBuilder.calledVersionPolicy'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>默认子流程版本策略</FormLabel>
+                      <FormControl>
+                        <Select value={field.value} onValueChange={field.onChange}>
+                          <SelectTrigger className='w-full'>
+                            <SelectValue placeholder='请选择版本策略' />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {subprocessVersionPolicies.map((item) => (
+                              <SelectItem key={item.value} value={item.value}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name='dynamicBuilder.calledVersion'
+                  render={({ field }) => (
+                    <FormItem className='md:col-span-2'>
+                      <FormLabel>默认子流程固定版本号</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type='number'
+                          min='1'
+                          placeholder='3'
+                          disabled={form.getValues('dynamicBuilder.calledVersionPolicy') !== 'FIXED_VERSION'}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
             ) : null}
 
             <div className='grid gap-4 md:grid-cols-2'>

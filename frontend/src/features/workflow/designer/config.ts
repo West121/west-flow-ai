@@ -168,6 +168,17 @@ const defaultDynamicBuilderConfig: WorkflowDynamicBuilderNodeConfig = {
   fallbackStrategy: 'KEEP_CURRENT',
   ruleExpression: '',
   manualTemplateCode: '',
+  targets: {
+    mode: 'USER',
+    userIds: [],
+    roleCodes: [],
+    departmentRef: '',
+    formFieldKey: '',
+    formulaExpression: '',
+  },
+  calledProcessKey: '',
+  calledVersionPolicy: 'LATEST_PUBLISHED',
+  calledVersion: null,
   appendPolicy: 'SERIAL_AFTER_CURRENT',
   maxGeneratedCount: 1,
   terminatePolicy: 'TERMINATE_GENERATED_ONLY',
@@ -681,6 +692,7 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
 
   if (kind === 'dynamic-builder') {
     const value = config as Partial<WorkflowDynamicBuilderNodeConfig> | null | undefined
+    const targets = (value?.targets ?? {}) as Partial<WorkflowDynamicBuilderNodeConfig['targets']>
     const sourceMode = normalizeDynamicBuilderSourceMode(value?.sourceMode)
     return {
       buildMode: normalizeDynamicBuilderBuildMode(value?.buildMode),
@@ -693,6 +705,25 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
       fallbackStrategy: normalizeDynamicBuilderFallbackStrategy(value?.fallbackStrategy),
       ruleExpression: value?.ruleExpression ? String(value.ruleExpression) : '',
       manualTemplateCode: value?.manualTemplateCode ? String(value.manualTemplateCode) : '',
+      targets: {
+        mode:
+          targets.mode === 'ROLE' ||
+          targets.mode === 'DEPARTMENT' ||
+          targets.mode === 'DEPARTMENT_AND_CHILDREN' ||
+          targets.mode === 'FORM_FIELD' ||
+          targets.mode === 'FORMULA'
+            ? targets.mode
+            : 'USER',
+        userIds: Array.isArray(targets.userIds) ? targets.userIds.map(String) : [],
+        roleCodes: Array.isArray(targets.roleCodes) ? targets.roleCodes.map(String) : [],
+        departmentRef: targets.departmentRef ? String(targets.departmentRef) : '',
+        formFieldKey: targets.formFieldKey ? String(targets.formFieldKey) : '',
+        formulaExpression: targets.formulaExpression ? String(targets.formulaExpression) : '',
+      },
+      calledProcessKey: value?.calledProcessKey ? String(value.calledProcessKey) : '',
+      calledVersionPolicy:
+        value?.calledVersionPolicy === 'FIXED_VERSION' ? 'FIXED_VERSION' : 'LATEST_PUBLISHED',
+      calledVersion: normalizeNumber(value?.calledVersion, null),
       appendPolicy: normalizeDynamicBuilderAppendPolicy(value?.appendPolicy),
       maxGeneratedCount: normalizeNumber(
         value?.maxGeneratedCount,
