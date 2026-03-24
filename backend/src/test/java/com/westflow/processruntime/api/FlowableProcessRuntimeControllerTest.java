@@ -1059,8 +1059,9 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
-    void shouldKeepNextTaskVisibleWhenDynamicBuildSubprocessPolicyIsSerialAfterCurrent() throws Exception {
+    void shouldBlockNextTaskUntilDynamicBuildSubprocessFinishesWhenSerialAfterCurrent() throws Exception {
         String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildDynamicBuilderSubprocessAfterCurrentPayload());
         seedLeaveBill("leave_028a");
@@ -1086,12 +1087,29 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString()).path("data");
 
         JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_028a");
+        String childInstanceId = detailBody.path("appendLinks").get(0).path("targetInstanceId").asText();
         assertThat(detailBody.path("appendLinks").size()).isEqualTo(1);
         assertThat(detailBody.path("appendLinks").get(0).path("appendType").asText()).isEqualTo("SUBPROCESS");
         assertThat(detailBody.path("appendLinks").get(0).path("status").asText()).isEqualTo("RUNNING");
-        assertThat(detailBody.path("activeTaskIds").size()).isEqualTo(1);
-        assertThat(detailBody.path("nodeId").asText()).isEqualTo("approve_manager");
+        assertThat(detailBody.path("activeTaskIds").size()).isEqualTo(0);
         assertThat(detailBody.path("instanceStatus").asText()).isEqualTo("RUNNING");
+
+        mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/terminate", childInstanceId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "terminateScope": "CHILD",
+                                  "childInstanceId": "%s",
+                                  "reason": "动态构建子流程已结束"
+                                }
+                                """.formatted(childInstanceId)))
+                .andExpect(status().isOk());
+
+        JsonNode detailAfterTerminate = approvalDetailByBusiness(applicantToken, "leave_028a");
+        assertThat(detailAfterTerminate.path("appendLinks").get(0).path("status").asText()).isEqualTo("TERMINATED");
+        assertThat(detailAfterTerminate.path("activeTaskIds").size()).isEqualTo(1);
+        assertThat(detailAfterTerminate.path("nodeId").asText()).isEqualTo("approve_manager");
     }
 
     @Test

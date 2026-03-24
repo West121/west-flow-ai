@@ -1196,7 +1196,9 @@ public class FlowableProcessRuntimeService {
                 .filter(this::isVisibleTask)
                 .map(this::toTaskView)
                 .toList();
-        String status = blockingTaskViews(nextTasks).isEmpty() ? "COMPLETED" : "RUNNING";
+        String status = blockingTaskViews(nextTasks).isEmpty() && !hasRunningAppendStructures(task.getProcessInstanceId())
+                ? "COMPLETED"
+                : "RUNNING";
         return new CompleteTaskResponse(
                 task.getProcessInstanceId(),
                 taskId,
@@ -4654,9 +4656,41 @@ public class FlowableProcessRuntimeService {
         if (task == null) {
             return false;
         }
+        List<RuntimeAppendLinkRecord> runningAppendLinks = runtimeAppendLinkService.listByParentInstanceId(task.getProcessInstanceId()).stream()
+                .filter(link -> "RUNNING".equals(link.status()))
+                .toList();
+        return isBlockedBySerialBeforeNext(task, runningAppendLinks)
+                || isBlockedBySerialAfterCurrent(task, runningAppendLinks);
+    }
+
+    private boolean isBlockedBySerialBeforeNext(Task task, List<RuntimeAppendLinkRecord> runningAppendLinks) {
         return blockingDynamicBuilderNodeIds(task.getProcessInstanceId(), task.getTaskDefinitionKey()).stream()
-                .anyMatch(sourceNodeId -> runtimeAppendLinkService.listByParentInstanceId(task.getProcessInstanceId()).stream()
-                        .anyMatch(link -> "RUNNING".equals(link.status()) && sourceNodeId.equals(link.sourceNodeId())));
+                .anyMatch(sourceNodeId -> runningAppendLinks.stream()
+                        .anyMatch(link -> sourceNodeId.equals(link.sourceNodeId())));
+    }
+
+    private boolean isBlockedBySerialAfterCurrent(Task task, List<RuntimeAppendLinkRecord> runningAppendLinks) {
+        return runningAppendLinks.stream()
+                .filter(link -> "SERIAL_AFTER_CURRENT".equals(normalizeAppendPolicy(link.policy())))
+                .anyMatch(link -> shouldBlockBySerialAfterCurrent(task, link));
+    }
+
+    private boolean shouldBlockBySerialAfterCurrent(Task task, RuntimeAppendLinkRecord link) {
+        if (!Objects.equals(task.getProcessInstanceId(), link.parentInstanceId())) {
+            return false;
+        }
+        if ("DYNAMIC_BUILD".equals(link.triggerMode())) {
+            return true;
+        }
+        String sourceTaskId = link.sourceTaskId();
+        if (sourceTaskId == null || sourceTaskId.isBlank()) {
+            return true;
+        }
+        Task activeSourceTask = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .taskId(sourceTaskId)
+                .singleResult();
+        return activeSourceTask == null;
     }
 
     private List<String> blockingDynamicBuilderNodeIds(String processInstanceId, String nodeId) {
