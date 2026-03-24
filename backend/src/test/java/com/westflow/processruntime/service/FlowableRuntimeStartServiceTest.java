@@ -475,11 +475,14 @@ class FlowableRuntimeStartServiceTest {
         assertThat(childInstance).isNotNull();
         assertThat(childInstance.getProcessDefinitionId()).isEqualTo(fixedVersionFlowableDefinitionId);
         assertThat(childInstance.getProcessDefinitionId()).isNotEqualTo(latestFlowableDefinitionId);
+        assertThat(runtimeService.getVariable(childInstance.getProcessInstanceId(), "sourceBillNo"))
+                .isEqualTo("BILL-FIXED-001");
 
         Task childTask = taskService.createTaskQuery()
                 .processInstanceId(childInstance.getProcessInstanceId())
                 .singleResult();
         assertThat(childTask).isNotNull();
+        runtimeService.setVariable(childInstance.getProcessInstanceId(), "approvedResult", "APPROVED");
 
         StpUtil.login("lisi");
         flowableProcessRuntimeService.complete(childTask.getId(), new CompleteTaskRequest(
@@ -516,6 +519,13 @@ class FlowableRuntimeStartServiceTest {
                 response.instanceId(),
                 childInstance.getProcessInstanceId()
         )).isEqualTo("WAIT_PARENT_CONFIRM");
+        assertThat(historyService.createHistoricVariableInstanceQuery()
+                .processInstanceId(response.instanceId())
+                .variableName("purchaseResult")
+                .singleResult())
+                .isNotNull()
+                .extracting(historicVariable -> String.valueOf(historicVariable.getValue()))
+                .isEqualTo("APPROVED");
     }
 
     @Test
@@ -1278,7 +1288,13 @@ class FlowableRuntimeStartServiceTest {
                         "parentResumeStrategy": "WAIT_PARENT_CONFIRM",
                         "businessBindingMode": "INHERIT_PARENT",
                         "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
-                        "childFinishPolicy": "RETURN_TO_PARENT"
+                        "childFinishPolicy": "RETURN_TO_PARENT",
+                        "inputMappings": [
+                          {"source": "billNo", "target": "sourceBillNo"}
+                        ],
+                        "outputMappings": [
+                          {"source": "approvedResult", "target": "purchaseResult"}
+                        ]
                       },
                       "ui": {"width": 240, "height": 88}
                     },

@@ -8,6 +8,7 @@ import com.westflow.processruntime.api.ProcessTaskSnapshot;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
 import com.westflow.processruntime.model.ProcessLinkRecord;
+import java.util.ArrayList;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -146,6 +147,7 @@ public class FlowableRuntimeStartService {
                     now,
                     null
             ));
+            applySubprocessInputMappings(parentInstance.getProcessInstanceId(), childInstance.getProcessInstanceId(), config);
             PublishedProcessDefinition childPublishedDefinition = processDefinitionService.getByFlowableDefinitionId(
                     childInstance.getProcessDefinitionId()
             );
@@ -192,6 +194,24 @@ public class FlowableRuntimeStartService {
                 .filter(node -> "approver".equals(node.type()))
                 .forEach(node -> appendCountersignStartVariables(variables, node));
         return variables;
+    }
+
+    private void applySubprocessInputMappings(
+            String parentInstanceId,
+            String childInstanceId,
+            Map<String, Object> config
+    ) {
+        for (Map<String, Object> mapping : listMapValue(config.get("inputMappings"))) {
+            String source = stringValue(mapping.get("source"));
+            String target = stringValue(mapping.get("target"));
+            if (source == null || target == null) {
+                continue;
+            }
+            Object value = flowableEngineFacade.runtimeService().getVariable(parentInstanceId, source);
+            if (value != null) {
+                flowableEngineFacade.runtimeService().setVariable(childInstanceId, target, value);
+            }
+        }
     }
 
     /**
@@ -285,6 +305,20 @@ public class FlowableRuntimeStartService {
         Map<String, Object> result = new LinkedHashMap<>();
         map.forEach((key, mapValue) -> result.put(String.valueOf(key), mapValue));
         return result;
+    }
+
+    private List<Map<String, Object>> listMapValue(Object value) {
+        if (!(value instanceof List<?> items) || items.isEmpty()) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : items) {
+            Map<String, Object> mapped = mapValue(item);
+            if (!mapped.isEmpty()) {
+                result.add(mapped);
+            }
+        }
+        return List.copyOf(result);
     }
 
     private List<String> stringListValue(Object value) {

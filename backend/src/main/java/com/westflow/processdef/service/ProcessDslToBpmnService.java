@@ -17,6 +17,7 @@ import org.flowable.bpmn.model.ExclusiveGateway;
 import org.flowable.bpmn.model.InclusiveGateway;
 import org.flowable.bpmn.model.ExtensionAttribute;
 import org.flowable.bpmn.model.FlowElement;
+import org.flowable.bpmn.model.IOParameter;
 import org.flowable.bpmn.model.ImplementationType;
 import org.flowable.bpmn.model.IntermediateCatchEvent;
 import org.flowable.bpmn.model.MultiInstanceLoopCharacteristics;
@@ -173,6 +174,8 @@ public class ProcessDslToBpmnService {
         } else {
             activity.setCalledElement(calledProcessKey);
         }
+        activity.setInParameters(buildIoParameters(config.get("inputMappings")));
+        activity.setOutParameters(buildIoParameters(config.get("outputMappings")));
         return activity;
     }
 
@@ -663,6 +666,28 @@ public class ProcessDslToBpmnService {
             items.add(sourceText + "->" + targetText);
         }
         return items.isEmpty() ? null : String.join(",", items);
+    }
+
+    private List<IOParameter> buildIoParameters(Object value) {
+        if (!(value instanceof List<?> mappings) || mappings.isEmpty()) {
+            return List.of();
+        }
+        List<IOParameter> parameters = new ArrayList<>();
+        for (Object mappingItem : mappings) {
+            if (!(mappingItem instanceof Map<?, ?> mappingMap)) {
+                continue;
+            }
+            String source = stringValue(mappingMap.get("source"));
+            String target = stringValue(mappingMap.get("target"));
+            if (source == null || target == null) {
+                continue;
+            }
+            IOParameter parameter = new IOParameter();
+            parameter.setSource(source);
+            parameter.setTarget(target);
+            parameters.add(parameter);
+        }
+        return parameters;
     }
 
     private String serializeConditionValue(Object value) {
