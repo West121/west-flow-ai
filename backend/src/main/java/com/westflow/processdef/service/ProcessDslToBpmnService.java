@@ -1,5 +1,7 @@
 package com.westflow.processdef.service;
 
+import com.westflow.processdef.mapper.ProcessDefinitionMapper;
+import com.westflow.processdef.model.ProcessDefinitionRecord;
 import com.westflow.processdef.model.ProcessDslPayload;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -26,6 +28,7 @@ import org.flowable.bpmn.model.StartEvent;
 import org.flowable.bpmn.model.TimerEventDefinition;
 import org.flowable.bpmn.model.UserTask;
 import org.flowable.bpmn.model.BpmnModel;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -36,6 +39,16 @@ public class ProcessDslToBpmnService {
     private static final String WESTFLOW_PREFIX = "westflow";
     private static final String DEFAULT_TRIGGER_DELEGATE = "${flowableTriggerDelegate}";
     private static final String DEFAULT_DYNAMIC_BUILDER_DELEGATE = "${flowableDynamicBuilderDelegate}";
+    private final ProcessDefinitionMapper processDefinitionMapper;
+
+    ProcessDslToBpmnService() {
+        this.processDefinitionMapper = null;
+    }
+
+    @Autowired
+    public ProcessDslToBpmnService(ProcessDefinitionMapper processDefinitionMapper) {
+        this.processDefinitionMapper = processDefinitionMapper;
+    }
 
     public String convert(ProcessDslPayload payload, String processDefinitionId, int version) {
         BpmnModel model = new BpmnModel();
@@ -146,8 +159,42 @@ public class ProcessDslToBpmnService {
         CallActivity activity = new CallActivity();
         activity.setId(node.id());
         activity.setName(node.name());
-        activity.setCalledElement(stringValue(config.get("calledProcessKey")));
+        String calledProcessKey = stringValue(config.get("calledProcessKey"));
+        String calledVersionPolicy = stringValue(config.get("calledVersionPolicy"));
+        Integer calledVersion = integerValue(config.get("calledVersion"));
+        ProcessDefinitionRecord fixedVersionRecord = resolveFixedVersionSubprocessDefinition(
+                calledProcessKey,
+                calledVersionPolicy,
+                calledVersion
+        );
+        if (fixedVersionRecord != null) {
+            activity.setCalledElementType("id");
+            activity.setCalledElement(fixedVersionRecord.flowableDefinitionId());
+        } else {
+            activity.setCalledElement(calledProcessKey);
+        }
         return activity;
+    }
+
+    private ProcessDefinitionRecord resolveFixedVersionSubprocessDefinition(
+            String calledProcessKey,
+            String calledVersionPolicy,
+            Integer calledVersion
+    ) {
+        if (!"FIXED_VERSION".equals(calledVersionPolicy) || calledProcessKey == null || calledProcessKey.isBlank() || calledVersion == null) {
+            return null;
+        }
+        if (processDefinitionMapper == null) {
+            return null;
+        }
+        ProcessDefinitionRecord record = processDefinitionMapper.selectPublishedByProcessKeyAndVersion(calledProcessKey, calledVersion);
+        if (record == null) {
+            throw new IllegalStateException("FIXED_VERSION 子流程未找到已发布定义: processKey=" + calledProcessKey + ", version=" + calledVersion);
+        }
+        if (record.flowableDefinitionId() == null || record.flowableDefinitionId().isBlank()) {
+            throw new IllegalStateException("FIXED_VERSION 子流程缺少 Flowable definition id: processKey=" + calledProcessKey + ", version=" + calledVersion);
+        }
+        return record;
     }
 
     // 条件节点映射为排他网关。
@@ -662,6 +709,20 @@ public class ProcessDslToBpmnService {
 
     private String booleanValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private Integer integerValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private String normalizeNullable(String value) {

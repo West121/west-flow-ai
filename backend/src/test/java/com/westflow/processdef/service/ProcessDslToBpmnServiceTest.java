@@ -1,12 +1,17 @@
 package com.westflow.processdef.service;
 
+import com.westflow.processdef.mapper.ProcessDefinitionMapper;
+import com.westflow.processdef.model.ProcessDefinitionRecord;
 import com.westflow.processdef.model.ProcessDslPayload;
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ProcessDslToBpmnServiceTest {
 
@@ -271,6 +276,24 @@ class ProcessDslToBpmnServiceTest {
 
     @Test
     void shouldConvertSubprocessNodeIntoCallActivity() {
+        ProcessDefinitionMapper mapper = mock(ProcessDefinitionMapper.class);
+        when(mapper.selectPublishedByProcessKeyAndVersion("plm_purchase_review", 3))
+                .thenReturn(new ProcessDefinitionRecord(
+                        "plm_purchase_review:3",
+                        "plm_purchase_review",
+                        "采购复核子流程",
+                        "PLM",
+                        3,
+                        "PUBLISHED",
+                        "{}",
+                        "<xml/>",
+                        "wangwu",
+                        "deployment_003",
+                        "plm_purchase_review:3:flowable",
+                        LocalDateTime.of(2026, 3, 23, 10, 0),
+                        LocalDateTime.of(2026, 3, 23, 10, 0)
+                ));
+        ProcessDslToBpmnService service = new ProcessDslToBpmnService(mapper);
         ProcessDslPayload payload = new ProcessDslPayload(
                 "1.0.0",
                 "oa_parent",
@@ -320,7 +343,8 @@ class ProcessDslToBpmnServiceTest {
                 "<callActivity",
                 "id=\"subprocess_1\"",
                 "name=\"采购复核子流程\"",
-                "calledElement=\"plm_purchase_review\"",
+                "calledElement=\"plm_purchase_review:3:flowable\"",
+                "calledElementType=\"id\"",
                 "calledProcessKey=\"plm_purchase_review\"",
                 "calledVersionPolicy=\"FIXED_VERSION\"",
                 "calledVersion=\"3\"",

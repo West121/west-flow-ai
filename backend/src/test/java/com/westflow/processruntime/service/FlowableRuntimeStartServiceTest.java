@@ -449,6 +449,18 @@ class FlowableRuntimeStartServiceTest {
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildSubprocessParentFixedVersionPayload());
+        String fixedVersionFlowableDefinitionId = jdbcTemplate.queryForObject(
+                "SELECT flowable_definition_id FROM wf_process_definition WHERE process_key = ? AND version = ?",
+                String.class,
+                "oa_sub_review",
+                1
+        );
+        String latestFlowableDefinitionId = jdbcTemplate.queryForObject(
+                "SELECT flowable_definition_id FROM wf_process_definition WHERE process_key = ? AND version = ?",
+                String.class,
+                "oa_sub_review",
+                2
+        );
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
                 "oa_parent_with_subprocess",
@@ -461,6 +473,8 @@ class FlowableRuntimeStartServiceTest {
                 .superProcessInstanceId(response.instanceId())
                 .singleResult();
         assertThat(childInstance).isNotNull();
+        assertThat(childInstance.getProcessDefinitionId()).isEqualTo(fixedVersionFlowableDefinitionId);
+        assertThat(childInstance.getProcessDefinitionId()).isNotEqualTo(latestFlowableDefinitionId);
 
         Task childTask = taskService.createTaskQuery()
                 .processInstanceId(childInstance.getProcessInstanceId())
