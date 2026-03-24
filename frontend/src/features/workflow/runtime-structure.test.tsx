@@ -16,12 +16,15 @@ describe('runtime structure section', () => {
             parentNodeId: 'subprocess_review',
             calledProcessKey: 'oa_sub_review',
             calledDefinitionId: 'oa_sub_review:1:1004',
+            calledVersionPolicy: 'FIXED_VERSION',
+            calledVersion: 1,
             linkType: 'CALL_ACTIVITY',
             status: 'RUNNING',
             callScope: 'CHILD_AND_DESCENDANTS',
             joinMode: 'WAIT_PARENT_CONFIRM',
             childStartStrategy: 'FIXED_VERSION',
             parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+            resumeDecisionReason: 'PARENT_CONFIRM_RESUMED',
             terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
             childFinishPolicy: 'RETURN_TO_PARENT',
             createdAt: '2026-03-23T10:10:00+08:00',
@@ -121,11 +124,14 @@ describe('runtime structure section', () => {
     expect(screen.getByText('结构来源：ADHOC_TASK')).toBeInTheDocument()
     expect(screen.getByText('结构来源：ADHOC_SUBPROCESS')).toBeInTheDocument()
     expect(screen.getByText('终止策略：TERMINATE_PARENT_AND_SUBPROCESS')).toBeInTheDocument()
+    expect(screen.getByText('调用版本策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('调用版本：1')).toBeInTheDocument()
     expect(screen.getByText('子流程策略')).toBeInTheDocument()
     expect(screen.getByText('调用范围：CHILD_AND_DESCENDANTS')).toBeInTheDocument()
     expect(screen.getByText('汇合模式：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
     expect(screen.getByText('子流程启动策略：FIXED_VERSION')).toBeInTheDocument()
     expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('恢复决策：PARENT_CONFIRM_RESUMED')).toBeInTheDocument()
     expect(screen.getByText('动态构建策略')).toBeInTheDocument()
     expect(screen.getByText('构建模式：SUBPROCESS_CALLS')).toBeInTheDocument()
     expect(screen.getByText('来源模式：MODEL_DRIVEN')).toBeInTheDocument()
@@ -152,12 +158,15 @@ describe('runtime structure section', () => {
             parentNodeId: 'subprocess_review',
             calledProcessKey: 'oa_sub_review',
             calledDefinitionId: 'oa_sub_review:1:1004',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: null,
             linkType: 'CALL_ACTIVITY',
             status: 'WAIT_PARENT_CONFIRM',
             callScope: 'CHILD_ONLY',
             joinMode: 'WAIT_PARENT_CONFIRM',
             childStartStrategy: 'LATEST_PUBLISHED',
             parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+            resumeDecisionReason: 'WAIT_PARENT_CONFIRM',
             terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
             childFinishPolicy: 'RETURN_TO_PARENT',
             createdAt: '2026-03-24T10:10:00+08:00',

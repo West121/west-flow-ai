@@ -14,6 +14,8 @@ public record ProcessInstanceLinkResponse(
         String parentNodeType,
         String calledProcessKey,
         String calledDefinitionId,
+        String calledVersionPolicy,
+        Integer calledVersion,
         String childProcessName,
         Integer childProcessVersion,
         String linkType,
@@ -24,6 +26,7 @@ public record ProcessInstanceLinkResponse(
         String joinMode,
         String childStartStrategy,
         String parentResumeStrategy,
+        String resumeDecisionReason,
         OffsetDateTime createdAt,
         OffsetDateTime finishedAt
 ) {

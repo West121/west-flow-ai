@@ -154,6 +154,8 @@ function RuntimeStructureItem({
           <div>结构来源：{link.runtimeLinkType ?? link.linkType ?? '--'}</div>
           <div>子流程编码：{link.calledProcessKey ?? '--'}</div>
           <div>子流程定义：{link.calledDefinitionId ?? '--'}</div>
+          <div>调用版本策略：{link.calledVersionPolicy ?? '--'}</div>
+          <div>调用版本：{link.calledVersion ?? '--'}</div>
           <div>目标用户：{link.targetUserId ?? '--'}</div>
           <div>终止策略：{link.terminatePolicy ?? '--'}</div>
           <div>完成策略：{link.childFinishPolicy ?? '--'}</div>
@@ -166,6 +168,7 @@ function RuntimeStructureItem({
           'joinMode',
           'childStartStrategy',
           'parentResumeStrategy',
+          'resumeDecisionReason',
         ]) ? (
           <div className='space-y-2 rounded-md border bg-muted/20 p-3'>
             <div className='text-sm font-medium'>子流程策略</div>
@@ -180,6 +183,10 @@ function RuntimeStructureItem({
                 {
                   label: '父流程恢复策略',
                   value: resolveLinkField(link, 'parentResumeStrategy'),
+                },
+                {
+                  label: '恢复决策',
+                  value: resolveLinkField(link, 'resumeDecisionReason'),
                 },
               ]}
             />

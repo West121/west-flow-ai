@@ -92,6 +92,8 @@ class WorkflowManagementServiceTest {
                 "subprocess",
                 "oa_sub_review",
                 "child_pd_1",
+                "LATEST_PUBLISHED",
+                null,
                 "附属子流程",
                 1,
                 "CALL_ACTIVITY",
@@ -101,6 +103,7 @@ class WorkflowManagementServiceTest {
                 "CHILD_AND_DESCENDANTS",
                 "WAIT_PARENT_CONFIRM",
                 "SCENE_BINDING",
+                "WAIT_PARENT_CONFIRM",
                 "WAIT_PARENT_CONFIRM",
                 OffsetDateTime.now(),
                 null
@@ -180,6 +183,8 @@ class WorkflowManagementServiceTest {
             assertThat(response.processLinks().get(0).joinMode()).isEqualTo("WAIT_PARENT_CONFIRM");
             assertThat(response.processLinks().get(0).childStartStrategy()).isEqualTo("SCENE_BINDING");
             assertThat(response.processLinks().get(0).parentResumeStrategy()).isEqualTo("WAIT_PARENT_CONFIRM");
+            assertThat(response.processLinks().get(0).calledVersionPolicy()).isEqualTo("LATEST_PUBLISHED");
+            assertThat(response.processLinks().get(0).resumeDecisionReason()).isEqualTo("WAIT_PARENT_CONFIRM");
             assertThat(response.inclusiveGatewayHits()).hasSize(1);
             assertThat(response.inclusiveGatewayHits().get(0).defaultBranchId()).isEqualTo("edge_3");
             assertThat(response.inclusiveGatewayHits().get(0).requiredBranchCount()).isEqualTo(1);

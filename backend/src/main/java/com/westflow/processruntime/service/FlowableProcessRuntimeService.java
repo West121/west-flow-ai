@@ -3900,12 +3900,14 @@ public class FlowableProcessRuntimeService {
 
     private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(com.westflow.processruntime.model.ProcessLinkRecord record) {
         NodeMetadata parentNode = resolveNodeMetadata(record.parentInstanceId(), record.parentNodeId());
+        Map<String, Object> nodeConfig = resolveNodeConfig(record.parentInstanceId(), record.parentNodeId());
         DefinitionMetadata childDefinition = resolveDefinitionMetadata(
                 record.childInstanceId(),
                 record.calledDefinitionId(),
                 record.calledProcessKey()
         );
         SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(record);
+        Integer calledVersion = integerValue(nodeConfig.get("calledVersion"));
         return new ProcessInstanceLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
@@ -3916,6 +3918,8 @@ public class FlowableProcessRuntimeService {
                 parentNode.nodeType(),
                 record.calledProcessKey(),
                 record.calledDefinitionId(),
+                stringValueOrDefault(nodeConfig.get("calledVersionPolicy"), "LATEST_PUBLISHED"),
+                calledVersion == null || calledVersion <= 0 ? null : calledVersion,
                 childDefinition.processName(),
                 childDefinition.version(),
                 record.linkType(),
@@ -3926,9 +3930,29 @@ public class FlowableProcessRuntimeService {
                 structureMetadata.joinMode(),
                 structureMetadata.childStartStrategy(),
                 structureMetadata.parentResumeStrategy(),
+                resolveSubprocessResumeDecisionReason(record, structureMetadata),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
                 record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
         );
+    }
+
+    private String resolveSubprocessResumeDecisionReason(
+            com.westflow.processruntime.model.ProcessLinkRecord record,
+            SubprocessStructureMetadata structureMetadata
+    ) {
+        if ("WAIT_PARENT_CONFIRM".equals(record.status())) {
+            return "WAIT_PARENT_CONFIRM";
+        }
+        if ("TERMINATED".equals(record.status())) {
+            return "CHILD_TERMINATED";
+        }
+        if ("TERMINATE_PARENT".equals(record.childFinishPolicy())) {
+            return "CHILD_FINISH_TERMINATES_PARENT";
+        }
+        if ("WAIT_PARENT_CONFIRM".equals(structureMetadata.parentResumeStrategy())) {
+            return "PARENT_CONFIRM_RESUMED";
+        }
+        return "AUTO_RETURN";
     }
 
     private RuntimeAppendLinkResponse toRuntimeAppendLinkResponse(RuntimeAppendLinkRecord record) {

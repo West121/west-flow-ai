@@ -429,6 +429,8 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(linksBody.get(0).path("joinMode").asText()).isEqualTo("AUTO_RETURN");
         assertThat(linksBody.get(0).path("childStartStrategy").asText()).isEqualTo("LATEST_PUBLISHED");
         assertThat(linksBody.get(0).path("parentResumeStrategy").asText()).isEqualTo("AUTO_RETURN");
+        assertThat(linksBody.get(0).path("calledVersionPolicy").asText()).isEqualTo("LATEST_PUBLISHED");
+        assertThat(linksBody.get(0).path("resumeDecisionReason").asText()).isEqualTo("AUTO_RETURN");
     }
 
     @Test
@@ -492,6 +494,7 @@ class FlowableProcessRuntimeControllerTest {
                 .getResponse()
                 .getContentAsString()).path("data");
         assertThat(linksBeforeConfirm.get(0).path("status").asText()).isEqualTo("WAIT_PARENT_CONFIRM");
+        assertThat(linksBeforeConfirm.get(0).path("resumeDecisionReason").asText()).isEqualTo("WAIT_PARENT_CONFIRM");
 
         JsonNode confirmBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/links/{linkId}/confirm-parent-resume", instanceId, linkId)
                         .header("Authorization", "Bearer " + applicantToken))
@@ -570,6 +573,7 @@ class FlowableProcessRuntimeControllerTest {
                 .getResponse()
                 .getContentAsString()).path("data");
         assertThat(linksBeforeConfirm.get(0).path("status").asText()).isEqualTo("WAIT_PARENT_CONFIRM");
+        assertThat(linksBeforeConfirm.get(0).path("resumeDecisionReason").asText()).isEqualTo("WAIT_PARENT_CONFIRM");
 
         JsonNode confirmBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/links/{linkId}/confirm-parent-resume", instanceId, linkId)
                         .header("Authorization", "Bearer " + applicantToken))
@@ -630,6 +634,7 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(linksBody).hasSize(1);
         assertThat(linksBody.get(0).path("calledProcessKey").asText()).isEqualTo("oa_sub_review_scene");
         assertThat(linksBody.get(0).path("childStartStrategy").asText()).isEqualTo("SCENE_BINDING");
+        assertThat(linksBody.get(0).path("calledVersionPolicy").asText()).isEqualTo("LATEST_PUBLISHED");
         assertThat(linksBody.get(0).path("childProcessName").asText()).isEqualTo("场景绑定子流程");
         assertThat(linksBody.get(0).path("calledDefinitionId").asText()).isNotBlank();
     }

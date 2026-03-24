@@ -6,6 +6,8 @@ export type RuntimeStructureLink = {
   parentNodeId?: string | null
   calledProcessKey?: string | null
   calledDefinitionId?: string | null
+  calledVersionPolicy?: string | null
+  calledVersion?: number | null
   linkType?: string | null
   runtimeLinkType?: string | null
   triggerMode?: string | null
@@ -15,6 +17,7 @@ export type RuntimeStructureLink = {
   joinMode?: string | null
   childStartStrategy?: string | null
   parentResumeStrategy?: string | null
+  resumeDecisionReason?: string | null
   executionStrategy?: string | null
   fallbackStrategy?: string | null
   buildMode?: string | null
