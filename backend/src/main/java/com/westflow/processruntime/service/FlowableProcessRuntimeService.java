@@ -4548,7 +4548,7 @@ public class FlowableProcessRuntimeService {
                         .filter(node -> "dynamic-builder".equals(node.type()))
                         .filter(node -> {
                             String appendPolicy = normalizeAppendPolicy(stringValue(nodeConfig(definition.dsl(), node.id()).get("appendPolicy")));
-                            return !"PARALLEL_WITH_CURRENT".equals(appendPolicy);
+                            return "SERIAL_BEFORE_NEXT".equals(appendPolicy);
                         })
                         .map(ProcessDslPayload.Node::id)
                         .distinct()

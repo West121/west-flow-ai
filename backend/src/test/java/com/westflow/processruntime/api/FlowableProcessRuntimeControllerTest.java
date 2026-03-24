@@ -1044,6 +1044,42 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldKeepNextTaskVisibleWhenDynamicBuildSubprocessPolicyIsSerialAfterCurrent() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildDynamicBuilderSubprocessAfterCurrentPayload());
+        seedLeaveBill("leave_028a");
+
+        objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_dynamic_builder_subprocess_after_current",
+                                  "businessKey": "leave_028a",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "动态构建附属子流程后置串行",
+                                    "dynamicSubprocessKeys": ["oa_sub_review"]
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_028a");
+        assertThat(detailBody.path("appendLinks").size()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("appendType").asText()).isEqualTo("SUBPROCESS");
+        assertThat(detailBody.path("appendLinks").get(0).path("status").asText()).isEqualTo("RUNNING");
+        assertThat(detailBody.path("activeTaskIds").size()).isEqualTo(1);
+        assertThat(detailBody.path("nodeId").asText()).isEqualTo("approve_manager");
+        assertThat(detailBody.path("instanceStatus").asText()).isEqualTo("RUNNING");
+    }
+
+    @Test
     void shouldUnblockNextTaskAfterDynamicBuildSubprocessFinishesWhenSerialBeforeNext() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -3810,6 +3846,79 @@ class FlowableProcessRuntimeControllerTest {
                         "ruleExpression": "${dynamicSubprocessKeys}",
                         "manualTemplateCode": "",
                         "appendPolicy": "SERIAL_BEFORE_NEXT",
+                        "maxGeneratedCount": 1,
+                        "terminatePolicy": "TERMINATE_GENERATED_ONLY"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "领导审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "dynamic_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "dynamic_1", "target": "approve_manager", "priority": 10, "label": "继续"},
+                    {"id": "edge_3", "source": "approve_manager", "target": "end_1", "priority": 10, "label": "完成"}
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderSubprocessAfterCurrentPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_builder_subprocess_after_current",
+                  "processName": "动态构建附属子流程后置串行",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_builder_subprocess_after_current_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "SUBPROCESS_CALLS",
+                        "sourceMode": "RULE",
+                        "ruleExpression": "${dynamicSubprocessKeys}",
+                        "manualTemplateCode": "",
+                        "appendPolicy": "SERIAL_AFTER_CURRENT",
                         "maxGeneratedCount": 1,
                         "terminatePolicy": "TERMINATE_GENERATED_ONLY"
                       },
