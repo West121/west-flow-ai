@@ -199,6 +199,19 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
+function buildModelDrivenDynamicBuilderNode(): WorkflowNode {
+  const node = buildDynamicBuilderNode()
+  node.data.config = {
+    ...(node.data.config as Record<string, unknown>),
+    sourceMode: 'MODEL_DRIVEN',
+    sceneCode: 'leave_auto_scene',
+    executionStrategy: 'TEMPLATE_FIRST',
+    fallbackStrategy: 'KEEP_CURRENT',
+    manualTemplateCode: '',
+  } as never
+  return node
+}
+
 function buildInclusiveNode(
   direction: 'SPLIT' | 'JOIN' = 'JOIN',
   config: Record<string, unknown> = {}
@@ -765,6 +778,34 @@ describe('workflow designer node config panel', () => {
           appendPolicy: 'SERIAL_AFTER_CURRENT',
           maxGeneratedCount: 2,
           terminatePolicy: 'TERMINATE_GENERATED_ONLY',
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('hydrates and submits model driven dynamic builder fields back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(
+      <NodeConfigPanel node={buildModelDrivenDynamicBuilderNode()} edges={edges} onApply={onApply} />
+    )
+
+    expect(screen.getByDisplayValue('leave_auto_scene')).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('leave_overtime_approval'), {
+      target: { value: 'leave_model_scene' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'dynamic_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          sourceMode: 'MODEL_DRIVEN',
+          sceneCode: 'leave_model_scene',
+          executionStrategy: 'TEMPLATE_FIRST',
+          fallbackStrategy: 'KEEP_CURRENT',
         }),
       }),
       undefined

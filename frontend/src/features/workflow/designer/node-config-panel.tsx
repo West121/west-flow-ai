@@ -148,6 +148,7 @@ const dynamicBuilderBuildModes = [
 
 const dynamicBuilderSourceModes = [
   { value: 'RULE', label: '规则生成' },
+  { value: 'MODEL_DRIVEN', label: '模型驱动' },
   { value: 'MANUAL_TEMPLATE', label: '人工模板' },
 ] satisfies Array<{ value: WorkflowDynamicBuilderSourceMode; label: string }>
 
@@ -319,7 +320,7 @@ const nodeConfigFormSchema = z
     }),
     dynamicBuilder: z.object({
       buildMode: z.enum(['APPROVER_TASKS', 'SUBPROCESS_CALLS']),
-      sourceMode: z.enum(['RULE', 'MANUAL_TEMPLATE']),
+      sourceMode: z.enum(['RULE', 'MODEL_DRIVEN', 'MANUAL_TEMPLATE']),
       sceneCode: z.string(),
       executionStrategy: z.enum([
         'RULE_FIRST',
@@ -681,6 +682,17 @@ const nodeConfigFormSchema = z
           code: z.ZodIssueCode.custom,
           message: '规则生成需要填写规则表达式',
           path: ['dynamicBuilder', 'ruleExpression'],
+        })
+      }
+
+      if (
+        values.dynamicBuilder.sourceMode === 'MODEL_DRIVEN' &&
+        !values.dynamicBuilder.sceneCode.trim()
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: '模型驱动需要填写场景编码',
+          path: ['dynamicBuilder', 'sceneCode'],
         })
       }
 
@@ -1441,14 +1453,17 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
     dynamicBuilder: {
       buildMode:
         config.buildMode === 'SUBPROCESS_CALLS' ? 'SUBPROCESS_CALLS' : 'APPROVER_TASKS',
-      sourceMode: config.sourceMode === 'MANUAL_TEMPLATE' ? 'MANUAL_TEMPLATE' : 'RULE',
+      sourceMode:
+        config.sourceMode === 'MANUAL_TEMPLATE' || config.sourceMode === 'MODEL_DRIVEN'
+          ? config.sourceMode
+          : 'RULE',
       sceneCode: String(config.sceneCode ?? ''),
       executionStrategy:
         config.executionStrategy === 'RULE_ONLY' ||
         config.executionStrategy === 'TEMPLATE_FIRST' ||
         config.executionStrategy === 'TEMPLATE_ONLY'
           ? config.executionStrategy
-          : config.sourceMode === 'MANUAL_TEMPLATE'
+          : config.sourceMode === 'MANUAL_TEMPLATE' || config.sourceMode === 'MODEL_DRIVEN'
             ? 'TEMPLATE_FIRST'
             : 'RULE_FIRST',
       fallbackStrategy:
@@ -2615,6 +2630,38 @@ export function NodeConfigPanel({
                   </FormItem>
                 )}
               />
+            ) : null}
+
+            {selectedDynamicBuilderSourceMode === 'MODEL_DRIVEN' ? (
+              <div className='grid gap-3 rounded-xl border border-dashed p-3'>
+                <p className='text-sm font-medium'>模型驱动配置</p>
+                <p className='text-xs text-muted-foreground'>
+                  使用场景编码命中模型模板或知识驱动规则，执行策略建议优先走模板优先或仅模板。
+                </p>
+                <div className='flex flex-wrap gap-2'>
+                  {[
+                    'leave_auto_scene',
+                    'expense_auto_scene',
+                    'plm_change_scene',
+                  ].map((sceneCode) => (
+                    <Button
+                      key={sceneCode}
+                      type='button'
+                      variant='secondary'
+                      size='sm'
+                      onClick={() =>
+                        form.setValue('dynamicBuilder.sceneCode', sceneCode, {
+                          shouldDirty: true,
+                          shouldTouch: true,
+                          shouldValidate: true,
+                        })
+                      }
+                    >
+                      {sceneCode}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             ) : null}
 
             {selectedDynamicBuilderSourceMode === 'MANUAL_TEMPLATE' ? (

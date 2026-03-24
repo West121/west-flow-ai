@@ -270,7 +270,11 @@ function normalizeDynamicBuilderBuildMode(
 function normalizeDynamicBuilderSourceMode(
   value: unknown
 ): WorkflowDynamicBuilderSourceMode {
-  return value === 'MANUAL_TEMPLATE' ? 'MANUAL_TEMPLATE' : 'RULE'
+  if (value === 'MANUAL_TEMPLATE' || value === 'MODEL_DRIVEN') {
+    return value
+  }
+
+  return 'RULE'
 }
 
 function normalizeDynamicBuilderExecutionStrategy(
@@ -285,7 +289,8 @@ function normalizeDynamicBuilderExecutionStrategy(
   ) {
     return value
   }
-  return sourceMode === 'MANUAL_TEMPLATE' ? 'TEMPLATE_FIRST' : 'RULE_FIRST'
+
+  return sourceMode === 'RULE' ? 'RULE_FIRST' : 'TEMPLATE_FIRST'
 }
 
 function normalizeDynamicBuilderFallbackStrategy(

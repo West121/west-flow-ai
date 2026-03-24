@@ -79,7 +79,10 @@ export type WorkflowSubprocessParentResumeStrategy =
   | 'WAIT_PARENT_CONFIRM'
 
 export type WorkflowDynamicBuildMode = 'APPROVER_TASKS' | 'SUBPROCESS_CALLS'
-export type WorkflowDynamicBuilderSourceMode = 'RULE' | 'MANUAL_TEMPLATE'
+export type WorkflowDynamicBuilderSourceMode =
+  | 'RULE'
+  | 'MODEL_DRIVEN'
+  | 'MANUAL_TEMPLATE'
 export type WorkflowDynamicBuilderExecutionStrategy =
   | 'RULE_FIRST'
   | 'RULE_ONLY'

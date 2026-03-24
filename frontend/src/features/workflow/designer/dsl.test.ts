@@ -117,6 +117,19 @@ function buildDynamicBuilderNode(): WorkflowNode {
   }
 }
 
+function buildModelDrivenDynamicBuilderNode(): WorkflowNode {
+  const node = buildDynamicBuilderNode()
+  node.data.config = {
+    ...(node.data.config as Record<string, unknown>),
+    sourceMode: 'MODEL_DRIVEN',
+    sceneCode: 'leave_auto_scene',
+    executionStrategy: 'TEMPLATE_FIRST',
+    fallbackStrategy: 'KEEP_CURRENT',
+    manualTemplateCode: '',
+  } as never
+  return node
+}
+
 function buildSubprocessNode(): WorkflowNode {
   return {
     id: 'subprocess_1',
@@ -359,6 +372,32 @@ describe('workflow designer dsl mapping', () => {
       appendPolicy: 'PARALLEL_WITH_CURRENT',
       maxGeneratedCount: 2,
       terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
+    })
+  })
+
+  it('persists model driven dynamic builder fields in the DSL config', () => {
+    const snapshotWithDynamicBuilder = {
+      ...snapshot,
+      nodes: snapshot.nodes.map((node) =>
+        node.id === 'approve_1' ? buildModelDrivenDynamicBuilderNode() : node
+      ),
+    } satisfies WorkflowSnapshot
+
+    const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithDynamicBuilder, {
+      processKey: 'oa_leave',
+      processName: '请假审批',
+      category: 'OA',
+      processFormKey: 'oa-leave-start-form',
+      processFormVersion: '1.0.0',
+      formFields: [],
+    })
+
+    expect(dsl.nodes[1]?.config).toMatchObject({
+      sourceMode: 'MODEL_DRIVEN',
+      sceneCode: 'leave_auto_scene',
+      executionStrategy: 'TEMPLATE_FIRST',
+      fallbackStrategy: 'KEEP_CURRENT',
+      manualTemplateCode: '',
     })
   })
 
