@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkflowDesignerPage } from './pages'
@@ -131,10 +130,8 @@ describe('workflow designer page', () => {
     ).not.toBeInTheDocument()
 
     const nodeTab = screen.getByRole('tab', { name: '节点属性' })
-    await act(async () => {
-      fireEvent.mouseDown(nodeTab)
-      fireEvent.click(nodeTab)
-    })
+    fireEvent.mouseDown(nodeTab)
+    fireEvent.click(nodeTab)
 
     expect(screen.getByTestId('workflow-designer-node-panel')).toBeInTheDocument()
   })

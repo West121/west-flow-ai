@@ -274,9 +274,6 @@ public class SystemNotificationChannelService {
         Map<String, Object> config = new LinkedHashMap<>();
         switch (type) {
             case EMAIL -> {
-                // 邮件先保留最小可执行配置，后续再接真实 SMTP 管理表。
-                config.put("smtpHost", "smtp.mock.local");
-                config.put("smtpPort", 25);
                 config.put("fromAddress", endpoint);
                 config.put("username", endpoint);
                 if (secret != null) {
