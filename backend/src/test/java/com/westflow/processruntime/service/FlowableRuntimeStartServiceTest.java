@@ -8,6 +8,7 @@ import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.api.CompleteTaskRequest;
 import com.westflow.processruntime.api.StartProcessRequest;
 import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
 import com.westflow.processruntime.api.RuntimeAppendLinkResponse;
 import java.util.List;
 import java.util.Map;
@@ -80,7 +81,11 @@ class FlowableRuntimeStartServiceTest {
                             .filter(task -> task.getExecutionId() == null || task.getExecutionId().isBlank())
                             .map(TaskInfo::getId)
                             .forEach(taskId -> taskService.deleteTask(taskId, "TEST_CLEANUP"));
-                    runtimeService.deleteProcessInstance(instance.getId(), "TEST_CLEANUP");
+                    try {
+                        runtimeService.deleteProcessInstance(instance.getId(), "TEST_CLEANUP");
+                    } catch (FlowableObjectNotFoundException ignored) {
+                        // 嵌套子流程会被父流程删除级联带走，这里允许实例已经不存在。
+                    }
                 });
         historyService.createHistoricProcessInstanceQuery().list()
                 .forEach(instance -> {
@@ -384,6 +389,30 @@ class FlowableRuntimeStartServiceTest {
                 response.instanceId(),
                 childInstance.getProcessInstanceId()
         )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT call_scope FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("CHILD_ONLY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT join_mode FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("AUTO_RETURN");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT child_start_strategy FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("LATEST_PUBLISHED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT parent_resume_strategy FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("AUTO_RETURN");
 
         Task childTask = taskService.createTaskQuery()
                 .processInstanceId(childInstance.getProcessInstanceId())
@@ -412,6 +441,87 @@ class FlowableRuntimeStartServiceTest {
         assertThat(runtimeService.createProcessInstanceQuery()
                 .processInstanceId(response.instanceId())
                 .singleResult()).isNull();
+    }
+
+    @Test
+    void shouldPersistFixedVersionChildStartStrategyForSubprocess() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildSubprocessChildPayload());
+        processDefinitionService.publish(buildSubprocessParentFixedVersionPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_parent_with_subprocess",
+                "parent_bill_fixed_001",
+                "OA_COMMON",
+                java.util.Map.of("billNo", "BILL-FIXED-001")
+        ));
+
+        ProcessInstance childInstance = runtimeService.createProcessInstanceQuery()
+                .superProcessInstanceId(response.instanceId())
+                .singleResult();
+        assertThat(childInstance).isNotNull();
+
+        Task childTask = taskService.createTaskQuery()
+                .processInstanceId(childInstance.getProcessInstanceId())
+                .singleResult();
+        assertThat(childTask).isNotNull();
+
+        StpUtil.login("lisi");
+        flowableProcessRuntimeService.complete(childTask.getId(), new CompleteTaskRequest(
+                "APPROVE",
+                "usr_002",
+                "固定版本子流程审批通过",
+                null
+        ));
+        assertThat(flowableProcessRuntimeService.links(response.instanceId()))
+                .singleElement()
+                .satisfies(link -> assertThat(link.status()).isEqualTo("WAIT_PARENT_CONFIRM"));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT call_scope FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("CHILD_ONLY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT join_mode FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("WAIT_PARENT_CONFIRM");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT child_start_strategy FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("FIXED_VERSION");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT parent_resume_strategy FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("WAIT_PARENT_CONFIRM");
+    }
+
+    @Test
+    void shouldExposeDescendantSubprocessLinksWhenCallScopeIncludesDescendants() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildSubprocessLeafPayload());
+        processDefinitionService.publish(buildNestedSubprocessChildPayload());
+        processDefinitionService.publish(buildParentWithDescendantCallScopePayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_parent_with_subprocess",
+                "parent_bill_descendant_001",
+                "OA_COMMON",
+                java.util.Map.of("billNo", "BILL-DESC-001")
+        ));
+
+        assertThat(flowableProcessRuntimeService.links(response.instanceId()))
+                .hasSize(2)
+                .extracting(ProcessInstanceLinkResponse::parentNodeId)
+                .containsExactly("subprocess_1", "subprocess_1_child");
     }
 
     @Test
@@ -838,6 +948,218 @@ class FlowableRuntimeStartServiceTest {
                 """, ProcessDslPayload.class);
     }
 
+    private ProcessDslPayload buildSubprocessLeafPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_sub_review_leaf",
+                  "processName": "子子流程复核",
+                  "category": "OA",
+                  "processFormKey": "oa_sub_review_leaf_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_1",
+                      "type": "approver",
+                      "name": "叶子流程审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildNestedSubprocessChildPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_sub_review",
+                  "processName": "子流程复核",
+                  "category": "OA",
+                  "processFormKey": "oa_sub_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1_child",
+                      "type": "subprocess",
+                      "name": "叶子子流程",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review_leaf",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "AUTO_RETURN",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1_child",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1_child",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildParentWithDescendantCallScopePayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_parent_with_subprocess",
+                  "processName": "主流程带子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "callScope": "CHILD_AND_DESCENDANTS",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "AUTO_RETURN",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
     private ProcessDslPayload buildSubprocessParentPayload() throws Exception {
         return objectMapper.readValue("""
                 {
@@ -869,6 +1191,77 @@ class FlowableRuntimeStartServiceTest {
                       "config": {
                         "calledProcessKey": "oa_sub_review",
                         "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildSubprocessParentFixedVersionPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_parent_with_subprocess",
+                  "processName": "主流程带子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review",
+                        "calledVersionPolicy": "FIXED_VERSION",
+                        "calledVersion": 1,
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "WAIT_PARENT_CONFIRM",
+                        "childStartStrategy": "FIXED_VERSION",
+                        "parentResumeStrategy": "WAIT_PARENT_CONFIRM",
                         "businessBindingMode": "INHERIT_PARENT",
                         "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
                         "childFinishPolicy": "RETURN_TO_PARENT"

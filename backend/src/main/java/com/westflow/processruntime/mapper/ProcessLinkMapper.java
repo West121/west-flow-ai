@@ -26,6 +26,10 @@ public interface ProcessLinkMapper {
               status,
               terminate_policy,
               child_finish_policy,
+              call_scope,
+              join_mode,
+              child_start_strategy,
+              parent_resume_strategy,
               created_at,
               finished_at,
               updated_at
@@ -41,6 +45,10 @@ public interface ProcessLinkMapper {
               #{status},
               #{terminatePolicy},
               #{childFinishPolicy},
+              #{callScope},
+              #{joinMode},
+              #{childStartStrategy},
+              #{parentResumeStrategy},
               #{createdAt},
               #{finishedAt},
               CURRENT_TIMESTAMP
@@ -61,6 +69,10 @@ public interface ProcessLinkMapper {
               status,
               terminate_policy AS terminatePolicy,
               child_finish_policy AS childFinishPolicy,
+              call_scope AS callScope,
+              join_mode AS joinMode,
+              child_start_strategy AS childStartStrategy,
+              parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
             FROM wf_process_link
@@ -82,6 +94,10 @@ public interface ProcessLinkMapper {
               status,
               terminate_policy AS terminatePolicy,
               child_finish_policy AS childFinishPolicy,
+              call_scope AS callScope,
+              join_mode AS joinMode,
+              child_start_strategy AS childStartStrategy,
+              parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
             FROM wf_process_link
@@ -103,6 +119,10 @@ public interface ProcessLinkMapper {
               status,
               terminate_policy AS terminatePolicy,
               child_finish_policy AS childFinishPolicy,
+              call_scope AS callScope,
+              join_mode AS joinMode,
+              child_start_strategy AS childStartStrategy,
+              parent_resume_strategy AS parentResumeStrategy,
               created_at AS createdAt,
               finished_at AS finishedAt
             FROM wf_process_link

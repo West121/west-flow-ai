@@ -50,6 +50,10 @@ class ProcessTerminationTopologyServiceTest {
                         "RUNNING",
                         "TERMINATE_SUBPROCESS_ONLY",
                         "RETURN_TO_PARENT",
+                        "CHILD_ONLY",
+                        "AUTO_RETURN",
+                        "LATEST_PUBLISHED",
+                        "AUTO_RETURN",
                         Instant.parse("2026-03-23T01:00:00Z"),
                         null
                 ),
@@ -65,6 +69,10 @@ class ProcessTerminationTopologyServiceTest {
                         "RUNNING",
                         "TERMINATE_SUBPROCESS_ONLY",
                         "RETURN_TO_PARENT",
+                        "CHILD_ONLY",
+                        "AUTO_RETURN",
+                        "LATEST_PUBLISHED",
+                        "AUTO_RETURN",
                         Instant.parse("2026-03-23T01:05:00Z"),
                         null
                 )
@@ -155,6 +163,10 @@ class ProcessTerminationTopologyServiceTest {
                         "RUNNING",
                         "TERMINATE_SUBPROCESS_ONLY",
                         "RETURN_TO_PARENT",
+                        "CHILD_ONLY",
+                        "AUTO_RETURN",
+                        "LATEST_PUBLISHED",
+                        "AUTO_RETURN",
                         Instant.parse("2026-03-23T01:00:00Z"),
                         null
                 ),
@@ -170,6 +182,10 @@ class ProcessTerminationTopologyServiceTest {
                         "RUNNING",
                         "TERMINATE_SUBPROCESS_ONLY",
                         "RETURN_TO_PARENT",
+                        "CHILD_ONLY",
+                        "AUTO_RETURN",
+                        "LATEST_PUBLISHED",
+                        "AUTO_RETURN",
                         Instant.parse("2026-03-23T01:05:00Z"),
                         null
                 )

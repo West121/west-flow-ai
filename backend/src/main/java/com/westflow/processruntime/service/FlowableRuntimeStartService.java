@@ -91,14 +91,22 @@ public class FlowableRuntimeStartService {
      * 主流程发起后扫描即时创建的 callActivity 子流程，并落平台关联表。
      */
     private void persistSubprocessLinks(PublishedProcessDefinition definition, ProcessInstance parentInstance) {
+        String rootInstanceId = java.util.Optional.ofNullable(processLinkService.getByChildInstanceId(parentInstance.getProcessInstanceId()))
+                .map(ProcessLinkRecord::rootInstanceId)
+                .orElse(parentInstance.getProcessInstanceId());
+        persistSubprocessLinks(definition, parentInstance, rootInstanceId);
+    }
+
+    private void persistSubprocessLinks(
+            PublishedProcessDefinition definition,
+            ProcessInstance parentInstance,
+            String rootInstanceId
+    ) {
         Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> subprocessNodesByKey =
                 buildSubprocessNodesByKey(definition);
         if (subprocessNodesByKey.isEmpty()) {
             return;
         }
-        String rootInstanceId = java.util.Optional.ofNullable(processLinkService.getByChildInstanceId(parentInstance.getProcessInstanceId()))
-                .map(ProcessLinkRecord::rootInstanceId)
-                .orElse(parentInstance.getProcessInstanceId());
         List<ProcessInstance> childInstances = flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .superProcessInstanceId(parentInstance.getProcessInstanceId())
@@ -131,9 +139,17 @@ public class FlowableRuntimeStartService {
                     "RUNNING",
                     stringValue(config.get("terminatePolicy")),
                     stringValue(config.get("childFinishPolicy")),
+                    stringValueOrDefault(config.get("callScope"), "CHILD_ONLY"),
+                    stringValueOrDefault(config.get("joinMode"), "AUTO_RETURN"),
+                    stringValueOrDefault(config.get("childStartStrategy"), "LATEST_PUBLISHED"),
+                    stringValueOrDefault(config.get("parentResumeStrategy"), "AUTO_RETURN"),
                     now,
                     null
             ));
+            PublishedProcessDefinition childPublishedDefinition = processDefinitionService.getByFlowableDefinitionId(
+                    childInstance.getProcessDefinitionId()
+            );
+            persistSubprocessLinks(childPublishedDefinition, childInstance, rootInstanceId);
         }
     }
 
@@ -284,5 +300,10 @@ public class FlowableRuntimeStartService {
         }
         String stringValue = String.valueOf(value);
         return stringValue.isBlank() ? null : stringValue;
+    }
+
+    private String stringValueOrDefault(Object value, String defaultValue) {
+        String stringValue = stringValue(value);
+        return stringValue == null ? defaultValue : stringValue;
     }
 }

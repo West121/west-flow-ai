@@ -2790,9 +2790,35 @@ public class FlowableProcessRuntimeService {
     private List<ProcessInstanceLinkResponse> subprocessLinks(String instanceId) {
         String rootInstanceId = processLinkService.resolveRootInstanceId(instanceId);
         synchronizeProcessLinks(rootInstanceId);
-        return processLinkService.listByRootInstanceId(rootInstanceId).stream()
+        List<com.westflow.processruntime.model.ProcessLinkRecord> rootLinks =
+                processLinkService.listByRootInstanceId(rootInstanceId);
+        if (rootLinks.isEmpty()) {
+            return List.of();
+        }
+        Map<String, List<com.westflow.processruntime.model.ProcessLinkRecord>> linksByParentInstanceId = rootLinks.stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        com.westflow.processruntime.model.ProcessLinkRecord::parentInstanceId,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        List<com.westflow.processruntime.model.ProcessLinkRecord> visibleLinks = new ArrayList<>();
+        collectVisibleSubprocessLinks(rootInstanceId, linksByParentInstanceId, visibleLinks);
+        return visibleLinks.stream()
                 .map(this::toProcessInstanceLinkResponse)
                 .toList();
+    }
+
+    private void collectVisibleSubprocessLinks(
+            String parentInstanceId,
+            Map<String, List<com.westflow.processruntime.model.ProcessLinkRecord>> linksByParentInstanceId,
+            List<com.westflow.processruntime.model.ProcessLinkRecord> visibleLinks
+    ) {
+        for (com.westflow.processruntime.model.ProcessLinkRecord link : linksByParentInstanceId.getOrDefault(parentInstanceId, List.of())) {
+            visibleLinks.add(link);
+            if ("CHILD_AND_DESCENDANTS".equals(resolveSubprocessStructureMetadata(link).callScope())) {
+                collectVisibleSubprocessLinks(link.childInstanceId(), linksByParentInstanceId, visibleLinks);
+            }
+        }
     }
 
     private void synchronizeProcessLinks(String rootInstanceId) {
@@ -2813,14 +2839,27 @@ public class FlowableProcessRuntimeService {
                     if (historicChild == null || historicChild.getEndTime() == null) {
                         return;
                     }
-                    String resolvedStatus = isTerminatedProcess(historicChild) ? "TERMINATED" : "FINISHED";
+                    SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(record);
+                    String resolvedStatus = isTerminatedProcess(historicChild)
+                            ? "TERMINATED"
+                            : "WAIT_PARENT_CONFIRM".equals(structureMetadata.joinMode())
+                            ? "WAIT_PARENT_CONFIRM"
+                            : "FINISHED";
                     processLinkService.updateStatus(record.childInstanceId(), resolvedStatus, historicChild.getEndTime().toInstant());
                     appendInstanceEvent(
                             record.parentInstanceId(),
                             null,
                             record.parentNodeId(),
-                            "TERMINATED".equals(resolvedStatus) ? "SUBPROCESS_TERMINATED" : "SUBPROCESS_FINISHED",
-                            "TERMINATED".equals(resolvedStatus) ? "子流程已终止" : "子流程已完成",
+                            switch (resolvedStatus) {
+                                case "TERMINATED" -> "SUBPROCESS_TERMINATED";
+                                case "WAIT_PARENT_CONFIRM" -> "SUBPROCESS_WAIT_PARENT_CONFIRM";
+                                default -> "SUBPROCESS_FINISHED";
+                            },
+                            switch (resolvedStatus) {
+                                case "TERMINATED" -> "子流程已终止";
+                                case "WAIT_PARENT_CONFIRM" -> "子流程已完成，等待父流程确认";
+                                default -> "子流程已完成";
+                            },
                             "INSTANCE",
                             null,
                             record.childInstanceId(),
@@ -3507,10 +3546,7 @@ public class FlowableProcessRuntimeService {
                 record.calledDefinitionId(),
                 record.calledProcessKey()
         );
-        SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(
-                record.parentInstanceId(),
-                record.parentNodeId()
-        );
+        SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(record);
         return new ProcessInstanceLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
@@ -3873,6 +3909,21 @@ public class FlowableProcessRuntimeService {
                 stringValueOrDefault(config.get("joinMode"), "AUTO_RETURN"),
                 stringValueOrDefault(config.get("childStartStrategy"), "LATEST_PUBLISHED"),
                 stringValueOrDefault(config.get("parentResumeStrategy"), "AUTO_RETURN")
+        );
+    }
+
+    private SubprocessStructureMetadata resolveSubprocessStructureMetadata(
+            com.westflow.processruntime.model.ProcessLinkRecord record
+    ) {
+        SubprocessStructureMetadata fallback = resolveSubprocessStructureMetadata(
+                record.parentInstanceId(),
+                record.parentNodeId()
+        );
+        return new SubprocessStructureMetadata(
+                stringValueOrDefault(record.callScope(), fallback.callScope()),
+                stringValueOrDefault(record.joinMode(), fallback.joinMode()),
+                stringValueOrDefault(record.childStartStrategy(), fallback.childStartStrategy()),
+                stringValueOrDefault(record.parentResumeStrategy(), fallback.parentResumeStrategy())
         );
     }
 
