@@ -1,11 +1,5 @@
 import { useMemo } from 'react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import {
   listRuntimeFormKeys,
@@ -82,13 +76,14 @@ function RuntimeFormSelector({
     null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{label}</CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
-      </CardHeader>
-      <CardContent className='grid gap-4'>
-        <div className='grid gap-4 md:grid-cols-2'>
+    <div className='space-y-3 rounded-2xl border bg-background/60 p-4'>
+      <div className='space-y-1'>
+        <div className='text-sm font-medium'>{label}</div>
+        {description ? (
+          <p className='text-xs leading-5 text-muted-foreground'>{description}</p>
+        ) : null}
+      </div>
+      <div className='grid gap-3 md:grid-cols-2'>
           <div className='grid gap-2'>
             <Label htmlFor={`${scope}-form-key`}>{keyLabel}</Label>
             <select
@@ -155,25 +150,23 @@ function RuntimeFormSelector({
         </div>
 
         {selectedRegistration ? (
-          <div className='grid gap-3 rounded-2xl border bg-muted/20 p-4 text-sm'>
-            <div className='flex flex-wrap gap-2 text-xs text-muted-foreground'>
-              <span>{statusLabel}</span>
-              <span>流程：{selectedRegistration.processKey}</span>
-              <span>表单：{selectedRegistration.formKey}</span>
-              <span>版本：{selectedRegistration.formVersion}</span>
+          <div className='space-y-2 rounded-2xl border bg-muted/20 p-3 text-sm'>
+            <div className='flex flex-wrap gap-2'>
+              <Badge variant='secondary'>{statusLabel}</Badge>
+              <Badge variant='outline'>{selectedRegistration.formKey}</Badge>
+              <Badge variant='outline'>{selectedRegistration.formVersion}</Badge>
             </div>
-            <p className='font-medium'>{selectedRegistration.title}</p>
-            <p className='text-xs text-muted-foreground'>
-              {selectedRegistration.description}
+            <p className='font-medium leading-6'>{selectedRegistration.title}</p>
+            <p className='text-xs leading-5 text-muted-foreground'>
+              {selectedRegistration.description || '已选择表单，可直接用于当前流程。'}
             </p>
           </div>
         ) : (
-          <div className='rounded-2xl border border-dashed p-4 text-sm text-muted-foreground'>
+          <div className='rounded-2xl border border-dashed p-3 text-sm text-muted-foreground'>
             {emptyMessage}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   )
 }
 

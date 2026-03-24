@@ -355,6 +355,7 @@ type WorkflowDesignerState = {
     template: WorkflowNodeTemplate,
     position: { x: number; y: number }
   ) => void
+  insertNodeOnEdge: (edgeId: string, template: WorkflowNodeTemplate) => void
   addStructurePreset: (
     preset: 'SUBPROCESS_CHAIN' | 'DYNAMIC_BUILDER_CHAIN' | 'INCLUSIVE_BRANCH'
   ) => void
@@ -554,6 +555,34 @@ function createPresetNodes(
   }
 }
 
+function resolveInsertedNodePosition(
+  sourceNode: WorkflowNode | undefined,
+  targetNode: WorkflowNode | undefined
+) {
+  if (!sourceNode && !targetNode) {
+    return { x: 320, y: 160 }
+  }
+
+  if (!sourceNode) {
+    return {
+      x: targetNode!.position.x - 180,
+      y: targetNode!.position.y,
+    }
+  }
+
+  if (!targetNode) {
+    return {
+      x: sourceNode.position.x + 180,
+      y: sourceNode.position.y,
+    }
+  }
+
+  return {
+    x: (sourceNode.position.x + targetNode.position.x) / 2,
+    y: (sourceNode.position.y + targetNode.position.y) / 2,
+  }
+}
+
 export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
   (set) => ({
     history: createWorkflowHistoryState(initialSnapshot),
@@ -716,6 +745,53 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             ...state.history.present,
             nodes: [...state.history.present.nodes, nextNode],
             selectedNodeId: nextNode.id,
+          }),
+        }
+      }),
+    insertNodeOnEdge: (edgeId, template) =>
+      set((state) => {
+        const edge = state.history.present.edges.find((item) => item.id === edgeId)
+        if (!edge) {
+          return state
+        }
+
+        const sourceNode = state.history.present.nodes.find(
+          (node) => node.id === edge.source
+        )
+        const targetNode = state.history.present.nodes.find(
+          (node) => node.id === edge.target
+        )
+        const nodeId = `node-${template.kind}-${state.nextNodeSequence + 1}`
+        const insertedNode = createWorkflowNode(
+          template,
+          nodeId,
+          resolveInsertedNodePosition(sourceNode, targetNode)
+        )
+        const leadingEdgeId = `edge-${edge.source}-${insertedNode.id}-${Date.now()}`
+        const trailingEdgeId = `edge-${insertedNode.id}-${edge.target}-${Date.now() + 1}`
+
+        return {
+          nextNodeSequence: state.nextNodeSequence + 1,
+          history: commitWorkflowSnapshot(state.history, {
+            ...state.history.present,
+            nodes: [...state.history.present.nodes, insertedNode],
+            edges: [
+              ...state.history.present.edges.filter((item) => item.id !== edgeId),
+              {
+                ...edge,
+                id: leadingEdgeId,
+                target: insertedNode.id,
+              },
+              {
+                id: trailingEdgeId,
+                source: insertedNode.id,
+                target: edge.target,
+                type: 'smoothstep',
+                animated: false,
+                label: '',
+              },
+            ],
+            selectedNodeId: insertedNode.id,
           }),
         }
       }),

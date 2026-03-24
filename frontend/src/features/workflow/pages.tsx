@@ -7,7 +7,6 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
-  Panel,
   ReactFlow,
   ReactFlowProvider,
   type Node,
@@ -33,7 +32,6 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -47,6 +45,7 @@ import {
   saveProcessDefinition,
 } from '@/lib/api/workflow'
 import { getApiErrorMessage } from '@/lib/api/client'
+import { cn } from '@/lib/utils'
 import {
   findProcessRuntimeFormByProcessKey,
 } from '@/features/forms/runtime/form-component-registry'
@@ -68,10 +67,12 @@ import {
 import { NodeConfigPanel } from './designer/node-config-panel'
 import { useWorkflowDesignerStore } from './designer/store'
 import {
+  type WorkflowEdge,
   type WorkflowHelperLines,
   type WorkflowNode,
 } from './designer/types'
 import { WorkflowNodeCard } from './designer/workflow-node'
+import { WorkflowQuickInsertEdge } from './designer/workflow-edge'
 
 import '@xyflow/react/dist/style.css'
 
@@ -116,6 +117,10 @@ const workflowNodeTypes = {
   workflow: WorkflowNodeCard,
 }
 
+const workflowEdgeTypes = {
+  quickInsert: WorkflowQuickInsertEdge,
+}
+
 const helperLineThreshold = 16
 const defaultLeaveFormFields: ProcessDefinitionMeta['formFields'] = [
   { fieldKey: 'leaveType', label: '请假类型', valueType: 'string' },
@@ -132,6 +137,53 @@ const defaultDefinitionMeta: ProcessDefinitionMeta = {
   processFormKey: defaultProcessForm?.formKey ?? '',
   processFormVersion: defaultProcessForm?.formVersion ?? '',
   formFields: defaultLeaveFormFields,
+}
+
+type PersistedDesignerDraft = {
+  snapshot: {
+    nodes: WorkflowNode[]
+    edges: WorkflowEdge[]
+    selectedNodeId: string | null
+  }
+  viewport: {
+    x: number
+    y: number
+    zoom: number
+  } | null
+}
+
+function buildDesignerDraftKey(processDefinitionId?: string) {
+  return `workflow-designer-draft:${processDefinitionId ?? 'new'}`
+}
+
+function readPersistedDesignerDraft(
+  draftKey: string
+): PersistedDesignerDraft | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(draftKey)
+    return raw ? (JSON.parse(raw) as PersistedDesignerDraft) : null
+  } catch {
+    return null
+  }
+}
+
+function writePersistedDesignerDraft(
+  draftKey: string,
+  value: PersistedDesignerDraft
+) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(draftKey, JSON.stringify(value))
+  } catch {
+    // 忽略浏览器存储异常，不阻塞设计器编辑。
+  }
 }
 
 // 把后端状态统一映射成列表页中文状态。
@@ -341,28 +393,22 @@ function DesignerPalette({
 
   return (
     <Card className='h-full border-dashed bg-card/95'>
-      <CardHeader>
+      <CardHeader className='space-y-2'>
         <CardTitle className='flex items-center gap-2'>
           <Waypoints className='size-4' />
           节点面板
         </CardTitle>
-        <CardDescription>
-          支持拖拽进画布，也可以双击快速追加到当前设计稿。
-        </CardDescription>
       </CardHeader>
       <CardContent className='flex flex-col gap-3'>
         <div className='rounded-2xl border border-primary/15 bg-primary/[0.04] p-3'>
           <div className='mb-3 flex items-start justify-between gap-3'>
             <div>
               <p className='text-sm font-semibold'>高级结构</p>
-              <p className='text-xs leading-5 text-muted-foreground'>
-                子流程、动态构建和复杂分支从这里起步，避免在面板里来回找。
-              </p>
             </div>
             <Badge variant='secondary' className='shrink-0'>
               复杂编排
             </Badge>
-          </div>
+            </div>
           <div className='grid grid-cols-2 gap-2'>
             {advancedTemplates.map((template) => {
               const Icon = template.icon
@@ -408,16 +454,16 @@ function DesignerPalette({
                   <p className='text-sm font-medium'>{preset.title}</p>
                   <Badge variant='outline'>插入模板</Badge>
                 </div>
-                <p className='mt-1 text-xs leading-5 text-muted-foreground'>
-                  {preset.description}
-                </p>
               </button>
             ))}
           </div>
         </div>
 
-        {baseTemplates.map((template) => {
+        <div className='grid grid-cols-2 gap-2'>
+          {baseTemplates.map((template, index) => {
           const Icon = template.icon
+          const shouldSpanTwoColumns =
+            baseTemplates.length % 2 === 1 && index === baseTemplates.length - 1
 
           return (
             <button
@@ -432,27 +478,29 @@ function DesignerPalette({
                   template.kind
                 )
               }}
-              className='group rounded-2xl border bg-background/80 p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm'
+              className={cn(
+                'group rounded-2xl border bg-background/80 p-3 text-left transition',
+                'hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm',
+                shouldSpanTwoColumns && 'col-span-2'
+              )}
             >
-              <div className='flex items-start gap-3'>
-                <div className='flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary'>
+              <div className='flex items-start gap-2.5'>
+                <div className='flex size-9 items-center justify-center rounded-2xl bg-primary/10 text-primary'>
                   <Icon className='size-4' />
                 </div>
-                <div className='flex flex-1 flex-col gap-1'>
-                  <div className='flex items-center justify-between gap-2'>
-                    <span className='font-medium'>{template.label}</span>
-                    <span className='text-[11px] text-muted-foreground'>
-                      拖入
-                    </span>
-                  </div>
-                  <p className='text-xs leading-5 text-muted-foreground'>
+                <div className='flex min-w-0 flex-1 flex-col gap-1'>
+                  <span className='truncate text-sm font-medium'>
+                    {template.label}
+                  </span>
+                  <p className='text-[11px] leading-4 text-muted-foreground'>
                     {template.description}
                   </p>
                 </div>
               </div>
             </button>
           )
-        })}
+          })}
+        </div>
       </CardContent>
     </Card>
   )
@@ -508,9 +556,18 @@ function WorkflowDesignerWorkspace({
   const undo = useWorkflowDesignerStore((state) => state.undo)
   const redo = useWorkflowDesignerStore((state) => state.redo)
   const reactFlow = useReactFlow<WorkflowNode>()
+  const viewport = useViewport()
   const [definitionMetaOverrides, setDefinitionMetaOverrides] = useState<
     Partial<ProcessDefinitionMeta>
   >({})
+  const draftKey = useMemo(
+    () => buildDesignerDraftKey(processDefinitionId),
+    [processDefinitionId]
+  )
+  const canvasEdges = useMemo(
+    () => edges.map((edge) => ({ ...edge, type: 'quickInsert' })),
+    [edges]
+  )
 
   const detailQuery = useQuery({
     queryKey: ['process-definition-detail', processDefinitionId],
@@ -585,9 +642,28 @@ function WorkflowDesignerWorkspace({
   )
 
   useEffect(() => {
+    const persistedDraft = readPersistedDesignerDraft(draftKey)
+    if (persistedDraft) {
+      hydrateSnapshot(persistedDraft.snapshot)
+      const timer = window.setTimeout(() => {
+        if (persistedDraft.viewport) {
+          reactFlow.setViewport(persistedDraft.viewport, { duration: 0 })
+          return
+        }
+
+        reactFlow.fitView({ padding: 0.18, duration: 350 })
+      }, 120)
+
+      return () => window.clearTimeout(timer)
+    }
+
     if (!processDefinitionId) {
       resetDesigner()
-      return
+      const timer = window.setTimeout(() => {
+        reactFlow.fitView({ padding: 0.18, duration: 350 })
+      }, 120)
+
+      return () => window.clearTimeout(timer)
     }
 
     if (!detailQuery.data) {
@@ -595,15 +671,32 @@ function WorkflowDesignerWorkspace({
     }
 
     hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(detailQuery.data))
-  }, [detailQuery.data, hydrateSnapshot, processDefinitionId, resetDesigner])
-
-  useEffect(() => {
     const timer = window.setTimeout(() => {
       reactFlow.fitView({ padding: 0.18, duration: 350 })
     }, 120)
 
     return () => window.clearTimeout(timer)
-  }, [reactFlow])
+  }, [
+    detailQuery.data,
+    draftKey,
+    hydrateSnapshot,
+    processDefinitionId,
+    reactFlow,
+    resetDesigner,
+  ])
+
+  useEffect(() => {
+    writePersistedDesignerDraft(draftKey, {
+      snapshot,
+      viewport: viewport
+        ? {
+            x: viewport.x,
+            y: viewport.y,
+            zoom: viewport.zoom,
+          }
+        : null,
+    })
+  }, [draftKey, snapshot, viewport])
 
   const handleConnect: OnConnect = (connection) => {
     connectNodes(connection)
@@ -638,7 +731,7 @@ function WorkflowDesignerWorkspace({
   return (
     <PageShell
       title='流程设计器'
-      description='独立设计工作区已经接入 React Flow，支持节点拖入、画布拖拽、连线、自动布局、undo/redo、MiniMap、视图控制和基础对齐辅助线。'
+      description='流程设计、布局调整和属性配置都在同一屏完成。'
       actions={
         <>
           <Button
@@ -700,13 +793,10 @@ function WorkflowDesignerWorkspace({
           />
         }
         canvas={
-          <Card className='border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.08),_transparent_46%)]'>
-            <CardHeader className='flex flex-row items-start justify-between gap-4'>
-              <div className='space-y-2'>
+          <Card className='flex h-full min-h-0 flex-col border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.08),_transparent_46%)]'>
+            <CardHeader className='flex flex-row items-start justify-between gap-4 space-y-0'>
+              <div className='space-y-1'>
                 <CardTitle>画布工作区</CardTitle>
-                <CardDescription>
-                  已启用网格吸附、辅助线提示与流程骨架节点，适合继续接入 DSL 校验与节点表单。
-                </CardDescription>
               </div>
               <div className='flex flex-wrap gap-2'>
                 <Badge variant='secondary'>
@@ -723,9 +813,9 @@ function WorkflowDesignerWorkspace({
                 </Badge>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className='flex min-h-0 flex-1'>
               <div
-                className='relative h-[680px] overflow-hidden rounded-2xl border bg-background/85'
+                className='relative h-full min-h-0 flex-1 overflow-hidden rounded-2xl border bg-background/85'
                 onDragOver={(event) => {
                   event.preventDefault()
                   event.dataTransfer.dropEffect = 'move'
@@ -735,8 +825,9 @@ function WorkflowDesignerWorkspace({
                 <GuideLinesOverlay lines={helperLines} />
                 <ReactFlow
                   nodes={nodes}
-                  edges={edges}
+                  edges={canvasEdges}
                   nodeTypes={workflowNodeTypes}
+                  edgeTypes={workflowEdgeTypes}
                   onNodesChange={applyNodeChanges}
                   onEdgesChange={applyEdgeChanges}
                   onConnect={handleConnect}
@@ -752,19 +843,12 @@ function WorkflowDesignerWorkspace({
                   maxZoom={1.6}
                   snapToGrid
                   snapGrid={[20, 20]}
-                  fitView
                   proOptions={{ hideAttribution: true }}
                   defaultEdgeOptions={{
-                    type: 'smoothstep',
+                    type: 'quickInsert',
                     animated: false,
                   }}
                 >
-                  <Panel
-                    position='top-left'
-                    className='rounded-2xl border bg-background/90 px-3 py-2 text-xs text-muted-foreground shadow-sm'
-                  >
-                    从左侧拖入节点，双击节点模板可快速追加
-                  </Panel>
                   <MiniMap
                     pannable
                     zoomable
@@ -784,11 +868,8 @@ function WorkflowDesignerWorkspace({
         }
         flowSettings={
           <Card className='bg-card/95'>
-            <CardHeader>
+            <CardHeader className='space-y-1'>
               <CardTitle>流程配置</CardTitle>
-              <CardDescription>
-                基础信息、发布校验、超时审批和 AI 设计入口都会落在这个右侧区域。
-              </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-4'>
               <div className='grid gap-3'>
@@ -865,10 +946,10 @@ function WorkflowDesignerWorkspace({
               <div className='space-y-3 rounded-2xl border p-4 text-sm'>
                 <div className='flex items-center gap-2 font-medium'>
                   <AlarmClockCheck className='size-4 text-primary' />
-                  当前示例基线
+                  当前模板
                 </div>
                 <p className='text-muted-foreground'>
-                  默认加载请假审批案例，包含排他网关、角色选人、部门选人、表单字段选人和自定义公式选人。
+                  默认加载请假审批案例。
                 </p>
               </div>
             </CardContent>
@@ -876,11 +957,8 @@ function WorkflowDesignerWorkspace({
         }
         nodeSettings={
           <Card className='bg-card/95'>
-            <CardHeader>
+            <CardHeader className='space-y-1'>
               <CardTitle>节点配置</CardTitle>
-              <CardDescription>
-                右侧表单会实时写回画布节点与 DSL，保存草稿后即可落库。
-              </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-4 text-sm'>
               <NodeConfigPanel
@@ -889,32 +967,6 @@ function WorkflowDesignerWorkspace({
                 processFormFields={definitionMeta.formFields}
                 onApply={updateNodeDraft}
               />
-              {selectedNode ? (
-                <div className='rounded-2xl border p-4'>
-                  <p className='text-xs text-muted-foreground'>画布坐标</p>
-                  <p className='mt-2 font-medium'>
-                    X {Math.round(selectedNode.position.x)} / Y{' '}
-                    {Math.round(selectedNode.position.y)}
-                  </p>
-                </div>
-              ) : null}
-              <Button
-                variant='outline'
-                onClick={() => {
-                  const flowJson = reactFlow.toObject()
-                  void navigator.clipboard
-                    .writeText(JSON.stringify(flowJson, null, 2))
-                    .then(() => {
-                      toast.success('当前流程 JSON 已复制到剪贴板。')
-                    })
-                    .catch(() => {
-                      toast.error('复制失败，请稍后重试。')
-                    })
-                }}
-              >
-                <Sparkles data-icon='inline-start' />
-                复制当前 JSON
-              </Button>
             </CardContent>
           </Card>
         }

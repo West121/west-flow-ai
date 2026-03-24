@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -20,7 +20,7 @@ export function WorkflowDesignerLayout({
   return (
     <div
       data-testid='workflow-designer-layout'
-      className='grid min-h-[calc(100vh-18rem)] gap-4 xl:h-[calc(100vh-18rem)] xl:grid-cols-[280px_minmax(0,1fr)_360px]'
+      className='grid h-[calc(100vh-12rem)] min-h-[760px] gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]'
     >
       <aside
         data-testid='workflow-designer-palette'
@@ -45,11 +45,8 @@ export function WorkflowDesignerLayout({
         className='min-h-0 overflow-hidden rounded-3xl border bg-card/95 shadow-sm'
       >
         <Card className='flex h-full flex-col border-0 shadow-none'>
-          <CardHeader className='space-y-3 border-b pb-4'>
+          <CardHeader className='space-y-2 border-b pb-4'>
             <CardTitle>属性面板</CardTitle>
-            <CardDescription>
-              流程属性和节点属性按页签切换，右侧不再堆叠成长页面。
-            </CardDescription>
           </CardHeader>
           <CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-4'>
             <Tabs defaultValue='flow' className='flex min-h-0 flex-1 flex-col'>

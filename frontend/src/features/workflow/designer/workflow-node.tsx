@@ -71,6 +71,8 @@ export function WorkflowNodeCard({
     toneClassNames[workflowData.tone as keyof typeof toneClassNames]
   const showTarget = workflowData.kind !== 'start'
   const showSource = workflowData.kind !== 'end'
+  const handleClassName =
+    'size-4.5 rounded-full border-[3px] border-background bg-primary shadow-sm'
 
   return (
     <div
@@ -84,7 +86,15 @@ export function WorkflowNodeCard({
         <Handle
           type='target'
           position={Position.Top}
-          className='size-3 border-2 border-background bg-primary'
+          className={handleClassName}
+        />
+      ) : null}
+      {showTarget ? (
+        <Handle
+          id='target-left'
+          type='target'
+          position={Position.Left}
+          className={handleClassName}
         />
       ) : null}
 
@@ -121,7 +131,15 @@ export function WorkflowNodeCard({
         <Handle
           type='source'
           position={Position.Bottom}
-          className='size-3 border-2 border-background bg-primary'
+          className={handleClassName}
+        />
+      ) : null}
+      {showSource ? (
+        <Handle
+          id='source-right'
+          type='source'
+          position={Position.Right}
+          className={handleClassName}
         />
       ) : null}
     </div>

@@ -1,3 +1,4 @@
+import { Play } from 'lucide-react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { useWorkflowDesignerStore } from './store'
 
@@ -51,6 +52,41 @@ describe('workflow designer store', () => {
     expect(
       snapshot.edges.some(
         (edge) => edge.data?.condition?.type === 'FORMULA'
+      )
+    ).toBe(true)
+  })
+
+  it('inserts a node in the middle of an existing edge', () => {
+    const store = useWorkflowDesignerStore.getState()
+    const sourceEdge = store.history.present.edges.find(
+      (edge) => edge.id === 'edge-start-condition'
+    )
+
+    expect(sourceEdge).toBeTruthy()
+
+    store.insertNodeOnEdge(sourceEdge!.id, {
+      kind: 'approver',
+      label: '审批',
+      description: '支持会签、或签、主办、转办',
+      tone: 'brand',
+      accent: 'from-sky-500/20 to-sky-500/5',
+      icon: Play,
+    })
+
+    const snapshot = useWorkflowDesignerStore.getState().history.present
+    const insertedNode = snapshot.nodes.find((node) => node.id === snapshot.selectedNodeId)
+
+    expect(insertedNode?.data.kind).toBe('approver')
+    expect(
+      snapshot.edges.some(
+        (edge) =>
+          edge.source === 'node-start' && edge.target === insertedNode?.id
+      )
+    ).toBe(true)
+    expect(
+      snapshot.edges.some(
+        (edge) =>
+          edge.source === insertedNode?.id && edge.target === 'node-condition'
       )
     ).toBe(true)
   })

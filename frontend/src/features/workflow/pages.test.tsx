@@ -4,10 +4,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkflowDesignerPage } from './pages'
 import { useWorkflowDesignerStore } from './designer/store'
 
-const { navigateMock, fitViewMock } = vi.hoisted(() => ({
+const { navigateMock, fitViewMock, setViewportMock, reactFlowMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   fitViewMock: vi.fn(),
+  setViewportMock: vi.fn(),
+  reactFlowMock: {
+    fitView: undefined as unknown,
+    setViewport: undefined as unknown,
+    toObject: () => ({ nodes: [], edges: [] }),
+    screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+  },
 }))
+
+reactFlowMock.fitView = fitViewMock
+reactFlowMock.setViewport = setViewportMock
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -78,11 +88,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
       <div data-testid='reactflow-canvas'>{children}</div>
     ),
     ReactFlowProvider: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-    useReactFlow: () => ({
-      fitView: fitViewMock,
-      toObject: () => ({ nodes: [], edges: [] }),
-      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
-    }),
+    useReactFlow: () => reactFlowMock,
     useViewport: () => ({ zoom: 1, x: 0, y: 0 }),
   }
 })
@@ -107,6 +113,10 @@ function renderWithQuery(ui: React.ReactNode) {
 afterEach(() => {
   navigateMock.mockClear()
   fitViewMock.mockClear()
+  setViewportMock.mockClear()
+  reactFlowMock.fitView = fitViewMock
+  reactFlowMock.setViewport = setViewportMock
+  window.sessionStorage.clear()
   useWorkflowDesignerStore.getState().resetDesigner()
 })
 
@@ -122,6 +132,9 @@ describe('workflow designer page', () => {
     expect(screen.getByText('动态构建模板')).toBeInTheDocument()
     expect(screen.getByText('包容分支模板')).toBeInTheDocument()
     expect(screen.getByText('属性面板')).toBeInTheDocument()
+    expect(
+      screen.queryByText('从左侧拖入节点，双击节点模板可快速追加')
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '流程属性' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '节点属性' })).toBeInTheDocument()
     expect(screen.getByTestId('reactflow-controls')).toBeInTheDocument()
