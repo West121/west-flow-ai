@@ -1,9 +1,7 @@
 package com.westflow.processdef.service;
 
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
-import com.westflow.processdef.model.ProcessDefinitionRecord;
 import com.westflow.processdef.model.ProcessDslPayload;
-import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +9,6 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class ProcessDslToBpmnServiceTest {
 
@@ -277,22 +274,6 @@ class ProcessDslToBpmnServiceTest {
     @Test
     void shouldConvertSubprocessNodeIntoCallActivity() {
         ProcessDefinitionMapper mapper = mock(ProcessDefinitionMapper.class);
-        when(mapper.selectPublishedByProcessKeyAndVersion("plm_purchase_review", 3))
-                .thenReturn(new ProcessDefinitionRecord(
-                        "plm_purchase_review:3",
-                        "plm_purchase_review",
-                        "采购复核子流程",
-                        "PLM",
-                        3,
-                        "PUBLISHED",
-                        "{}",
-                        "<xml/>",
-                        "wangwu",
-                        "deployment_003",
-                        "plm_purchase_review:3:flowable",
-                        LocalDateTime.of(2026, 3, 23, 10, 0),
-                        LocalDateTime.of(2026, 3, 23, 10, 0)
-                ));
         ProcessDslToBpmnService service = new ProcessDslToBpmnService(mapper);
         ProcessDslPayload payload = new ProcessDslPayload(
                 "1.0.0",
@@ -313,14 +294,14 @@ class ProcessDslToBpmnServiceTest {
                         )),
                         node("subprocess_1", "subprocess", "采购复核子流程", Map.ofEntries(
                                 Map.entry("calledProcessKey", "plm_purchase_review"),
-                                Map.entry("calledVersionPolicy", "FIXED_VERSION"),
-                                Map.entry("calledVersion", 3),
+                                Map.entry("calledVersionPolicy", "LATEST_PUBLISHED"),
                                 Map.entry("businessBindingMode", "OVERRIDE"),
                                 Map.entry("terminatePolicy", "TERMINATE_PARENT_AND_SUBPROCESS"),
                                 Map.entry("childFinishPolicy", "TERMINATE_PARENT"),
                                 Map.entry("callScope", "CHILD_AND_DESCENDANTS"),
                                 Map.entry("joinMode", "WAIT_PARENT_CONFIRM"),
                                 Map.entry("childStartStrategy", "SCENE_BINDING"),
+                                Map.entry("sceneCode", "plm_purchase_review_default"),
                                 Map.entry("parentResumeStrategy", "WAIT_PARENT_CONFIRM"),
                                 Map.entry("inputMappings", List.of(
                                         Map.of("source", "billNo", "target", "sourceBillNo")
@@ -343,8 +324,7 @@ class ProcessDslToBpmnServiceTest {
                 "<callActivity",
                 "id=\"subprocess_1\"",
                 "name=\"采购复核子流程\"",
-                "calledElement=\"plm_purchase_review:3:flowable\"",
-                "calledElementType=\"id\"",
+                "calledElement=\"${wfSubprocessCalledElement_subprocess_1}\"",
                 "<flowable:in",
                 "source=\"billNo\"",
                 "target=\"sourceBillNo\"",
@@ -352,13 +332,13 @@ class ProcessDslToBpmnServiceTest {
                 "source=\"approvedResult\"",
                 "target=\"purchaseResult\"",
                 "calledProcessKey=\"plm_purchase_review\"",
-                "calledVersionPolicy=\"FIXED_VERSION\"",
-                "calledVersion=\"3\"",
+                "calledVersionPolicy=\"LATEST_PUBLISHED\"",
                 "terminatePolicy=\"TERMINATE_PARENT_AND_SUBPROCESS\"",
                 "childFinishPolicy=\"TERMINATE_PARENT\"",
                 "callScope=\"CHILD_AND_DESCENDANTS\"",
                 "joinMode=\"WAIT_PARENT_CONFIRM\"",
                 "childStartStrategy=\"SCENE_BINDING\"",
+                "sceneCode=\"plm_purchase_review_default\"",
                 "parentResumeStrategy=\"WAIT_PARENT_CONFIRM\""
         );
     }

@@ -2,6 +2,7 @@ package com.westflow.processruntime.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processruntime.api.ProcessTaskSnapshot;
@@ -19,6 +20,7 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.identitylink.api.IdentityLink;
@@ -41,6 +43,7 @@ public class FlowableRuntimeStartService {
     private final FlowableCountersignService flowableCountersignService;
     private final ProcessLinkService processLinkService;
     private final CountersignAssigneeResolver countersignAssigneeResolver;
+    private final BusinessProcessBindingService businessProcessBindingService;
 
     /**
      * 启动指定流程定义的最新发布版本。
@@ -104,7 +107,7 @@ public class FlowableRuntimeStartService {
             String rootInstanceId
     ) {
         Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> subprocessNodesByKey =
-                buildSubprocessNodesByKey(definition);
+                buildSubprocessNodesByKey(definition, parentInstance.getProcessInstanceId());
         if (subprocessNodesByKey.isEmpty()) {
             return;
         }
@@ -159,14 +162,16 @@ public class FlowableRuntimeStartService {
      * 预先按子流程 key 建立节点队列，便于一对多 callActivity 场景顺序匹配。
      */
     private Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> buildSubprocessNodesByKey(
-            PublishedProcessDefinition definition
+            PublishedProcessDefinition definition,
+            String parentInstanceId
     ) {
         Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> nodesByKey = new LinkedHashMap<>();
+        String businessType = resolveProcessBusinessType(parentInstanceId);
         for (com.westflow.processdef.model.ProcessDslPayload.Node node : definition.dsl().nodes()) {
             if (!"subprocess".equals(node.type())) {
                 continue;
             }
-            String calledProcessKey = stringValue(mapValue(node.config()).get("calledProcessKey"));
+            String calledProcessKey = resolveRuntimeSubprocessProcessKey(mapValue(node.config()), businessType, node.id());
             if (calledProcessKey == null) {
                 continue;
             }
@@ -191,9 +196,23 @@ public class FlowableRuntimeStartService {
         variables.put("westflowBusinessKey", request.businessKey());
         variables.put("westflowInitiatorUserId", StpUtil.getLoginIdAsString());
         definition.dsl().nodes().stream()
+                .filter(node -> "subprocess".equals(node.type()))
+                .forEach(node -> appendSubprocessStartVariables(variables, request.businessType(), node));
+        definition.dsl().nodes().stream()
                 .filter(node -> "approver".equals(node.type()))
                 .forEach(node -> appendCountersignStartVariables(variables, node));
         return variables;
+    }
+
+    private void appendSubprocessStartVariables(
+            Map<String, Object> variables,
+            String businessType,
+            com.westflow.processdef.model.ProcessDslPayload.Node node
+    ) {
+        String calledProcessKey = resolveRuntimeSubprocessProcessKey(mapValue(node.config()), businessType, node.id());
+        if (calledProcessKey != null) {
+            variables.put(subprocessCalledElementVariable(node.id()), calledProcessKey);
+        }
     }
 
     private void applySubprocessInputMappings(
@@ -339,5 +358,29 @@ public class FlowableRuntimeStartService {
     private String stringValueOrDefault(Object value, String defaultValue) {
         String stringValue = stringValue(value);
         return stringValue == null ? defaultValue : stringValue;
+    }
+
+    private String resolveRuntimeSubprocessProcessKey(Map<String, Object> config, String businessType, String nodeId) {
+        String childStartStrategy = stringValueOrDefault(config.get("childStartStrategy"), "LATEST_PUBLISHED");
+        if (!"SCENE_BINDING".equals(childStartStrategy)) {
+            return stringValue(config.get("calledProcessKey"));
+        }
+        String sceneCode = stringValue(config.get("sceneCode"));
+        if (businessType == null || sceneCode == null) {
+            throw new IllegalStateException("SCENE_BINDING 子流程缺少业务类型或场景码: nodeId=" + nodeId);
+        }
+        return businessProcessBindingService.resolveProcessKey(businessType, sceneCode);
+    }
+
+    private String subprocessCalledElementVariable(String nodeId) {
+        return "wfSubprocessCalledElement_" + nodeId;
+    }
+
+    private String resolveProcessBusinessType(String processInstanceId) {
+        try {
+            return stringValue(flowableEngineFacade.runtimeService().getVariable(processInstanceId, "westflowBusinessType"));
+        } catch (FlowableObjectNotFoundException ignored) {
+            return null;
+        }
     }
 }

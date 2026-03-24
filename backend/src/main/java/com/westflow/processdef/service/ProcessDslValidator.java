@@ -164,6 +164,16 @@ public class ProcessDslValidator {
                 throw invalid("subprocess 节点 FIXED_VERSION 模式必须配置 calledVersion", Map.of("nodeId", node.id()));
             }
 
+            String childStartStrategy = asString(config.get("childStartStrategy"));
+            if ("SCENE_BINDING".equals(childStartStrategy)) {
+                if (!"LATEST_PUBLISHED".equals(calledVersionPolicy)) {
+                    throw invalid("subprocess 节点 SCENE_BINDING 模式仅支持 LATEST_PUBLISHED", Map.of("nodeId", node.id()));
+                }
+                if (asString(config.get("sceneCode")) == null) {
+                    throw invalid("subprocess 节点 SCENE_BINDING 模式必须配置 sceneCode", Map.of("nodeId", node.id()));
+                }
+            }
+
             String businessBindingMode = asString(config.get("businessBindingMode"));
             if (businessBindingMode == null || !SUPPORTED_SUBPROCESS_BUSINESS_BINDING_MODES.contains(businessBindingMode)) {
                 throw invalid("subprocess 节点 businessBindingMode 不合法", Map.of("nodeId", node.id(), "businessBindingMode", businessBindingMode));

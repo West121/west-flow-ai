@@ -17,6 +17,7 @@ import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
+import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.TaskInfo;
@@ -609,6 +610,53 @@ class FlowableRuntimeStartServiceTest {
                 .isNotNull()
                 .extracting(historicVariable -> String.valueOf(historicVariable.getValue()))
                 .isEqualTo("APPROVED");
+    }
+
+    @Test
+    void shouldResolveSceneBindingSubprocessAtRuntime() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildSubprocessChildPayloadWithKey(
+                "oa_sub_review_scene",
+                "场景绑定子流程"
+        ));
+        processDefinitionService.publish(buildSubprocessParentSceneBindingPayload());
+        jdbcTemplate.update("""
+                INSERT INTO wf_business_process_binding (
+                    id, business_type, scene_code, process_key, priority, enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "bind_test_scene_subprocess",
+                "OA_COMMON",
+                "sub_review_scene",
+                "oa_sub_review_scene",
+                100,
+                true
+        );
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_parent_with_scene_binding_subprocess",
+                "parent_bill_scene_001",
+                "OA_COMMON",
+                java.util.Map.of("billNo", "BILL-SCENE-001")
+        ));
+
+        ProcessInstance childInstance = runtimeService.createProcessInstanceQuery()
+                .superProcessInstanceId(response.instanceId())
+                .singleResult();
+        assertThat(childInstance).isNotNull();
+        ProcessDefinition childDefinition = repositoryService.createProcessDefinitionQuery()
+                .processDefinitionId(childInstance.getProcessDefinitionId())
+                .singleResult();
+        assertThat(childDefinition).isNotNull();
+        assertThat(childDefinition.getKey()).isEqualTo("oa_sub_review_scene");
+        assertThat(runtimeService.getVariable(response.instanceId(), "wfSubprocessCalledElement_subprocess_1"))
+                .isEqualTo("oa_sub_review_scene");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT child_start_strategy FROM wf_process_link WHERE parent_instance_id = ? AND child_instance_id = ?",
+                String.class,
+                response.instanceId(),
+                childInstance.getProcessInstanceId()
+        )).isEqualTo("SCENE_BINDING");
     }
 
     @Test
@@ -1642,6 +1690,149 @@ class FlowableRuntimeStartServiceTest {
                   ]
                 }
                 """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildSubprocessParentSceneBindingPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_parent_with_scene_binding_subprocess",
+                  "processName": "主流程带场景绑定子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review_template",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "SCENE_BINDING",
+                        "sceneCode": "sub_review_scene",
+                        "parentResumeStrategy": "AUTO_RETURN",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildSubprocessChildPayloadWithKey(String processKey, String processName) throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "%s",
+                  "processName": "%s",
+                  "category": "OA",
+                  "processFormKey": "oa_sub_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_1",
+                      "type": "approver",
+                      "name": "子流程审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """.formatted(processKey, processName), ProcessDslPayload.class);
     }
 
     private ProcessDslPayload buildDynamicBuilderTaskPayload() throws Exception {

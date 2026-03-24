@@ -164,6 +164,7 @@ public class ProcessDslToBpmnService {
         String calledProcessKey = stringValue(config.get("calledProcessKey"));
         String calledVersionPolicy = stringValue(config.get("calledVersionPolicy"));
         Integer calledVersion = integerValue(config.get("calledVersion"));
+        String childStartStrategy = resolveSubprocessChildStartStrategy(config);
         ProcessDefinitionRecord fixedVersionRecord = resolveFixedVersionSubprocessDefinition(
                 calledProcessKey,
                 calledVersionPolicy,
@@ -172,6 +173,8 @@ public class ProcessDslToBpmnService {
         if (fixedVersionRecord != null) {
             activity.setCalledElementType("id");
             activity.setCalledElement(fixedVersionRecord.flowableDefinitionId());
+        } else if ("SCENE_BINDING".equals(childStartStrategy)) {
+            activity.setCalledElement(wrapExpression(subprocessCalledElementVariable(node.id())));
         } else {
             activity.setCalledElement(calledProcessKey);
         }
@@ -389,6 +392,10 @@ public class ProcessDslToBpmnService {
 
     private String inclusiveSelectionExpression(String edgeId) {
         return "${westflowInclusiveSelected_" + edgeId + "}";
+    }
+
+    private String subprocessCalledElementVariable(String nodeId) {
+        return "wfSubprocessCalledElement_" + nodeId;
     }
 
     private String wrapExpression(String expression) {

@@ -646,6 +646,58 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectSceneBindingSubprocessWithFixedVersionPolicy() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("subprocess_1", "subprocess", Map.of(
+                                "calledProcessKey", "oa_leave_subflow",
+                                "calledVersionPolicy", "FIXED_VERSION",
+                                "calledVersion", 1,
+                                "businessBindingMode", "INHERIT_PARENT",
+                                "terminatePolicy", "TERMINATE_SUBPROCESS_ONLY",
+                                "childFinishPolicy", "RETURN_TO_PARENT",
+                                "childStartStrategy", "SCENE_BINDING",
+                                "sceneCode", "long_leave"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "subprocess_1"),
+                        edge("edge_2", "subprocess_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "subprocess 节点 SCENE_BINDING 模式仅支持 LATEST_PUBLISHED");
+    }
+
+    @Test
+    void shouldRejectSceneBindingSubprocessWithoutSceneCode() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("subprocess_1", "subprocess", Map.of(
+                                "calledProcessKey", "oa_leave_subflow",
+                                "calledVersionPolicy", "LATEST_PUBLISHED",
+                                "businessBindingMode", "INHERIT_PARENT",
+                                "terminatePolicy", "TERMINATE_SUBPROCESS_ONLY",
+                                "childFinishPolicy", "RETURN_TO_PARENT",
+                                "childStartStrategy", "SCENE_BINDING"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "subprocess_1"),
+                        edge("edge_2", "subprocess_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "subprocess 节点 SCENE_BINDING 模式必须配置 sceneCode");
+    }
+
+    @Test
     void shouldRejectDynamicBuilderWithoutBuildMode() {
         Map<String, Object> dynamicConfig = new LinkedHashMap<>();
         dynamicConfig.put("sourceMode", "RULE");
