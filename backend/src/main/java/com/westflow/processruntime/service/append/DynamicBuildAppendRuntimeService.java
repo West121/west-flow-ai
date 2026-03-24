@@ -252,17 +252,17 @@ public class DynamicBuildAppendRuntimeService {
             Map<String, Object> processVariables,
             int maxGeneratedCount
     ) {
-        List<?> rawItems;
         String sourceMode = normalizeSourceMode(stringValue(config.get("sourceMode")));
-        if ("MODEL_DRIVEN".equals(sourceMode)) {
-            rawItems = resolveDynamicBuilderModelItems(
-                    buildMode,
-                    stringValue(config.get("manualTemplateCode")),
-                    stringValue(config.get("sceneCode"))
-            );
-        } else {
-            rawItems = resolveDynamicBuilderRuleItems(buildMode, config, processVariables, stringValue(config.get("ruleExpression")));
-        }
+        String executionStrategy = normalizeExecutionStrategy(stringValue(config.get("executionStrategy")), sourceMode);
+        String fallbackStrategy = normalizeFallbackStrategy(stringValue(config.get("fallbackStrategy")));
+        List<?> rawItems = resolveDynamicBuilderItemsByStrategy(
+                buildMode,
+                config,
+                processVariables,
+                sourceMode,
+                executionStrategy,
+                fallbackStrategy
+        );
         List<Map<String, Object>> resolved = new ArrayList<>();
         for (Object item : rawItems) {
             if (resolved.size() >= maxGeneratedCount) {
@@ -284,18 +284,73 @@ public class DynamicBuildAppendRuntimeService {
         return resolved;
     }
 
+    private List<?> resolveDynamicBuilderItemsByStrategy(
+            String buildMode,
+            Map<String, Object> config,
+            Map<String, Object> processVariables,
+            String sourceMode,
+            String executionStrategy,
+            String fallbackStrategy
+    ) {
+        List<?> ruleItems = resolveDynamicBuilderRuleItems(
+                buildMode,
+                config,
+                processVariables,
+                stringValue(config.get("ruleExpression")),
+                false
+        );
+        List<?> modelItems = resolveDynamicBuilderModelItems(
+                buildMode,
+                stringValue(config.get("manualTemplateCode")),
+                stringValue(config.get("sceneCode"))
+        );
+        List<?> preferred = switch (executionStrategy) {
+            case "RULE_ONLY" -> ruleItems;
+            case "TEMPLATE_ONLY" -> modelItems;
+            case "TEMPLATE_FIRST" -> !modelItems.isEmpty() ? modelItems : ruleItems;
+            default -> !ruleItems.isEmpty() ? ruleItems : modelItems;
+        };
+        if (!preferred.isEmpty()) {
+            return preferred;
+        }
+        return switch (fallbackStrategy) {
+            case "USE_RULE" -> resolveDynamicBuilderRuleItems(
+                    buildMode,
+                    config,
+                    processVariables,
+                    stringValue(config.get("ruleExpression")),
+                    true
+            );
+            case "USE_TEMPLATE" -> modelItems;
+            case "SKIP_GENERATION" -> List.of();
+            default -> "MODEL_DRIVEN".equals(sourceMode)
+                    ? modelItems
+                    : resolveDynamicBuilderRuleItems(
+                            buildMode,
+                            config,
+                            processVariables,
+                            stringValue(config.get("ruleExpression")),
+                            true
+                    );
+        };
+    }
+
     private List<?> resolveDynamicBuilderRuleItems(
             String buildMode,
             Map<String, Object> config,
             Map<String, Object> processVariables,
-            String ruleExpression
+            String ruleExpression,
+            boolean allowFallback
     ) {
         if (ruleExpression == null || ruleExpression.isBlank()) {
-            return resolveDynamicBuilderFallbackItems(buildMode, config);
+            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
         }
         Object value = evaluateDynamicBuilderRule(ruleExpression.trim(), processVariables);
         if (value instanceof Boolean booleanValue) {
-            return booleanValue ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
+            if (!booleanValue) {
+                return List.of();
+            }
+            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
         }
         if (value instanceof List<?> items) {
             return items;
@@ -319,7 +374,7 @@ public class DynamicBuildAppendRuntimeService {
             return List.of(map);
         }
         if (value == null) {
-            return resolveDynamicBuilderFallbackItems(buildMode, config);
+            return allowFallback ? resolveDynamicBuilderFallbackItems(buildMode, config) : List.of();
         }
         return List.of(value);
     }
@@ -567,6 +622,26 @@ public class DynamicBuildAppendRuntimeService {
             case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
             case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
             default -> "RULE_DRIVEN";
+        };
+    }
+
+    private String normalizeExecutionStrategy(String executionStrategy, String sourceMode) {
+        if (executionStrategy == null || executionStrategy.isBlank()) {
+            return "MODEL_DRIVEN".equals(sourceMode) ? "TEMPLATE_FIRST" : "RULE_FIRST";
+        }
+        return switch (executionStrategy.trim().toUpperCase()) {
+            case "RULE_ONLY", "TEMPLATE_FIRST", "TEMPLATE_ONLY" -> executionStrategy.trim().toUpperCase();
+            default -> "RULE_FIRST";
+        };
+    }
+
+    private String normalizeFallbackStrategy(String fallbackStrategy) {
+        if (fallbackStrategy == null || fallbackStrategy.isBlank()) {
+            return "KEEP_CURRENT";
+        }
+        return switch (fallbackStrategy.trim().toUpperCase()) {
+            case "USE_RULE", "USE_TEMPLATE", "SKIP_GENERATION" -> fallbackStrategy.trim().toUpperCase();
+            default -> "KEEP_CURRENT";
         };
     }
 
