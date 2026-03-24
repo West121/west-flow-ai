@@ -28,6 +28,8 @@ public record ProcessInstanceLinkResponse(
         String childStartDecisionReason,
         String parentResumeStrategy,
         String resumeDecisionReason,
+        Integer descendantCount,
+        Integer runningDescendantCount,
         OffsetDateTime createdAt,
         OffsetDateTime finishedAt
 ) {

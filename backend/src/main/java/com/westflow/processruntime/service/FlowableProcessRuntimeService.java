@@ -3059,8 +3059,23 @@ public class FlowableProcessRuntimeService {
                 ));
         List<com.westflow.processruntime.model.ProcessLinkRecord> visibleLinks = new ArrayList<>();
         collectVisibleSubprocessLinks(rootInstanceId, linksByParentInstanceId, visibleLinks);
+        Map<String, Integer> descendantCounts = new LinkedHashMap<>();
+        Map<String, Integer> runningDescendantCounts = new LinkedHashMap<>();
+        for (com.westflow.processruntime.model.ProcessLinkRecord link : visibleLinks) {
+            List<com.westflow.processruntime.model.ProcessLinkRecord> descendants =
+                    collectDescendantProcessLinks(rootInstanceId, link.childInstanceId());
+            descendantCounts.put(link.id(), descendants.size());
+            runningDescendantCounts.put(
+                    link.id(),
+                    (int) descendants.stream().filter(descendant -> "RUNNING".equals(descendant.status())).count()
+            );
+        }
         return visibleLinks.stream()
-                .map(this::toProcessInstanceLinkResponse)
+                .map(link -> toProcessInstanceLinkResponse(
+                        link,
+                        descendantCounts.getOrDefault(link.id(), 0),
+                        runningDescendantCounts.getOrDefault(link.id(), 0)
+                ))
                 .toList();
     }
 
@@ -3919,7 +3934,17 @@ public class FlowableProcessRuntimeService {
                 });
     }
 
-    private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(com.westflow.processruntime.model.ProcessLinkRecord record) {
+    private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(
+            com.westflow.processruntime.model.ProcessLinkRecord record
+    ) {
+        return toProcessInstanceLinkResponse(record, 0, 0);
+    }
+
+    private ProcessInstanceLinkResponse toProcessInstanceLinkResponse(
+            com.westflow.processruntime.model.ProcessLinkRecord record,
+            int descendantCount,
+            int runningDescendantCount
+    ) {
         NodeMetadata parentNode = resolveNodeMetadata(record.parentInstanceId(), record.parentNodeId());
         Map<String, Object> nodeConfig = resolveNodeConfig(record.parentInstanceId(), record.parentNodeId());
         DefinitionMetadata childDefinition = resolveDefinitionMetadata(
@@ -3953,6 +3978,8 @@ public class FlowableProcessRuntimeService {
                 record.childStartDecisionReason(),
                 structureMetadata.parentResumeStrategy(),
                 resolveSubprocessResumeDecisionReason(record, structureMetadata),
+                descendantCount,
+                runningDescendantCount,
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
                 record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
         );
@@ -4014,8 +4041,17 @@ public class FlowableProcessRuntimeService {
                 stringValue(sourceNodeConfig.get("ruleExpression")),
                 stringValue(sourceNodeConfig.get("manualTemplateCode")),
                 stringValue(sourceNodeConfig.get("sceneCode")),
-                stringValue(sourceNodeConfig.get("executionStrategy")),
-                stringValue(sourceNodeConfig.get("fallbackStrategy")),
+                stringValueOrDefault(
+                        stringValue(runtimeMetadata.get("westflowDynamicExecutionStrategy")),
+                        stringValue(sourceNodeConfig.get("executionStrategy"))
+                ),
+                stringValueOrDefault(
+                        stringValue(runtimeMetadata.get("westflowDynamicFallbackStrategy")),
+                        stringValue(sourceNodeConfig.get("fallbackStrategy"))
+                ),
+                integerValue(runtimeMetadata.get("westflowDynamicMaxGeneratedCount")),
+                integerValue(runtimeMetadata.get("westflowDynamicGeneratedCount")),
+                booleanValue(runtimeMetadata.get("westflowDynamicGenerationTruncated")),
                 stringValue(runtimeMetadata.get("westflowDynamicResolvedSourceMode")),
                 stringValue(runtimeMetadata.get("westflowDynamicResolutionPath")),
                 stringValue(runtimeMetadata.get("westflowDynamicTemplateSource")),
@@ -4040,6 +4076,16 @@ public class FlowableProcessRuntimeService {
             return "PROCESS_KEY";
         }
         return normalizeDynamicBuilderSourceMode(stringValue(sourceNodeConfig.get("sourceMode")));
+    }
+
+    private Boolean booleanValue(Object value) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String stringValue && !stringValue.isBlank()) {
+            return Boolean.parseBoolean(stringValue.trim());
+        }
+        return null;
     }
 
     private List<ProcessTaskSnapshot> activeAppendTasks(String processInstanceId) {

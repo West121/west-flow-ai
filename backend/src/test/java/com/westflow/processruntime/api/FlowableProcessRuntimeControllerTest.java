@@ -432,6 +432,8 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(linksBody.get(0).path("parentResumeStrategy").asText()).isEqualTo("AUTO_RETURN");
         assertThat(linksBody.get(0).path("calledVersionPolicy").asText()).isEqualTo("LATEST_PUBLISHED");
         assertThat(linksBody.get(0).path("resumeDecisionReason").asText()).isEqualTo("AUTO_RETURN");
+        assertThat(linksBody.get(0).path("descendantCount").asInt()).isZero();
+        assertThat(linksBody.get(0).path("runningDescendantCount").asInt()).isZero();
     }
 
     @Test
@@ -776,6 +778,10 @@ class FlowableProcessRuntimeControllerTest {
                 .getResponse()
                 .getContentAsString()).path("data");
         assertThat(linksBeforeTerminate).hasSize(2);
+        assertThat(linksBeforeTerminate.get(0).path("descendantCount").asInt()).isEqualTo(1);
+        assertThat(linksBeforeTerminate.get(0).path("runningDescendantCount").asInt()).isEqualTo(1);
+        assertThat(linksBeforeTerminate.get(1).path("descendantCount").asInt()).isZero();
+        assertThat(linksBeforeTerminate.get(1).path("runningDescendantCount").asInt()).isZero();
 
         String childInstanceId = jdbcTemplate.queryForObject(
                 "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ? AND parent_node_id = ?",
@@ -1230,6 +1236,11 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("resolvedTargetMode").asText()).isEqualTo("USER");
         assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("TEMPLATE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("templateSource").asText()).isEqualTo("SCENE_CODE");
+        assertThat(detailBody.path("appendLinks").get(0).path("executionStrategy").asText()).isEqualTo("TEMPLATE_FIRST");
+        assertThat(detailBody.path("appendLinks").get(0).path("fallbackStrategy").asText()).isEqualTo("KEEP_CURRENT");
+        assertThat(detailBody.path("appendLinks").get(0).path("maxGeneratedCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("generatedCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("generationTruncated").asBoolean()).isFalse();
         assertThat(detailBody.path("appendLinks").get(0).path("targetBusinessType").asText()).isEqualTo("OA_LEAVE");
         assertThat(detailBody.path("appendLinks").get(0).path("targetSceneCode").asText()).isEqualTo("leave_model_scene");
         assertThat(detailBody.path("appendLinks").get(0).path("targetUserId").asText()).isEqualTo("usr_003");
@@ -1292,6 +1303,11 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("appendLinks").get(0).path("resolvedTargetMode").asText()).isEqualTo("PROCESS_KEY");
         assertThat(detailBody.path("appendLinks").get(0).path("resolutionPath").asText()).isEqualTo("TEMPLATE_PRIMARY");
         assertThat(detailBody.path("appendLinks").get(0).path("templateSource").asText()).isEqualTo("SCENE_CODE");
+        assertThat(detailBody.path("appendLinks").get(0).path("executionStrategy").asText()).isEqualTo("TEMPLATE_FIRST");
+        assertThat(detailBody.path("appendLinks").get(0).path("fallbackStrategy").asText()).isEqualTo("KEEP_CURRENT");
+        assertThat(detailBody.path("appendLinks").get(0).path("maxGeneratedCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("generatedCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("appendLinks").get(0).path("generationTruncated").asBoolean()).isFalse();
         assertThat(detailBody.path("appendLinks").get(0).path("targetBusinessType").asText()).isEqualTo("OA_LEAVE");
         assertThat(detailBody.path("appendLinks").get(0).path("targetSceneCode").asText()).isEqualTo("leave_sub_review_scene");
         assertThat(detailBody.path("appendLinks").get(0).path("targetInstanceId").asText()).isNotBlank();

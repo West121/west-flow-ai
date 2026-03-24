@@ -48,6 +48,9 @@ public class DynamicBuildAppendRuntimeService {
     private static final String DYNAMIC_TEMPLATE_SOURCE = "westflowDynamicTemplateSource";
     private static final String DYNAMIC_EXECUTION_STRATEGY = "westflowDynamicExecutionStrategy";
     private static final String DYNAMIC_FALLBACK_STRATEGY = "westflowDynamicFallbackStrategy";
+    private static final String DYNAMIC_MAX_GENERATED_COUNT = "westflowDynamicMaxGeneratedCount";
+    private static final String DYNAMIC_GENERATED_COUNT = "westflowDynamicGeneratedCount";
+    private static final String DYNAMIC_GENERATION_TRUNCATED = "westflowDynamicGenerationTruncated";
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final ProcessDefinitionService processDefinitionService;
@@ -287,9 +290,6 @@ public class DynamicBuildAppendRuntimeService {
         );
         List<Map<String, Object>> resolved = new ArrayList<>();
         for (Object item : selection.items()) {
-            if (resolved.size() >= maxGeneratedCount) {
-                break;
-            }
             Map<String, Object> map = mapValue(item);
             if (!map.isEmpty()) {
                 resolved.add(map);
@@ -303,6 +303,10 @@ public class DynamicBuildAppendRuntimeService {
                 resolved.add(Map.of("userId", userId));
             }
         }
+        boolean truncated = resolved.size() > maxGeneratedCount;
+        List<Map<String, Object>> finalItems = truncated
+                ? List.copyOf(resolved.subList(0, maxGeneratedCount))
+                : List.copyOf(resolved);
         return new DynamicBuildResolutionResult(
                 sourceMode,
                 executionStrategy,
@@ -310,7 +314,10 @@ public class DynamicBuildAppendRuntimeService {
                 selection.resolvedSourceMode(),
                 selection.resolutionPath(),
                 selection.templateSource(),
-                List.copyOf(resolved)
+                maxGeneratedCount,
+                finalItems.size(),
+                truncated,
+                finalItems
         );
     }
 
@@ -767,6 +774,9 @@ public class DynamicBuildAppendRuntimeService {
         metadata.put(DYNAMIC_RESOLUTION_PATH, resolution.resolutionPath());
         metadata.put(DYNAMIC_EXECUTION_STRATEGY, resolution.executionStrategy());
         metadata.put(DYNAMIC_FALLBACK_STRATEGY, resolution.fallbackStrategy());
+        metadata.put(DYNAMIC_MAX_GENERATED_COUNT, resolution.maxGeneratedCount());
+        metadata.put(DYNAMIC_GENERATED_COUNT, resolution.generatedCount());
+        metadata.put(DYNAMIC_GENERATION_TRUNCATED, resolution.generationTruncated());
         if (resolution.templateSource() != null && !resolution.templateSource().isBlank()) {
             metadata.put(DYNAMIC_TEMPLATE_SOURCE, resolution.templateSource());
         }
@@ -780,6 +790,9 @@ public class DynamicBuildAppendRuntimeService {
             String resolvedSourceMode,
             String resolutionPath,
             String templateSource,
+            int maxGeneratedCount,
+            int generatedCount,
+            boolean generationTruncated,
             List<Map<String, Object>> items
     ) {
     }

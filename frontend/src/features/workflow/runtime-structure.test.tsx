@@ -26,6 +26,8 @@ describe('runtime structure section', () => {
             childStartDecisionReason: 'oa_sub_review@1',
             parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
             resumeDecisionReason: 'PARENT_CONFIRM_RESUMED',
+            descendantCount: 1,
+            runningDescendantCount: 1,
             terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
             childFinishPolicy: 'RETURN_TO_PARENT',
             createdAt: '2026-03-23T10:10:00+08:00',
@@ -73,9 +75,15 @@ describe('runtime structure section', () => {
             status: 'COMPLETED',
             buildMode: 'SUBPROCESS_CALLS',
             sourceMode: 'MODEL_DRIVEN',
+            sceneCode: 'leave_sub_scene',
+            ruleExpression: 'ifElse(leaveDays >= 5, "SUBPROCESS_CALL", "APPEND_TASK")',
+            manualTemplateCode: 'append_sub_review',
             resolvedTargetMode: 'PROCESS_KEY',
             executionStrategy: 'TEMPLATE_FIRST',
             fallbackStrategy: 'USE_TEMPLATE',
+            maxGeneratedCount: 2,
+            generatedCount: 1,
+            generationTruncated: false,
             resolvedSourceMode: 'MODEL_DRIVEN',
             resolutionPath: 'TEMPLATE_PRIMARY',
             templateSource: 'SCENE_CODE',
@@ -139,12 +147,22 @@ describe('runtime structure section', () => {
     expect(screen.getByText('启动决策：oa_sub_review@1')).toBeInTheDocument()
     expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
     expect(screen.getByText('恢复决策：PARENT_CONFIRM_RESUMED')).toBeInTheDocument()
+    expect(screen.getByText('后代子流程数：1')).toBeInTheDocument()
+    expect(screen.getByText('运行中后代数：1')).toBeInTheDocument()
     expect(screen.getByText('动态构建策略')).toBeInTheDocument()
     expect(screen.getByText('构建模式：SUBPROCESS_CALLS')).toBeInTheDocument()
     expect(screen.getByText('来源模式：MODEL_DRIVEN')).toBeInTheDocument()
+    expect(screen.getByText('场景编码：leave_sub_scene')).toBeInTheDocument()
+    expect(
+      screen.getByText('规则表达式：ifElse(leaveDays >= 5, "SUBPROCESS_CALL", "APPEND_TASK")')
+    ).toBeInTheDocument()
+    expect(screen.getByText('模板编码：append_sub_review')).toBeInTheDocument()
     expect(screen.getByText('目标模式：PROCESS_KEY')).toBeInTheDocument()
     expect(screen.getByText('执行策略：TEMPLATE_FIRST')).toBeInTheDocument()
     expect(screen.getByText('回退策略：USE_TEMPLATE')).toBeInTheDocument()
+    expect(screen.getByText('最大生成数：2')).toBeInTheDocument()
+    expect(screen.getByText('实际生成数：1')).toBeInTheDocument()
+    expect(screen.getByText('是否截断：否')).toBeInTheDocument()
     expect(screen.getByText('实际来源：MODEL_DRIVEN')).toBeInTheDocument()
     expect(screen.getByText('解析路径：TEMPLATE_PRIMARY')).toBeInTheDocument()
     expect(screen.getByText('模板来源：SCENE_CODE')).toBeInTheDocument()

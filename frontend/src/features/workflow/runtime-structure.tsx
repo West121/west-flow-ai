@@ -59,6 +59,12 @@ function resolveLinkField(link: RuntimeStructureLink, field: string) {
   if (typeof value === 'string' && value.trim()) {
     return value.trim()
   }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+  if (typeof value === 'boolean') {
+    return value ? '是' : '否'
+  }
 
   return null
 }
@@ -172,6 +178,8 @@ function RuntimeStructureItem({
           'childStartDecisionReason',
           'parentResumeStrategy',
           'resumeDecisionReason',
+          'descendantCount',
+          'runningDescendantCount',
         ]) ? (
           <div className='space-y-2 rounded-md border bg-muted/20 p-3'>
             <div className='text-sm font-medium'>子流程策略</div>
@@ -195,6 +203,14 @@ function RuntimeStructureItem({
                   label: '恢复决策',
                   value: resolveLinkField(link, 'resumeDecisionReason'),
                 },
+                {
+                  label: '后代子流程数',
+                  value: resolveLinkField(link, 'descendantCount'),
+                },
+                {
+                  label: '运行中后代数',
+                  value: resolveLinkField(link, 'runningDescendantCount'),
+                },
               ]}
             />
           </div>
@@ -203,9 +219,15 @@ function RuntimeStructureItem({
         {hasAnyLinkField(link, [
           'buildMode',
           'sourceMode',
+          'sceneCode',
+          'ruleExpression',
+          'manualTemplateCode',
           'resolvedTargetMode',
           'executionStrategy',
           'fallbackStrategy',
+          'maxGeneratedCount',
+          'generatedCount',
+          'generationTruncated',
           'resolvedSourceMode',
           'resolutionPath',
           'templateSource',
@@ -222,6 +244,15 @@ function RuntimeStructureItem({
                   label: '来源模式',
                   value: resolveLinkField(link, 'sourceMode'),
                 },
+                { label: '场景编码', value: resolveLinkField(link, 'sceneCode') },
+                {
+                  label: '规则表达式',
+                  value: resolveLinkField(link, 'ruleExpression'),
+                },
+                {
+                  label: '模板编码',
+                  value: resolveLinkField(link, 'manualTemplateCode'),
+                },
                 {
                   label: '目标模式',
                   value: resolveLinkField(link, 'resolvedTargetMode'),
@@ -233,6 +264,18 @@ function RuntimeStructureItem({
                 {
                   label: '回退策略',
                   value: resolveLinkField(link, 'fallbackStrategy'),
+                },
+                {
+                  label: '最大生成数',
+                  value: resolveLinkField(link, 'maxGeneratedCount'),
+                },
+                {
+                  label: '实际生成数',
+                  value: resolveLinkField(link, 'generatedCount'),
+                },
+                {
+                  label: '是否截断',
+                  value: resolveLinkField(link, 'generationTruncated'),
                 },
                 {
                   label: '实际来源',

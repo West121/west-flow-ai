@@ -21,10 +21,18 @@ export type RuntimeStructureLink = {
   childStartDecisionReason?: string | null
   parentResumeStrategy?: string | null
   resumeDecisionReason?: string | null
+  descendantCount?: number | null
+  runningDescendantCount?: number | null
   executionStrategy?: string | null
   fallbackStrategy?: string | null
+  maxGeneratedCount?: number | null
+  generatedCount?: number | null
+  generationTruncated?: boolean | null
   buildMode?: string | null
   sourceMode?: string | null
+  sceneCode?: string | null
+  ruleExpression?: string | null
+  manualTemplateCode?: string | null
   resolvedTargetMode?: string | null
   resolvedSourceMode?: string | null
   resolutionPath?: string | null

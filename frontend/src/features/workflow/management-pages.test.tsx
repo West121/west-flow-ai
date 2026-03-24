@@ -109,10 +109,18 @@ describe('workflow management pages', () => {
           parentNodeId: 'subprocess_review',
           calledProcessKey: 'oa_sub_review',
           calledDefinitionId: 'oa_sub_review:1:1004',
+          calledVersionPolicy: 'FIXED_VERSION',
+          calledVersion: 1,
           linkType: 'CALL_ACTIVITY',
           status: 'RUNNING',
           terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
           childFinishPolicy: 'RETURN_TO_PARENT',
+          callScope: 'CHILD_AND_DESCENDANTS',
+          joinMode: 'WAIT_PARENT_CONFIRM',
+          childStartStrategy: 'FIXED_VERSION',
+          childStartDecisionReason: 'FIXED_VERSION',
+          parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+          resumeDecisionReason: 'WAIT_PARENT_CONFIRM',
           createdAt: '2026-03-23T10:10:00+08:00',
           finishedAt: null,
         },
@@ -157,6 +165,14 @@ describe('workflow management pages', () => {
     expect(screen.getByText(/子流程实例：pi_sub_001/)).toBeInTheDocument()
     expect(screen.getByText(/动态构建实例：pi_dynamic_001/)).toBeInTheDocument()
     expect(screen.getByText('结构来源：ADHOC_SUBPROCESS')).toBeInTheDocument()
+    expect(screen.getByText('调用版本策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('调用版本：1')).toBeInTheDocument()
+    expect(screen.getByText('调用范围：CHILD_AND_DESCENDANTS')).toBeInTheDocument()
+    expect(screen.getByText('汇合模式：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('子流程启动策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('启动决策：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('恢复决策：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
     expect(screen.getByText('附言：规则命中后自动构建子流程')).toBeInTheDocument()
   })
 

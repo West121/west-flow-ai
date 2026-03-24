@@ -106,6 +106,8 @@ class WorkflowManagementServiceTest {
                 "SCENE_BINDING:OA_COMMON/leave_sub_review_scene",
                 "WAIT_PARENT_CONFIRM",
                 "WAIT_PARENT_CONFIRM",
+                1,
+                0,
                 OffsetDateTime.now(),
                 null
         );
@@ -186,6 +188,8 @@ class WorkflowManagementServiceTest {
             assertThat(response.processLinks().get(0).parentResumeStrategy()).isEqualTo("WAIT_PARENT_CONFIRM");
             assertThat(response.processLinks().get(0).calledVersionPolicy()).isEqualTo("LATEST_PUBLISHED");
             assertThat(response.processLinks().get(0).resumeDecisionReason()).isEqualTo("WAIT_PARENT_CONFIRM");
+            assertThat(response.processLinks().get(0).descendantCount()).isEqualTo(1);
+            assertThat(response.processLinks().get(0).runningDescendantCount()).isZero();
             assertThat(response.inclusiveGatewayHits()).hasSize(1);
             assertThat(response.inclusiveGatewayHits().get(0).defaultBranchId()).isEqualTo("edge_3");
             assertThat(response.inclusiveGatewayHits().get(0).requiredBranchCount()).isEqualTo(1);

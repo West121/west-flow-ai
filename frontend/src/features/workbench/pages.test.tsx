@@ -1378,10 +1378,18 @@ describe('workbench pages', () => {
             parentNodeId: 'subprocess_review',
             calledProcessKey: 'oa_sub_review',
             calledDefinitionId: 'oa_sub_review:1:1004',
+            calledVersionPolicy: 'FIXED_VERSION',
+            calledVersion: 1,
             linkType: 'CALL_ACTIVITY',
             status: 'RUNNING',
             terminatePolicy: 'TERMINATE_PARENT_AND_SUBPROCESS',
             childFinishPolicy: 'RETURN_TO_PARENT',
+            callScope: 'CHILD_AND_DESCENDANTS',
+            joinMode: 'WAIT_PARENT_CONFIRM',
+            childStartStrategy: 'FIXED_VERSION',
+            childStartDecisionReason: 'FIXED_VERSION',
+            parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+            resumeDecisionReason: 'WAIT_PARENT_CONFIRM',
             createdAt: '2026-03-23T10:10:00+08:00',
             finishedAt: null,
           },
@@ -1395,6 +1403,8 @@ describe('workbench pages', () => {
             parentNodeId: 'dynamic_builder_001',
             calledProcessKey: 'oa_leave_append_review',
             calledDefinitionId: 'oa_leave_append_review:1:1008',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: null,
             linkType: 'ADHOC',
             runtimeLinkType: 'ADHOC_TASK',
             triggerMode: 'APPEND',
@@ -1402,6 +1412,12 @@ describe('workbench pages', () => {
             status: 'RUNNING',
             terminatePolicy: 'TERMINATE_GENERATED_ONLY',
             childFinishPolicy: 'RETURN_TO_PARENT',
+            callScope: null,
+            joinMode: null,
+            childStartStrategy: null,
+            childStartDecisionReason: null,
+            parentResumeStrategy: null,
+            resumeDecisionReason: null,
             sourceTaskId: 'task_runtime_001',
             sourceNodeId: 'dynamic_builder_001',
             targetTaskId: 'task_append_001',
@@ -1420,6 +1436,8 @@ describe('workbench pages', () => {
             parentNodeId: 'dynamic_builder_002',
             calledProcessKey: 'oa_leave_dynamic_subflow',
             calledDefinitionId: 'oa_leave_dynamic_subflow:2:1009',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: 2,
             linkType: 'ADHOC',
             runtimeLinkType: 'ADHOC_SUBPROCESS',
             triggerMode: 'DYNAMIC_BUILD',
@@ -1427,6 +1445,20 @@ describe('workbench pages', () => {
             status: 'COMPLETED',
             terminatePolicy: 'TERMINATE_PARENT_AND_GENERATED',
             childFinishPolicy: 'TERMINATE_PARENT',
+            callScope: 'CHILD_ONLY',
+            joinMode: 'AUTO_RETURN',
+            childStartStrategy: 'LATEST_PUBLISHED',
+            childStartDecisionReason: 'LATEST_PUBLISHED',
+            parentResumeStrategy: 'AUTO_RETURN',
+            resumeDecisionReason: 'AUTO_RETURN',
+            buildMode: 'SUBPROCESS_CALLS',
+            sourceMode: 'RULE',
+            executionStrategy: 'RULE_ONLY',
+            fallbackStrategy: 'USE_TEMPLATE',
+            resolvedTargetMode: 'SUBPROCESS',
+            resolvedSourceMode: 'RULE',
+            resolutionPath: 'RULE -> TEMPLATE',
+            templateSource: 'system',
             sourceTaskId: 'task_runtime_001',
             sourceNodeId: 'dynamic_builder_002',
             targetTaskId: null,
@@ -1486,6 +1518,16 @@ describe('workbench pages', () => {
     ).toBe(true)
     expect(screen.getByText('结构来源：ADHOC_TASK')).toBeInTheDocument()
     expect(screen.getByText('结构来源：ADHOC_SUBPROCESS')).toBeInTheDocument()
+    expect(screen.getByText('调用版本策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('调用版本：1')).toBeInTheDocument()
+    expect(screen.getByText('调用范围：CHILD_AND_DESCENDANTS')).toBeInTheDocument()
+    expect(screen.getByText('汇合模式：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('子流程启动策略：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('启动决策：FIXED_VERSION')).toBeInTheDocument()
+    expect(screen.getByText('父流程恢复策略：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('恢复决策：WAIT_PARENT_CONFIRM')).toBeInTheDocument()
+    expect(screen.getByText('执行策略：RULE_ONLY')).toBeInTheDocument()
+    expect(screen.getByText('回退策略：USE_TEMPLATE')).toBeInTheDocument()
     expect(screen.getAllByText('APPEND').length).toBeGreaterThan(0)
     expect(screen.getAllByText('DYNAMIC_BUILD').length).toBeGreaterThan(0)
     expect(screen.getByText('附言：追加一位串行复核人')).toBeInTheDocument()
