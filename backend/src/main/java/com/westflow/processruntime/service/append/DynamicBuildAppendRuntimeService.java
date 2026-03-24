@@ -6,6 +6,7 @@ import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processruntime.model.ProcessLinkRecord;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
 import com.westflow.processruntime.service.FlowableTaskActionService;
@@ -41,12 +42,18 @@ import org.springframework.stereotype.Service;
 public class DynamicBuildAppendRuntimeService {
 
     private static final Pattern SIMPLE_COMPARISON_PATTERN = Pattern.compile("^([a-zA-Z_][a-zA-Z0-9_]*)\\s*(==|!=|>=|<=|>|<)\\s*(.+)$");
+    private static final String DYNAMIC_RESOLVED_SOURCE_MODE = "westflowDynamicResolvedSourceMode";
+    private static final String DYNAMIC_RESOLUTION_PATH = "westflowDynamicResolutionPath";
+    private static final String DYNAMIC_TEMPLATE_SOURCE = "westflowDynamicTemplateSource";
+    private static final String DYNAMIC_EXECUTION_STRATEGY = "westflowDynamicExecutionStrategy";
+    private static final String DYNAMIC_FALLBACK_STRATEGY = "westflowDynamicFallbackStrategy";
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final ProcessDefinitionService processDefinitionService;
     private final FlowableTaskActionService flowableTaskActionService;
     private final RuntimeAppendLinkService runtimeAppendLinkService;
     private final ProcessLinkService processLinkService;
+    private final BusinessProcessBindingService businessProcessBindingService;
 
     /**
      * 执行 dynamic-builder 节点，按配置生成附属任务或附属子流程。
@@ -74,13 +81,13 @@ public class DynamicBuildAppendRuntimeService {
             return;
         }
         String appendPolicy = normalizeAppendPolicy(stringValue(config.get("appendPolicy")));
-        List<Map<String, Object>> generatedItems = resolveDynamicBuilderItems(buildMode, config, processVariables, maxGeneratedCount);
-        if (generatedItems.isEmpty()) {
+        DynamicBuildResolutionResult resolution = resolveDynamicBuilderItems(buildMode, config, processVariables, maxGeneratedCount);
+        if (resolution.items().isEmpty()) {
             return;
         }
         String operatorUserId = resolveRuntimeOperatorUserId(processVariables);
         if ("APPROVER_TASKS".equals(buildMode)) {
-            createDynamicBuildTasks(processInstanceId, sourceNodeId, node.name(), appendPolicy, generatedItems, operatorUserId);
+            createDynamicBuildTasks(processInstanceId, sourceNodeId, node.name(), appendPolicy, resolution, operatorUserId);
             return;
         }
         createDynamicBuildSubprocesses(
@@ -90,7 +97,7 @@ public class DynamicBuildAppendRuntimeService {
                 parentDefinition,
                 appendPolicy,
                 processVariables,
-                generatedItems,
+                resolution,
                 operatorUserId
         );
     }
@@ -112,14 +119,14 @@ public class DynamicBuildAppendRuntimeService {
             String sourceNodeId,
             String nodeName,
             String appendPolicy,
-            List<Map<String, Object>> generatedItems,
+            DynamicBuildResolutionResult resolution,
             String operatorUserId
     ) {
         String rootInstanceId = resolveRuntimeTreeRootInstanceId(processInstanceId);
         String processDefinitionId = activeFlowableDefinitionId(processInstanceId);
         String sourceStructureId = buildDynamicBuildSourceTaskId(processInstanceId, sourceNodeId);
-        for (int index = 0; index < generatedItems.size(); index++) {
-            Map<String, Object> item = generatedItems.get(index);
+        for (int index = 0; index < resolution.items().size(); index++) {
+            Map<String, Object> item = resolution.items().get(index);
             String targetUserId = stringValue(item.get("userId"));
             if (targetUserId == null) {
                 targetUserId = stringValue(item.get("targetUserId"));
@@ -128,6 +135,16 @@ public class DynamicBuildAppendRuntimeService {
                 continue;
             }
             String generatedNodeId = sourceNodeId + "__dynamic_task_" + (index + 1);
+            Map<String, Object> localVariables = new LinkedHashMap<>(Map.of(
+                    "westflowTaskKind", "APPEND",
+                    "westflowAppendType", "TASK",
+                    "westflowAppendPolicy", appendPolicy,
+                    "westflowTriggerMode", "DYNAMIC_BUILD",
+                    "westflowSourceTaskId", sourceStructureId,
+                    "westflowSourceNodeId", sourceNodeId,
+                    "westflowOperatorUserId", operatorUserId
+            ));
+            localVariables.putAll(dynamicBuildRuntimeMetadata(resolution));
             Task generatedTask = flowableTaskActionService.createAdhocTask(
                     processInstanceId,
                     processDefinitionId,
@@ -137,15 +154,7 @@ public class DynamicBuildAppendRuntimeService {
                     targetUserId,
                     List.of(),
                     null,
-                    new LinkedHashMap<>(Map.of(
-                            "westflowTaskKind", "APPEND",
-                            "westflowAppendType", "TASK",
-                            "westflowAppendPolicy", appendPolicy,
-                            "westflowTriggerMode", "DYNAMIC_BUILD",
-                            "westflowSourceTaskId", sourceStructureId,
-                            "westflowSourceNodeId", sourceNodeId,
-                            "westflowOperatorUserId", operatorUserId
-                    ))
+                    localVariables
             );
             RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
                     UUID.randomUUID().toString(),
@@ -179,14 +188,14 @@ public class DynamicBuildAppendRuntimeService {
             PublishedProcessDefinition parentDefinition,
             String appendPolicy,
             Map<String, Object> processVariables,
-            List<Map<String, Object>> generatedItems,
+            DynamicBuildResolutionResult resolution,
             String operatorUserId
     ) {
         String rootInstanceId = resolveRuntimeTreeRootInstanceId(processInstanceId);
         String parentBusinessKey = stringValue(processVariables.get("westflowBusinessKey"));
         String sourceStructureId = buildDynamicBuildSourceTaskId(processInstanceId, sourceNodeId);
-        for (int index = 0; index < generatedItems.size(); index++) {
-            Map<String, Object> item = generatedItems.get(index);
+        for (int index = 0; index < resolution.items().size(); index++) {
+            Map<String, Object> item = resolution.items().get(index);
             String calledProcessKey = stringValue(item.get("calledProcessKey"));
             if (calledProcessKey == null || calledProcessKey.isBlank()) {
                 continue;
@@ -212,6 +221,7 @@ public class DynamicBuildAppendRuntimeService {
             childVariables.put("westflowAppendSourceTaskId", sourceStructureId);
             childVariables.put("westflowAppendSourceNodeId", sourceNodeId);
             childVariables.put("westflowAppendOperatorUserId", operatorUserId);
+            childVariables.putAll(dynamicBuildRuntimeMetadata(resolution));
             Object appendVariables = item.get("appendVariables");
             if (appendVariables instanceof Map<?, ?> appendVariablesMap) {
                 appendVariablesMap.forEach((key, value) -> childVariables.put(String.valueOf(key), value));
@@ -246,7 +256,7 @@ public class DynamicBuildAppendRuntimeService {
         }
     }
 
-    private List<Map<String, Object>> resolveDynamicBuilderItems(
+    private DynamicBuildResolutionResult resolveDynamicBuilderItems(
             String buildMode,
             Map<String, Object> config,
             Map<String, Object> processVariables,
@@ -255,7 +265,7 @@ public class DynamicBuildAppendRuntimeService {
         String sourceMode = normalizeSourceMode(stringValue(config.get("sourceMode")));
         String executionStrategy = normalizeExecutionStrategy(stringValue(config.get("executionStrategy")), sourceMode);
         String fallbackStrategy = normalizeFallbackStrategy(stringValue(config.get("fallbackStrategy")));
-        List<?> rawItems = resolveDynamicBuilderItemsByStrategy(
+        DynamicBuildSelectionResult selection = resolveDynamicBuilderItemsByStrategy(
                 buildMode,
                 config,
                 processVariables,
@@ -264,7 +274,7 @@ public class DynamicBuildAppendRuntimeService {
                 fallbackStrategy
         );
         List<Map<String, Object>> resolved = new ArrayList<>();
-        for (Object item : rawItems) {
+        for (Object item : selection.items()) {
             if (resolved.size() >= maxGeneratedCount) {
                 break;
             }
@@ -281,10 +291,18 @@ public class DynamicBuildAppendRuntimeService {
                 resolved.add(Map.of("userId", userId));
             }
         }
-        return resolved;
+        return new DynamicBuildResolutionResult(
+                sourceMode,
+                executionStrategy,
+                fallbackStrategy,
+                selection.resolvedSourceMode(),
+                selection.resolutionPath(),
+                selection.templateSource(),
+                List.copyOf(resolved)
+        );
     }
 
-    private List<?> resolveDynamicBuilderItemsByStrategy(
+    private DynamicBuildSelectionResult resolveDynamicBuilderItemsByStrategy(
             String buildMode,
             Map<String, Object> config,
             Map<String, Object> processVariables,
@@ -299,39 +317,41 @@ public class DynamicBuildAppendRuntimeService {
                 stringValue(config.get("ruleExpression")),
                 false
         );
-        List<?> modelItems = resolveDynamicBuilderModelItems(
+        DynamicBuildTemplateSelection templateSelection = resolveDynamicBuilderModelItems(
                 buildMode,
                 stringValue(config.get("manualTemplateCode")),
-                stringValue(config.get("sceneCode"))
+                stringValue(config.get("sceneCode")),
+                stringValue(config.get("businessType")),
+                processVariables
         );
-        List<?> preferred = switch (executionStrategy) {
-            case "RULE_ONLY" -> ruleItems;
-            case "TEMPLATE_ONLY" -> modelItems;
-            case "TEMPLATE_FIRST" -> !modelItems.isEmpty() ? modelItems : ruleItems;
-            default -> !ruleItems.isEmpty() ? ruleItems : modelItems;
+        DynamicBuildSelectionResult preferred = switch (executionStrategy) {
+            case "RULE_ONLY" -> selectRuleItems(ruleItems, "RULE_PRIMARY");
+            case "TEMPLATE_ONLY" -> selectTemplateItems(templateSelection, "TEMPLATE_PRIMARY");
+            case "TEMPLATE_FIRST" -> !templateSelection.items().isEmpty()
+                    ? selectTemplateItems(templateSelection, "TEMPLATE_PRIMARY")
+                    : selectRuleItems(ruleItems, "RULE_SECONDARY");
+            default -> !ruleItems.isEmpty()
+                    ? selectRuleItems(ruleItems, "RULE_PRIMARY")
+                    : selectTemplateItems(templateSelection, "TEMPLATE_SECONDARY");
         };
-        if (!preferred.isEmpty()) {
+        if (!preferred.items().isEmpty()) {
             return preferred;
         }
+        List<?> keepCurrentRuleItems = resolveDynamicBuilderRuleItems(
+                buildMode,
+                config,
+                processVariables,
+                stringValue(config.get("ruleExpression")),
+                true
+        );
         return switch (fallbackStrategy) {
-            case "USE_RULE" -> resolveDynamicBuilderRuleItems(
-                    buildMode,
-                    config,
-                    processVariables,
-                    stringValue(config.get("ruleExpression")),
-                    true
-            );
-            case "USE_TEMPLATE" -> modelItems;
-            case "SKIP_GENERATION" -> List.of();
-            default -> "MODEL_DRIVEN".equals(sourceMode)
-                    ? modelItems
-                    : resolveDynamicBuilderRuleItems(
-                            buildMode,
-                            config,
-                            processVariables,
-                            stringValue(config.get("ruleExpression")),
-                            true
-                    );
+            case "USE_RULE" -> selectRuleItems(keepCurrentRuleItems, "FALLBACK_RULE");
+            case "USE_TEMPLATE" -> selectTemplateItems(templateSelection, "FALLBACK_TEMPLATE");
+            case "SKIP_GENERATION" -> DynamicBuildSelectionResult.skipped(sourceMode);
+            default -> switch (executionStrategy) {
+                case "RULE_ONLY", "RULE_FIRST" -> selectRuleItems(keepCurrentRuleItems, "KEEP_CURRENT_RULE");
+                default -> selectTemplateItems(templateSelection, "KEEP_CURRENT_TEMPLATE");
+            };
         };
     }
 
@@ -515,16 +535,45 @@ public class DynamicBuildAppendRuntimeService {
         };
     }
 
-    private List<?> resolveDynamicBuilderModelItems(String buildMode, String manualTemplateCode, String sceneCode) {
+    private DynamicBuildTemplateSelection resolveDynamicBuilderModelItems(
+            String buildMode,
+            String manualTemplateCode,
+            String sceneCode,
+            String configuredBusinessType,
+            Map<String, Object> processVariables
+    ) {
         if (manualTemplateCode != null && !manualTemplateCode.isBlank()) {
-            return resolveDynamicBuilderManualTemplate(buildMode, manualTemplateCode);
+            return new DynamicBuildTemplateSelection(
+                    "MANUAL_TEMPLATE",
+                    "MANUAL_TEMPLATE",
+                    resolveDynamicBuilderManualTemplate(buildMode, manualTemplateCode)
+            );
         }
         if (sceneCode == null || sceneCode.isBlank()) {
-            return List.of();
+            return DynamicBuildTemplateSelection.empty();
         }
-        return "SUBPROCESS_CALLS".equals(buildMode)
-                ? List.of(Map.of("calledProcessKey", sceneCode))
-                : List.of(Map.of("userId", sceneCode));
+        List<?> items;
+        if ("SUBPROCESS_CALLS".equals(buildMode)) {
+            String businessType = configuredBusinessType;
+            if (businessType == null || businessType.isBlank()) {
+                businessType = stringValue(processVariables.get("westflowBusinessType"));
+            }
+            String calledProcessKey = businessType == null || businessType.isBlank()
+                    ? sceneCode
+                    : businessProcessBindingService.resolveProcessKey(businessType, sceneCode);
+            items = List.of(Map.of(
+                    "calledProcessKey", calledProcessKey,
+                    "sceneCode", sceneCode,
+                    "businessType", businessType == null ? "" : businessType
+            ));
+        } else {
+            items = List.of(Map.of("userId", sceneCode, "sceneCode", sceneCode));
+        }
+        return new DynamicBuildTemplateSelection(
+                "MODEL_DRIVEN",
+                "SCENE_CODE",
+                items
+        );
     }
 
     private String buildGeneratedSubprocessRuntimeBusinessKey(String parentBusinessKey, String sourceNodeId, int index) {
@@ -620,14 +669,15 @@ public class DynamicBuildAppendRuntimeService {
         }
         return switch (sourceMode.trim().toUpperCase()) {
             case "RULE", "RULE_DRIVEN" -> "RULE_DRIVEN";
-            case "MANUAL_TEMPLATE", "MODEL_DRIVEN" -> "MODEL_DRIVEN";
+            case "MANUAL_TEMPLATE" -> "MANUAL_TEMPLATE";
+            case "MODEL_DRIVEN" -> "MODEL_DRIVEN";
             default -> "RULE_DRIVEN";
         };
     }
 
     private String normalizeExecutionStrategy(String executionStrategy, String sourceMode) {
         if (executionStrategy == null || executionStrategy.isBlank()) {
-            return "MODEL_DRIVEN".equals(sourceMode) ? "TEMPLATE_FIRST" : "RULE_FIRST";
+            return "RULE_DRIVEN".equals(sourceMode) ? "RULE_FIRST" : "TEMPLATE_FIRST";
         }
         return switch (executionStrategy.trim().toUpperCase()) {
             case "RULE_ONLY", "TEMPLATE_FIRST", "TEMPLATE_ONLY" -> executionStrategy.trim().toUpperCase();
@@ -667,5 +717,65 @@ public class DynamicBuildAppendRuntimeService {
             }
         }
         return 0;
+    }
+
+    private DynamicBuildSelectionResult selectRuleItems(List<?> ruleItems, String resolutionPath) {
+        return new DynamicBuildSelectionResult("RULE_DRIVEN", resolutionPath, null, ruleItems == null ? List.of() : ruleItems);
+    }
+
+    private DynamicBuildSelectionResult selectTemplateItems(DynamicBuildTemplateSelection selection, String resolutionPath) {
+        if (selection == null) {
+            return new DynamicBuildSelectionResult("MODEL_DRIVEN", resolutionPath, null, List.of());
+        }
+        return new DynamicBuildSelectionResult(
+                selection.resolvedSourceMode(),
+                resolutionPath,
+                selection.templateSource(),
+                selection.items()
+        );
+    }
+
+    private Map<String, Object> dynamicBuildRuntimeMetadata(DynamicBuildResolutionResult resolution) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put(DYNAMIC_RESOLVED_SOURCE_MODE, resolution.resolvedSourceMode());
+        metadata.put(DYNAMIC_RESOLUTION_PATH, resolution.resolutionPath());
+        metadata.put(DYNAMIC_EXECUTION_STRATEGY, resolution.executionStrategy());
+        metadata.put(DYNAMIC_FALLBACK_STRATEGY, resolution.fallbackStrategy());
+        if (resolution.templateSource() != null && !resolution.templateSource().isBlank()) {
+            metadata.put(DYNAMIC_TEMPLATE_SOURCE, resolution.templateSource());
+        }
+        return metadata;
+    }
+
+    private record DynamicBuildResolutionResult(
+            String sourceMode,
+            String executionStrategy,
+            String fallbackStrategy,
+            String resolvedSourceMode,
+            String resolutionPath,
+            String templateSource,
+            List<Map<String, Object>> items
+    ) {
+    }
+
+    private record DynamicBuildSelectionResult(
+            String resolvedSourceMode,
+            String resolutionPath,
+            String templateSource,
+            List<?> items
+    ) {
+        private static DynamicBuildSelectionResult skipped(String sourceMode) {
+            return new DynamicBuildSelectionResult(sourceMode, "SKIPPED", null, List.of());
+        }
+    }
+
+    private record DynamicBuildTemplateSelection(
+            String resolvedSourceMode,
+            String templateSource,
+            List<?> items
+    ) {
+        private static DynamicBuildTemplateSelection empty() {
+            return new DynamicBuildTemplateSelection("MODEL_DRIVEN", null, List.of());
+        }
     }
 }

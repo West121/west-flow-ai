@@ -5,6 +5,7 @@ import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
 import com.westflow.processruntime.service.FlowableTaskActionService;
 import com.westflow.processruntime.service.ProcessLinkService;
@@ -48,6 +49,9 @@ class DynamicBuildAppendRuntimeServiceTest {
 
     @Mock
     private ProcessLinkService processLinkService;
+
+    @Mock
+    private BusinessProcessBindingService businessProcessBindingService;
 
     @Mock
     private RuntimeService runtimeService;
@@ -161,6 +165,7 @@ class DynamicBuildAppendRuntimeServiceTest {
         when(processLinkService.getByChildInstanceId("instance_1")).thenReturn(null);
         when(runtimeAppendLinkService.getByTargetInstanceId("instance_1")).thenReturn(null);
         when(processDefinitionService.getById("pd_001")).thenReturn(buildModelDrivenParentDefinitionForSubprocess());
+        when(businessProcessBindingService.resolveProcessKey("OA_COMMON", "oa_sub_review")).thenReturn("oa_sub_review");
         when(processDefinitionService.getLatestByProcessKey("oa_sub_review")).thenReturn(buildChildDefinition());
         when(processInstance.getProcessInstanceId()).thenReturn("child_001");
         when(runtimeService.startProcessInstanceByKey(anyString(), anyString(), anyMap())).thenReturn(processInstance);
@@ -176,6 +181,7 @@ class DynamicBuildAppendRuntimeServiceTest {
         assertThat(record.appendType()).isEqualTo("SUBPROCESS");
         assertThat(record.calledProcessKey()).isEqualTo("oa_sub_review");
         assertThat(record.targetInstanceId()).isEqualTo("child_001");
+        verify(businessProcessBindingService).resolveProcessKey("OA_COMMON", "oa_sub_review");
     }
 
     @Test
