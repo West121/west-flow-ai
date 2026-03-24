@@ -915,7 +915,7 @@ function WorkflowDesignerWorkspace({
               </div>
               <ProcessFormSelector
                 label='流程默认表单'
-                description='发起页使用流程默认表单，审批节点未配置覆盖表单时也会回退到这里。'
+                description='发起页默认使用'
                 value={
                   definitionMeta.processFormKey && definitionMeta.processFormVersion
                     ? {

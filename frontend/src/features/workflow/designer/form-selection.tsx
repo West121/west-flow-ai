@@ -76,11 +76,11 @@ function RuntimeFormSelector({
     null
 
   return (
-    <div className='space-y-3 rounded-2xl border bg-background/60 p-4'>
-      <div className='space-y-1'>
+    <div className='space-y-2'>
+      <div className='space-y-0.5'>
         <div className='text-sm font-medium'>{label}</div>
         {description ? (
-          <p className='text-xs leading-5 text-muted-foreground'>{description}</p>
+          <p className='text-[11px] leading-4 text-muted-foreground'>{description}</p>
         ) : null}
       </div>
       <div className='grid gap-3 md:grid-cols-2'>
@@ -150,19 +150,16 @@ function RuntimeFormSelector({
         </div>
 
         {selectedRegistration ? (
-          <div className='space-y-2 rounded-2xl border bg-muted/20 p-3 text-sm'>
+          <div className='flex flex-wrap items-center gap-2 rounded-xl bg-muted/30 px-3 py-2 text-sm'>
+            <span className='font-medium leading-none'>{selectedRegistration.title}</span>
             <div className='flex flex-wrap gap-2'>
               <Badge variant='secondary'>{statusLabel}</Badge>
               <Badge variant='outline'>{selectedRegistration.formKey}</Badge>
               <Badge variant='outline'>{selectedRegistration.formVersion}</Badge>
             </div>
-            <p className='font-medium leading-6'>{selectedRegistration.title}</p>
-            <p className='text-xs leading-5 text-muted-foreground'>
-              {selectedRegistration.description || '已选择表单，可直接用于当前流程。'}
-            </p>
           </div>
         ) : (
-          <div className='rounded-2xl border border-dashed p-3 text-sm text-muted-foreground'>
+          <div className='rounded-xl border border-dashed px-3 py-2 text-sm text-muted-foreground'>
             {emptyMessage}
           </div>
         )}

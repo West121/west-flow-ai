@@ -3260,7 +3260,7 @@ export function NodeConfigPanel({
                 <FormItem>
                   <NodeFormSelector
                     label='节点覆盖表单'
-                    description='审批节点可覆盖流程默认表单，覆盖后任务页优先渲染这里选择的代码组件。'
+                    description='任务页优先使用'
                     value={
                       selectedNodeFormKey || selectedNodeFormVersion
                         ? {

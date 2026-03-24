@@ -61,6 +61,36 @@ class ProcessDefinitionServiceTest {
     }
 
     @Test
+    void shouldPersistNodePositionsAfterSavingReorderedDraft() throws Exception {
+        ProcessDslPayload initial = payload("oa_leave", "请假审批", "OA");
+        processDefinitionService.saveDraft(initial);
+
+        ProcessDslPayload reordered = payload("oa_leave", "请假审批", "OA");
+        reordered.nodes().get(1).position().put("x", 960);
+        reordered.nodes().get(1).position().put("y", 420);
+        reordered.nodes().get(2).position().put("x", 1280);
+        reordered.nodes().get(2).position().put("y", 420);
+
+        processDefinitionService.saveDraft(reordered);
+
+        ProcessDefinitionDetailResponse detail = processDefinitionService.detail("oa_leave:draft");
+        assertThat(detail.dsl().nodes())
+                .filteredOn(node -> "approve_manager".equals(node.id()))
+                .singleElement()
+                .satisfies(node -> {
+                    assertThat(node.position()).containsEntry("x", 960);
+                    assertThat(node.position()).containsEntry("y", 420);
+                });
+        assertThat(detail.dsl().nodes())
+                .filteredOn(node -> "end_1".equals(node.id()))
+                .singleElement()
+                .satisfies(node -> {
+                    assertThat(node.position()).containsEntry("x", 1280);
+                    assertThat(node.position()).containsEntry("y", 420);
+                });
+    }
+
+    @Test
     void shouldPublishDefinitionWithNodeConfigurationInBpmn() throws Exception {
         ProcessDefinitionDetailResponse published = processDefinitionService.publish(
                 payload("oa_leave", "请假审批", "OA")
