@@ -104,6 +104,14 @@ public class FlowableProcessRuntimeService {
     private record DefinitionMetadata(String processName, Integer version) {
     }
 
+    private record SubprocessStructureMetadata(
+            String callScope,
+            String joinMode,
+            String childStartStrategy,
+            String parentResumeStrategy
+    ) {
+    }
+
     private final FlowableEngineFacade flowableEngineFacade;
     private final FlowableRuntimeStartService flowableRuntimeStartService;
     private final FlowableTaskActionService flowableTaskActionService;
@@ -1934,24 +1942,36 @@ public class FlowableProcessRuntimeService {
         List<InclusiveGatewayHitResponse> hits = new ArrayList<>();
         for (ProcessDslPayload.Node split : inclusiveSplits) {
             ProcessDslPayload.Node join = resolveNearestInclusiveJoin(split.id(), nodeById, outgoingEdges);
-            List<ProcessDslPayload.Edge> branchEdges = outgoingEdges.getOrDefault(split.id(), List.of());
+            List<ProcessDslPayload.Edge> branchEdges = outgoingEdges.getOrDefault(split.id(), List.of()).stream()
+                    .sorted(Comparator
+                            .comparing(ProcessDslPayload.Edge::priority, Comparator.nullsLast(Integer::compareTo))
+                            .thenComparing(ProcessDslPayload.Edge::id))
+                    .toList();
             if (branchEdges.isEmpty()) {
                 continue;
             }
 
+            Map<String, Object> splitConfig = mapValue(split.config());
+            String defaultBranchId = stringValue(splitConfig.get("defaultBranchId"));
+            Integer requiredBranchCount = integerValue(splitConfig.get("requiredBranchCount"));
+            String branchMergePolicy = stringValueOrDefault(splitConfig.get("branchMergePolicy"), "ALL_SELECTED");
             List<String> activatedTargetNodeIds = new ArrayList<>();
             List<String> activatedTargetNodeNames = new ArrayList<>();
             List<String> skippedTargetNodeIds = new ArrayList<>();
             List<String> skippedTargetNodeNames = new ArrayList<>();
+            List<Integer> branchPriorities = new ArrayList<>();
             List<String> branchLabels = new ArrayList<>();
             List<String> branchExpressions = new ArrayList<>();
             OffsetDateTime firstActivatedAt = null;
+            int branchIndex = 1;
 
             for (ProcessDslPayload.Edge edge : branchEdges) {
                 String targetNodeId = edge.target();
                 if (targetNodeId == null || targetNodeId.isBlank()) {
+                    branchIndex++;
                     continue;
                 }
+                branchPriorities.add(edge.priority() == null ? branchIndex : edge.priority());
                 branchLabels.add(edge.label() == null || edge.label().isBlank()
                         ? targetNodeId
                         : edge.label());
@@ -1984,6 +2004,7 @@ public class FlowableProcessRuntimeService {
                     skippedTargetNodeIds.add(targetNodeId);
                     skippedTargetNodeNames.add(targetNode == null ? targetNodeId : targetNode.name());
                 }
+                branchIndex++;
             }
 
             OffsetDateTime finishedAt = join == null ? null : firstOccurredAtByNodeId.get(join.id());
@@ -1999,6 +2020,9 @@ public class FlowableProcessRuntimeService {
                     split.name(),
                     join == null ? null : join.id(),
                     join == null ? null : join.name(),
+                    defaultBranchId,
+                    requiredBranchCount,
+                    branchMergePolicy,
                     gatewayStatus,
                     branchEdges.size(),
                     activatedTargetNodeIds.size(),
@@ -2006,6 +2030,7 @@ public class FlowableProcessRuntimeService {
                     List.copyOf(activatedTargetNodeNames),
                     List.copyOf(skippedTargetNodeIds),
                     List.copyOf(skippedTargetNodeNames),
+                    List.copyOf(branchPriorities),
                     List.copyOf(branchLabels),
                     List.copyOf(branchExpressions),
                     buildInclusiveDecisionSummary(branchEdges.size(), activatedTargetNodeIds.size(), join != null),
@@ -2014,6 +2039,20 @@ public class FlowableProcessRuntimeService {
             ));
         }
         return hits;
+    }
+
+    private Integer integerValue(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private List<ProcessInstanceEventResponse> buildInclusiveGatewayEvents(
@@ -3363,6 +3402,10 @@ public class FlowableProcessRuntimeService {
                 record.calledDefinitionId(),
                 record.calledProcessKey()
         );
+        SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(
+                record.parentInstanceId(),
+                record.parentNodeId()
+        );
         return new ProcessInstanceLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
@@ -3379,6 +3422,10 @@ public class FlowableProcessRuntimeService {
                 record.status(),
                 record.terminatePolicy(),
                 record.childFinishPolicy(),
+                structureMetadata.callScope(),
+                structureMetadata.joinMode(),
+                structureMetadata.childStartStrategy(),
+                structureMetadata.parentResumeStrategy(),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
                 record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
         );
@@ -3709,6 +3756,16 @@ public class FlowableProcessRuntimeService {
             return resolveDefinitionMetadata(record.targetInstanceId(), record.calledDefinitionId(), record.calledProcessKey());
         }
         return resolveDefinitionMetadata(record.parentInstanceId(), record.calledDefinitionId(), record.calledProcessKey());
+    }
+
+    private SubprocessStructureMetadata resolveSubprocessStructureMetadata(String processInstanceId, String nodeId) {
+        Map<String, Object> config = resolveNodeConfig(processInstanceId, nodeId);
+        return new SubprocessStructureMetadata(
+                stringValueOrDefault(config.get("callScope"), "CHILD_ONLY"),
+                stringValueOrDefault(config.get("joinMode"), "AUTO_RETURN"),
+                stringValueOrDefault(config.get("childStartStrategy"), "LATEST_PUBLISHED"),
+                stringValueOrDefault(config.get("parentResumeStrategy"), "AUTO_RETURN")
+        );
     }
 
     private String resolveTaskName(String taskId) {
@@ -4278,6 +4335,11 @@ public class FlowableProcessRuntimeService {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private String stringValueOrDefault(Object value, String defaultValue) {
+        String text = stringValue(value);
+        return text == null ? defaultValue : text;
     }
 
     private HandoverPreviewTaskItemResponse toHandoverPreviewTask(Task task, String sourceUserId) {

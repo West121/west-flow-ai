@@ -178,6 +178,113 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectInclusiveSplitWithInvalidMergePolicy() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of("branchMergePolicy", "NOT_SUPPORTED")),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        edge("edge_2", "inclusive_split_1", "approve_1", expressionCondition("amount > 10000")),
+                        edge("edge_3", "inclusive_split_1", "approve_2", expressionCondition("urgent == true")),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "inclusive_split 节点 branchMergePolicy 不合法");
+    }
+
+    @Test
+    void shouldRejectInclusiveSplitWithRequiredCountExceedingBranches() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of(
+                                "requiredBranchCount", 3,
+                                "branchMergePolicy", "REQUIRED_COUNT"
+                        )),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        edge("edge_2", "inclusive_split_1", "approve_1", expressionCondition("amount > 10000")),
+                        edge("edge_3", "inclusive_split_1", "approve_2", expressionCondition("urgent == true")),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "inclusive_split 节点 requiredBranchCount 不合法");
+    }
+
+    @Test
+    void shouldRejectInclusiveSplitWithNonPositiveBranchPriority() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of()),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        new ProcessDslPayload.Edge("edge_2", "inclusive_split_1", "approve_1", -1, "金额超限", expressionCondition("amount > 10000")),
+                        new ProcessDslPayload.Edge("edge_3", "inclusive_split_1", "approve_2", 10, "长假", expressionCondition("urgent == true")),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "inclusive_split 分支 branchPriority 必须为正整数");
+    }
+
+    @Test
+    void shouldAcceptInclusiveSplitWithMergePolicyAndDefaultBranch() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of(
+                                "defaultBranchId", "edge_2",
+                                "requiredBranchCount", 1,
+                                "branchMergePolicy", "DEFAULT_BRANCH"
+                        )),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        edge("edge_2", "inclusive_split_1", "approve_1", expressionCondition("amount > 10000")),
+                        edge("edge_3", "inclusive_split_1", "approve_2", expressionCondition("urgent == true")),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
     void shouldAcceptPairedInclusiveNodes() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),
@@ -489,6 +596,31 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectSubprocessWithInvalidJoinMode() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("subprocess_1", "subprocess", Map.of(
+                                "calledProcessKey", "oa_leave_subflow",
+                                "calledVersionPolicy", "LATEST_PUBLISHED",
+                                "businessBindingMode", "INHERIT_PARENT",
+                                "terminatePolicy", "TERMINATE_SUBPROCESS_ONLY",
+                                "childFinishPolicy", "RETURN_TO_PARENT",
+                                "joinMode", "INVALID_JOIN_MODE"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "subprocess_1"),
+                        edge("edge_2", "subprocess_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "subprocess 节点 joinMode 不合法");
+    }
+
+    @Test
     void shouldRejectDynamicBuilderWithoutBuildMode() {
         Map<String, Object> dynamicConfig = new LinkedHashMap<>();
         dynamicConfig.put("sourceMode", "RULE");
@@ -790,6 +922,99 @@ class ProcessDslValidatorTest {
         );
 
         assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldAcceptRoleBasedCountersignDsl() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("OA_USER"),
+                                        "departmentRef", "",
+                                        "formFieldKey", "",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalMode", "PARALLEL",
+                                "reapprovePolicy", "RESTART_ALL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldAcceptFormulaBasedCountersignDsl() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "FORMULA",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", "",
+                                        "formulaExpression", "ifElse(leaveDays >= 3, 'usr_001,usr_002', 'usr_002,usr_003')"
+                                ),
+                                "approvalMode", "OR_SIGN",
+                                "autoFinishRemaining", true
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldRejectVoteCountersignWithoutExplicitUsers() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("OA_USER"),
+                                        "departmentRef", "",
+                                        "formFieldKey", "",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalMode", "VOTE",
+                                "voteRule", Map.of(
+                                        "thresholdPercent", 60,
+                                        "weights", List.of(
+                                                Map.of("userId", "usr_001", "weight", 40),
+                                                Map.of("userId", "usr_002", "weight", 60)
+                                        )
+                                )
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "票签模式至少配置 2 名指定处理人");
     }
 
     private void assertValidationFailure(ProcessDslPayload dsl, String messagePart) {

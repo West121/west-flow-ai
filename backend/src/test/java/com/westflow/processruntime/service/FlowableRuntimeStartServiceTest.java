@@ -311,6 +311,56 @@ class FlowableRuntimeStartServiceTest {
     }
 
     @Test
+    void shouldStartRoleBasedParallelCountersignWithResolvedAssignees() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
+                {
+                  "mode": "ROLE",
+                  "userIds": [],
+                  "roleCodes": ["OA_USER"],
+                  "departmentRef": "",
+                  "formFieldKey": "",
+                  "formulaExpression": ""
+                }
+                """));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_parallel_role_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 3, "reason", "角色并行会签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
+                .containsExactlyInAnyOrder("usr_001", "usr_002");
+    }
+
+    @Test
+    void shouldStartFormulaBasedParallelCountersignWithResolvedAssignees() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
+                {
+                  "mode": "FORMULA",
+                  "userIds": [],
+                  "roleCodes": [],
+                  "departmentRef": "",
+                  "formFieldKey": "",
+                  "formulaExpression": "ifElse(days >= 3, 'usr_001,usr_002', 'usr_002,usr_003')"
+                }
+                """));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_parallel_formula_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 5, "reason", "公式并行会签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
+                .containsExactlyInAnyOrder("usr_001", "usr_002");
+    }
+
+    @Test
     void shouldStartSubprocessAndPersistProcessLink() throws Exception {
         StpUtil.login("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayload());
@@ -634,6 +684,18 @@ class FlowableRuntimeStartServiceTest {
     }
 
     private ProcessDslPayload buildCountersignPayload(String approvalMode) throws Exception {
+        return buildCountersignPayload(approvalMode, """
+                {
+                  "mode": "USER",
+                  "userIds": %s,
+                  "roleCodes": [],
+                  "departmentRef": "",
+                  "formFieldKey": ""
+                }
+                """.formatted(voteUserIds(approvalMode)));
+    }
+
+    private ProcessDslPayload buildCountersignPayload(String approvalMode, String assignmentJson) throws Exception {
         return objectMapper.readValue("""
                 {
                   "dslVersion": "1.0.0",
@@ -665,13 +727,7 @@ class FlowableRuntimeStartServiceTest {
                         "approvalMode": "%s",
                         "reapprovePolicy": "RESTART_ALL",
                         "autoFinishRemaining": %s,
-                        "assignment": {
-                          "mode": "USER",
-                          "userIds": %s,
-                          "roleCodes": [],
-                          "departmentRef": "",
-                          "formFieldKey": ""
-                        },
+                        "assignment": %s,
                         "operations": ["APPROVE", "REJECT", "RETURN"]%s
                       },
                       "ui": {"width": 240, "height": 88}
@@ -705,7 +761,7 @@ class FlowableRuntimeStartServiceTest {
                 """.formatted(
                         approvalMode,
                         requiresAutoFinishRemaining(approvalMode),
-                        voteUserIds(approvalMode),
+                        assignmentJson,
                         voteRuleFragment(approvalMode)
                 ), ProcessDslPayload.class);
     }

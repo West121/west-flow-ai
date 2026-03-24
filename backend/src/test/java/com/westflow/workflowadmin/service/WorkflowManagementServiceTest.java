@@ -3,6 +3,7 @@ package com.westflow.workflowadmin.service;
 import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.identity.service.IdentityAuthService;
+import com.westflow.processruntime.api.InclusiveGatewayHitResponse;
 import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
 import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
@@ -97,6 +98,10 @@ class WorkflowManagementServiceTest {
                 "RUNNING",
                 "TERMINATE_SUBPROCESS_ONLY",
                 "RETURN_TO_PARENT",
+                "CHILD_AND_DESCENDANTS",
+                "WAIT_PARENT_CONFIRM",
+                "SCENE_BINDING",
+                "WAIT_PARENT_CONFIRM",
                 OffsetDateTime.now(),
                 null
         );
@@ -134,7 +139,28 @@ class WorkflowManagementServiceTest {
             when(runtimeProcessInstance.isSuspended()).thenReturn(false);
 
             when(processLinkService.resolveRootInstanceId("instance_1")).thenReturn("root_1");
-            when(flowableProcessRuntimeService.inclusiveGatewayHits("instance_1")).thenReturn(List.of());
+            when(flowableProcessRuntimeService.inclusiveGatewayHits("instance_1")).thenReturn(List.of(new InclusiveGatewayHitResponse(
+                    "inclusive_split_1",
+                    "包容分支",
+                    "inclusive_join_1",
+                    "包容汇聚",
+                    "edge_3",
+                    1,
+                    "DEFAULT_BRANCH",
+                    "IN_PROGRESS",
+                    2,
+                    1,
+                    List.of("approve_finance"),
+                    List.of("财务审批"),
+                    List.of("approve_hr"),
+                    List.of("人事审批"),
+                    List.of(10, 20),
+                    List.of("金额超限", "长假"),
+                    List.of("amount > 1000", "days > 3"),
+                    "已激活 1/2 条分支",
+                    OffsetDateTime.now(),
+                    null
+            )));
             when(flowableProcessRuntimeService.links("root_1")).thenReturn(List.of(processLink));
             when(flowableProcessRuntimeService.appendLinks("instance_1")).thenReturn(List.of());
 
@@ -144,6 +170,15 @@ class WorkflowManagementServiceTest {
             assertThat(response.processLinks().get(0).childProcessName()).isEqualTo("附属子流程");
             assertThat(response.processLinks().get(0).parentNodeName()).isEqualTo("子流程节点");
             assertThat(response.processLinks().get(0).parentNodeType()).isEqualTo("subprocess");
+            assertThat(response.processLinks().get(0).callScope()).isEqualTo("CHILD_AND_DESCENDANTS");
+            assertThat(response.processLinks().get(0).joinMode()).isEqualTo("WAIT_PARENT_CONFIRM");
+            assertThat(response.processLinks().get(0).childStartStrategy()).isEqualTo("SCENE_BINDING");
+            assertThat(response.processLinks().get(0).parentResumeStrategy()).isEqualTo("WAIT_PARENT_CONFIRM");
+            assertThat(response.inclusiveGatewayHits()).hasSize(1);
+            assertThat(response.inclusiveGatewayHits().get(0).defaultBranchId()).isEqualTo("edge_3");
+            assertThat(response.inclusiveGatewayHits().get(0).requiredBranchCount()).isEqualTo(1);
+            assertThat(response.inclusiveGatewayHits().get(0).branchMergePolicy()).isEqualTo("DEFAULT_BRANCH");
+            assertThat(response.inclusiveGatewayHits().get(0).branchPriorities()).containsExactly(10, 20);
         }
     }
 }

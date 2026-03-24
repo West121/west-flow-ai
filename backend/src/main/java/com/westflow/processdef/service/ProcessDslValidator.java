@@ -42,6 +42,23 @@ public class ProcessDslValidator {
             "RETURN_TO_PARENT",
             "TERMINATE_PARENT"
     );
+    private static final List<String> SUPPORTED_SUBPROCESS_CALL_SCOPES = List.of(
+            "CHILD_ONLY",
+            "CHILD_AND_DESCENDANTS"
+    );
+    private static final List<String> SUPPORTED_SUBPROCESS_JOIN_MODES = List.of(
+            "AUTO_RETURN",
+            "WAIT_PARENT_CONFIRM"
+    );
+    private static final List<String> SUPPORTED_SUBPROCESS_CHILD_START_STRATEGIES = List.of(
+            "LATEST_PUBLISHED",
+            "FIXED_VERSION",
+            "SCENE_BINDING"
+    );
+    private static final List<String> SUPPORTED_SUBPROCESS_PARENT_RESUME_STRATEGIES = List.of(
+            "AUTO_RETURN",
+            "WAIT_PARENT_CONFIRM"
+    );
     private static final List<String> SUPPORTED_DYNAMIC_BUILDER_BUILD_MODES = List.of(
             "APPROVER_TASKS",
             "SUBPROCESS_CALLS"
@@ -63,6 +80,11 @@ public class ProcessDslValidator {
             "EXPRESSION",
             "FIELD",
             "FORMULA"
+    );
+    private static final List<String> SUPPORTED_INCLUSIVE_BRANCH_MERGE_POLICIES = List.of(
+            "ALL_SELECTED",
+            "REQUIRED_COUNT",
+            "DEFAULT_BRANCH"
     );
     private static final List<String> SUPPORTED_FIELD_CONDITION_OPERATORS = List.of(
             "EQ",
@@ -142,6 +164,23 @@ public class ProcessDslValidator {
             if (childFinishPolicy == null || !SUPPORTED_SUBPROCESS_CHILD_FINISH_POLICIES.contains(childFinishPolicy)) {
                 throw invalid("subprocess 节点 childFinishPolicy 不合法", Map.of("nodeId", node.id(), "childFinishPolicy", childFinishPolicy));
             }
+
+            validateOptionalEnum(config, "callScope", SUPPORTED_SUBPROCESS_CALL_SCOPES, node.id());
+            validateOptionalEnum(config, "joinMode", SUPPORTED_SUBPROCESS_JOIN_MODES, node.id());
+            validateOptionalEnum(config, "childStartStrategy", SUPPORTED_SUBPROCESS_CHILD_START_STRATEGIES, node.id());
+            validateOptionalEnum(config, "parentResumeStrategy", SUPPORTED_SUBPROCESS_PARENT_RESUME_STRATEGIES, node.id());
+        }
+    }
+
+    private void validateOptionalEnum(
+            Map<String, Object> config,
+            String fieldName,
+            List<String> supportedValues,
+            String nodeId
+    ) {
+        String value = asString(config.get(fieldName));
+        if (value != null && !supportedValues.contains(value)) {
+            throw invalid("subprocess 节点 " + fieldName + " 不合法", Map.of("nodeId", nodeId, fieldName, value));
         }
     }
 
@@ -335,11 +374,16 @@ public class ProcessDslValidator {
             Map<String, Object> approvalPolicy,
             String approvalMode
     ) {
+        String assignmentMode = asString(assignment.get("mode"));
         List<String> userIds = stringList(assignment.get("userIds"));
         boolean isCountersignMode = List.of("SEQUENTIAL", "PARALLEL", "OR_SIGN", "VOTE").contains(approvalMode)
                 && config.containsKey("approvalMode");
         if (isCountersignMode) {
-            if (!"USER".equals(asString(assignment.get("mode"))) || userIds.size() < 2) {
+            if ("VOTE".equals(approvalMode)) {
+                if (!"USER".equals(assignmentMode) || userIds.size() < 2) {
+                    throw invalid("approver 节点票签模式至少配置 2 名指定处理人", Map.of("nodeId", node.id(), "approvalMode", approvalMode));
+                }
+            } else if ("USER".equals(assignmentMode) && userIds.size() < 2) {
                 throw invalid("approver 节点会签模式至少配置 2 名处理人", Map.of("nodeId", node.id(), "approvalMode", approvalMode));
             }
         }
@@ -633,6 +677,7 @@ public class ProcessDslValidator {
             if (edges.size() < 2) {
                 throw invalid("inclusive_split 节点至少需要两条出边", Map.of("nodeId", split.id(), "outgoingCount", edges.size()));
             }
+            validateInclusiveSplitConfig(split, edges);
             for (ProcessDslPayload.Edge edge : edges) {
                 validateBranchCondition(split, edge, "inclusive_split");
             }
@@ -648,6 +693,63 @@ public class ProcessDslValidator {
             }
             if (!canReachNodeType(join.id(), "inclusive_split", incomingEdges, nodeById, new HashSet<>(), true)) {
                 throw invalid("inclusive_split 与 inclusive_join 必须成对出现", Map.of("nodeId", join.id()));
+            }
+        }
+    }
+
+    // 校验包容分支的第一批策略配置，保证分支优先级、默认分支和汇聚规则可被稳定识别。
+    private void validateInclusiveSplitConfig(ProcessDslPayload.Node split, List<ProcessDslPayload.Edge> outgoingEdges) {
+        Map<String, Object> config = safeConfig(split);
+
+        String branchMergePolicy = asString(config.get("branchMergePolicy"));
+        if (branchMergePolicy != null && !SUPPORTED_INCLUSIVE_BRANCH_MERGE_POLICIES.contains(branchMergePolicy)) {
+            throw invalid(
+                    "inclusive_split 节点 branchMergePolicy 不合法",
+                    Map.of("nodeId", split.id(), "branchMergePolicy", branchMergePolicy)
+            );
+        }
+
+        Integer requiredBranchCount = integerValue(config.get("requiredBranchCount"));
+        if (requiredBranchCount != null) {
+            if (requiredBranchCount <= 0 || requiredBranchCount > outgoingEdges.size()) {
+                throw invalid(
+                        "inclusive_split 节点 requiredBranchCount 不合法",
+                        Map.of("nodeId", split.id(), "requiredBranchCount", requiredBranchCount, "outgoingCount", outgoingEdges.size())
+                );
+            }
+        }
+
+        String defaultBranchId = asString(config.get("defaultBranchId"));
+        if (defaultBranchId != null && outgoingEdges.stream().noneMatch(edge -> defaultBranchId.equals(edge.id()))) {
+            throw invalid(
+                    "inclusive_split 节点 defaultBranchId 必须指向出边",
+                    Map.of("nodeId", split.id(), "defaultBranchId", defaultBranchId)
+            );
+        }
+
+        if ("REQUIRED_COUNT".equals(branchMergePolicy) && requiredBranchCount == null) {
+            throw invalid(
+                    "inclusive_split 节点 branchMergePolicy=REQUIRED_COUNT 时必须配置 requiredBranchCount",
+                    Map.of("nodeId", split.id())
+            );
+        }
+        if ("DEFAULT_BRANCH".equals(branchMergePolicy) && defaultBranchId == null) {
+            throw invalid(
+                    "inclusive_split 节点 branchMergePolicy=DEFAULT_BRANCH 时必须配置 defaultBranchId",
+                    Map.of("nodeId", split.id())
+            );
+        }
+
+        List<Integer> branchPriorities = outgoingEdges.stream()
+                .map(ProcessDslPayload.Edge::priority)
+                .filter(priority -> priority != null)
+                .toList();
+        if (!branchPriorities.isEmpty()) {
+            if (branchPriorities.stream().anyMatch(priority -> priority <= 0)) {
+                throw invalid(
+                        "inclusive_split 分支 branchPriority 必须为正整数",
+                        Map.of("nodeId", split.id(), "branchPriorities", branchPriorities)
+                );
             }
         }
     }

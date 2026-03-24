@@ -238,6 +238,43 @@ public interface SystemUserMapper {
 
     @Select({
             "<script>",
+            "SELECT DISTINCT u.id",
+            "FROM wf_user u",
+            "INNER JOIN wf_user_role ur ON ur.user_id = u.id",
+            "INNER JOIN wf_role r ON r.id = ur.role_id",
+            "WHERE u.enabled = TRUE",
+            "  AND r.enabled = TRUE",
+            "  AND (",
+            "    r.id IN",
+            "    <foreach collection='roleRefs' item='roleRef' open='(' separator=',' close=')'>",
+            "      #{roleRef}",
+            "    </foreach>",
+            "    OR r.role_code IN",
+            "    <foreach collection='roleRefs' item='roleRef' open='(' separator=',' close=')'>",
+            "      #{roleRef}",
+            "    </foreach>",
+            "  )",
+            "ORDER BY u.id ASC",
+            "</script>"
+    })
+    List<String> selectEnabledUserIdsByRoleRefs(@Param("roleRefs") List<String> roleRefs);
+
+    @Select({
+            "<script>",
+            "SELECT DISTINCT u.id",
+            "FROM wf_user u",
+            "WHERE u.enabled = TRUE",
+            "  AND u.active_department_id IN",
+            "  <foreach collection='departmentIds' item='departmentId' open='(' separator=',' close=')'>",
+            "    #{departmentId}",
+            "  </foreach>",
+            "ORDER BY u.id ASC",
+            "</script>"
+    })
+    List<String> selectEnabledUserIdsByDepartmentIds(@Param("departmentIds") List<String> departmentIds);
+
+    @Select({
+            "<script>",
             "SELECT COUNT(1)",
             "FROM wf_user",
             "WHERE username = #{username}",

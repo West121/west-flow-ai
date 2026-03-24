@@ -415,13 +415,19 @@ const nodeConfigFormSchema = z
       if (
         ['SEQUENTIAL', 'PARALLEL', 'OR_SIGN', 'VOTE'].includes(values.approver.approvalPolicyType)
       ) {
-        if (values.approver.assignmentMode !== 'USER') {
+        if (
+          values.approver.approvalPolicyType === 'VOTE' &&
+          values.approver.assignmentMode !== 'USER'
+        ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: '当前阶段会签模式仅支持指定人员',
+            message: '当前阶段票签模式仅支持指定人员',
             path: ['approver', 'assignmentMode'],
           })
-        } else if (parseListValue(values.approver.userIds).length < 2) {
+        } else if (
+          values.approver.assignmentMode === 'USER' &&
+          parseListValue(values.approver.userIds).length < 2
+        ) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: '会签模式至少需要 2 名处理人',

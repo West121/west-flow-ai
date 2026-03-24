@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { NodeConfigPanel } from './node-config-panel'
 import { workflowNodeTemplates } from './palette'
-import { type WorkflowEdge, type WorkflowNode } from './types'
+import { type WorkflowApproverNodeConfig, type WorkflowEdge, type WorkflowNode } from './types'
 
 function buildTimerNode(): WorkflowNode {
   return {
@@ -327,6 +327,50 @@ describe('workflow designer node config panel', () => {
           }),
           reapprovePolicy: 'CONTINUE_PROGRESS',
           autoFinishRemaining: true,
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('allows role based parallel countersign configuration', async () => {
+    const onApply = vi.fn()
+    const node = buildApproverNode('ROLE')
+    const approverConfig = node.data.config as WorkflowApproverNodeConfig
+    node.data.config = {
+      ...approverConfig,
+      approvalMode: 'PARALLEL',
+      approvalPolicy: {
+        type: 'PARALLEL',
+        voteThreshold: null,
+      },
+      assignment: {
+        ...approverConfig.assignment,
+        userIds: [],
+        roleCodes: ['OA_USER'],
+      },
+      voteRule: {
+        thresholdPercent: null,
+        passCondition: 'THRESHOLD_REACHED',
+        rejectCondition: 'REJECT_THRESHOLD',
+        weights: [],
+      },
+    } as typeof node.data.config
+
+    render(<NodeConfigPanel node={node} edges={edges} onApply={onApply} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          approvalMode: 'PARALLEL',
+          assignment: expect.objectContaining({
+            mode: 'ROLE',
+            roleCodes: ['OA_USER'],
+          }),
         }),
       }),
       undefined

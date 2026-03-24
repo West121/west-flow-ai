@@ -39,6 +39,7 @@ public class FlowableRuntimeStartService {
     private final WorkflowOperationLogService workflowOperationLogService;
     private final FlowableCountersignService flowableCountersignService;
     private final ProcessLinkService processLinkService;
+    private final CountersignAssigneeResolver countersignAssigneeResolver;
 
     /**
      * 启动指定流程定义的最新发布版本。
@@ -190,7 +191,7 @@ public class FlowableRuntimeStartService {
             return;
         }
         Map<String, Object> assignment = mapValue(config.get("assignment"));
-        List<String> userIds = stringListValue(assignment.get("userIds"));
+        List<String> userIds = countersignAssigneeResolver.resolve(assignment, variables);
         if (userIds.size() < 2) {
             return;
         }

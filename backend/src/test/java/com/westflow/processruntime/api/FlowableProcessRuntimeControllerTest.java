@@ -292,6 +292,10 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("inclusiveGatewayHits").isArray()).isTrue();
         assertThat(detailBody.path("inclusiveGatewayHits")).hasSize(1);
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("splitNodeId").asText()).isEqualTo("inclusive_split_1");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchId").asText()).isEqualTo("edge_3");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("requiredBranchCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchMergePolicy").asText()).isEqualTo("DEFAULT_BRANCH");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchPriorities").toString()).contains("10", "20");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchLabels").toString()).contains("金额超限", "长假");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchExpressions").toString()).contains("amount > 1000", "days > 3");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("decisionSummary").asText()).contains("已激活 1/2 条分支");
@@ -340,6 +344,10 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(linksBody.get(0).path("childProcessVersion").asInt()).isEqualTo(1);
         assertThat(linksBody.get(0).path("linkType").asText()).isEqualTo("CALL_ACTIVITY");
         assertThat(linksBody.get(0).path("status").asText()).isEqualTo("RUNNING");
+        assertThat(linksBody.get(0).path("callScope").asText()).isEqualTo("CHILD_ONLY");
+        assertThat(linksBody.get(0).path("joinMode").asText()).isEqualTo("AUTO_RETURN");
+        assertThat(linksBody.get(0).path("childStartStrategy").asText()).isEqualTo("LATEST_PUBLISHED");
+        assertThat(linksBody.get(0).path("parentResumeStrategy").asText()).isEqualTo("AUTO_RETURN");
     }
 
     @Test
@@ -1628,7 +1636,11 @@ class FlowableProcessRuntimeControllerTest {
                       "type": "end",
                       "name": "结束",
                       "position": {"x": 540, "y": 100},
-                      "config": {},
+                      "config": {
+                        "defaultBranchId": "edge_3",
+                        "requiredBranchCount": 1,
+                        "branchMergePolicy": "DEFAULT_BRANCH"
+                      },
                       "ui": {"width": 240, "height": 88}
                     }
                   ],
@@ -2366,7 +2378,11 @@ class FlowableProcessRuntimeControllerTest {
                         "calledVersionPolicy": "LATEST_PUBLISHED",
                         "businessBindingMode": "INHERIT_PARENT",
                         "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
-                        "childFinishPolicy": "RETURN_TO_PARENT"
+                        "childFinishPolicy": "RETURN_TO_PARENT",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "AUTO_RETURN"
                       },
                       "ui": {"width": 240, "height": 88}
                     },
@@ -2427,7 +2443,11 @@ class FlowableProcessRuntimeControllerTest {
                       "type": "inclusive_split",
                       "name": "包容分支",
                       "position": {"x": 320, "y": 100},
-                      "config": {},
+                      "config": {
+                        "defaultBranchId": "edge_3",
+                        "requiredBranchCount": 1,
+                        "branchMergePolicy": "DEFAULT_BRANCH"
+                      },
                       "ui": {"width": 240, "height": 88}
                     },
                     {

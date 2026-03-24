@@ -61,7 +61,7 @@ public class FlowableCountersignService {
         if (model == null || task == null) {
             return Map.of();
         }
-        CountersignNodeMetadata metadata = resolveCountersignMetadata(model, task.getTaskDefinitionKey());
+        CountersignNodeMetadata metadata = resolveCountersignMetadata(model, task.getProcessInstanceId(), task.getTaskDefinitionKey());
         if (metadata == null) {
             return Map.of();
         }
@@ -176,7 +176,7 @@ public class FlowableCountersignService {
                 ));
 
         for (Map.Entry<String, List<Task>> entry : activeTasksByNode.entrySet()) {
-            CountersignNodeMetadata metadata = resolveCountersignMetadata(model, entry.getKey());
+            CountersignNodeMetadata metadata = resolveCountersignMetadata(model, processInstanceId, entry.getKey());
             if (metadata == null) {
                 continue;
             }
@@ -457,7 +457,7 @@ public class FlowableCountersignService {
         );
     }
 
-    private CountersignNodeMetadata resolveCountersignMetadata(BpmnModel model, String nodeId) {
+    private CountersignNodeMetadata resolveCountersignMetadata(BpmnModel model, String processInstanceId, String nodeId) {
         BaseElement element = model.getFlowElement(nodeId);
         if (element == null) {
             return null;
@@ -470,6 +470,9 @@ public class FlowableCountersignService {
             return null;
         }
         List<String> userIds = commaSeparatedValue(extensionValue(element, "userIds"));
+        if (userIds.size() < 2 && processInstanceId != null && !processInstanceId.isBlank()) {
+            userIds = runtimeCountersignAssignees(processInstanceId, nodeId);
+        }
         if (userIds.size() < 2) {
             return null;
         }
@@ -487,6 +490,22 @@ public class FlowableCountersignService {
                 integerValue(extensionValue(element, "voteThresholdPercent")),
                 parseVoteWeights(extensionValue(element, "voteWeights"))
         );
+    }
+
+    private List<String> runtimeCountersignAssignees(String processInstanceId, String nodeId) {
+        Object runtimeValue = flowableEngineFacade.runtimeService()
+                .getVariable(processInstanceId, countersignCollectionVariable(nodeId));
+        if (runtimeValue instanceof List<?> values) {
+            return values.stream()
+                    .map(String::valueOf)
+                    .filter(value -> value != null && !value.isBlank())
+                    .distinct()
+                    .toList();
+        }
+        if (runtimeValue instanceof String value && !value.isBlank()) {
+            return commaSeparatedValue(value);
+        }
+        return List.of();
     }
 
     private Optional<TaskGroupMemberRecord> findMemberByTaskId(String taskId) {
@@ -602,6 +621,14 @@ public class FlowableCountersignService {
 
     private String countersignDecisionVariable(String nodeId) {
         return "wfCountersignDecision_" + nodeId;
+    }
+
+    private String countersignCollectionVariable(String nodeId) {
+        return "wfCountersignAssignees_" + nodeId;
+    }
+
+    private String countersignElementVariable(String nodeId) {
+        return "wfCountersignAssignee_" + nodeId;
     }
 
     private String extensionValue(BaseElement element, String name) {

@@ -19,6 +19,10 @@ public record ProcessInstanceLinkResponse(
         String status,
         String terminatePolicy,
         String childFinishPolicy,
+        String callScope,
+        String joinMode,
+        String childStartStrategy,
+        String parentResumeStrategy,
         OffsetDateTime createdAt,
         OffsetDateTime finishedAt
 ) {

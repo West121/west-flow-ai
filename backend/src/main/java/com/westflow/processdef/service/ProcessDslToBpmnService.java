@@ -48,6 +48,9 @@ public class ProcessDslToBpmnService {
         process.setExecutable(true);
         model.addProcess(process);
 
+        Map<String, ProcessDslPayload.Node> nodeById = new LinkedHashMap<>();
+        payload.nodes().forEach(node -> nodeById.put(node.id(), node));
+
         payload.nodes().stream()
                 .sorted(Comparator.comparing(ProcessDslPayload.Node::id))
                 .map(this::toFlowElement)
@@ -55,7 +58,7 @@ public class ProcessDslToBpmnService {
 
         payload.edges().stream()
                 .sorted(Comparator.comparing(ProcessDslPayload.Edge::id))
-                .map(this::toSequenceFlow)
+                .map(edge -> toSequenceFlow(edge, nodeById.get(edge.source())))
                 .forEach(process::addFlowElement);
 
         byte[] xmlBytes = new BpmnXMLConverter().convertToXML(model, StandardCharsets.UTF_8.name());
@@ -105,7 +108,7 @@ public class ProcessDslToBpmnService {
         String formFieldKey = stringValue(assignment.get("formFieldKey"));
         String formulaExpression = stringValue(assignment.get("formulaExpression"));
         String approvalMode = resolveApprovalMode(config);
-        if (isCountersignApprovalMode(config, approvalMode) && userIds.size() > 1) {
+        if (isCountersignApprovalMode(config, approvalMode)) {
             task.setAssignee("${" + countersignElementVariable(node.id()) + "}");
             task.setLoopCharacteristics(buildCountersignLoopCharacteristics(node.id(), approvalMode));
         } else if (userIds.size() == 1) {
@@ -238,7 +241,7 @@ public class ProcessDslToBpmnService {
     }
 
     // 连线映射为真实 sequence flow，并保留条件表达式。
-    private SequenceFlow toSequenceFlow(ProcessDslPayload.Edge edge) {
+    private SequenceFlow toSequenceFlow(ProcessDslPayload.Edge edge, ProcessDslPayload.Node sourceNode) {
         SequenceFlow flow = new SequenceFlow();
         flow.setId(edge.id());
         flow.setSourceRef(edge.source());
@@ -250,6 +253,17 @@ public class ProcessDslToBpmnService {
             flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression));
         }
         addExtensionAttribute(flow, "priority", edge.priority() == null ? null : String.valueOf(edge.priority()));
+        addExtensionAttribute(flow, "branchPriority", edge.priority() == null ? null : String.valueOf(edge.priority()));
+        if (sourceNode != null && "inclusive_split".equals(sourceNode.type())) {
+            Map<String, Object> sourceConfig = mapValue(sourceNode.config());
+            addExtensionAttribute(flow, "defaultBranchId", stringValue(sourceConfig.get("defaultBranchId")));
+            addExtensionAttribute(flow, "requiredBranchCount", stringValue(sourceConfig.get("requiredBranchCount")));
+            addExtensionAttribute(flow, "branchMergePolicy", stringValue(sourceConfig.get("branchMergePolicy")));
+            addExtensionElement(flow, "branchPriority", edge.priority() == null ? null : String.valueOf(edge.priority()));
+            addExtensionElement(flow, "defaultBranchId", stringValue(sourceConfig.get("defaultBranchId")));
+            addExtensionElement(flow, "requiredBranchCount", stringValue(sourceConfig.get("requiredBranchCount")));
+            addExtensionElement(flow, "branchMergePolicy", stringValue(sourceConfig.get("branchMergePolicy")));
+        }
         String conditionType = stringValue(condition.get("type"));
         if (conditionType != null) {
             addExtensionAttribute(flow, "conditionType", conditionType);
@@ -323,6 +337,9 @@ public class ProcessDslToBpmnService {
         addExtensionAttribute(element, "dslNodeType", node.type());
         addExtensionAttribute(element, "description", normalizeNullable(node.description()));
         flattenConfig(config).forEach((key, value) -> addExtensionAttribute(element, key, value));
+        if ("inclusive_split".equals(node.type())) {
+            addInclusiveStrategyExtensions(element, config);
+        }
     }
 
     // 展平嵌套配置，保留旧实现里测试依赖的关键字段名。
@@ -350,6 +367,15 @@ public class ProcessDslToBpmnService {
         attrs.put("businessBindingMode", stringValue(config.get("businessBindingMode")));
         attrs.put("terminatePolicy", stringValue(config.get("terminatePolicy")));
         attrs.put("childFinishPolicy", stringValue(config.get("childFinishPolicy")));
+        attrs.put("defaultBranchId", stringValue(config.get("defaultBranchId")));
+        attrs.put("requiredBranchCount", stringValue(config.get("requiredBranchCount")));
+        attrs.put("branchMergePolicy", stringValue(config.get("branchMergePolicy")));
+        if (isSubprocessConfig(config)) {
+            attrs.put("callScope", resolveSubprocessCallScope(config));
+            attrs.put("joinMode", resolveSubprocessJoinMode(config));
+            attrs.put("childStartStrategy", resolveSubprocessChildStartStrategy(config));
+            attrs.put("parentResumeStrategy", resolveSubprocessParentResumeStrategy(config));
+        }
         attrs.put("buildMode", stringValue(config.get("buildMode")));
         attrs.put("sourceMode", stringValue(config.get("sourceMode")));
         attrs.put("ruleExpression", stringValue(config.get("ruleExpression")));
@@ -399,6 +425,37 @@ public class ProcessDslToBpmnService {
         attrs.put("targetDepartmentRef", stringValue(targets.get("departmentRef")));
 
         return attrs;
+    }
+
+    private String resolveSubprocessCallScope(Map<String, Object> config) {
+        return normalizeSubprocessValue(config.get("callScope"), "CHILD_ONLY");
+    }
+
+    private String resolveSubprocessJoinMode(Map<String, Object> config) {
+        return normalizeSubprocessValue(config.get("joinMode"), "AUTO_RETURN");
+    }
+
+    private String resolveSubprocessChildStartStrategy(Map<String, Object> config) {
+        return normalizeSubprocessValue(config.get("childStartStrategy"), "LATEST_PUBLISHED");
+    }
+
+    private String resolveSubprocessParentResumeStrategy(Map<String, Object> config) {
+        return normalizeSubprocessValue(config.get("parentResumeStrategy"), "AUTO_RETURN");
+    }
+
+    private boolean isSubprocessConfig(Map<String, Object> config) {
+        return config.containsKey("calledProcessKey")
+                || config.containsKey("calledVersionPolicy")
+                || config.containsKey("childFinishPolicy")
+                || config.containsKey("callScope")
+                || config.containsKey("joinMode")
+                || config.containsKey("childStartStrategy")
+                || config.containsKey("parentResumeStrategy");
+    }
+
+    private String normalizeSubprocessValue(Object rawValue, String defaultValue) {
+        String value = stringValue(rawValue);
+        return value == null || value.isBlank() ? defaultValue : value;
     }
 
     // 会签模式统一映射到 Flowable 多实例用户任务。
@@ -452,6 +509,24 @@ public class ProcessDslToBpmnService {
         attribute.setNamespace(WESTFLOW_NS);
         attribute.setNamespacePrefix(WESTFLOW_PREFIX);
         element.addAttribute(attribute);
+    }
+
+    private void addExtensionElement(BaseElement element, String name, String value) {
+        if (name == null || value == null || value.isBlank()) {
+            return;
+        }
+        org.flowable.bpmn.model.ExtensionElement extensionElement = new org.flowable.bpmn.model.ExtensionElement();
+        extensionElement.setName(name);
+        extensionElement.setNamespace(WESTFLOW_NS);
+        extensionElement.setNamespacePrefix(WESTFLOW_PREFIX);
+        extensionElement.setElementText(value);
+        element.addExtensionElement(extensionElement);
+    }
+
+    private void addInclusiveStrategyExtensions(BaseElement element, Map<String, Object> config) {
+        addExtensionElement(element, "defaultBranchId", stringValue(config.get("defaultBranchId")));
+        addExtensionElement(element, "requiredBranchCount", stringValue(config.get("requiredBranchCount")));
+        addExtensionElement(element, "branchMergePolicy", stringValue(config.get("branchMergePolicy")));
     }
 
     private String buildProcessDocumentation(String processDefinitionId, int version, ProcessDslPayload payload) {

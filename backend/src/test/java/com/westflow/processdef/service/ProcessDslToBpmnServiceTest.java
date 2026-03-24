@@ -211,6 +211,31 @@ class ProcessDslToBpmnServiceTest {
     }
 
     @Test
+    void shouldConvertRoleBasedParallelCountersignIntoMultiInstanceUserTask() {
+        ProcessDslPayload payload = countersignPayload("PARALLEL", Map.of(
+                "mode", "ROLE",
+                "userIds", List.of(),
+                "roleCodes", List.of("OA_USER"),
+                "departmentRef", "",
+                "formFieldKey", "",
+                "formulaExpression", ""
+        ));
+
+        String xml = service.convert(payload, "oa_countersign:1", 1);
+
+        assertThat(xml).contains(
+                "id=\"approve_countersign\"",
+                "<multiInstanceLoopCharacteristics",
+                "isSequential=\"false\"",
+                "flowable:collection=\"${wfCountersignAssignees_approve_countersign}\"",
+                "flowable:elementVariable=\"wfCountersignAssignee_approve_countersign\"",
+                "flowable:assignee=\"${wfCountersignAssignee_approve_countersign}\"",
+                "assignmentMode=\"ROLE\"",
+                "roleCodes=\"OA_USER\""
+        );
+    }
+
+    @Test
     void shouldConvertOrSignCountersignIntoConditionalMultiInstanceUserTask() {
         ProcessDslPayload payload = countersignPayload("OR_SIGN");
 
@@ -263,19 +288,23 @@ class ProcessDslToBpmnServiceTest {
                         node("start_1", "start", "开始", Map.of(
                                 "initiatorEditable", true
                         )),
-                        node("subprocess_1", "subprocess", "采购复核子流程", Map.of(
-                                "calledProcessKey", "plm_purchase_review",
-                                "calledVersionPolicy", "FIXED_VERSION",
-                                "calledVersion", 3,
-                                "businessBindingMode", "OVERRIDE",
-                                "terminatePolicy", "TERMINATE_PARENT_AND_SUBPROCESS",
-                                "childFinishPolicy", "TERMINATE_PARENT",
-                                "inputMappings", List.of(
+                        node("subprocess_1", "subprocess", "采购复核子流程", Map.ofEntries(
+                                Map.entry("calledProcessKey", "plm_purchase_review"),
+                                Map.entry("calledVersionPolicy", "FIXED_VERSION"),
+                                Map.entry("calledVersion", 3),
+                                Map.entry("businessBindingMode", "OVERRIDE"),
+                                Map.entry("terminatePolicy", "TERMINATE_PARENT_AND_SUBPROCESS"),
+                                Map.entry("childFinishPolicy", "TERMINATE_PARENT"),
+                                Map.entry("callScope", "CHILD_AND_DESCENDANTS"),
+                                Map.entry("joinMode", "WAIT_PARENT_CONFIRM"),
+                                Map.entry("childStartStrategy", "SCENE_BINDING"),
+                                Map.entry("parentResumeStrategy", "WAIT_PARENT_CONFIRM"),
+                                Map.entry("inputMappings", List.of(
                                         Map.of("source", "billNo", "target", "sourceBillNo")
-                                ),
-                                "outputMappings", List.of(
+                                )),
+                                Map.entry("outputMappings", List.of(
                                         Map.of("source", "approvedResult", "target", "purchaseResult")
-                                )
+                                ))
                         )),
                         node("end_1", "end", "结束", Map.of())
                 ),
@@ -296,7 +325,11 @@ class ProcessDslToBpmnServiceTest {
                 "calledVersionPolicy=\"FIXED_VERSION\"",
                 "calledVersion=\"3\"",
                 "terminatePolicy=\"TERMINATE_PARENT_AND_SUBPROCESS\"",
-                "childFinishPolicy=\"TERMINATE_PARENT\""
+                "childFinishPolicy=\"TERMINATE_PARENT\"",
+                "callScope=\"CHILD_AND_DESCENDANTS\"",
+                "joinMode=\"WAIT_PARENT_CONFIRM\"",
+                "childStartStrategy=\"SCENE_BINDING\"",
+                "parentResumeStrategy=\"WAIT_PARENT_CONFIRM\""
         );
     }
 
@@ -317,7 +350,11 @@ class ProcessDslToBpmnServiceTest {
                 ),
                 List.of(
                         node("start_1", "start", "开始", Map.of()),
-                        node("inclusive_split_1", "inclusive_split", "包容分支", Map.of()),
+                        node("inclusive_split_1", "inclusive_split", "包容分支", Map.of(
+                                "defaultBranchId", "edge_2",
+                                "requiredBranchCount", 1,
+                                "branchMergePolicy", "DEFAULT_BRANCH"
+                        )),
                         node("approve_1", "approver", "审批A", Map.of(
                                 "assignment", Map.of(
                                         "mode", "USER",
@@ -358,7 +395,15 @@ class ProcessDslToBpmnServiceTest {
         assertThat(xml).contains(
                 "<inclusiveGateway",
                 "id=\"inclusive_split_1\"",
-                "id=\"inclusive_join_1\""
+                "id=\"inclusive_join_1\"",
+                "<westflow:defaultBranchId",
+                "edge_2",
+                "<westflow:requiredBranchCount",
+                "1",
+                "<westflow:branchMergePolicy",
+                "DEFAULT_BRANCH",
+                "<westflow:branchPriority",
+                "2"
         );
         assertThat(xml).contains("amount > 1000", "days > 3");
     }
@@ -571,6 +616,17 @@ class ProcessDslToBpmnServiceTest {
     }
 
     private ProcessDslPayload countersignPayload(String approvalMode) {
+        return countersignPayload(approvalMode, Map.of(
+                "mode", "USER",
+                "userIds", List.of("usr_002", "usr_003"),
+                "roleCodes", List.of(),
+                "departmentRef", "",
+                "formFieldKey", "",
+                "formulaExpression", ""
+        ));
+    }
+
+    private ProcessDslPayload countersignPayload(String approvalMode, Map<String, Object> assignment) {
         return new ProcessDslPayload(
                 "1.0.0",
                 "oa_countersign",
@@ -590,13 +646,7 @@ class ProcessDslToBpmnServiceTest {
                                 "approvalMode", approvalMode,
                                 "reapprovePolicy", "RESTART_ALL",
                                 "autoFinishRemaining", !"SEQUENTIAL".equals(approvalMode) && !"PARALLEL".equals(approvalMode),
-                                "assignment", Map.of(
-                                        "mode", "USER",
-                                        "userIds", List.of("usr_002", "usr_003"),
-                                        "roleCodes", List.of(),
-                                        "departmentRef", "",
-                                        "formFieldKey", ""
-                                ),
+                                "assignment", assignment,
                                 "operations", List.of("APPROVE", "REJECT", "RETURN"),
                                 "voteRule", "VOTE".equals(approvalMode)
                                         ? Map.of(
