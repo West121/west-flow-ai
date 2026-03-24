@@ -14,10 +14,13 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ConfigurableNotificationProvidersTest {
+
+    private final MockEnvironment environment = mockEnvironment();
 
     @Test
     void shouldBuildSmsRequestWithConfiguredEndpointAndCredential() throws Exception {
@@ -25,7 +28,7 @@ class ConfigurableNotificationProvidersTest {
         AtomicReference<String> authRef = new AtomicReference<>("");
         HttpServer server = startServer("/sms", exchange -> handle(exchange, bodyRef, authRef));
         try {
-            SmsHttpNotificationProvider provider = new SmsHttpNotificationProvider(new ObjectMapper());
+            SmsHttpNotificationProvider provider = new SmsHttpNotificationProvider(new ObjectMapper(), environment);
             NotificationSendResult result = provider.send(
                     channel(
                             "sms_ops",
@@ -64,7 +67,7 @@ class ConfigurableNotificationProvidersTest {
         AtomicReference<String> authRef = new AtomicReference<>("");
         HttpServer server = startServer("/wechat", exchange -> handle(exchange, bodyRef, authRef));
         try {
-            WechatHttpNotificationProvider provider = new WechatHttpNotificationProvider(new ObjectMapper());
+            WechatHttpNotificationProvider provider = new WechatHttpNotificationProvider(new ObjectMapper(), environment);
             NotificationSendResult result = provider.send(
                     channel(
                             "wechat_ops",
@@ -103,7 +106,7 @@ class ConfigurableNotificationProvidersTest {
         AtomicReference<String> authRef = new AtomicReference<>("");
         HttpServer server = startServer("/dingtalk", exchange -> handle(exchange, bodyRef, authRef));
         try {
-            DingTalkHttpNotificationProvider provider = new DingTalkHttpNotificationProvider(new ObjectMapper());
+            DingTalkHttpNotificationProvider provider = new DingTalkHttpNotificationProvider(new ObjectMapper(), environment);
             NotificationSendResult result = provider.send(
                     channel(
                             "ding_ops",
@@ -148,6 +151,12 @@ class ConfigurableNotificationProvidersTest {
         });
         server.start();
         return server;
+    }
+
+    private MockEnvironment mockEnvironment() {
+        MockEnvironment mockEnvironment = new MockEnvironment();
+        mockEnvironment.setActiveProfiles("test");
+        return mockEnvironment;
     }
 
     private void handle(

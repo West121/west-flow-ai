@@ -12,14 +12,18 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 
 abstract class AbstractConfigurableHttpNotificationProvider implements NotificationProvider {
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final Environment environment;
 
-    protected AbstractConfigurableHttpNotificationProvider(ObjectMapper objectMapper) {
+    protected AbstractConfigurableHttpNotificationProvider(ObjectMapper objectMapper, Environment environment) {
         this.objectMapper = objectMapper;
+        this.environment = environment;
         this.httpClient = HttpClient.newHttpClient();
     }
 
@@ -95,6 +99,9 @@ abstract class AbstractConfigurableHttpNotificationProvider implements Notificat
     }
 
     private boolean allowDiagnosticMock(NotificationChannelRecord channel, Map<String, Object> config) {
+        if (!environment.acceptsProfiles(Profiles.of("local", "test"))) {
+            return false;
+        }
         if (!Boolean.TRUE.equals(channel.mockMode())) {
             return false;
         }

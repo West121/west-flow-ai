@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,7 @@ public class NotificationChannelService {
 
     private final NotificationChannelMapper notificationChannelMapper;
     private final NotificationLogMapper notificationLogMapper;
+    private final Environment environment;
 
     // 通知渠道列表支持关键字、状态和渠道类型筛选。
     public PageResponse<NotificationChannelListItemResponse> page(PageRequest request) {
@@ -431,6 +434,9 @@ public class NotificationChannelService {
         if (!List.of(NotificationChannelType.SMS, NotificationChannelType.WECHAT, NotificationChannelType.DINGTALK).contains(type)) {
             return false;
         }
+        if (!allowDiagnosticMockProfile()) {
+            return false;
+        }
         Map<String, Object> normalized = normalizeConfig(config);
         Object enabled = normalized.get("diagnosticMockEnabled");
         if (!(enabled instanceof Boolean enabledValue) || !enabledValue) {
@@ -446,6 +452,10 @@ public class NotificationChannelService {
                 || endpoint.startsWith("http://localhost")
                 || endpoint.startsWith("https://127.0.0.1")
                 || endpoint.startsWith("https://localhost");
+    }
+
+    private boolean allowDiagnosticMockProfile() {
+        return environment.acceptsProfiles(Profiles.of("local", "test"));
     }
 
     // 统一构造请求非法异常。

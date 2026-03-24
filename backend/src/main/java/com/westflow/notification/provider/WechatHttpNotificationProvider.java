@@ -6,6 +6,7 @@ import com.westflow.notification.model.NotificationChannelType;
 import com.westflow.notification.model.NotificationDispatchRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
@@ -14,8 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class WechatHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
 
-    public WechatHttpNotificationProvider(ObjectMapper objectMapper) {
-        super(objectMapper);
+    public WechatHttpNotificationProvider(ObjectMapper objectMapper, Environment environment) {
+        super(objectMapper, environment);
     }
 
     @Override

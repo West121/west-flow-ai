@@ -6,6 +6,7 @@ import com.westflow.notification.model.NotificationChannelType;
 import com.westflow.notification.model.NotificationDispatchRequest;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -14,8 +15,8 @@ import org.springframework.stereotype.Component;
  */
 public class DingTalkHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
 
-    public DingTalkHttpNotificationProvider(ObjectMapper objectMapper) {
-        super(objectMapper);
+    public DingTalkHttpNotificationProvider(ObjectMapper objectMapper, Environment environment) {
+        super(objectMapper, environment);
     }
 
     @Override
