@@ -256,6 +256,31 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldRejectInclusiveSplitWithoutBranchPriority() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("inclusive_split_1", "inclusive_split", Map.of()),
+                        approverNode("approve_1"),
+                        approverNode("approve_2"),
+                        node("inclusive_join_1", "inclusive_join", Map.of()),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "inclusive_split_1"),
+                        new ProcessDslPayload.Edge("edge_2", "inclusive_split_1", "approve_1", null, "金额超限", expressionCondition("amount > 10000")),
+                        new ProcessDslPayload.Edge("edge_3", "inclusive_split_1", "approve_2", 10, "长假", expressionCondition("urgent == true")),
+                        edge("edge_4", "approve_1", "inclusive_join_1"),
+                        edge("edge_5", "approve_2", "inclusive_join_1"),
+                        edge("edge_6", "inclusive_join_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "inclusive_split 分支 branchPriority 必须为正整数");
+    }
+
+    @Test
     void shouldAcceptInclusiveSplitWithMergePolicyAndDefaultBranch() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),

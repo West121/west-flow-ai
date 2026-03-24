@@ -795,15 +795,12 @@ public class ProcessDslValidator {
 
         List<Integer> branchPriorities = outgoingEdges.stream()
                 .map(ProcessDslPayload.Edge::priority)
-                .filter(priority -> priority != null)
                 .toList();
-        if (!branchPriorities.isEmpty()) {
-            if (branchPriorities.stream().anyMatch(priority -> priority <= 0)) {
-                throw invalid(
-                        "inclusive_split 分支 branchPriority 必须为正整数",
-                        Map.of("nodeId", split.id(), "branchPriorities", branchPriorities)
-                );
-            }
+        if (branchPriorities.stream().anyMatch(priority -> priority == null || priority <= 0)) {
+            throw invalid(
+                    "inclusive_split 分支 branchPriority 必须为正整数",
+                    Map.of("nodeId", split.id(), "branchPriorities", branchPriorities)
+            );
         }
     }
 
