@@ -735,6 +735,96 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldTerminateChildAndDescendantSubprocessesWhenCallScopeIncludesDescendants() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildSubprocessLeafPayload());
+        processDefinitionService.publish(buildNestedSubprocessChildPayload());
+        processDefinitionService.publish(buildParentWithDescendantCallScopePayload());
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_parent_with_subprocess",
+                                  "businessKey": "parent_bill_descendant_terminate_001",
+                                  "businessType": "OA_COMMON",
+                                  "formData": {
+                                    "billNo": "BILL-DESC-TERM-001"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String instanceId = startBody.path("instanceId").asText();
+        JsonNode linksBeforeTerminate = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/instances/{instanceId}/links", instanceId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(linksBeforeTerminate).hasSize(2);
+
+        String childInstanceId = jdbcTemplate.queryForObject(
+                "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ? AND parent_node_id = ?",
+                String.class,
+                instanceId,
+                "subprocess_1"
+        );
+        String descendantInstanceId = jdbcTemplate.queryForObject(
+                "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ? AND parent_node_id = ?",
+                String.class,
+                childInstanceId,
+                "subprocess_1_child"
+        );
+
+        JsonNode terminateBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/instances/{instanceId}/terminate", instanceId)
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "terminateScope": "CHILD",
+                                  "childInstanceId": "%s",
+                                  "reason": "测试级联终止子流程"
+                                }
+                                """.formatted(childInstanceId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(terminateBody.path("instanceId").asText()).isEqualTo(instanceId);
+        assertThat(flowableEngineFacade.runtimeService().createProcessInstanceQuery().processInstanceId(childInstanceId).singleResult()).isNull();
+        assertThat(flowableEngineFacade.runtimeService().createProcessInstanceQuery().processInstanceId(descendantInstanceId).singleResult()).isNull();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_process_link WHERE child_instance_id = ? AND status = 'TERMINATED'",
+                Integer.class,
+                childInstanceId
+        )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_process_link WHERE child_instance_id = ? AND status = 'TERMINATED'",
+                Integer.class,
+                descendantInstanceId
+        )).isEqualTo(1);
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/approval-sheets/by-business")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .param("businessType", "OA_COMMON")
+                        .param("businessId", "parent_bill_descendant_terminate_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(detailBody.path("instanceEvents").toString())
+                .contains("terminatedDescendantCount")
+                .contains("\"terminatedDescendantCount\":1");
+        assertThat(detailBody.path("processLinks").toString()).contains(descendantInstanceId);
+    }
+
+    @Test
     void shouldAppendTaskAndUpdateAppendLinkStatusOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -2889,6 +2979,218 @@ class FlowableProcessRuntimeControllerTest {
                         "joinMode": "AUTO_RETURN",
                         "childStartStrategy": "LATEST_PUBLISHED",
                         "parentResumeStrategy": "AUTO_RETURN"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildSubprocessLeafPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_sub_review_leaf",
+                  "processName": "子子流程复核",
+                  "category": "OA",
+                  "processFormKey": "oa_sub_review_leaf_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_1",
+                      "type": "approver",
+                      "name": "叶子流程审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildNestedSubprocessChildPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_sub_review",
+                  "processName": "子流程复核",
+                  "category": "OA",
+                  "processFormKey": "oa_sub_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1_child",
+                      "type": "subprocess",
+                      "name": "叶子子流程",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review_leaf",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "AUTO_RETURN",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1_child",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1_child",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildParentWithDescendantCallScopePayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_parent_with_subprocess",
+                  "processName": "主流程带子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "callScope": "CHILD_AND_DESCENDANTS",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "AUTO_RETURN",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
                       },
                       "ui": {"width": 240, "height": 88}
                     },

@@ -464,10 +464,26 @@ public class FlowableProcessRuntimeService {
             );
         }
         Instant terminatedAt = Instant.now();
+        List<com.westflow.processruntime.model.ProcessLinkRecord> descendantLinks = link == null
+                ? List.of()
+                : collectDescendantProcessLinks(link.rootInstanceId(), resolvedChildInstanceId);
+        List<String> descendantInstanceIds = descendantLinks.stream()
+                .map(com.westflow.processruntime.model.ProcessLinkRecord::childInstanceId)
+                .distinct()
+                .toList();
         runtimeAppendLinkService.markTerminatedByParentInstanceId(resolvedChildInstanceId, terminatedAt);
-        flowableTaskActionService.revokeProcessInstance(resolvedChildInstanceId, "WESTFLOW_TERMINATE:" + reason);
+        descendantInstanceIds.forEach(descendantInstanceId ->
+                runtimeAppendLinkService.markTerminatedByParentInstanceId(descendantInstanceId, terminatedAt)
+        );
+        revokeProcessInstanceQuietly(resolvedChildInstanceId, reason);
+        descendantInstanceIds.stream()
+                .filter(descendantInstanceId -> !resolvedChildInstanceId.equals(descendantInstanceId))
+                .forEach(descendantInstanceId -> revokeProcessInstanceQuietly(descendantInstanceId, reason));
         if (link != null) {
             processLinkService.updateStatus(resolvedChildInstanceId, "TERMINATED", terminatedAt);
+            descendantLinks.forEach(descendantLink ->
+                    processLinkService.updateStatus(descendantLink.childInstanceId(), "TERMINATED", terminatedAt)
+            );
             appendInstanceEvent(
                     link.parentInstanceId(),
                     null,
@@ -482,7 +498,8 @@ public class FlowableProcessRuntimeService {
                             "terminateScope", "CHILD",
                             "reason", reason,
                             "childInstanceId", resolvedChildInstanceId,
-                            "parentNodeId", link.parentNodeId()
+                            "parentNodeId", link.parentNodeId(),
+                            "terminatedDescendantCount", descendantInstanceIds.size()
                     ),
                     null,
                     link.parentNodeId(),
@@ -492,6 +509,31 @@ public class FlowableProcessRuntimeService {
                     null,
                     null
             );
+            descendantLinks.forEach(descendantLink -> appendInstanceEvent(
+                    descendantLink.parentInstanceId(),
+                    null,
+                    descendantLink.parentNodeId(),
+                    "SUBPROCESS_TERMINATED",
+                    "后代子流程已终止",
+                    "INSTANCE",
+                    null,
+                    descendantLink.childInstanceId(),
+                    null,
+                    eventDetails(
+                            "terminateScope", "CHILD_DESCENDANT",
+                            "reason", reason,
+                            "childInstanceId", descendantLink.childInstanceId(),
+                            "parentNodeId", descendantLink.parentNodeId(),
+                            "ancestorChildInstanceId", resolvedChildInstanceId
+                    ),
+                    null,
+                    descendantLink.parentNodeId(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            ));
         } else {
             runtimeAppendLinkService.updateStatusByTargetInstanceId(resolvedChildInstanceId, "TERMINATED", terminatedAt);
             appendInstanceEvent(
@@ -521,6 +563,8 @@ public class FlowableProcessRuntimeService {
                     null
             );
         }
+        String resolvedRootInstanceId = link != null ? link.rootInstanceId() : appendLink.rootInstanceId();
+        String resolvedParentInstanceId = link != null ? link.parentInstanceId() : appendLink.parentInstanceId();
         appendInstanceEvent(
                 resolvedChildInstanceId,
                 null,
@@ -534,8 +578,9 @@ public class FlowableProcessRuntimeService {
                 eventDetails(
                         "terminateScope", "CHILD",
                         "reason", reason,
-                        "rootInstanceId", link != null ? link.rootInstanceId() : appendLink.rootInstanceId(),
-                        "parentInstanceId", link != null ? link.parentInstanceId() : appendLink.parentInstanceId()
+                        "rootInstanceId", resolvedRootInstanceId,
+                        "parentInstanceId", resolvedParentInstanceId,
+                        "terminatedDescendantCount", descendantInstanceIds.size()
                 ),
                 null,
                 null,
@@ -545,7 +590,39 @@ public class FlowableProcessRuntimeService {
                 null,
                 null
         );
-        return nextTaskResponse(link != null ? link.parentInstanceId() : appendLink.parentInstanceId(), null);
+        descendantInstanceIds.forEach(descendantInstanceId -> appendInstanceEvent(
+                descendantInstanceId,
+                null,
+                null,
+                "INSTANCE_TERMINATED",
+                "流程已终止",
+                "INSTANCE",
+                null,
+                null,
+                null,
+                eventDetails(
+                        "terminateScope", "CHILD_DESCENDANT",
+                        "reason", reason,
+                        "rootInstanceId", resolvedRootInstanceId,
+                        "parentInstanceId", resolvedChildInstanceId
+                ),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        ));
+        return nextTaskResponse(resolvedParentInstanceId, null);
+    }
+
+    private void revokeProcessInstanceQuietly(String processInstanceId, String reason) {
+        try {
+            flowableTaskActionService.revokeProcessInstance(processInstanceId, "WESTFLOW_TERMINATE:" + reason);
+        } catch (FlowableObjectNotFoundException ignored) {
+            // 父子级联终止时，后代实例可能已经被父实例一并删除。
+        }
     }
 
     /**
@@ -2927,6 +3004,34 @@ public class FlowableProcessRuntimeService {
             if ("CHILD_AND_DESCENDANTS".equals(resolveSubprocessStructureMetadata(link).callScope())) {
                 collectVisibleSubprocessLinks(link.childInstanceId(), linksByParentInstanceId, visibleLinks);
             }
+        }
+    }
+
+    private List<com.westflow.processruntime.model.ProcessLinkRecord> collectDescendantProcessLinks(
+            String rootInstanceId,
+            String parentInstanceId
+    ) {
+        Map<String, List<com.westflow.processruntime.model.ProcessLinkRecord>> linksByParentInstanceId = processLinkService
+                .listByRootInstanceId(rootInstanceId)
+                .stream()
+                .collect(java.util.stream.Collectors.groupingBy(
+                        com.westflow.processruntime.model.ProcessLinkRecord::parentInstanceId,
+                        LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()
+                ));
+        List<com.westflow.processruntime.model.ProcessLinkRecord> descendants = new ArrayList<>();
+        collectDescendantProcessLinks(parentInstanceId, linksByParentInstanceId, descendants);
+        return descendants;
+    }
+
+    private void collectDescendantProcessLinks(
+            String parentInstanceId,
+            Map<String, List<com.westflow.processruntime.model.ProcessLinkRecord>> linksByParentInstanceId,
+            List<com.westflow.processruntime.model.ProcessLinkRecord> descendants
+    ) {
+        for (com.westflow.processruntime.model.ProcessLinkRecord link : linksByParentInstanceId.getOrDefault(parentInstanceId, List.of())) {
+            descendants.add(link);
+            collectDescendantProcessLinks(link.childInstanceId(), linksByParentInstanceId, descendants);
         }
     }
 
