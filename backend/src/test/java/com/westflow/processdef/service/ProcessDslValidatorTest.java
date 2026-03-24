@@ -1128,6 +1128,93 @@ class ProcessDslValidatorTest {
     }
 
     @Test
+    void shouldAcceptDepartmentBasedCountersignDsl() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "DEPARTMENT",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "dept_001",
+                                        "formFieldKey", "",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalMode", "PARALLEL",
+                                "reapprovePolicy", "RESTART_ALL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldAcceptDepartmentAndChildrenCountersignDsl() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "DEPARTMENT_AND_CHILDREN",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "dept_001",
+                                        "formFieldKey", "",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalMode", "PARALLEL",
+                                "reapprovePolicy", "RESTART_ALL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void shouldAcceptFormFieldBasedCountersignDsl() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNodeWithConfig("approve_1", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "FORM_FIELD",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", "managerUserIds",
+                                        "formulaExpression", ""
+                                ),
+                                "approvalMode", "PARALLEL",
+                                "reapprovePolicy", "RESTART_ALL"
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
+    }
+
+    @Test
     void shouldAcceptFormulaBasedCountersignDsl() {
         ProcessDslPayload dsl = withNodesAndEdges(
                 validDsl(),

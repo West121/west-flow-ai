@@ -148,6 +148,7 @@ class FlowableRuntimeStartServiceTest {
             assertThat(link.targetTaskId()).isNotBlank();
             assertThat(link.resolvedSourceMode()).isEqualTo("RULE_DRIVEN");
             assertThat(link.resolutionPath()).isEqualTo("KEEP_CURRENT_RULE");
+            assertThat(link.resolutionStatus()).isEqualTo("SUCCESS");
         });
     }
 
@@ -177,6 +178,7 @@ class FlowableRuntimeStartServiceTest {
         assertThat(link.calledProcessKey()).isEqualTo("oa_dynamic_sub_review");
         assertThat(link.resolvedSourceMode()).isEqualTo("RULE_DRIVEN");
         assertThat(link.resolutionPath()).isEqualTo("KEEP_CURRENT_RULE");
+        assertThat(link.resolutionStatus()).isEqualTo("SUCCESS");
         assertThat(flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
                 .processInstanceId(link.targetInstanceId())
@@ -206,6 +208,34 @@ class FlowableRuntimeStartServiceTest {
         assertThat(link.resolvedSourceMode()).isEqualTo("MANUAL_TEMPLATE");
         assertThat(link.resolutionPath()).isEqualTo("FALLBACK_TEMPLATE");
         assertThat(link.templateSource()).isEqualTo("MANUAL_TEMPLATE");
+        assertThat(link.resolutionStatus()).isEqualTo("SUCCESS");
+    }
+
+    @Test
+    void shouldExposeDynamicBuilderSkippedResolutionMetadata() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildDynamicBuilderSkipTaskPayload());
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_dynamic_append_tasks_skip",
+                "dynamic_append_task_skip_001",
+                "OA_LEAVE",
+                Map.of(
+                        "days", 5,
+                        "reason", "动态构建跳过"
+                )
+        ));
+
+        List<RuntimeAppendLinkResponse> appendLinks = flowableProcessRuntimeService.appendLinks(response.instanceId());
+        assertThat(appendLinks).hasSize(1);
+        RuntimeAppendLinkResponse link = appendLinks.get(0);
+        assertThat(link.appendType()).isEqualTo("TASK");
+        assertThat(link.status()).isEqualTo("SKIPPED");
+        assertThat(link.runtimeLinkType()).isEqualTo("DYNAMIC_BUILD_SKIPPED");
+        assertThat(link.resolutionStatus()).isEqualTo("SKIPPED");
+        assertThat(link.resolutionReason()).contains("未生成附属结构");
+        assertThat(link.resolvedSourceMode()).isEqualTo("RULE_DRIVEN");
+        assertThat(link.resolutionPath()).isEqualTo("SKIPPED");
     }
 
     @Test
@@ -389,6 +419,136 @@ class FlowableRuntimeStartServiceTest {
                 "leave_bill_parallel_formula_001",
                 "OA_LEAVE",
                 java.util.Map.of("days", 5, "reason", "公式并行会签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
+                .containsExactlyInAnyOrder("usr_001", "usr_002");
+    }
+
+    @Test
+    void shouldStartDepartmentBasedParallelCountersignWithResolvedAssignees() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
+                {
+                  "mode": "DEPARTMENT",
+                  "userIds": [],
+                  "roleCodes": [],
+                  "departmentRef": "dept_001",
+                  "formFieldKey": "",
+                  "formulaExpression": ""
+                }
+                """));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_parallel_department_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 3, "reason", "部门并行会签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
+                .containsExactlyInAnyOrder("usr_001", "usr_admin");
+    }
+
+    @Test
+    void shouldStartDepartmentAndChildrenBasedParallelCountersignWithResolvedAssignees() throws Exception {
+        StpUtil.login("zhangsan");
+        jdbcTemplate.update("""
+                INSERT INTO wf_department (id, company_id, parent_department_id, department_name, enabled, created_at, updated_at)
+                VALUES (?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "dept_test_child",
+                "cmp_001",
+                "dept_001",
+                "测试子部门"
+        );
+        jdbcTemplate.update("""
+                INSERT INTO wf_post (id, department_id, post_name, enabled, created_at, updated_at)
+                VALUES (?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "post_test_child",
+                "dept_test_child",
+                "测试岗位"
+        );
+        jdbcTemplate.update("""
+                INSERT INTO wf_user (
+                    id,
+                    username,
+                    display_name,
+                    mobile,
+                    email,
+                    avatar,
+                    company_id,
+                    active_department_id,
+                    active_post_id,
+                    password_hash,
+                    enabled,
+                    login_enabled,
+                    failed_login_count,
+                    locked_until,
+                    last_login_at,
+                    password_updated_at,
+                    created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, TRUE, 0, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "usr_test_child",
+                "counter_sign_child",
+                "测试子部门审批人",
+                "13500000000",
+                "child@example.com",
+                "",
+                "cmp_001",
+                "dept_test_child",
+                "post_test_child",
+                "$2b$12$hnDyFmHcz5ztyI6c8Mf6Qup5rCPnQVe7sjR57nqM1UwzQ102bw5Ce"
+        );
+
+        processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
+                {
+                  "mode": "DEPARTMENT_AND_CHILDREN",
+                  "userIds": [],
+                  "roleCodes": [],
+                  "departmentRef": "dept_001",
+                  "formFieldKey": "",
+                  "formulaExpression": ""
+                }
+                """));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_parallel_department_children_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 3, "reason", "部门及子部门并行会签")
+        ));
+
+        assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
+                .containsExactlyInAnyOrder("usr_001", "usr_admin", "usr_test_child");
+    }
+
+    @Test
+    void shouldStartFormFieldBasedParallelCountersignWithResolvedAssignees() throws Exception {
+        StpUtil.login("zhangsan");
+        processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
+                {
+                  "mode": "FORM_FIELD",
+                  "userIds": [],
+                  "roleCodes": [],
+                  "departmentRef": "",
+                  "formFieldKey": "managerUserIds",
+                  "formulaExpression": ""
+                }
+                """));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_countersign",
+                "leave_bill_parallel_form_field_001",
+                "OA_LEAVE",
+                java.util.Map.of(
+                        "days", 3,
+                        "reason", "表单字段并行会签",
+                        "managerUserIds", List.of("usr_001", "usr_002")
+                )
         ));
 
         assertThat(flowableEngineTasks(response.instanceId()).stream().map(Task::getAssignee))
@@ -2406,6 +2566,79 @@ class FlowableRuntimeStartServiceTest {
                       "priority": 10,
                       "label": "通过"
                     }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildDynamicBuilderSkipTaskPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_dynamic_append_tasks_skip",
+                  "processName": "动态构建附属任务跳过",
+                  "category": "OA",
+                  "processFormKey": "oa_dynamic_append_tasks_skip_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "dynamic_1",
+                      "type": "dynamic-builder",
+                      "name": "动态构建",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "buildMode": "APPROVER_TASKS",
+                        "sourceMode": "RULE",
+                        "ruleExpression": "leaveDays > 100",
+                        "fallbackStrategy": "SKIP_GENERATION",
+                        "appendPolicy": "SERIAL_AFTER_CURRENT",
+                        "maxGeneratedCount": 2,
+                        "terminatePolicy": "TERMINATE_GENERATED_ONLY"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "领导审批",
+                      "position": {"x": 540, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {"type": "SEQUENTIAL"},
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 760, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "dynamic_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "dynamic_1", "target": "approve_manager", "priority": 10, "label": "继续"},
+                    {"id": "edge_3", "source": "approve_manager", "target": "end_1", "priority": 10, "label": "完成"}
                   ]
                 }
                 """, ProcessDslPayload.class);

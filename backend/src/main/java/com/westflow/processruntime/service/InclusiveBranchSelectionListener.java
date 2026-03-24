@@ -84,8 +84,10 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
                 .map(SelectedBranchDecision::candidate)
                 .toList();
         Set<String> selectedEdgeIds = new LinkedHashSet<>();
+        Set<String> selectedTargetNodeIds = new LinkedHashSet<>();
         for (BranchCandidate candidate : selectedCandidates) {
             selectedEdgeIds.add(candidate.edgeId());
+            selectedTargetNodeIds.add(candidate.targetNodeId());
         }
 
         for (SequenceFlow flow : outgoingFlows) {
@@ -110,6 +112,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
         summary.put("eligibleBranchCount", eligibleCandidates.size());
         summary.put("selectedBranchCount", selectedCandidates.size());
         summary.put("selectedEdgeIds", List.copyOf(selectedEdgeIds));
+        summary.put("selectedTargetNodeIds", List.copyOf(selectedTargetNodeIds));
         summary.put("selectedLabels", selectedLabels);
         summary.put("selectedPriorities", selectedPriorities);
         summary.put("selectedDecisionReasons", selectedReasons);
@@ -167,6 +170,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
                 .findFirst()
                 .map(flow -> new BranchCandidate(
                         flow.getId(),
+                        flow.getTargetRef(),
                         flow.getName(),
                         integerValue(attributeValue(flow, "branchPriority")),
                         true,
@@ -178,11 +182,12 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
 
     private BranchCandidate toCandidate(SequenceFlow flow, Map<String, Object> variables) {
         String edgeId = flow.getId();
+        String targetNodeId = flow.getTargetRef();
         String label = flow.getName();
         Integer priority = integerValue(attributeValue(flow, "branchPriority"));
         String conditionExpression = attributeValue(flow, "branchConditionExpression");
         boolean eligible = evaluateCondition(conditionExpression, variables);
-        return new BranchCandidate(edgeId, label, priority, eligible, conditionExpression);
+        return new BranchCandidate(edgeId, targetNodeId, label, priority, eligible, conditionExpression);
     }
 
     private String attributeValue(BaseElement element, String attributeName) {
@@ -326,6 +331,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
 
     private record BranchCandidate(
             String edgeId,
+            String targetNodeId,
             String label,
             Integer priority,
             boolean eligible,

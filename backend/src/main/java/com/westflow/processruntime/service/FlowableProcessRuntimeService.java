@@ -69,6 +69,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
@@ -118,13 +119,14 @@ public class FlowableProcessRuntimeService {
     private record InclusiveSelectionSummary(
             Integer eligibleTargetCount,
             List<String> selectedEdgeIds,
+            List<String> selectedTargetNodeIds,
             List<String> selectedBranchLabels,
             List<Integer> selectedBranchPriorities,
             List<String> selectedDecisionReasons,
             boolean defaultBranchSelected
     ) {
         private static InclusiveSelectionSummary empty() {
-            return new InclusiveSelectionSummary(null, List.of(), List.of(), List.of(), List.of(), false);
+            return new InclusiveSelectionSummary(null, List.of(), List.of(), List.of(), List.of(), List.of(), false);
         }
     }
 
@@ -2077,12 +2079,19 @@ public class FlowableProcessRuntimeService {
         }
 
         Map<String, List<ProcessDslPayload.Edge>> outgoingEdges = new LinkedHashMap<>();
+        Map<String, ProcessDslPayload.Edge> edgeById = new LinkedHashMap<>();
         for (ProcessDslPayload.Edge edge : payload.edges()) {
             outgoingEdges.computeIfAbsent(edge.source(), ignored -> new ArrayList<>()).add(edge);
+            edgeById.put(edge.id(), edge);
         }
         Map<String, Object> processVariables = runtimeOrHistoricVariables(processInstanceId);
+        Set<String> activeTaskNodeIds = activeTasks.stream()
+                .map(Task::getTaskDefinitionKey)
+                .filter(nodeId -> nodeId != null && !nodeId.isBlank())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, OffsetDateTime> firstOccurredAtByNodeId = new HashMap<>();
+        Map<String, List<HistoricActivityInstance>> historicActivitiesByNodeId = new LinkedHashMap<>();
         Set<String> reachedNodeIds = new LinkedHashSet<>();
         List<HistoricActivityInstance> historicActivities = flowableEngineFacade.historyService()
                 .createHistoricActivityInstanceQuery()
@@ -2099,6 +2108,7 @@ public class FlowableProcessRuntimeService {
                     activity.getActivityId(),
                     toOffsetDateTime(activity.getStartTime())
             );
+            historicActivitiesByNodeId.computeIfAbsent(activity.getActivityId(), ignored -> new ArrayList<>()).add(activity);
         }
         for (Task activeTask : activeTasks) {
             if (activeTask.getTaskDefinitionKey() == null || activeTask.getTaskDefinitionKey().isBlank()) {
@@ -2199,6 +2209,35 @@ public class FlowableProcessRuntimeService {
                 branchIndex++;
             }
 
+            List<String> resolvedSelectedEdgeIds = selectionSummary.selectedEdgeIds().isEmpty()
+                    ? List.copyOf(selectedEdgeIds)
+                    : selectionSummary.selectedEdgeIds();
+            List<String> resolvedSelectedBranchLabels = selectionSummary.selectedBranchLabels().isEmpty()
+                    ? List.copyOf(selectedBranchLabels)
+                    : selectionSummary.selectedBranchLabels();
+            List<Integer> resolvedSelectedBranchPriorities = selectionSummary.selectedBranchPriorities().isEmpty()
+                    ? List.copyOf(selectedBranchPriorities)
+                    : selectionSummary.selectedBranchPriorities();
+            List<String> resolvedSelectedDecisionReasons = selectionSummary.selectedDecisionReasons().isEmpty()
+                    ? List.copyOf(selectedDecisionReasons)
+                    : selectionSummary.selectedDecisionReasons();
+            boolean resolvedDefaultBranchSelected = selectionSummary.selectedEdgeIds().isEmpty()
+                    ? defaultBranchSelected
+                    : selectionSummary.defaultBranchSelected();
+            List<String> resolvedSelectedTargetNodeIds = selectionSummary.selectedTargetNodeIds().isEmpty()
+                    ? resolvedSelectedEdgeIds.stream()
+                            .map(edgeById::get)
+                            .filter(Objects::nonNull)
+                            .map(ProcessDslPayload.Edge::target)
+                            .filter(target -> target != null && !target.isBlank())
+                            .toList()
+                    : selectionSummary.selectedTargetNodeIds();
+            int completedSelectedTargetCount = countCompletedInclusiveTargets(
+                    resolvedSelectedTargetNodeIds,
+                    activeTaskNodeIds,
+                    historicActivitiesByNodeId
+            );
+            int pendingSelectedTargetCount = Math.max(0, resolvedSelectedTargetNodeIds.size() - completedSelectedTargetCount);
             OffsetDateTime finishedAt = join == null ? null : firstOccurredAtByNodeId.get(join.id());
             String gatewayStatus = resolveInclusiveGatewayStatus(
                     historicProcessInstance,
@@ -2228,21 +2267,13 @@ public class FlowableProcessRuntimeService {
                     List.copyOf(branchPriorities),
                     List.copyOf(branchLabels),
                     List.copyOf(branchExpressions),
-                    selectionSummary.selectedEdgeIds().isEmpty()
-                            ? List.copyOf(selectedEdgeIds)
-                            : selectionSummary.selectedEdgeIds(),
-                    selectionSummary.selectedBranchLabels().isEmpty()
-                            ? List.copyOf(selectedBranchLabels)
-                            : selectionSummary.selectedBranchLabels(),
-                    selectionSummary.selectedBranchPriorities().isEmpty()
-                            ? List.copyOf(selectedBranchPriorities)
-                            : selectionSummary.selectedBranchPriorities(),
-                    selectionSummary.selectedDecisionReasons().isEmpty()
-                            ? List.copyOf(selectedDecisionReasons)
-                            : selectionSummary.selectedDecisionReasons(),
-                    selectionSummary.selectedEdgeIds().isEmpty()
-                            ? defaultBranchSelected
-                            : selectionSummary.defaultBranchSelected(),
+                    completedSelectedTargetCount,
+                    pendingSelectedTargetCount,
+                    resolvedSelectedEdgeIds,
+                    resolvedSelectedBranchLabels,
+                    resolvedSelectedBranchPriorities,
+                    resolvedSelectedDecisionReasons,
+                    resolvedDefaultBranchSelected,
                     buildInclusiveDecisionSummary(
                             branchEdges.size(),
                             selectionSummary.eligibleTargetCount() == null
@@ -2250,9 +2281,9 @@ public class FlowableProcessRuntimeService {
                                     : selectionSummary.eligibleTargetCount(),
                             activatedTargetNodeIds.size(),
                             branchMergePolicy,
-                            selectionSummary.selectedEdgeIds().isEmpty()
-                                    ? defaultBranchSelected
-                                    : selectionSummary.defaultBranchSelected(),
+                            resolvedDefaultBranchSelected,
+                            resolvedSelectedEdgeIds.size(),
+                            completedSelectedTargetCount,
                             join != null
                     ),
                     firstActivatedAt,
@@ -2290,6 +2321,7 @@ public class FlowableProcessRuntimeService {
         return new InclusiveSelectionSummary(
                 integerValue(summary.get("eligibleBranchCount")),
                 selectedEdgeIds,
+                stringListValue(summary.get("selectedTargetNodeIds")),
                 stringListValue(summary.get("selectedLabels")),
                 integerListValue(summary.get("selectedPriorities")),
                 stringListValue(summary.get("selectedDecisionReasons")),
@@ -2380,6 +2412,8 @@ public class FlowableProcessRuntimeService {
         details.put("selectedBranchLabels", hit.selectedBranchLabels());
         details.put("selectedBranchPriorities", hit.selectedBranchPriorities());
         details.put("selectedDecisionReasons", hit.selectedDecisionReasons());
+        details.put("completedSelectedTargetCount", hit.completedSelectedTargetCount());
+        details.put("pendingSelectedTargetCount", hit.pendingSelectedTargetCount());
         details.put("defaultBranchSelected", hit.defaultBranchSelected());
         details.put("activatedTargetNodeIds", hit.activatedTargetNodeIds());
         details.put("activatedTargetNodeNames", hit.activatedTargetNodeNames());
@@ -3956,6 +3990,7 @@ public class FlowableProcessRuntimeService {
         );
         SubprocessStructureMetadata structureMetadata = resolveSubprocessStructureMetadata(record);
         Integer calledVersion = integerValue(nodeConfig.get("calledVersion"));
+        boolean parentConfirmationRequired = "WAIT_PARENT_CONFIRM".equals(record.status());
         return new ProcessInstanceLinkResponse(
                 record.id(),
                 record.rootInstanceId(),
@@ -3980,6 +4015,7 @@ public class FlowableProcessRuntimeService {
                 record.childStartDecisionReason(),
                 structureMetadata.parentResumeStrategy(),
                 resolveSubprocessResumeDecisionReason(record, structureMetadata),
+                parentConfirmationRequired,
                 descendantCount,
                 runningDescendantCount,
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
@@ -4059,9 +4095,31 @@ public class FlowableProcessRuntimeService {
                 stringValue(runtimeMetadata.get("westflowDynamicTemplateSource")),
                 record.operatorUserId(),
                 record.commentText(),
+                resolveDynamicBuildResolutionStatus(record),
+                resolveDynamicBuildResolutionReason(record),
                 record.createdAt() == null ? null : OffsetDateTime.ofInstant(record.createdAt(), TIME_ZONE),
                 record.finishedAt() == null ? null : OffsetDateTime.ofInstant(record.finishedAt(), TIME_ZONE)
         );
+    }
+
+    private String resolveDynamicBuildResolutionStatus(RuntimeAppendLinkRecord record) {
+        if (record == null || record.triggerMode() == null || !"DYNAMIC_BUILD".equals(record.triggerMode())) {
+            return null;
+        }
+        return switch (record.status()) {
+            case "FAILED", "SKIPPED" -> record.status();
+            default -> "SUCCESS";
+        };
+    }
+
+    private String resolveDynamicBuildResolutionReason(RuntimeAppendLinkRecord record) {
+        if (record == null || record.triggerMode() == null || !"DYNAMIC_BUILD".equals(record.triggerMode())) {
+            return null;
+        }
+        if ("FAILED".equals(record.status()) || "SKIPPED".equals(record.status())) {
+            return record.commentText();
+        }
+        return null;
     }
 
     private String resolveDynamicBuilderTargetMode(
@@ -4445,6 +4503,8 @@ public class FlowableProcessRuntimeService {
             int activatedCount,
             String branchMergePolicy,
             boolean defaultBranchSelected,
+            int selectedTargetCount,
+            int completedSelectedTargetCount,
             boolean hasJoin
     ) {
         String base = "已激活 " + activatedCount + "/" + branchCount + " 条分支";
@@ -4456,10 +4516,45 @@ public class FlowableProcessRuntimeService {
         if (defaultBranchSelected) {
             summary.append("，已走默认分支");
         }
+        if (selectedTargetCount > 0) {
+            int pendingSelectedTargetCount = Math.max(0, selectedTargetCount - completedSelectedTargetCount);
+            summary.append("，汇聚进度 ")
+                    .append(completedSelectedTargetCount)
+                    .append("/")
+                    .append(selectedTargetCount)
+                    .append("，待完成 ")
+                    .append(pendingSelectedTargetCount)
+                    .append(" 条");
+        }
         if (!hasJoin) {
             return summary.append("，未找到汇聚节点").toString();
         }
         return summary.toString();
+    }
+
+    private int countCompletedInclusiveTargets(
+            List<String> selectedTargetNodeIds,
+            Set<String> activeTaskNodeIds,
+            Map<String, List<HistoricActivityInstance>> historicActivitiesByNodeId
+    ) {
+        if (selectedTargetNodeIds == null || selectedTargetNodeIds.isEmpty()) {
+            return 0;
+        }
+        int completedCount = 0;
+        for (String targetNodeId : selectedTargetNodeIds) {
+            if (targetNodeId == null || targetNodeId.isBlank()) {
+                continue;
+            }
+            if (activeTaskNodeIds.contains(targetNodeId)) {
+                continue;
+            }
+            List<HistoricActivityInstance> activities = historicActivitiesByNodeId.get(targetNodeId);
+            boolean completed = activities != null && activities.stream().anyMatch(activity -> activity.getEndTime() != null);
+            if (completed) {
+                completedCount++;
+            }
+        }
+        return completedCount;
     }
 
     private HistoricProcessInstance requireHistoricProcessInstance(String processInstanceId) {
@@ -4515,6 +4610,27 @@ public class FlowableProcessRuntimeService {
         if (record.targetInstanceId() != null && !record.targetInstanceId().isBlank()) {
             Map<String, Object> values = runtimeOrHistoricVariables(record.targetInstanceId());
             return values.isEmpty() ? Map.of() : values;
+        }
+        if ("DYNAMIC_BUILD".equals(record.triggerMode())) {
+            Map<String, Object> sourceNodeConfig = resolveNodeConfig(record.parentInstanceId(), record.sourceNodeId());
+            if (!sourceNodeConfig.isEmpty()) {
+                Map<String, Object> metadata = new LinkedHashMap<>();
+                metadata.put("westflowDynamicResolvedSourceMode", normalizeDynamicBuilderSourceMode(stringValue(sourceNodeConfig.get("sourceMode"))));
+                metadata.put("westflowDynamicResolutionPath", record.status());
+                metadata.put("westflowDynamicExecutionStrategy", stringValue(sourceNodeConfig.get("executionStrategy")));
+                metadata.put("westflowDynamicFallbackStrategy", stringValue(sourceNodeConfig.get("fallbackStrategy")));
+                metadata.put("westflowDynamicMaxGeneratedCount", integerValue(sourceNodeConfig.get("maxGeneratedCount")));
+                metadata.put("westflowDynamicGeneratedCount", 0);
+                metadata.put("westflowDynamicGenerationTruncated", false);
+                String templateSource = stringValue(sourceNodeConfig.get("manualTemplateCode"));
+                if (templateSource == null || templateSource.isBlank()) {
+                    templateSource = stringValue(sourceNodeConfig.get("sceneCode"));
+                }
+                if (templateSource != null && !templateSource.isBlank()) {
+                    metadata.put("westflowDynamicTemplateSource", templateSource);
+                }
+                return metadata;
+            }
         }
         return Map.of();
     }

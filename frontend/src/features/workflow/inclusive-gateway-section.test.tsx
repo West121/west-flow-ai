@@ -19,6 +19,8 @@ describe('InclusiveGatewaySection', () => {
             branchPriorities: [10, 20],
             branchLabels: ['金额超限', '长假'],
             branchExpressions: ['amount > 1000', 'days > 3'],
+            completedSelectedTargetCount: 0,
+            pendingSelectedTargetCount: 1,
             selectedEdgeIds: ['edge_urgent'],
             selectedBranchLabels: ['默认分支'],
             selectedBranchPriorities: [30],
@@ -45,6 +47,8 @@ describe('InclusiveGatewaySection', () => {
     expect(screen.getByText('分支优先级：10、20')).toBeInTheDocument()
     expect(screen.getByText('分支名称：金额超限、长假')).toBeInTheDocument()
     expect(screen.getByText('分支表达式：amount > 1000、days > 3')).toBeInTheDocument()
+    expect(screen.getByText('汇聚完成：0/1')).toBeInTheDocument()
+    expect(screen.getByText('汇聚待完成：1')).toBeInTheDocument()
     expect(screen.getByText('最终命中边：edge_urgent')).toBeInTheDocument()
     expect(screen.getByText('最终命中分支：默认分支')).toBeInTheDocument()
     expect(screen.getByText('最终命中优先级：30')).toBeInTheDocument()

@@ -53,6 +53,7 @@ public class DynamicBuildAppendRuntimeService {
     private final ProcessDefinitionService processDefinitionService;
     private final FlowableTaskActionService flowableTaskActionService;
     private final RuntimeAppendLinkService runtimeAppendLinkService;
+    private final DynamicBuildOutcomeRecorder dynamicBuildOutcomeRecorder;
     private final ProcessLinkService processLinkService;
     private final BusinessProcessBindingService businessProcessBindingService;
     private final CountersignAssigneeResolver countersignAssigneeResolver;
@@ -83,25 +84,57 @@ public class DynamicBuildAppendRuntimeService {
             return;
         }
         String appendPolicy = normalizeAppendPolicy(stringValue(config.get("appendPolicy")));
-        DynamicBuildResolutionResult resolution = resolveDynamicBuilderItems(buildMode, config, processVariables, maxGeneratedCount);
-        if (resolution.items().isEmpty()) {
-            return;
-        }
         String operatorUserId = resolveRuntimeOperatorUserId(processVariables);
-        if ("APPROVER_TASKS".equals(buildMode)) {
-            createDynamicBuildTasks(processInstanceId, sourceNodeId, node.name(), appendPolicy, resolution, operatorUserId);
-            return;
+        try {
+            DynamicBuildResolutionResult resolution = resolveDynamicBuilderItems(buildMode, config, processVariables, maxGeneratedCount);
+            if (resolution.items().isEmpty()) {
+                createDynamicBuildOutcomeLink(
+                        processInstanceId,
+                        sourceNodeId,
+                        buildMode,
+                        appendPolicy,
+                        config,
+                        processVariables,
+                        null,
+                        null,
+                        "SKIPPED",
+                        "DYNAMIC_BUILD_SKIPPED",
+                        buildDynamicBuildSkipReason(resolution),
+                        operatorUserId
+                );
+                return;
+            }
+            if ("APPROVER_TASKS".equals(buildMode)) {
+                createDynamicBuildTasks(processInstanceId, sourceNodeId, node.name(), appendPolicy, resolution, operatorUserId);
+                return;
+            }
+            createDynamicBuildSubprocesses(
+                    processInstanceId,
+                    sourceNodeId,
+                    node.name(),
+                    parentDefinition,
+                    appendPolicy,
+                    processVariables,
+                    resolution,
+                    operatorUserId
+            );
+        } catch (RuntimeException exception) {
+            createDynamicBuildOutcomeLink(
+                    processInstanceId,
+                    sourceNodeId,
+                    buildMode,
+                    appendPolicy,
+                    config,
+                    processVariables,
+                    null,
+                    null,
+                    "FAILED",
+                    "DYNAMIC_BUILD_FAILED",
+                    buildDynamicBuildFailureReason(exception),
+                    operatorUserId
+            );
+            throw exception;
         }
-        createDynamicBuildSubprocesses(
-                processInstanceId,
-                sourceNodeId,
-                node.name(),
-                parentDefinition,
-                appendPolicy,
-                processVariables,
-                resolution,
-                operatorUserId
-        );
     }
 
     private PublishedProcessDefinition resolveParentDefinition(String processInstanceId, Map<String, Object> processVariables) {
@@ -266,6 +299,67 @@ public class DynamicBuildAppendRuntimeService {
             );
             runtimeAppendLinkService.createLink(appendLink);
         }
+    }
+
+    private void createDynamicBuildOutcomeLink(
+            String processInstanceId,
+            String sourceNodeId,
+            String buildMode,
+            String appendPolicy,
+            Map<String, Object> config,
+            Map<String, Object> processVariables,
+            String targetTaskId,
+            String targetInstanceId,
+            String status,
+            String runtimeLinkType,
+            String commentText,
+            String operatorUserId
+    ) {
+        String rootInstanceId = resolveRuntimeTreeRootInstanceId(processInstanceId);
+        String sourceStructureId = buildDynamicBuildSourceTaskId(processInstanceId, sourceNodeId);
+        String calledProcessKey = "SUBPROCESS_CALLS".equals(buildMode) ? stringValue(config.get("calledProcessKey")) : null;
+        String calledDefinitionId = null;
+        String calledVersionPolicy = "SUBPROCESS_CALLS".equals(buildMode) ? stringValue(config.get("calledVersionPolicy")) : null;
+        Integer calledVersion = null;
+        if ("SUBPROCESS_CALLS".equals(buildMode)) {
+            Object calledVersionValue = config.get("calledVersion");
+            if (calledVersionValue instanceof Number number) {
+                calledVersion = number.intValue();
+            } else if (calledVersionValue instanceof String stringValue && !stringValue.isBlank()) {
+                try {
+                    calledVersion = Integer.parseInt(stringValue.trim());
+                } catch (NumberFormatException ignored) {
+                    calledVersion = null;
+                }
+            }
+        }
+        RuntimeAppendLinkRecord appendLink = new RuntimeAppendLinkRecord(
+                UUID.randomUUID().toString(),
+                rootInstanceId,
+                processInstanceId,
+                sourceStructureId,
+                sourceNodeId,
+                "SUBPROCESS_CALLS".equals(buildMode) ? "SUBPROCESS" : "TASK",
+                runtimeLinkType,
+                appendPolicy,
+                targetTaskId,
+                targetInstanceId,
+                null,
+                calledProcessKey,
+                calledDefinitionId,
+                calledVersionPolicy,
+                calledVersion,
+                "SUBPROCESS_CALLS".equals(buildMode) ? "PROCESS_KEY" : "USER",
+                stringValue(processVariables.get("westflowBusinessType")),
+                stringValue(config.get("sceneCode")),
+                status,
+                "DYNAMIC_BUILD",
+                operatorUserId,
+                commentText,
+                Instant.now(),
+                Instant.now()
+        );
+        dynamicBuildOutcomeRecorder.record(appendLink);
     }
 
     private DynamicBuildResolutionResult resolveDynamicBuilderItems(
@@ -704,6 +798,27 @@ public class DynamicBuildAppendRuntimeService {
             metadata.put(DYNAMIC_TEMPLATE_SOURCE, resolution.templateSource());
         }
         return metadata;
+    }
+
+    private String buildDynamicBuildSkipReason(DynamicBuildResolutionResult resolution) {
+        List<String> reasons = new ArrayList<>();
+        reasons.add("动态构建未生成附属结构");
+        if (resolution != null) {
+            reasons.add("resolutionPath=" + resolution.resolutionPath());
+            reasons.add("executionStrategy=" + resolution.executionStrategy());
+            reasons.add("fallbackStrategy=" + resolution.fallbackStrategy());
+            reasons.add("generatedCount=" + resolution.generatedCount());
+            reasons.add("maxGeneratedCount=" + resolution.maxGeneratedCount());
+        }
+        return String.join("；", reasons);
+    }
+
+    private String buildDynamicBuildFailureReason(RuntimeException exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            message = exception.getClass().getSimpleName();
+        }
+        return "动态构建执行失败；error=" + message;
     }
 
     private record DynamicBuildResolutionResult(

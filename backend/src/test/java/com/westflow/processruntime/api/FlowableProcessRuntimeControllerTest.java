@@ -303,8 +303,11 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("金额超限");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("10");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedDecisionReasons").toString()).contains("DEFAULT_POLICY_PRIORITY");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("completedSelectedTargetCount").asInt()).isEqualTo(0);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("pendingSelectedTargetCount").asInt()).isEqualTo(1);
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isFalse();
-        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("decisionSummary").asText()).contains("已激活 1/2 条分支", "命中候选 1 条", "策略 DEFAULT_BRANCH");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("decisionSummary").asText())
+                .contains("已激活 1/2 条分支", "命中候选 1 条", "策略 DEFAULT_BRANCH", "汇聚进度 0/1", "待完成 1 条");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("activatedTargetNodeNames").get(0).asText()).isEqualTo("财务审批");
         assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("skippedTargetNodeNames").get(0).asText()).isEqualTo("人事审批");
         assertThat(detailBody.path("instanceEvents").toString()).contains("INCLUSIVE_BRANCH_ACTIVATED", "\"selectedEdgeIds\":[\"edge_2\"]");

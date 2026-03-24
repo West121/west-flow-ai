@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type WorkflowNode, type WorkflowSnapshot } from './types'
+import { type WorkflowApproverNodeConfig, type WorkflowNode, type WorkflowSnapshot } from './types'
 import {
   type ProcessDefinitionDetailResponse,
   processDefinitionDetailToWorkflowSnapshot,
@@ -371,6 +371,142 @@ describe('workflow designer dsl mapping', () => {
       autoFinishRemaining: true,
     })
   })
+
+  it.each([
+    [
+      'ROLE',
+      {
+        mode: 'ROLE',
+        userIds: [],
+        roleCodes: ['role_manager', 'OA_USER'],
+        departmentRef: '',
+        formFieldKey: '',
+        formulaExpression: '',
+      },
+      {
+        assignment: {
+          mode: 'ROLE',
+          roleCodes: ['role_manager', 'OA_USER'],
+        },
+      },
+    ],
+    [
+      'DEPARTMENT',
+      {
+        mode: 'DEPARTMENT',
+        userIds: [],
+        roleCodes: [],
+        departmentRef: 'dept_001',
+        formFieldKey: '',
+        formulaExpression: '',
+      },
+      {
+        assignment: {
+          mode: 'DEPARTMENT',
+          departmentRef: 'dept_001',
+        },
+      },
+    ],
+    [
+      'DEPARTMENT_AND_CHILDREN',
+      {
+        mode: 'DEPARTMENT_AND_CHILDREN',
+        userIds: [],
+        roleCodes: [],
+        departmentRef: 'dept_001',
+        formFieldKey: '',
+        formulaExpression: '',
+      },
+      {
+        assignment: {
+          mode: 'DEPARTMENT_AND_CHILDREN',
+          departmentRef: 'dept_001',
+        },
+      },
+    ],
+    [
+      'FORM_FIELD',
+      {
+        mode: 'FORM_FIELD',
+        userIds: [],
+        roleCodes: [],
+        departmentRef: '',
+        formFieldKey: 'managerUserIds',
+        formulaExpression: '',
+      },
+      {
+        assignment: {
+          mode: 'FORM_FIELD',
+          formFieldKey: 'managerUserIds',
+        },
+      },
+    ],
+    [
+      'FORMULA',
+      {
+        mode: 'FORMULA',
+        userIds: [],
+        roleCodes: [],
+        departmentRef: '',
+        formFieldKey: '',
+        formulaExpression: 'ifElse(days >= 3, "usr_001,usr_002", "usr_002,usr_003")',
+      },
+      {
+        assignment: {
+          mode: 'FORMULA',
+          formulaExpression: 'ifElse(days >= 3, "usr_001,usr_002", "usr_002,usr_003")',
+        },
+      },
+    ],
+  ] as const)(
+    'persists countersign assignment mode %s in the DSL config',
+    (_mode, assignment, expected) => {
+      const normalizedAssignment: WorkflowApproverNodeConfig['assignment'] = {
+        mode: assignment.mode,
+        userIds: [...assignment.userIds],
+        roleCodes: [...assignment.roleCodes],
+        departmentRef: assignment.departmentRef,
+        formFieldKey: assignment.formFieldKey,
+        formulaExpression: assignment.formulaExpression,
+      }
+      const snapshotWithCountersign = {
+        ...snapshot,
+        nodes: snapshot.nodes.map((node) =>
+          node.id === 'approve_1' ? (() => {
+            const approverConfig = node.data.config as WorkflowApproverNodeConfig
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                config: {
+                  ...approverConfig,
+                  approvalMode: 'PARALLEL',
+                  reapprovePolicy: 'RESTART_ALL',
+                  autoFinishRemaining: true,
+                  approvalPolicy: {
+                    type: 'PARALLEL',
+                    voteThreshold: null,
+                  },
+                  assignment: normalizedAssignment,
+                },
+              },
+            } satisfies WorkflowNode
+          })() : node
+        ),
+      } satisfies WorkflowSnapshot
+
+      const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithCountersign, {
+        processKey: 'oa_leave',
+        processName: '请假审批',
+        category: 'OA',
+        processFormKey: 'oa-leave-start-form',
+        processFormVersion: '1.0.0',
+        formFields: [],
+      })
+
+      expect(dsl.nodes[1]?.config).toMatchObject(expected)
+    }
+  )
 
   it('persists dynamic builder fields in the DSL config', () => {
     const snapshotWithDynamicBuilder = {

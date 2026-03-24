@@ -145,6 +145,7 @@ public class WorkflowManagementService {
             );
         }
         InstanceContext context = buildInstanceContext(historicInstance);
+        List<ProcessInstanceLinkResponse> processLinks = processLinks(instanceId);
         return new WorkflowInstanceDetailResponse(
                 instanceId,
                 context.platformProcessDefinitionId(),
@@ -161,13 +162,20 @@ public class WorkflowManagementService {
                 toOffsetDateTime(historicInstance.getEndTime()),
                 context.variables(),
                 flowableProcessRuntimeService.inclusiveGatewayHits(instanceId),
-                processLinks(instanceId),
+                processLinks,
+                waitingParentConfirmLinks(processLinks),
                 flowableProcessRuntimeService.appendLinks(instanceId)
         );
     }
 
     private List<ProcessInstanceLinkResponse> processLinks(String instanceId) {
         return flowableProcessRuntimeService.links(processLinkService.resolveRootInstanceId(instanceId));
+    }
+
+    private List<ProcessInstanceLinkResponse> waitingParentConfirmLinks(List<ProcessInstanceLinkResponse> processLinks) {
+        return processLinks.stream()
+                .filter(ProcessInstanceLinkResponse::parentConfirmationRequired)
+                .toList();
     }
 
     private OffsetDateTime toOffsetDateTime(Instant value) {

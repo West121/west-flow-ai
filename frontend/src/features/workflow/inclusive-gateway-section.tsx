@@ -13,6 +13,8 @@ type InclusiveGatewayHit = {
   branchPriorities?: number[]
   branchLabels?: string[]
   branchExpressions?: string[]
+  completedSelectedTargetCount?: number
+  pendingSelectedTargetCount?: number
   selectedEdgeIds?: string[]
   selectedBranchLabels?: string[]
   selectedBranchPriorities?: number[]
@@ -107,6 +109,13 @@ export function InclusiveGatewaySection({
               <div>分支优先级：{joinOrDash(hit.branchPriorities?.map(String))}</div>
               <div>分支名称：{joinOrDash(hit.branchLabels)}</div>
               <div>分支表达式：{joinOrDash(hit.branchExpressions)}</div>
+              <div>
+                汇聚完成：
+                {hit.selectedEdgeIds?.length
+                  ? `${hit.completedSelectedTargetCount ?? 0}/${hit.selectedEdgeIds.length}`
+                  : '--'}
+              </div>
+              <div>汇聚待完成：{hit.pendingSelectedTargetCount ?? '--'}</div>
             </div>
 
             <div className='grid gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground md:grid-cols-3'>

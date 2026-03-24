@@ -27,6 +27,7 @@ public record WorkflowInstanceDetailResponse(
         Map<String, Object> variables,
         List<InclusiveGatewayHitResponse> inclusiveGatewayHits,
         List<ProcessInstanceLinkResponse> processLinks,
+        List<ProcessInstanceLinkResponse> waitingParentConfirmLinks,
         List<RuntimeAppendLinkResponse> runtimeStructureLinks
 ) {
 }

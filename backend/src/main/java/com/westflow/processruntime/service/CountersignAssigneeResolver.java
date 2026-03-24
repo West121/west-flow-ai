@@ -32,7 +32,7 @@ public class CountersignAssigneeResolver {
         if (mode == null) {
             return List.of();
         }
-        return switch (mode) {
+        List<String> resolved = switch (mode) {
             case "USER" -> stringListValue(assignment.get("userIds"));
             case "ROLE" -> systemUserMapper.selectEnabledUserIdsByRoleRefs(stringListValue(assignment.get("roleCodes")));
             case "DEPARTMENT" -> systemUserMapper.selectEnabledUserIdsByDepartmentIds(
@@ -45,6 +45,7 @@ public class CountersignAssigneeResolver {
             case "FORMULA" -> coerceUserIds(evaluateFormula(stringValue(assignment.get("formulaExpression")), startVariables));
             default -> List.of();
         };
+        return normalizeUserIds(resolved);
     }
 
     private Object evaluateFormula(String expression, Map<String, Object> startVariables) {
@@ -116,6 +117,20 @@ public class CountersignAssigneeResolver {
             return candidate == null ? List.of() : List.of(candidate);
         }
         return List.copyOf(userIds);
+    }
+
+    private List<String> normalizeUserIds(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> normalized = new LinkedHashSet<>();
+        for (String userId : userIds) {
+            String candidate = stringValue(userId);
+            if (candidate != null) {
+                normalized.add(candidate);
+            }
+        }
+        return List.copyOf(normalized);
     }
 
     private List<String> stringListValue(Object value) {
