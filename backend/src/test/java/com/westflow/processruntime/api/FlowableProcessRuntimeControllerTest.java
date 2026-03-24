@@ -310,6 +310,79 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeRequiredCountInclusiveGatewayDecisionOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildInclusiveRequiredCountPayload());
+        seedLeaveBill("leave_032");
+
+        objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_inclusive_required_count",
+                                  "businessKey": "leave_032",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 10,
+                                    "amount": 2000,
+                                    "reason": "包容分支固定数量"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_032");
+        assertThat(detailBody.path("inclusiveGatewayHits")).hasSize(1);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchMergePolicy").asText()).isEqualTo("REQUIRED_COUNT");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("requiredBranchCount").asInt()).isEqualTo(1);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("eligibleTargetCount").asInt()).isEqualTo(2);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedEdgeIds").toString()).contains("edge_3");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("长假");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("10");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isFalse();
+    }
+
+    @Test
+    void shouldExposeDefaultBranchInclusiveGatewayDecisionOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildInclusiveDefaultBranchPayload());
+        seedLeaveBill("leave_033");
+
+        objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_inclusive_default_branch",
+                                  "businessKey": "leave_033",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "amount": 100,
+                                    "reason": "包容分支默认兜底"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_033");
+        assertThat(detailBody.path("inclusiveGatewayHits")).hasSize(1);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("branchMergePolicy").asText()).isEqualTo("DEFAULT_BRANCH");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("eligibleTargetCount").asInt()).isEqualTo(0);
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedEdgeIds").toString()).contains("edge_4");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchLabels").toString()).contains("默认分支");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("selectedBranchPriorities").toString()).contains("30");
+        assertThat(detailBody.path("inclusiveGatewayHits").get(0).path("defaultBranchSelected").asBoolean()).isTrue();
+    }
+
+    @Test
     void shouldExposeSubprocessInstanceLinksOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayload());
@@ -504,6 +577,58 @@ class FlowableProcessRuntimeControllerTest {
 
         assertThat(confirmBody.path("linkId").asText()).isEqualTo(linkId);
         assertThat(confirmBody.path("status").asText()).isEqualTo("FINISHED");
+    }
+
+    @Test
+    void shouldResolveSceneBindingSubprocessLinksOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        processDefinitionService.publish(buildSubprocessChildPayloadWithKey(
+                "oa_sub_review_scene",
+                "场景绑定子流程"
+        ));
+        processDefinitionService.publish(buildSubprocessParentSceneBindingPayload());
+        jdbcTemplate.update("""
+                INSERT INTO wf_business_process_binding (
+                    id, business_type, scene_code, process_key, priority, enabled, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                "bind_test_scene_subprocess_controller",
+                "OA_COMMON",
+                "sub_review_scene",
+                "oa_sub_review_scene",
+                100,
+                true
+        );
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_parent_with_scene_binding_subprocess",
+                                  "businessKey": "parent_bill_scene_002",
+                                  "businessType": "OA_COMMON",
+                                  "formData": {
+                                    "billNo": "BILL-SCENE-002"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        JsonNode linksBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/instances/{instanceId}/links", startBody.path("instanceId").asText())
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(linksBody).hasSize(1);
+        assertThat(linksBody.get(0).path("calledProcessKey").asText()).isEqualTo("oa_sub_review_scene");
+        assertThat(linksBody.get(0).path("childStartStrategy").asText()).isEqualTo("SCENE_BINDING");
+        assertThat(linksBody.get(0).path("childProcessName").asText()).isEqualTo("场景绑定子流程");
+        assertThat(linksBody.get(0).path("calledDefinitionId").asText()).isNotBlank();
     }
 
     @Test
@@ -2654,6 +2779,78 @@ class FlowableProcessRuntimeControllerTest {
                 """, ProcessDslPayload.class);
     }
 
+    private ProcessDslPayload buildSubprocessChildPayloadWithKey(String processKey, String processName) throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "%s",
+                  "processName": "%s",
+                  "category": "OA",
+                  "processFormKey": "oa_sub_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_1",
+                      "type": "approver",
+                      "name": "子流程审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"]
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """.formatted(processKey, processName), ProcessDslPayload.class);
+    }
+
     private ProcessDslPayload buildSubprocessParentPayload() throws Exception {
         return objectMapper.readValue("""
                 {
@@ -2864,6 +3061,77 @@ class FlowableProcessRuntimeControllerTest {
                 """, ProcessDslPayload.class);
     }
 
+    private ProcessDslPayload buildSubprocessParentSceneBindingPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_parent_with_scene_binding_subprocess",
+                  "processName": "主流程带场景绑定子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "oa_sub_review_template",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "SCENE_BINDING",
+                        "sceneCode": "sub_review_scene",
+                        "parentResumeStrategy": "AUTO_RETURN",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
     private ProcessDslPayload buildInclusiveGatewayPayload() throws Exception {
         return objectMapper.readValue("""
                 {
@@ -3003,6 +3271,76 @@ class FlowableProcessRuntimeControllerTest {
                       "priority": 10,
                       "label": "完成"
                     }
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildInclusiveRequiredCountPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_inclusive_required_count",
+                  "processName": "包容分支固定数量",
+                  "category": "OA",
+                  "processFormKey": "oa_inclusive_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {"id": "start_1", "type": "start", "name": "开始", "position": {"x": 100, "y": 100}, "config": {"initiatorEditable": true}, "ui": {"width": 240, "height": 88}},
+                    {"id": "inclusive_split_1", "type": "inclusive_split", "name": "包容分支", "position": {"x": 320, "y": 100}, "config": {"requiredBranchCount": 1, "branchMergePolicy": "REQUIRED_COUNT"}, "ui": {"width": 240, "height": 88}},
+                    {"id": "approve_finance", "type": "approver", "name": "财务审批", "position": {"x": 540, "y": 40}, "config": {"assignment": {"mode": "USER", "userIds": ["usr_002"], "roleCodes": [], "departmentRef": "", "formFieldKey": ""}, "approvalPolicy": {"type": "SEQUENTIAL"}, "operations": ["APPROVE", "REJECT", "RETURN"]}, "ui": {"width": 240, "height": 88}},
+                    {"id": "approve_hr", "type": "approver", "name": "人事审批", "position": {"x": 540, "y": 180}, "config": {"assignment": {"mode": "USER", "userIds": ["usr_003"], "roleCodes": [], "departmentRef": "", "formFieldKey": ""}, "approvalPolicy": {"type": "SEQUENTIAL"}, "operations": ["APPROVE", "REJECT", "RETURN"]}, "ui": {"width": 240, "height": 88}},
+                    {"id": "approve_default", "type": "approver", "name": "默认审批", "position": {"x": 540, "y": 320}, "config": {"assignment": {"mode": "USER", "userIds": ["usr_004"], "roleCodes": [], "departmentRef": "", "formFieldKey": ""}, "approvalPolicy": {"type": "SEQUENTIAL"}, "operations": ["APPROVE", "REJECT", "RETURN"]}, "ui": {"width": 240, "height": 88}},
+                    {"id": "inclusive_join_1", "type": "inclusive_join", "name": "包容汇聚", "position": {"x": 760, "y": 100}, "config": {}, "ui": {"width": 240, "height": 88}},
+                    {"id": "end_1", "type": "end", "name": "结束", "position": {"x": 980, "y": 100}, "config": {}, "ui": {"width": 240, "height": 88}}
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "inclusive_split_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "inclusive_split_1", "target": "approve_finance", "priority": 20, "label": "金额超限", "condition": {"type": "EXPRESSION", "expression": "amount > 1000"}},
+                    {"id": "edge_3", "source": "inclusive_split_1", "target": "approve_hr", "priority": 10, "label": "长假", "condition": {"type": "EXPRESSION", "expression": "days > 3"}},
+                    {"id": "edge_4", "source": "inclusive_split_1", "target": "approve_default", "priority": 30, "label": "默认分支", "condition": {"type": "EXPRESSION", "expression": "amount > 99999"}},
+                    {"id": "edge_5", "source": "approve_finance", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_6", "source": "approve_hr", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_7", "source": "approve_default", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_8", "source": "inclusive_join_1", "target": "end_1", "priority": 10, "label": "完成"}
+                  ]
+                }
+                """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildInclusiveDefaultBranchPayload() throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_inclusive_default_branch",
+                  "processName": "包容分支默认兜底",
+                  "category": "OA",
+                  "processFormKey": "oa_inclusive_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {"id": "start_1", "type": "start", "name": "开始", "position": {"x": 100, "y": 100}, "config": {"initiatorEditable": true}, "ui": {"width": 240, "height": 88}},
+                    {"id": "inclusive_split_1", "type": "inclusive_split", "name": "包容分支", "position": {"x": 320, "y": 100}, "config": {"defaultBranchId": "edge_4", "branchMergePolicy": "DEFAULT_BRANCH"}, "ui": {"width": 240, "height": 88}},
+                    {"id": "approve_finance", "type": "approver", "name": "财务审批", "position": {"x": 540, "y": 40}, "config": {"assignment": {"mode": "USER", "userIds": ["usr_002"], "roleCodes": [], "departmentRef": "", "formFieldKey": ""}, "approvalPolicy": {"type": "SEQUENTIAL"}, "operations": ["APPROVE", "REJECT", "RETURN"]}, "ui": {"width": 240, "height": 88}},
+                    {"id": "approve_hr", "type": "approver", "name": "人事审批", "position": {"x": 540, "y": 180}, "config": {"assignment": {"mode": "USER", "userIds": ["usr_003"], "roleCodes": [], "departmentRef": "", "formFieldKey": ""}, "approvalPolicy": {"type": "SEQUENTIAL"}, "operations": ["APPROVE", "REJECT", "RETURN"]}, "ui": {"width": 240, "height": 88}},
+                    {"id": "approve_default", "type": "approver", "name": "默认审批", "position": {"x": 540, "y": 320}, "config": {"assignment": {"mode": "USER", "userIds": ["usr_004"], "roleCodes": [], "departmentRef": "", "formFieldKey": ""}, "approvalPolicy": {"type": "SEQUENTIAL"}, "operations": ["APPROVE", "REJECT", "RETURN"]}, "ui": {"width": 240, "height": 88}},
+                    {"id": "inclusive_join_1", "type": "inclusive_join", "name": "包容汇聚", "position": {"x": 760, "y": 100}, "config": {}, "ui": {"width": 240, "height": 88}},
+                    {"id": "end_1", "type": "end", "name": "结束", "position": {"x": 980, "y": 100}, "config": {}, "ui": {"width": 240, "height": 88}}
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "inclusive_split_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "inclusive_split_1", "target": "approve_finance", "priority": 10, "label": "金额超限", "condition": {"type": "EXPRESSION", "expression": "amount > 1000"}},
+                    {"id": "edge_3", "source": "inclusive_split_1", "target": "approve_hr", "priority": 20, "label": "长假", "condition": {"type": "EXPRESSION", "expression": "days > 3"}},
+                    {"id": "edge_4", "source": "inclusive_split_1", "target": "approve_default", "priority": 30, "label": "默认分支", "condition": {"type": "EXPRESSION", "expression": "amount > 99999"}},
+                    {"id": "edge_5", "source": "approve_finance", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_6", "source": "approve_hr", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_7", "source": "approve_default", "target": "inclusive_join_1", "priority": 10, "label": "汇聚"},
+                    {"id": "edge_8", "source": "inclusive_join_1", "target": "end_1", "priority": 10, "label": "完成"}
                   ]
                 }
                 """, ProcessDslPayload.class);
