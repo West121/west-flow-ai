@@ -1,9 +1,9 @@
 package com.westflow.system.org.department.mapper;
 
+import com.westflow.system.org.department.model.SystemDepartmentRecord;
 import com.westflow.system.org.department.response.SystemDepartmentDetailResponse;
 import com.westflow.system.org.department.response.SystemDepartmentFormOptionsResponse;
 import com.westflow.system.org.department.response.SystemDepartmentListItemResponse;
-import com.westflow.system.org.department.model.SystemDepartmentRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -22,7 +22,11 @@ public interface SystemDepartmentMapper {
             "SELECT",
             "  d.id AS department_id,",
             "  c.company_name,",
+            "  d.parent_department_id,",
             "  p.department_name AS parent_department_name,",
+            "  d.root_department_id,",
+            "  d.tree_level,",
+            "  d.tree_path,",
             "  d.department_name,",
             "  CASE WHEN d.enabled THEN 'ENABLED' ELSE 'DISABLED' END AS status,",
             "  d.created_at",
@@ -45,6 +49,9 @@ public interface SystemDepartmentMapper {
             "  </if>",
             "  <if test='parentDepartmentId != null'>",
             "    AND COALESCE(d.parent_department_id, '') = COALESCE(#{parentDepartmentId}, '')",
+            "  </if>",
+            "  <if test='rootDepartmentId != null and rootDepartmentId != \"\"'>",
+            "    AND d.root_department_id = #{rootDepartmentId}",
             "  </if>",
             "  <if test='!allAccess'>",
             "    <choose>",
@@ -79,6 +86,7 @@ public interface SystemDepartmentMapper {
             @Param("enabled") Boolean enabled,
             @Param("companyId") String companyId,
             @Param("parentDepartmentId") String parentDepartmentId,
+            @Param("rootDepartmentId") String rootDepartmentId,
             @Param("allAccess") boolean allAccess,
             @Param("companyIds") List<String> companyIds,
             @Param("departmentIds") List<String> departmentIds,
@@ -111,6 +119,9 @@ public interface SystemDepartmentMapper {
             "  <if test='parentDepartmentId != null'>",
             "    AND COALESCE(d.parent_department_id, '') = COALESCE(#{parentDepartmentId}, '')",
             "  </if>",
+            "  <if test='rootDepartmentId != null and rootDepartmentId != \"\"'>",
+            "    AND d.root_department_id = #{rootDepartmentId}",
+            "  </if>",
             "  <if test='!allAccess'>",
             "    <choose>",
             "      <when test='(companyIds != null and companyIds.size() &gt; 0) or (departmentIds != null and departmentIds.size() &gt; 0)'>",
@@ -142,6 +153,7 @@ public interface SystemDepartmentMapper {
             @Param("enabled") Boolean enabled,
             @Param("companyId") String companyId,
             @Param("parentDepartmentId") String parentDepartmentId,
+            @Param("rootDepartmentId") String rootDepartmentId,
             @Param("allAccess") boolean allAccess,
             @Param("companyIds") List<String> companyIds,
             @Param("departmentIds") List<String> departmentIds
@@ -154,14 +166,160 @@ public interface SystemDepartmentMapper {
               c.company_name,
               p.id AS parent_department_id,
               p.department_name AS parent_department_name,
+              d.root_department_id,
+              r.department_name AS root_department_name,
+              d.tree_level,
+              d.tree_path,
               d.department_name,
               d.enabled
             FROM wf_department d
             INNER JOIN wf_company c ON c.id = d.company_id
             LEFT JOIN wf_department p ON p.id = d.parent_department_id
+            LEFT JOIN wf_department r ON r.id = d.root_department_id
             WHERE d.id = #{departmentId}
             """)
     SystemDepartmentDetailResponse selectDetail(@Param("departmentId") String departmentId);
+
+    @Select({
+            "<script>",
+            "SELECT",
+            "  d.id AS department_id,",
+            "  c.id AS company_id,",
+            "  c.company_name,",
+            "  p.id AS parent_department_id,",
+            "  p.department_name AS parent_department_name,",
+            "  d.root_department_id,",
+            "  r.department_name AS root_department_name,",
+            "  d.tree_level,",
+            "  d.tree_path,",
+            "  d.department_name,",
+            "  d.enabled",
+            "FROM wf_department d",
+            "INNER JOIN wf_company c ON c.id = d.company_id",
+            "LEFT JOIN wf_department p ON p.id = d.parent_department_id",
+            "LEFT JOIN wf_department r ON r.id = d.root_department_id",
+            "<where>",
+            "  <if test='companyId != null and companyId != \"\"'>",
+            "    AND d.company_id = #{companyId}",
+            "  </if>",
+            "  <if test='enabled != null'>",
+            "    AND d.enabled = #{enabled}",
+            "  </if>",
+            "  <if test='!allAccess'>",
+            "    <choose>",
+            "      <when test='(companyIds != null and companyIds.size() &gt; 0) or (departmentIds != null and departmentIds.size() &gt; 0)'>",
+            "        <trim prefix='AND (' suffix=')' prefixOverrides='OR '>",
+            "          <if test='companyIds != null and companyIds.size() &gt; 0'>",
+            "            c.id IN",
+            "            <foreach collection='companyIds' item='companyId' open='(' separator=',' close=')'>",
+            "              #{companyId}",
+            "            </foreach>",
+            "          </if>",
+            "          <if test='departmentIds != null and departmentIds.size() &gt; 0'>",
+            "            OR d.id IN",
+            "            <foreach collection='departmentIds' item='departmentId' open='(' separator=',' close=')'>",
+            "              #{departmentId}",
+            "            </foreach>",
+            "          </if>",
+            "        </trim>",
+            "      </when>",
+            "      <otherwise>",
+            "        AND 1 = 0",
+            "      </otherwise>",
+            "    </choose>",
+            "  </if>",
+            "</where>",
+            "ORDER BY c.company_name ASC, d.tree_path ASC",
+            "</script>"
+    })
+    List<SystemDepartmentDetailResponse> selectTree(
+            @Param("companyId") String companyId,
+            @Param("enabled") Boolean enabled,
+            @Param("allAccess") boolean allAccess,
+            @Param("companyIds") List<String> companyIds,
+            @Param("departmentIds") List<String> departmentIds
+    );
+
+    @Select({
+            "<script>",
+            "SELECT",
+            "  d.id AS department_id,",
+            "  c.id AS company_id,",
+            "  c.company_name,",
+            "  p.id AS parent_department_id,",
+            "  p.department_name AS parent_department_name,",
+            "  d.root_department_id,",
+            "  r.department_name AS root_department_name,",
+            "  d.tree_level,",
+            "  d.tree_path,",
+            "  d.department_name,",
+            "  d.enabled",
+            "FROM wf_department d",
+            "INNER JOIN wf_company c ON c.id = d.company_id",
+            "LEFT JOIN wf_department p ON p.id = d.parent_department_id",
+            "LEFT JOIN wf_department r ON r.id = d.root_department_id",
+            "<where>",
+            "  (d.tree_path = #{treePath} OR d.tree_path LIKE CONCAT(#{treePath}, '/%'))",
+            "  <if test='!allAccess'>",
+            "    <choose>",
+            "      <when test='(companyIds != null and companyIds.size() &gt; 0) or (departmentIds != null and departmentIds.size() &gt; 0)'>",
+            "        <trim prefix='AND (' suffix=')' prefixOverrides='OR '>",
+            "          <if test='companyIds != null and companyIds.size() &gt; 0'>",
+            "            c.id IN",
+            "            <foreach collection='companyIds' item='companyId' open='(' separator=',' close=')'>",
+            "              #{companyId}",
+            "            </foreach>",
+            "          </if>",
+            "          <if test='departmentIds != null and departmentIds.size() &gt; 0'>",
+            "            OR d.id IN",
+            "            <foreach collection='departmentIds' item='departmentId' open='(' separator=',' close=')'>",
+            "              #{departmentId}",
+            "            </foreach>",
+            "          </if>",
+            "        </trim>",
+            "      </when>",
+            "      <otherwise>",
+            "        AND 1 = 0",
+            "      </otherwise>",
+            "    </choose>",
+            "  </if>",
+            "</where>",
+            "ORDER BY d.tree_path ASC",
+            "</script>"
+    })
+    List<SystemDepartmentDetailResponse> selectSubtree(
+            @Param("treePath") String treePath,
+            @Param("allAccess") boolean allAccess,
+            @Param("companyIds") List<String> companyIds,
+            @Param("departmentIds") List<String> departmentIds
+    );
+
+    @Select({
+            "<script>",
+            "SELECT",
+            "  d.id AS department_id,",
+            "  c.id AS company_id,",
+            "  c.company_name,",
+            "  p.id AS parent_department_id,",
+            "  p.department_name AS parent_department_name,",
+            "  d.root_department_id,",
+            "  r.department_name AS root_department_name,",
+            "  d.tree_level,",
+            "  d.tree_path,",
+            "  d.department_name,",
+            "  d.enabled",
+            "FROM wf_department d",
+            "INNER JOIN wf_company c ON c.id = d.company_id",
+            "LEFT JOIN wf_department p ON p.id = d.parent_department_id",
+            "LEFT JOIN wf_department r ON r.id = d.root_department_id",
+            "WHERE d.id IN",
+            "  <foreach collection='departmentIds' item='departmentId' open='(' separator=',' close=')'>",
+            "    #{departmentId}",
+            "  </foreach>",
+            "ORDER BY d.tree_level ASC",
+            "</script>"
+    })
+    List<SystemDepartmentDetailResponse> selectDepartmentsByIds(@Param("departmentIds") List<String> departmentIds);
 
     @Select("""
             SELECT
@@ -181,6 +339,9 @@ public interface SystemDepartmentMapper {
             "  d.company_id,",
             "  c.company_name,",
             "  d.parent_department_id,",
+            "  d.root_department_id,",
+            "  d.tree_level,",
+            "  d.tree_path,",
             "  d.enabled",
             "FROM wf_department d",
             "INNER JOIN wf_company c ON c.id = d.company_id",
@@ -189,7 +350,7 @@ public interface SystemDepartmentMapper {
             "    AND d.company_id = #{companyId}",
             "  </if>",
             "</where>",
-            "ORDER BY c.company_name ASC, d.department_name ASC",
+            "ORDER BY c.company_name ASC, d.tree_path ASC",
             "</script>"
     })
     List<SystemDepartmentFormOptionsResponse.ParentDepartmentOption> selectParentDepartmentOptions(
@@ -228,6 +389,9 @@ public interface SystemDepartmentMapper {
               id,
               company_id,
               parent_department_id,
+              root_department_id,
+              tree_level,
+              tree_path,
               department_name,
               enabled,
               created_at,
@@ -236,6 +400,9 @@ public interface SystemDepartmentMapper {
               #{id},
               #{companyId},
               #{parentDepartmentId},
+              #{rootDepartmentId},
+              #{treeLevel},
+              #{treePath},
               #{departmentName},
               #{enabled},
               CURRENT_TIMESTAMP,
@@ -248,10 +415,30 @@ public interface SystemDepartmentMapper {
             UPDATE wf_department
             SET company_id = #{companyId},
                 parent_department_id = #{parentDepartmentId},
+                root_department_id = #{rootDepartmentId},
+                tree_level = #{treeLevel},
+                tree_path = #{treePath},
                 department_name = #{departmentName},
                 enabled = #{enabled},
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
     int updateDepartment(SystemDepartmentRecord entity);
+
+    @Update("""
+            UPDATE wf_department
+            SET company_id = #{companyId},
+                root_department_id = #{rootDepartmentId},
+                tree_level = tree_level + #{treeLevelDelta},
+                tree_path = CONCAT(#{newTreePath}, SUBSTRING(tree_path FROM CHAR_LENGTH(#{oldTreePath}) + 1)),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE tree_path LIKE CONCAT(#{oldTreePath}, '/%')
+            """)
+    int updateDepartmentSubtreeTreeMeta(
+            @Param("oldTreePath") String oldTreePath,
+            @Param("newTreePath") String newTreePath,
+            @Param("treeLevelDelta") int treeLevelDelta,
+            @Param("companyId") String companyId,
+            @Param("rootDepartmentId") String rootDepartmentId
+    );
 }

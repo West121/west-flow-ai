@@ -1,5 +1,18 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { type ColumnDef, type OnChangeFn, type SortingState, type VisibilityState, flexRender, getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
+import {
+  type ColumnDef,
+  type ExpandedState,
+  type OnChangeFn,
+  type SortingState,
+  type VisibilityState,
+  flexRender,
+  getCoreRowModel,
+  getExpandedRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
@@ -25,6 +38,24 @@ function toSortingState(search: ListQuerySearch): SortingState {
   }))
 }
 
+function collectExpandedRows<TData>(
+  rows: TData[],
+  getSubRows: (row: TData) => TData[] | undefined,
+  parentId = ''
+): Record<string, boolean> {
+  return rows.reduce<Record<string, boolean>>((expanded, row, index) => {
+    const rowId = parentId ? `${parentId}.${index}` : `${index}`
+    const subRows = getSubRows(row) ?? []
+
+    if (subRows.length > 0) {
+      expanded[rowId] = true
+      Object.assign(expanded, collectExpandedRows(subRows, getSubRows, rowId))
+    }
+
+    return expanded
+  }, {})
+}
+
 export function ProTable<TData>({
   title,
   description,
@@ -45,6 +76,7 @@ export function ProTable<TData>({
   defaultViewMode = 'table',
   renderBoardCard,
   resolveBoardColumns,
+  getSubRows,
 }: {
   title: string
   description: string
@@ -65,15 +97,18 @@ export function ProTable<TData>({
   defaultViewMode?: 'table' | 'board'
   renderBoardCard?: (item: TData) => ReactNode
   resolveBoardColumns?: (rows: TData[]) => ProTableBoardColumn<TData>[]
+  getSubRows?: (row: TData) => TData[] | undefined
 }) {
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>(() => toSortingState(search))
   const [density, setDensity] = useState<ProTableDensityMode>('default')
   const [viewMode, setViewMode] = useState<'table' | 'board'>(defaultViewMode)
+  const [expanded, setExpanded] = useState<ExpandedState>({})
   const filters = search.filters ?? []
   const sorts = search.sorts ?? []
   const groups = search.groups ?? []
+  const isTreeMode = typeof getSubRows === 'function'
 
   const {
     globalFilter,
@@ -87,6 +122,18 @@ export function ProTable<TData>({
     pagination: { defaultPage: 1, defaultPageSize: 20 },
     globalFilter: { enabled: true, key: 'keyword' },
   })
+  const treeExpandedState = useMemo(() => {
+    if (!isTreeMode) {
+      return expanded
+    }
+
+    const normalizedGlobalFilter = (globalFilter ?? '').trim()
+    if (normalizedGlobalFilter === '' || !getSubRows) {
+      return expanded
+    }
+
+    return collectExpandedRows(data, getSubRows)
+  }, [data, expanded, getSubRows, globalFilter, isTreeMode])
 
   useEffect(() => {
     setSorting(toSortingState(search))
@@ -119,23 +166,33 @@ export function ProTable<TData>({
       rowSelection,
       sorting,
       columnVisibility,
+      ...(isTreeMode ? { expanded: treeExpandedState } : {}),
     },
     onGlobalFilterChange,
     onPaginationChange,
     onRowSelectionChange: setRowSelection,
     onSortingChange,
     onColumnVisibilityChange: setColumnVisibility,
+    onExpandedChange: setExpanded,
     getCoreRowModel: getCoreRowModel(),
-    ...(total !== undefined
+    ...(isTreeMode
       ? {
-          manualPagination: true as const,
-          pageCount: Math.max(1, Math.ceil(total / search.pageSize)),
+          enableExpanding: true as const,
+          filterFromLeafRows: true as const,
+          maxLeafRowFilterDepth: 1000,
+          getSubRows,
+          getExpandedRowModel: getExpandedRowModel(),
         }
-      : {
-          getFilteredRowModel: getFilteredRowModel(),
-          getSortedRowModel: getSortedRowModel(),
-          getPaginationRowModel: getPaginationRowModel(),
-        }),
+      : total !== undefined
+        ? {
+            manualPagination: true as const,
+            pageCount: Math.max(1, Math.ceil(total / search.pageSize)),
+          }
+        : {
+            getFilteredRowModel: getFilteredRowModel(),
+            getSortedRowModel: getSortedRowModel(),
+            getPaginationRowModel: getPaginationRowModel(),
+          }),
   })
 
   useEffect(() => {
@@ -279,7 +336,7 @@ export function ProTable<TData>({
                   </TableBody>
                 </Table>
               </div>
-              <DataTablePagination table={table} />
+              {!isTreeMode ? <DataTablePagination table={table} /> : null}
             </>
           )}
         </CardContent>

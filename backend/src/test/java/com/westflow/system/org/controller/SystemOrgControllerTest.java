@@ -166,7 +166,11 @@ class SystemOrgControllerTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
-        assertThat(objectMapper.readTree(detailResponse).path("data").path("departmentName").asText()).isEqualTo("财务部");
+        JsonNode seededDepartment = objectMapper.readTree(detailResponse).path("data");
+        assertThat(seededDepartment.path("departmentName").asText()).isEqualTo("财务部");
+        assertThat(seededDepartment.path("rootDepartmentId").asText()).isEqualTo("dept_001");
+        assertThat(seededDepartment.path("treeLevel").asInt()).isEqualTo(1);
+        assertThat(seededDepartment.path("treePath").asText()).isEqualTo("dept_001");
 
         String createResponse = mockMvc.perform(post("/api/v1/system/departments")
                         .header("Authorization", "Bearer " + token)
@@ -198,17 +202,51 @@ class SystemOrgControllerTest {
                                 """))
                 .andExpect(status().isConflict());
 
-        mockMvc.perform(put("/api/v1/system/departments/" + departmentId)
+        String childCreateResponse = mockMvc.perform(post("/api/v1/system/departments")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyId": "cmp_001",
+                                  "parentDepartmentId": "%s",
+                                  "departmentName": "运营一组",
+                                  "enabled": true
+                                }
+                                """.formatted(departmentId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String childDepartmentId = objectMapper.readTree(childCreateResponse).path("data").path("departmentId").asText();
+
+        String supportCreateResponse = mockMvc.perform(post("/api/v1/system/departments")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "companyId": "cmp_001",
                                   "parentDepartmentId": "dept_001",
+                                  "departmentName": "支持中心",
+                                  "enabled": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String supportDepartmentId = objectMapper.readTree(supportCreateResponse).path("data").path("departmentId").asText();
+
+        mockMvc.perform(put("/api/v1/system/departments/" + departmentId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyId": "cmp_001",
+                                  "parentDepartmentId": "%s",
                                   "departmentName": "运营中心（已更新）",
                                   "enabled": false
                                 }
-                                """))
+                                """.formatted(supportDepartmentId)))
                 .andExpect(status().isOk());
 
         String updatedResponse = mockMvc.perform(get("/api/v1/system/departments/" + departmentId)
@@ -219,7 +257,56 @@ class SystemOrgControllerTest {
                 .getContentAsString();
         JsonNode updatedData = objectMapper.readTree(updatedResponse).path("data");
         assertThat(updatedData.path("departmentName").asText()).isEqualTo("运营中心（已更新）");
-        assertThat(updatedData.path("parentDepartmentId").asText()).isEqualTo("dept_001");
+        assertThat(updatedData.path("parentDepartmentId").asText()).isEqualTo(supportDepartmentId);
+        assertThat(updatedData.path("rootDepartmentId").asText()).isEqualTo("dept_001");
+        assertThat(updatedData.path("treeLevel").asInt()).isEqualTo(3);
+        assertThat(updatedData.path("treePath").asText()).isEqualTo("dept_001/" + supportDepartmentId + "/" + departmentId);
+
+        String updatedChildResponse = mockMvc.perform(get("/api/v1/system/departments/" + childDepartmentId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode updatedChild = objectMapper.readTree(updatedChildResponse).path("data");
+        assertThat(updatedChild.path("parentDepartmentId").asText()).isEqualTo(departmentId);
+        assertThat(updatedChild.path("rootDepartmentId").asText()).isEqualTo("dept_001");
+        assertThat(updatedChild.path("treeLevel").asInt()).isEqualTo(4);
+        assertThat(updatedChild.path("treePath").asText()).isEqualTo("dept_001/" + supportDepartmentId + "/" + departmentId + "/" + childDepartmentId);
+
+        String ancestorsResponse = mockMvc.perform(get("/api/v1/system/departments/" + childDepartmentId + "/ancestors")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode ancestors = objectMapper.readTree(ancestorsResponse).path("data");
+        assertThat(ancestors.isArray()).isTrue();
+        assertThat(ancestors).extracting((JsonNode node) -> node.path("departmentId").asText())
+                .containsExactly("dept_001", supportDepartmentId, departmentId, childDepartmentId);
+
+        String subtreeResponse = mockMvc.perform(get("/api/v1/system/departments/" + supportDepartmentId + "/subtree")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode subtree = objectMapper.readTree(subtreeResponse).path("data");
+        assertThat(subtree.path("departmentId").asText()).isEqualTo(supportDepartmentId);
+        assertThat(subtree.path("children").isArray()).isTrue();
+        assertThat(subtree.path("children").get(0).path("departmentId").asText()).isEqualTo(departmentId);
+        assertThat(subtree.path("children").get(0).path("children").get(0).path("departmentId").asText()).isEqualTo(childDepartmentId);
+
+        String treeResponse = mockMvc.perform(get("/api/v1/system/departments/tree")
+                        .header("Authorization", "Bearer " + token)
+                        .param("companyId", "cmp_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode tree = objectMapper.readTree(treeResponse).path("data");
+        assertThat(tree.isArray()).isTrue();
+        assertThat(tree.findValuesAsText("departmentId")).contains(supportDepartmentId, departmentId, childDepartmentId, "dept_001");
 
         mockMvc.perform(post("/api/v1/system/departments")
                         .header("Authorization", "Bearer " + token)
@@ -252,7 +339,7 @@ class SystemOrgControllerTest {
             }
         }
         assertThat(nestedDepartment).isNotNull();
-        assertThat(nestedDepartment.path("parentDepartmentId").asText()).isEqualTo("dept_001");
+        assertThat(nestedDepartment.path("parentDepartmentId").asText()).isEqualTo(supportDepartmentId);
     }
 
     @Test

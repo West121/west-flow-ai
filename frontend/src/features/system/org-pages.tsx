@@ -11,6 +11,8 @@ import {
   BadgeCheck,
   BriefcaseBusiness,
   Building2,
+  ChevronDown,
+  ChevronRight,
   GitBranch,
   Loader2,
   Save,
@@ -56,15 +58,16 @@ import {
   getDepartmentDetail,
   getDepartmentFormOptions,
   getDepartmentUsers,
+  getDepartmentTree,
   getPostDetail,
   getPostFormOptions,
   getPostUsers,
   listCompanies,
-  listDepartments,
   listPosts,
   updateCompany,
   updateDepartment,
   updatePost,
+  type DepartmentTreeNode,
   type SaveCompanyPayload,
 } from '@/lib/api/system-org'
 import { handleServerError } from '@/lib/handle-server-error'
@@ -105,15 +108,6 @@ type SubmitAction = 'list' | 'continue'
 type CompanyRow = {
   companyId: string
   companyName: string
-  status: '启用' | '停用'
-  createdAt: string
-}
-
-type DepartmentRow = {
-  departmentId: string
-  companyName: string
-  parentDepartmentName: string
-  departmentName: string
   status: '启用' | '停用'
   createdAt: string
 }
@@ -184,6 +178,17 @@ function formatDateTime(value: string | null | undefined) {
 // 把后端启停状态映射成页面文案。
 function resolveStatusLabel(status: string) {
   return status === 'ENABLED' ? '启用' : '停用'
+}
+
+function flattenDepartmentTree(nodes: DepartmentTreeNode[]): DepartmentTreeNode[] {
+  return nodes.flatMap((node) => [node, ...flattenDepartmentTree(node.children)])
+}
+
+function countDepartmentNodes(nodes: DepartmentTreeNode[]): number {
+  return nodes.reduce(
+    (count, node) => count + 1 + countDepartmentNodes(node.children),
+    0
+  )
 }
 
 // 详情页的指标卡只负责展示一个图标、标题和数值。
@@ -368,75 +373,105 @@ const companyColumns: ColumnDef<CompanyRow>[] = [
 ]
 
 function buildDepartmentColumns(
-  onShowUsers: (row: DepartmentRow) => void
-): ColumnDef<DepartmentRow>[] {
+  onShowUsers: (row: DepartmentTreeNode) => void
+): ColumnDef<DepartmentTreeNode>[] {
   return [
-  {
-    accessorKey: 'departmentName',
-    header: '部门名称',
-    cell: ({ row }) => (
-      <div className='flex flex-col gap-1'>
-        <span className='font-medium'>{row.original.departmentName}</span>
-        <span className='text-xs text-muted-foreground'>
-          {row.original.departmentId}
-        </span>
-      </div>
-    ),
-  },
-  {
-    accessorKey: 'companyName',
-    header: '所属公司',
-  },
-  {
-    accessorKey: 'parentDepartmentName',
-    header: '上级部门',
-  },
-  {
-    accessorKey: 'status',
-    header: '状态',
-    cell: ({ row }) => (
-      <Badge variant={row.original.status === '启用' ? 'secondary' : 'outline'}>
-        {row.original.status}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: 'createdAt',
-    header: '创建时间',
-  },
-  {
-    id: 'action',
-    header: '操作',
-    enableSorting: false,
-    cell: ({ row }) => (
-      <div className='flex items-center gap-2'>
-        <Button
-          variant='ghost'
-          className='h-8 px-2'
-          onClick={() => onShowUsers(row.original)}
+    {
+      accessorKey: 'departmentName',
+      header: '部门名称',
+      cell: ({ row }) => (
+        <div
+          className='flex items-start gap-2'
+          style={{ paddingLeft: `${row.depth * 20}px` }}
         >
-          关联用户
-        </Button>
-        <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link
-            to='/system/departments/$departmentId'
-            params={{ departmentId: row.original.departmentId }}
+          {row.getCanExpand() ? (
+            <Button
+              type='button'
+              variant='ghost'
+              size='icon'
+              className='size-7 shrink-0'
+              aria-label={
+                row.getIsExpanded()
+                  ? `收起 ${row.original.departmentName}`
+                  : `展开 ${row.original.departmentName}`
+              }
+              onClick={row.getToggleExpandedHandler()}
+            >
+              {row.getIsExpanded() ? (
+                <ChevronDown className='size-4' />
+              ) : (
+                <ChevronRight className='size-4' />
+              )}
+            </Button>
+          ) : (
+            <span className='inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground'>
+              ·
+            </span>
+          )}
+          <div className='flex min-w-0 flex-col gap-1'>
+            <span className='font-medium'>{row.original.departmentName}</span>
+            <span className='text-xs text-muted-foreground'>
+              {row.original.departmentId}
+            </span>
+            <span className='text-xs text-muted-foreground'>
+              上级部门：{row.original.parentDepartmentName || '无上级部门'}
+            </span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'companyName',
+      header: '所属公司',
+    },
+    {
+      accessorKey: 'status',
+      header: '状态',
+      cell: ({ row }) => (
+        <Badge
+          variant={row.original.status === 'ENABLED' ? 'secondary' : 'outline'}
+        >
+          {row.original.status}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'createdAt',
+      header: '创建时间',
+    },
+    {
+      id: 'action',
+      header: '操作',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div className='flex items-center gap-2'>
+          <Button
+            variant='ghost'
+            className='h-8 px-2'
+            onClick={() => onShowUsers(row.original)}
           >
-            详情
-          </Link>
-        </Button>
-        <Button asChild variant='ghost' className='h-8 px-2'>
-          <Link
-            to='/system/departments/$departmentId/edit'
-            params={{ departmentId: row.original.departmentId }}
-          >
-            编辑
-          </Link>
-        </Button>
-      </div>
-    ),
-  },
-]
+            关联用户
+          </Button>
+          <Button asChild variant='ghost' className='h-8 px-2'>
+            <Link
+              to='/system/departments/$departmentId'
+              params={{ departmentId: row.original.departmentId }}
+            >
+              详情
+            </Link>
+          </Button>
+          <Button asChild variant='ghost' className='h-8 px-2'>
+            <Link
+              to='/system/departments/$departmentId/edit'
+              params={{ departmentId: row.original.departmentId }}
+            >
+              编辑
+            </Link>
+          </Button>
+        </div>
+      ),
+    },
+  ]
 }
 
 function buildPostColumns(
@@ -1546,12 +1581,12 @@ export function CompaniesListPage() {
 export function DepartmentsListPage() {
   const search = departmentsRoute.useSearch()
   const navigate = departmentsRoute.useNavigate()
-  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentRow | null>(
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentTreeNode | null>(
     null
   )
   const query = useQuery({
-    queryKey: ['system-departments', search],
-    queryFn: () => listDepartments(search),
+    queryKey: ['system-departments', 'tree'],
+    queryFn: getDepartmentTree,
     placeholderData: (previous) => previous,
   })
   const usersQuery = useQuery({
@@ -1560,18 +1595,7 @@ export function DepartmentsListPage() {
     enabled: Boolean(selectedDepartment?.departmentId),
   })
 
-  const rows = useMemo<DepartmentRow[]>(
-    () =>
-      (query.data?.records ?? []).map((record) => ({
-        departmentId: record.departmentId,
-        companyName: record.companyName || '-',
-        parentDepartmentName: record.parentDepartmentName || '无上级部门',
-        departmentName: record.departmentName,
-        status: resolveStatusLabel(record.status),
-        createdAt: formatDateTime(record.createdAt),
-      })),
-    [query.data?.records]
-  )
+  const rows = useMemo(() => query.data ?? [], [query.data])
   const createActionNode = (
     <Button asChild>
       <Link to='/system/departments/create' search={{}}>
@@ -1582,24 +1606,22 @@ export function DepartmentsListPage() {
   )
 
   const summaries = useMemo(() => {
-    const records = query.data?.records ?? []
-    const topLevelCount = records.filter(
-      (item) => !item.parentDepartmentName
-    ).length
+    const records = query.data ?? []
+    const flatRecords = flattenDepartmentTree(records)
     return [
       {
         label: '部门总量',
-        value: `${query.data?.total ?? 0}`,
-        hint: '部门列表已接入真实分页接口，可继续扩展树形视图和数据范围。',
+        value: `${countDepartmentNodes(records)}`,
+        hint: '部门列表已接入树形接口，支持展开/折叠查看层级结构。',
       },
       {
-        label: '当前页一级部门',
-        value: `${topLevelCount}`,
+        label: '一级部门',
+        value: `${records.length}`,
         hint: '无上级部门的节点通常对应组织树的第一层。',
       },
       {
         label: '当前页公司数',
-        value: `${new Set(records.map((item) => item.companyName)).size}`,
+        value: `${new Set(flatRecords.map((item) => item.companyName)).size}`,
         hint: '用于快速核对部门在公司层面的覆盖范围。',
       },
     ]
@@ -1607,19 +1629,20 @@ export function DepartmentsListPage() {
 
   return (
     <>
-      <ProTable<DepartmentRow>
+      <ProTable<DepartmentTreeNode>
         title='部门列表'
-        description='部门列表页已接通真实接口，支持独立创建、详情和编辑页面，后续继续扩展组织树能力。'
-        searchPlaceholder='搜索部门名称或所属公司'
+        description='部门列表页已接入树形接口，支持展开/折叠、独立创建、详情和编辑页面。'
+        searchPlaceholder='搜索部门名称、所属公司或上级部门'
         search={search}
         navigate={navigate}
         columns={buildDepartmentColumns(setSelectedDepartment)}
         data={rows}
-        total={query.data?.total}
+        total={countDepartmentNodes(rows)}
         summaries={summaries}
         createActionNode={createActionNode}
         onRefresh={() => void query.refetch()}
         onExport={() => void 0}
+        getSubRows={(row) => row.children}
       />
       <AssociatedUsersDialog
         open={Boolean(selectedDepartment)}

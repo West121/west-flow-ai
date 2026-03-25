@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CompanyCreatePage,
@@ -20,6 +21,7 @@ const { navigateMock, orgApiMocks } = vi.hoisted(() => ({
     getDepartmentUsers: vi.fn(),
     getPostFormOptions: vi.fn(),
     getPostUsers: vi.fn(),
+    getDepartmentTree: vi.fn(),
     listDepartments: vi.fn(),
     listPosts: vi.fn(),
   },
@@ -75,36 +77,95 @@ vi.mock('@/features/shared/pro-table', () => ({
     data,
     columns,
     title,
+    getSubRows,
   }: {
     data: Array<Record<string, unknown>>
     columns: Array<{
       id?: string
       accessorKey?: string
-      cell?: (context: { row: { original: Record<string, unknown> } }) => React.ReactNode
+      cell?: (context: {
+        row: {
+          original: Record<string, unknown>
+          depth: number
+          getCanExpand: () => boolean
+          getIsExpanded: () => boolean
+          getToggleExpandedHandler: () => () => void
+        }
+      }) => React.ReactNode
     }>
     title: string
-  }) => (
-    <section>
-      <h2>{title}</h2>
-      <table>
-        <tbody>
-          {data.map((row, rowIndex) => (
-            <tr key={String(row.id ?? row.departmentId ?? row.postId ?? rowIndex)}>
-              {columns.map((column, columnIndex) => (
-                <td key={`${column.id ?? column.accessorKey ?? columnIndex}`}>
-                  {column.cell
-                    ? column.cell({ row: { original: row } })
-                    : column.accessorKey
-                      ? String(row[column.accessorKey] ?? '')
-                      : null}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  ),
+    getSubRows?: (row: Record<string, unknown>) => Array<Record<string, unknown>> | undefined
+  }) => {
+    const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+    const isTreeMode = typeof getSubRows === 'function'
+
+    const rows: Array<{
+      row: Record<string, unknown>
+      rowId: string
+      depth: number
+      children: Array<Record<string, unknown>>
+      expanded: boolean
+    }> = []
+
+    const walk = (
+      items: Array<Record<string, unknown>>,
+      depth = 0,
+      parentId = ''
+    ) => {
+      items.forEach((item, index) => {
+        const rowId = parentId ? `${parentId}.${index}` : `${index}`
+        const children = isTreeMode ? getSubRows?.(item) ?? [] : []
+        const rowExpanded = Boolean(expanded[rowId])
+        rows.push({
+          row: item,
+          rowId,
+          depth,
+          children,
+          expanded: rowExpanded,
+        })
+        if (!isTreeMode || rowExpanded) {
+          walk(children, depth + 1, rowId)
+        }
+      })
+    }
+
+    walk(data)
+
+    return (
+      <section>
+        <h2>{title}</h2>
+        <table>
+          <tbody>
+            {rows.map(({ row, rowId, depth, children, expanded: rowExpanded }) => (
+              <tr key={String(row.id ?? row.departmentId ?? row.postId ?? rowId)}>
+                {columns.map((column, columnIndex) => (
+                  <td key={`${column.id ?? column.accessorKey ?? columnIndex}`}>
+                    {column.cell
+                      ? column.cell({
+                          row: {
+                            original: row,
+                            depth,
+                            getCanExpand: () => children.length > 0,
+                            getIsExpanded: () => rowExpanded,
+                            getToggleExpandedHandler: () => () =>
+                              setExpanded((current) => ({
+                                ...current,
+                                [rowId]: !current[rowId],
+                              })),
+                          },
+                        })
+                      : column.accessorKey
+                        ? String(row[column.accessorKey] ?? '')
+                        : null}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    )
+  },
 }))
 
 vi.mock('@/lib/api/system-org', () => orgApiMocks)
@@ -153,6 +214,19 @@ describe('org pages', () => {
         },
       ],
     })
+    orgApiMocks.getDepartmentTree.mockResolvedValue([
+      {
+        departmentId: 'dept_001',
+        companyId: 'company_001',
+        companyName: '西部科技',
+        parentDepartmentId: null,
+        parentDepartmentName: null,
+        departmentName: '财务部',
+        status: 'ENABLED',
+        createdAt: '2026-03-25T09:00:00+08:00',
+        children: [],
+      },
+    ])
     orgApiMocks.getPostFormOptions.mockResolvedValue({
       departments: [
         {

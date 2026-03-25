@@ -23,6 +23,9 @@ public record SystemDepartmentFormOptionsResponse(
             String companyId,
             String companyName,
             String parentDepartmentId,
+            String rootDepartmentId,
+            Integer treeLevel,
+            String treePath,
             boolean enabled
     ) {
     }

@@ -71,6 +71,20 @@ export type DepartmentRecord = {
 
 export type DepartmentPageResponse = BasePageResponse<DepartmentRecord>
 
+export type DepartmentTreeNode = {
+  departmentId: string
+  companyId: string
+  companyName: string
+  parentDepartmentId: string | null
+  parentDepartmentName: string | null
+  departmentName: string
+  departmentCode?: string
+  leaderName?: string
+  status: OrganizationStatus
+  createdAt: string
+  children: DepartmentTreeNode[]
+}
+
 export type DepartmentDetail = {
   departmentId: string
   companyId: string
@@ -220,6 +234,82 @@ export async function listDepartments(
   >('/system/departments/page', toPaginationRequest(search))
 
   return unwrapResponse(response)
+}
+
+function normalizeDepartmentStatus(value: unknown): OrganizationStatus {
+  if (value === 'ENABLED' || value === 'DISABLED') {
+    return value
+  }
+
+  return value ? 'ENABLED' : 'DISABLED'
+}
+
+function normalizeDepartmentTreeNode(value: unknown): DepartmentTreeNode {
+  const node = (value ?? {}) as Record<string, unknown>
+  const children = Array.isArray(node.children) ? node.children : []
+
+  return {
+    departmentId: String(node.departmentId ?? ''),
+    companyId: String(node.companyId ?? ''),
+    companyName: String(node.companyName ?? ''),
+    parentDepartmentId:
+      node.parentDepartmentId === null || node.parentDepartmentId === undefined || node.parentDepartmentId === ''
+        ? null
+        : String(node.parentDepartmentId),
+    parentDepartmentName:
+      node.parentDepartmentName === null || node.parentDepartmentName === undefined || node.parentDepartmentName === ''
+        ? null
+        : String(node.parentDepartmentName),
+    departmentName: String(node.departmentName ?? ''),
+    departmentCode:
+      node.departmentCode === undefined || node.departmentCode === null || node.departmentCode === ''
+        ? undefined
+        : String(node.departmentCode),
+    leaderName:
+      node.leaderName === undefined || node.leaderName === null || node.leaderName === ''
+        ? undefined
+        : String(node.leaderName),
+    status: normalizeDepartmentStatus(node.status ?? node.enabled),
+    createdAt:
+      node.createdAt === undefined || node.createdAt === null
+        ? ''
+        : String(node.createdAt),
+    children: normalizeDepartmentTreeResponse(children),
+  }
+}
+
+function normalizeDepartmentTreeResponse(
+  value: unknown
+): DepartmentTreeNode[] {
+  if (Array.isArray(value)) {
+    return value.map(normalizeDepartmentTreeNode)
+  }
+
+  if (!value || typeof value !== 'object') {
+    return []
+  }
+
+  const candidate = value as Record<string, unknown>
+  const items =
+    candidate.records ??
+    candidate.departments ??
+    candidate.items ??
+    candidate.children ??
+    candidate.data
+
+  if (Array.isArray(items)) {
+    return items.map(normalizeDepartmentTreeNode)
+  }
+
+  return []
+}
+
+export async function getDepartmentTree(): Promise<DepartmentTreeNode[]> {
+  const response = await apiClient.get<ApiSuccessResponse<unknown>>(
+    '/system/departments/tree'
+  )
+
+  return normalizeDepartmentTreeResponse(unwrapResponse(response))
 }
 
 export async function getDepartmentDetail(

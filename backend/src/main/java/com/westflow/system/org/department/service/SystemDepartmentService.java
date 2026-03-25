@@ -8,19 +8,29 @@ import com.westflow.common.query.SortItem;
 import com.westflow.identity.service.CurrentUserAccessService;
 import com.westflow.identity.service.CurrentUserAccessService.AccessPolicy;
 import com.westflow.system.org.company.mapper.SystemCompanyMapper;
+import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
+import com.westflow.system.org.department.model.SystemDepartmentRecord;
 import com.westflow.system.org.department.request.SaveSystemDepartmentRequest;
 import com.westflow.system.org.department.response.SystemDepartmentDetailResponse;
 import com.westflow.system.org.department.response.SystemDepartmentFormOptionsResponse;
 import com.westflow.system.org.department.response.SystemDepartmentListItemResponse;
 import com.westflow.system.org.department.response.SystemDepartmentMutationResponse;
-import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
-import com.westflow.system.org.department.model.SystemDepartmentRecord;
+import com.westflow.system.org.department.response.SystemDepartmentTreeNodeResponse;
 import com.westflow.system.user.response.SystemAssociatedUserResponse;
 import com.westflow.system.user.service.SystemUserService;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,8 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class SystemDepartmentService {
 
-    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "companyId", "parentDepartmentId");
-    private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "departmentName", "companyName");
+    private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "companyId", "parentDepartmentId", "rootDepartmentId");
+    private static final List<String> SUPPORTED_SORT_FIELDS = List.of("createdAt", "departmentName", "companyName", "treeLevel");
 
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final SystemCompanyMapper systemCompanyMapper;
@@ -44,7 +54,6 @@ public class SystemDepartmentService {
      * 分页查询部门。
      */
     public PageResponse<SystemDepartmentListItemResponse> page(PageRequest request) {
-        // 部门列表同时受公司、部门和子部门的数据权限约束。
         AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
         Filters filters = resolveFilters(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
@@ -52,11 +61,13 @@ public class SystemDepartmentService {
         if (accessPolicy.restricted() && accessPolicy.isEmpty()) {
             return new PageResponse<>(request.page(), request.pageSize(), 0, 0, List.of(), List.of());
         }
+
         long total = systemDepartmentMapper.countPage(
                 request.keyword(),
                 filters.enabled(),
                 filters.companyId(),
                 filters.parentDepartmentId(),
+                filters.rootDepartmentId(),
                 accessPolicy.allAccess(),
                 accessPolicy.companyIds(),
                 accessPolicy.departmentIds()
@@ -72,6 +83,7 @@ public class SystemDepartmentService {
                         filters.enabled(),
                         filters.companyId(),
                         filters.parentDepartmentId(),
+                        filters.rootDepartmentId(),
                         accessPolicy.allAccess(),
                         accessPolicy.companyIds(),
                         accessPolicy.departmentIds(),
@@ -85,12 +97,105 @@ public class SystemDepartmentService {
     }
 
     /**
-     * 查询部门详情。
+     * 查询部门树。
      */
-    public SystemDepartmentDetailResponse detail(String departmentId) {
-        // 详情需要补一次权限校验，避免直接访问越权部门。
-        SystemDepartmentDetailResponse detail = systemDepartmentMapper.selectDetail(departmentId);
-        if (detail == null) {
+    public List<SystemDepartmentTreeNodeResponse> tree(String companyId, Boolean enabled) {
+        AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
+        if (accessPolicy.restricted() && accessPolicy.isEmpty()) {
+            return List.of();
+        }
+        List<SystemDepartmentDetailResponse> flatNodes = systemDepartmentMapper.selectTree(
+                companyId,
+                enabled,
+                accessPolicy.allAccess(),
+                accessPolicy.companyIds(),
+                accessPolicy.departmentIds()
+        );
+        return buildTree(flatNodes);
+    }
+
+    /**
+     * 启动后回填已有部门的树元数据。
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void backfillTreeMetadata() {
+        List<SystemDepartmentDetailResponse> departments = systemDepartmentMapper.selectTree(
+                null,
+                null,
+                true,
+                List.of(),
+                List.of()
+        );
+        if (departments.isEmpty()) {
+            return;
+        }
+        boolean needsBackfill = departments.stream().anyMatch(department ->
+                department.rootDepartmentId() == null
+                        || department.treeLevel() == null
+                        || department.treePath() == null
+        );
+        if (!needsBackfill) {
+            return;
+        }
+
+        Map<String, SystemDepartmentDetailResponse> departmentMap = new LinkedHashMap<>();
+        for (SystemDepartmentDetailResponse department : departments) {
+            departmentMap.put(department.departmentId(), department);
+        }
+
+        Map<String, DepartmentTreeMeta> resolvedMeta = new HashMap<>();
+        for (SystemDepartmentDetailResponse department : departments) {
+            DepartmentTreeMeta treeMeta = resolveTreeMetaForBackfill(
+                    department.departmentId(),
+                    departmentMap,
+                    resolvedMeta,
+                    new HashSet<>()
+            );
+            if (Objects.equals(department.rootDepartmentId(), treeMeta.rootDepartmentId())
+                    && Objects.equals(department.treeLevel(), treeMeta.treeLevel())
+                    && Objects.equals(department.treePath(), treeMeta.treePath())) {
+                continue;
+            }
+            systemDepartmentMapper.updateDepartment(new SystemDepartmentRecord(
+                    department.departmentId(),
+                    department.companyId(),
+                    normalizeParentId(department.parentDepartmentId()),
+                    treeMeta.rootDepartmentId(),
+                    treeMeta.treeLevel(),
+                    treeMeta.treePath(),
+                    department.departmentName(),
+                    department.enabled()
+            ));
+        }
+    }
+
+    /**
+     * 查询部门祖先链。
+     */
+    public List<SystemDepartmentDetailResponse> ancestors(String departmentId) {
+        SystemDepartmentDetailResponse detail = detail(departmentId);
+        List<String> ancestorIds = splitTreePath(detail.treePath());
+        if (ancestorIds.isEmpty()) {
+            return List.of(detail);
+        }
+        return systemDepartmentMapper.selectDepartmentsByIds(ancestorIds);
+    }
+
+    /**
+     * 查询部门及以下的子树。
+     */
+    public SystemDepartmentTreeNodeResponse subtree(String departmentId) {
+        SystemDepartmentDetailResponse detail = detail(departmentId);
+        AccessPolicy accessPolicy = currentUserAccessService.resolveAccessPolicy();
+        List<SystemDepartmentDetailResponse> flatNodes = systemDepartmentMapper.selectSubtree(
+                detail.treePath(),
+                accessPolicy.allAccess(),
+                accessPolicy.companyIds(),
+                accessPolicy.departmentIds()
+        );
+        List<SystemDepartmentTreeNodeResponse> tree = buildTree(flatNodes);
+        if (tree.isEmpty()) {
             throw new ContractException(
                     "BIZ.RESOURCE_NOT_FOUND",
                     HttpStatus.NOT_FOUND,
@@ -98,6 +203,14 @@ public class SystemDepartmentService {
                     Map.of("departmentId", departmentId)
             );
         }
+        return tree.get(0);
+    }
+
+    /**
+     * 查询部门详情。
+     */
+    public SystemDepartmentDetailResponse detail(String departmentId) {
+        SystemDepartmentDetailResponse detail = loadDepartment(departmentId);
         assertAccessible(detail.companyId(), detail.departmentId());
         return detail;
     }
@@ -127,14 +240,22 @@ public class SystemDepartmentService {
     @Transactional
     public SystemDepartmentMutationResponse create(SaveSystemDepartmentRequest request) {
         validateCompanyExists(request.companyId());
-        validateParentDepartment(request.companyId(), request.parentDepartmentId(), null);
+        SystemDepartmentDetailResponse parent = validateParentDepartment(
+                request.companyId(),
+                request.parentDepartmentId(),
+                null
+        );
         validateDepartmentName(request.companyId(), request.parentDepartmentId(), request.departmentName(), null);
 
         String departmentId = buildId("dept");
+        DepartmentTreeMeta treeMeta = buildTreeMeta(departmentId, parent);
         systemDepartmentMapper.insertDepartment(new SystemDepartmentRecord(
                 departmentId,
                 request.companyId(),
                 normalizeParentId(request.parentDepartmentId()),
+                treeMeta.rootDepartmentId(),
+                treeMeta.treeLevel(),
+                treeMeta.treePath(),
                 request.departmentName(),
                 request.enabled()
         ));
@@ -146,18 +267,40 @@ public class SystemDepartmentService {
      */
     @Transactional
     public SystemDepartmentMutationResponse update(String departmentId, SaveSystemDepartmentRequest request) {
-        ensureExists(departmentId);
+        SystemDepartmentDetailResponse current = loadDepartment(departmentId);
         validateCompanyExists(request.companyId());
-        validateParentDepartment(request.companyId(), request.parentDepartmentId(), departmentId);
+        SystemDepartmentDetailResponse parent = validateParentDepartment(
+                request.companyId(),
+                request.parentDepartmentId(),
+                current
+        );
         validateDepartmentName(request.companyId(), request.parentDepartmentId(), request.departmentName(), departmentId);
 
+        DepartmentTreeMeta treeMeta = buildTreeMeta(departmentId, parent);
         systemDepartmentMapper.updateDepartment(new SystemDepartmentRecord(
                 departmentId,
                 request.companyId(),
                 normalizeParentId(request.parentDepartmentId()),
+                treeMeta.rootDepartmentId(),
+                treeMeta.treeLevel(),
+                treeMeta.treePath(),
                 request.departmentName(),
                 request.enabled()
         ));
+
+        if (!Objects.equals(current.companyId(), request.companyId())
+                || !Objects.equals(current.rootDepartmentId(), treeMeta.rootDepartmentId())
+                || !Objects.equals(current.treePath(), treeMeta.treePath())
+                || !Objects.equals(current.treeLevel(), treeMeta.treeLevel())) {
+            systemDepartmentMapper.updateDepartmentSubtreeTreeMeta(
+                    current.treePath(),
+                    treeMeta.treePath(),
+                    treeMeta.treeLevel() - current.treeLevel(),
+                    request.companyId(),
+                    treeMeta.rootDepartmentId()
+            );
+        }
+
         return new SystemDepartmentMutationResponse(departmentId);
     }
 
@@ -172,8 +315,9 @@ public class SystemDepartmentService {
         }
     }
 
-    private void ensureExists(String departmentId) {
-        if (systemDepartmentMapper.selectDetail(departmentId) == null) {
+    private SystemDepartmentDetailResponse loadDepartment(String departmentId) {
+        SystemDepartmentDetailResponse detail = systemDepartmentMapper.selectDetail(departmentId);
+        if (detail == null) {
             throw new ContractException(
                     "BIZ.RESOURCE_NOT_FOUND",
                     HttpStatus.NOT_FOUND,
@@ -181,13 +325,18 @@ public class SystemDepartmentService {
                     Map.of("departmentId", departmentId)
             );
         }
+        return detail;
     }
 
-    private void validateParentDepartment(String companyId, String parentDepartmentId, String excludeDepartmentId) {
+    private SystemDepartmentDetailResponse validateParentDepartment(
+            String companyId,
+            String parentDepartmentId,
+            SystemDepartmentDetailResponse currentDepartment
+    ) {
         if (parentDepartmentId == null || parentDepartmentId.isBlank()) {
-            return;
+            return null;
         }
-        if (parentDepartmentId.equals(excludeDepartmentId)) {
+        if (currentDepartment != null && parentDepartmentId.equals(currentDepartment.departmentId())) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
                     HttpStatus.BAD_REQUEST,
@@ -195,15 +344,8 @@ public class SystemDepartmentService {
                     Map.of("parentDepartmentId", parentDepartmentId)
             );
         }
-        SystemDepartmentDetailResponse parent = systemDepartmentMapper.selectDetail(parentDepartmentId);
-        if (parent == null) {
-            throw new ContractException(
-                    "BIZ.RESOURCE_NOT_FOUND",
-                    HttpStatus.NOT_FOUND,
-                    "父部门不存在",
-                    Map.of("parentDepartmentId", parentDepartmentId)
-            );
-        }
+
+        SystemDepartmentDetailResponse parent = loadDepartment(parentDepartmentId);
         if (!companyId.equals(parent.companyId())) {
             throw new ContractException(
                     "VALIDATION.REQUEST_INVALID",
@@ -212,6 +354,18 @@ public class SystemDepartmentService {
                     Map.of("companyId", companyId, "parentDepartmentId", parentDepartmentId)
             );
         }
+        if (currentDepartment != null && parent.treePath() != null && currentDepartment.treePath() != null) {
+            String currentTreePathPrefix = currentDepartment.treePath() + "/";
+            if (parent.treePath().equals(currentDepartment.treePath()) || parent.treePath().startsWith(currentTreePathPrefix)) {
+                throw new ContractException(
+                        "VALIDATION.REQUEST_INVALID",
+                        HttpStatus.BAD_REQUEST,
+                        "父部门不能选择当前部门及其子部门",
+                        Map.of("parentDepartmentId", parentDepartmentId)
+                );
+            }
+        }
+        return parent;
     }
 
     private void validateDepartmentName(String companyId, String parentDepartmentId, String departmentName, String excludeDepartmentId) {
@@ -235,6 +389,7 @@ public class SystemDepartmentService {
         Boolean enabled = null;
         String companyId = null;
         String parentDepartmentId = null;
+        String rootDepartmentId = null;
 
         for (FilterItem filter : filters) {
             if (!SUPPORTED_FILTER_FIELDS.contains(filter.field())) {
@@ -261,11 +416,12 @@ public class SystemDepartmentService {
                 }
                 case "companyId" -> companyId = value;
                 case "parentDepartmentId" -> parentDepartmentId = value;
+                case "rootDepartmentId" -> rootDepartmentId = value;
                 default -> {
                 }
             }
         }
-        return new Filters(enabled, companyId, parentDepartmentId);
+        return new Filters(enabled, companyId, parentDepartmentId, rootDepartmentId);
     }
 
     private String resolveOrderBy(List<SortItem> sorts) {
@@ -279,6 +435,7 @@ public class SystemDepartmentService {
         return switch (sort.field()) {
             case "departmentName" -> "d.department_name";
             case "companyName" -> "c.company_name";
+            case "treeLevel" -> "d.tree_level";
             default -> "d.created_at";
         };
     }
@@ -322,11 +479,164 @@ public class SystemDepartmentService {
         );
     }
 
+    private DepartmentTreeMeta buildTreeMeta(String departmentId, SystemDepartmentDetailResponse parent) {
+        if (parent == null) {
+            return new DepartmentTreeMeta(departmentId, 1, departmentId);
+        }
+        return new DepartmentTreeMeta(
+                parent.rootDepartmentId(),
+                parent.treeLevel() + 1,
+                parent.treePath() + "/" + departmentId
+        );
+    }
+
+    private DepartmentTreeMeta resolveTreeMetaForBackfill(
+            String departmentId,
+            Map<String, SystemDepartmentDetailResponse> departmentMap,
+            Map<String, DepartmentTreeMeta> resolvedMeta,
+            Set<String> visiting
+    ) {
+        DepartmentTreeMeta cached = resolvedMeta.get(departmentId);
+        if (cached != null) {
+            return cached;
+        }
+        if (!visiting.add(departmentId)) {
+            DepartmentTreeMeta cyclicMeta = new DepartmentTreeMeta(departmentId, 1, departmentId);
+            resolvedMeta.put(departmentId, cyclicMeta);
+            return cyclicMeta;
+        }
+
+        SystemDepartmentDetailResponse department = departmentMap.get(departmentId);
+        if (department == null) {
+            DepartmentTreeMeta orphanMeta = new DepartmentTreeMeta(departmentId, 1, departmentId);
+            resolvedMeta.put(departmentId, orphanMeta);
+            visiting.remove(departmentId);
+            return orphanMeta;
+        }
+
+        String parentDepartmentId = normalizeParentId(department.parentDepartmentId());
+        DepartmentTreeMeta treeMeta;
+        if (parentDepartmentId == null || !departmentMap.containsKey(parentDepartmentId)) {
+            treeMeta = new DepartmentTreeMeta(departmentId, 1, departmentId);
+        } else {
+            DepartmentTreeMeta parentMeta = resolveTreeMetaForBackfill(
+                    parentDepartmentId,
+                    departmentMap,
+                    resolvedMeta,
+                    visiting
+            );
+            SystemDepartmentDetailResponse parent = departmentMap.get(parentDepartmentId);
+            if (parent == null || !Objects.equals(parent.companyId(), department.companyId())) {
+                treeMeta = new DepartmentTreeMeta(departmentId, 1, departmentId);
+            } else {
+                treeMeta = new DepartmentTreeMeta(
+                        parentMeta.rootDepartmentId(),
+                        parentMeta.treeLevel() + 1,
+                        parentMeta.treePath() + "/" + departmentId
+                );
+            }
+        }
+
+        resolvedMeta.put(departmentId, treeMeta);
+        visiting.remove(departmentId);
+        return treeMeta;
+    }
+
+    private List<String> splitTreePath(String treePath) {
+        if (treePath == null || treePath.isBlank()) {
+            return List.of();
+        }
+        return List.of(treePath.split("/"));
+    }
+
+    private List<SystemDepartmentTreeNodeResponse> buildTree(List<SystemDepartmentDetailResponse> flatNodes) {
+        if (flatNodes == null || flatNodes.isEmpty()) {
+            return List.of();
+        }
+        Map<String, MutableTreeNode> nodeMap = new LinkedHashMap<>();
+        for (SystemDepartmentDetailResponse node : flatNodes) {
+            nodeMap.put(node.departmentId(), new MutableTreeNode(node));
+        }
+
+        List<MutableTreeNode> roots = new ArrayList<>();
+        for (MutableTreeNode node : nodeMap.values()) {
+            if (node.parentDepartmentId == null || !nodeMap.containsKey(node.parentDepartmentId)) {
+                roots.add(node);
+                continue;
+            }
+            nodeMap.get(node.parentDepartmentId).children.add(node);
+        }
+
+        sortNodes(roots);
+        return roots.stream().map(MutableTreeNode::toResponse).toList();
+    }
+
+    private void sortNodes(List<MutableTreeNode> nodes) {
+        nodes.sort(Comparator
+                .comparing((MutableTreeNode node) -> node.companyName == null ? "" : node.companyName)
+                .thenComparing(node -> node.treePath == null ? "" : node.treePath)
+                .thenComparing(node -> node.departmentName == null ? "" : node.departmentName));
+        nodes.forEach(node -> sortNodes(node.children));
+    }
+
     public record Filters(
             Boolean enabled,
             String companyId,
-            String parentDepartmentId
+            String parentDepartmentId,
+            String rootDepartmentId
     ) {
     }
 
+    private record DepartmentTreeMeta(
+            String rootDepartmentId,
+            int treeLevel,
+            String treePath
+    ) {
+    }
+
+    private static final class MutableTreeNode {
+        private final String departmentId;
+        private final String companyId;
+        private final String companyName;
+        private final String parentDepartmentId;
+        private final String parentDepartmentName;
+        private final String rootDepartmentId;
+        private final String rootDepartmentName;
+        private final Integer treeLevel;
+        private final String treePath;
+        private final String departmentName;
+        private final boolean enabled;
+        private final List<MutableTreeNode> children = new ArrayList<>();
+
+        private MutableTreeNode(SystemDepartmentDetailResponse node) {
+            this.departmentId = node.departmentId();
+            this.companyId = node.companyId();
+            this.companyName = node.companyName();
+            this.parentDepartmentId = node.parentDepartmentId();
+            this.parentDepartmentName = node.parentDepartmentName();
+            this.rootDepartmentId = node.rootDepartmentId();
+            this.rootDepartmentName = node.rootDepartmentName();
+            this.treeLevel = node.treeLevel();
+            this.treePath = node.treePath();
+            this.departmentName = node.departmentName();
+            this.enabled = node.enabled();
+        }
+
+        private SystemDepartmentTreeNodeResponse toResponse() {
+            return new SystemDepartmentTreeNodeResponse(
+                    departmentId,
+                    companyId,
+                    companyName,
+                    parentDepartmentId,
+                    parentDepartmentName,
+                    rootDepartmentId,
+                    rootDepartmentName,
+                    treeLevel,
+                    treePath,
+                    departmentName,
+                    enabled,
+                    children.stream().map(MutableTreeNode::toResponse).toList()
+            );
+        }
+    }
 }

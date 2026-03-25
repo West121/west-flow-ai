@@ -7,6 +7,9 @@ public record SystemDepartmentRecord(
         String id,
         String companyId,
         String parentDepartmentId,
+        String rootDepartmentId,
+        Integer treeLevel,
+        String treePath,
         String departmentName,
         Boolean enabled
 ) {

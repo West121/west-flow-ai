@@ -189,6 +189,37 @@ describe('system organization api', () => {
       )
       .mockResolvedValueOnce(
         okResponse({
+          departments: [
+            {
+              departmentId: 'dept_root',
+              companyId: 'cmp_001',
+              companyName: '西流科技',
+              parentDepartmentId: null,
+              parentDepartmentName: null,
+              departmentName: '总部',
+              departmentCode: 'HQ',
+              leaderName: '王五',
+              status: 'ENABLED',
+              createdAt: '2026-03-22T09:00:00+08:00',
+              children: [
+                {
+                  departmentId: 'dept_001',
+                  companyId: 'cmp_001',
+                  companyName: '西流科技',
+                  parentDepartmentId: 'dept_root',
+                  parentDepartmentName: '总部',
+                  departmentName: '财务部',
+                  status: 'DISABLED',
+                  createdAt: '2026-03-22T09:30:00+08:00',
+                  children: [],
+                },
+              ],
+            },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
           postId: 'post_001',
           companyId: 'cmp_001',
           companyName: '西流科技',
@@ -216,6 +247,7 @@ describe('system organization api', () => {
       listDepartments,
       getDepartmentDetail,
       getDepartmentFormOptions,
+      getDepartmentTree,
       createDepartment,
       updateDepartment,
       listPosts,
@@ -245,6 +277,18 @@ describe('system organization api', () => {
       companies: [{ id: 'cmp_001' }],
       parentDepartments: [{ id: 'dept_001', parentDepartmentId: null }],
     })
+    await expect(getDepartmentTree()).resolves.toMatchObject([
+      {
+        departmentId: 'dept_root',
+        children: [
+          {
+            departmentId: 'dept_001',
+            parentDepartmentId: 'dept_root',
+            status: 'DISABLED',
+          },
+        ],
+      },
+    ])
     await expect(
       createDepartment({
         companyId: 'cmp_001',

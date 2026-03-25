@@ -8,7 +8,11 @@ import java.time.OffsetDateTime;
 public record SystemDepartmentListItemResponse(
         String departmentId,
         String companyName,
+        String parentDepartmentId,
         String parentDepartmentName,
+        String rootDepartmentId,
+        Integer treeLevel,
+        String treePath,
         String departmentName,
         String status,
         OffsetDateTime createdAt
