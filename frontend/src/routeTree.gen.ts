@@ -24,7 +24,6 @@ import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedWorkflowDesignerRouteImport } from './routes/_authenticated/workflow/designer'
 import { Route as AuthenticatedWorkbenchStartRouteImport } from './routes/_authenticated/workbench/start'
 import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes/_authenticated/settings/notifications'
-import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedPlmStartRouteImport } from './routes/_authenticated/plm/start'
@@ -239,12 +238,6 @@ const AuthenticatedSettingsNotificationsRoute =
   AuthenticatedSettingsNotificationsRouteImport.update({
     id: '/notifications',
     path: '/notifications',
-    getParentRoute: () => AuthenticatedSettingsRouteRoute,
-  } as any)
-const AuthenticatedSettingsDisplayRoute =
-  AuthenticatedSettingsDisplayRouteImport.update({
-    id: '/display',
-    path: '/display',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
 const AuthenticatedSettingsAppearanceRoute =
@@ -1085,7 +1078,6 @@ export interface FileRoutesByFullPath {
   '/plm/start': typeof AuthenticatedPlmStartRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
@@ -1237,7 +1229,6 @@ export interface FileRoutesByTo {
   '/plm/start': typeof AuthenticatedPlmStartRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
@@ -1392,7 +1383,6 @@ export interface FileRoutesById {
   '/_authenticated/plm/start': typeof AuthenticatedPlmStartRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
-  '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
   '/_authenticated/settings/notifications': typeof AuthenticatedSettingsNotificationsRoute
   '/_authenticated/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/_authenticated/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
@@ -1547,7 +1537,6 @@ export interface FileRouteTypes {
     | '/plm/start'
     | '/settings/account'
     | '/settings/appearance'
-    | '/settings/display'
     | '/settings/notifications'
     | '/workbench/start'
     | '/workflow/designer'
@@ -1699,7 +1688,6 @@ export interface FileRouteTypes {
     | '/plm/start'
     | '/settings/account'
     | '/settings/appearance'
-    | '/settings/display'
     | '/settings/notifications'
     | '/workbench/start'
     | '/workflow/designer'
@@ -1853,7 +1841,6 @@ export interface FileRouteTypes {
     | '/_authenticated/plm/start'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
-    | '/_authenticated/settings/display'
     | '/_authenticated/settings/notifications'
     | '/_authenticated/workbench/start'
     | '/_authenticated/workflow/designer'
@@ -2106,13 +2093,6 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/settings/notifications'
       preLoaderRoute: typeof AuthenticatedSettingsNotificationsRouteImport
-      parentRoute: typeof AuthenticatedSettingsRouteRoute
-    }
-    '/_authenticated/settings/display': {
-      id: '/_authenticated/settings/display'
-      path: '/display'
-      fullPath: '/settings/display'
-      preLoaderRoute: typeof AuthenticatedSettingsDisplayRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
     '/_authenticated/settings/appearance': {
@@ -3073,7 +3053,6 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedSettingsRouteRouteChildren {
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
-  AuthenticatedSettingsDisplayRoute: typeof AuthenticatedSettingsDisplayRoute
   AuthenticatedSettingsNotificationsRoute: typeof AuthenticatedSettingsNotificationsRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
 }
@@ -3082,7 +3061,6 @@ const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteCh
   {
     AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
-    AuthenticatedSettingsDisplayRoute: AuthenticatedSettingsDisplayRoute,
     AuthenticatedSettingsNotificationsRoute:
       AuthenticatedSettingsNotificationsRoute,
     AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
