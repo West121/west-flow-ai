@@ -344,8 +344,6 @@ describe('workflow designer node config panel', () => {
       target: { value: '每天早上执行' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'timer_1',
@@ -405,8 +403,6 @@ describe('workflow designer node config panel', () => {
     expect(screen.getByText('表单字段编码')).toBeInTheDocument()
     const fieldInput = screen.getByPlaceholderText('请选择或输入字段编码')
     fireEvent.change(fieldInput, { target: { value: 'departmentId' } })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'approve_1',
@@ -459,8 +455,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.click(screen.getByRole('button', { name: /人事部/ }))
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'approve_1',
@@ -509,8 +503,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(formulaInput, {
       target: { value: 'ifElse(leaveDays >= 5, "usr_003", managerUserId)' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'approve_1',
@@ -532,7 +524,9 @@ describe('workflow designer node config panel', () => {
 
     render(<NodeConfigPanel node={buildApproverNode()} edges={edges} onApply={onApply} />)
 
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
+    fireEvent.change(screen.getByDisplayValue('60'), {
+      target: { value: '61' },
+    })
 
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
@@ -541,7 +535,7 @@ describe('workflow designer node config panel', () => {
         config: expect.objectContaining({
           approvalMode: 'VOTE',
           voteRule: expect.objectContaining({
-            thresholdPercent: 60,
+            thresholdPercent: 61,
             weights: [
               { userId: 'usr_002', weight: 40 },
               { userId: 'usr_003', weight: 60 },
@@ -590,8 +584,6 @@ describe('workflow designer node config panel', () => {
     await waitFor(() =>
       expect(screen.getByDisplayValue('OA 用户, 部门负责人')).toBeInTheDocument()
     )
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'approve_1',
@@ -639,8 +631,6 @@ describe('workflow designer node config panel', () => {
     await waitFor(() => expect(screen.getByText('部门负责人')).toBeInTheDocument())
     fireEvent.click(screen.getByText('部门负责人'))
     fireEvent.click(screen.getByRole('button', { name: '确认' }))
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'approve_1',
@@ -657,39 +647,12 @@ describe('workflow designer node config panel', () => {
     )
   })
 
-  it('submits approver field bindings back to the canvas patch', async () => {
-    const onApply = vi.fn()
-
-    const node = buildApproverNode('USER')
-    node.data.config = {
-      ...node.data.config,
-      approvalMode: 'SINGLE',
-      approvalPolicy: {
-        type: 'SINGLE',
-        voteThreshold: null,
-      },
-      voteRule: {
-        thresholdPercent: null,
-        passCondition: 'THRESHOLD_REACHED',
-        rejectCondition: 'REJECT_THRESHOLD',
-        weights: [],
-      },
-      nodeFormKey: 'oa-leave-approve-form',
-      nodeFormVersion: '1.0.0',
-      fieldBindings: [
-        {
-          source: 'PROCESS_FORM',
-          sourceFieldKey: 'leaveDays',
-          targetFieldKey: 'approvedDays',
-        },
-      ],
-    } as typeof node.data.config
-
+  it('hides node form and field binding controls for approver nodes', () => {
     render(
       <NodeConfigPanel
-        node={node}
+        node={buildApproverNode('USER')}
         edges={edges}
-        onApply={onApply}
+        onApply={vi.fn()}
         processFormFields={[
           { fieldKey: 'leaveDays', label: '请假天数', valueType: 'number' },
           { fieldKey: 'leaveType', label: '请假类型', valueType: 'string' },
@@ -697,28 +660,8 @@ describe('workflow designer node config panel', () => {
       />
     )
 
-    expect(screen.getByText('字段绑定')).toBeInTheDocument()
-    fireEvent.change(screen.getByDisplayValue('approvedDays'), {
-      target: { value: 'approvedLeaveDays' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
-    await waitFor(() => expect(onApply).toHaveBeenCalled())
-    expect(onApply).toHaveBeenCalledWith(
-      'approve_1',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          fieldBindings: [
-            {
-              source: 'PROCESS_FORM',
-              sourceFieldKey: 'leaveDays',
-              targetFieldKey: 'approvedLeaveDays',
-            },
-          ],
-        }),
-      }),
-      undefined
-    )
+    expect(screen.queryByText('节点覆盖表单')).not.toBeInTheDocument()
+    expect(screen.queryByText('字段绑定')).not.toBeInTheDocument()
   })
 
   it('hydrates and submits subprocess fields back to the canvas patch', async () => {
@@ -739,8 +682,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getByDisplayValue('sourceBillNo'), {
       target: { value: 'leaveRequestNo' },
     })
-
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
 
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
@@ -789,8 +730,6 @@ describe('workflow designer node config panel', () => {
       target: { value: 'append_leave_chain' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'dynamic_1',
@@ -823,8 +762,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getByPlaceholderText('leave_overtime_approval'), {
       target: { value: 'leave_model_scene' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'dynamic_1',
@@ -850,13 +787,15 @@ describe('workflow designer node config panel', () => {
     await waitFor(() => {
       expect(screen.getByText('部门负责人')).toBeInTheDocument()
     })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
+    fireEvent.change(screen.getByPlaceholderText('leave_overtime_approval'), {
+      target: { value: 'role_fallback_scene' },
+    })
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'dynamic_1',
       expect.objectContaining({
         config: expect.objectContaining({
+          sceneCode: 'role_fallback_scene',
           targets: expect.objectContaining({
             mode: 'ROLE',
             roleCodes: ['role_manager'],
@@ -882,8 +821,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getByPlaceholderText('oa_sub_review'), {
       target: { value: 'oa_sub_review_leaf' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'dynamic_1',
@@ -916,8 +853,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.click(screen.getByRole('combobox'))
     const splitOptions = screen.getAllByText('分支')
     fireEvent.click(splitOptions[splitOptions.length - 1]!)
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'inclusive_1',
@@ -967,8 +902,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getByDisplayValue('amount > 10000'), {
       target: { value: 'amount >= 20000' },
     })
-
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
 
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
@@ -1028,8 +961,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(screen.getAllByLabelText('分支优先级')[1]!, {
       target: { value: '4' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
-
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'inclusive_1',
@@ -1117,8 +1048,6 @@ describe('workflow designer node config panel', () => {
     fireEvent.change(formulaInputs[formulaInputs.length - 1]!, {
       target: { value: 'ifElse(amount > 20000, "A", "B")' },
     })
-
-    fireEvent.click(screen.getByRole('button', { name: '应用到画布' }))
 
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(

@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
@@ -62,6 +63,10 @@ import {
   ProcessTimeTravelSection,
 } from '@/features/workflow/advanced-runtime-sections'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
+import {
+  ApprovalTagList,
+  ApprovalUserTag,
+} from '@/features/workbench/approval-actor-tags'
 import {
   ApprovalSheetAutomationActionTimeline,
   ApprovalSheetAutomationStatusCard,
@@ -90,7 +95,6 @@ import {
   type RuntimeStructureLink,
 } from '@/features/workflow/runtime-structure-utils'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
-import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-renderer'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   WORKBENCH_RUNTIME_ENDPOINTS,
@@ -151,6 +155,21 @@ function formatDateTime(value: string | null | undefined) {
     minute: '2-digit',
     hour12: false,
   }).format(date)
+}
+
+function resolveCurrentHandlerContent(detail: WorkbenchTaskDetail) {
+  if (detail.assigneeUserId) {
+    return (
+      <ApprovalUserTag
+        userId={detail.assigneeUserId}
+        displayNames={detail.userDisplayNames}
+      />
+    )
+  }
+  if (detail.candidateUserIds.length > 0 || (detail.candidateGroupIds?.length ?? 0) > 0) {
+    return <Badge variant='secondary'>待认领</Badge>
+  }
+  return '--'
 }
 
 // 待办状态在列表里只展示最直观的中文标签。
@@ -392,8 +411,10 @@ function ApprovalSheetListToolbar({
 // 动作轨迹按任务节点串起审批动作和办理信息。
 function ApprovalSheetActionTimeline({
   taskTrace,
+  userDisplayNames,
 }: {
   taskTrace: WorkbenchTaskDetail['taskTrace']
+  userDisplayNames?: Record<string, string> | null
 }) {
   const items = taskTrace ?? []
 
@@ -418,13 +439,43 @@ function ApprovalSheetActionTimeline({
                   {(item.actingMode || item.actingForUserId || item.delegatedByUserId || item.handoverFromUserId) ? (
                     <div className='flex flex-wrap gap-x-3 gap-y-1'>
                       <span>办理模式：{resolveApprovalSheetActingModeLabel(item.actingMode)}</span>
-                      {item.actingForUserId ? <span>代谁办理：{item.actingForUserId}</span> : null}
-                      {item.delegatedByUserId ? <span>委派来源：{item.delegatedByUserId}</span> : null}
-                      {item.handoverFromUserId ? <span>离职转办来源：{item.handoverFromUserId}</span> : null}
+                      {item.actingForUserId ? (
+                        <span className='flex items-center gap-1'>
+                          代谁办理：
+                          <ApprovalUserTag
+                            userId={item.actingForUserId}
+                            displayNames={userDisplayNames}
+                          />
+                        </span>
+                      ) : null}
+                      {item.delegatedByUserId ? (
+                        <span className='flex items-center gap-1'>
+                          委派来源：
+                          <ApprovalUserTag
+                            userId={item.delegatedByUserId}
+                            displayNames={userDisplayNames}
+                          />
+                        </span>
+                      ) : null}
+                      {item.handoverFromUserId ? (
+                        <span className='flex items-center gap-1'>
+                          离职转办来源：
+                          <ApprovalUserTag
+                            userId={item.handoverFromUserId}
+                            displayNames={userDisplayNames}
+                          />
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className='flex flex-wrap gap-x-3 gap-y-1'>
-                    <span>办理人：{formatApprovalSheetText(item.operatorUserId ?? item.assigneeUserId)}</span>
+                    <span className='flex items-center gap-1'>
+                      办理人：
+                      <ApprovalUserTag
+                        userId={item.operatorUserId ?? item.assigneeUserId}
+                        displayNames={userDisplayNames}
+                      />
+                    </span>
                     <span>接收时间：{formatDateTime(item.receiveTime)}</span>
                     <span>读取时间：{formatDateTime(item.readTime)}</span>
                   </div>
@@ -645,8 +696,8 @@ function ApprovalSheetListPageSection({
   )
 }
 
-// 待办页顶部提供离职转办入口。
-function WorkbenchTodoHandoverToolbar() {
+// 待办页使用紧凑动作按钮承载离职转办，避免占满顶部空间。
+function WorkbenchTodoHandoverAction() {
   const queryClient = useQueryClient()
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false)
   const handoverForm = useForm<HandoverTaskFormValues>({
@@ -682,86 +733,76 @@ function WorkbenchTodoHandoverToolbar() {
   })
 
   return (
-    <Card className='border-dashed'>
-      <CardHeader>
-        <CardTitle className='text-base'>离职转办</CardTitle>
-        <CardDescription>
-          流程管理员可以批量将某个来源用户的待办转给目标用户。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
-          <DialogTrigger asChild>
-            <Button type='button' variant='outline'>
-              离职转办
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>离职转办</DialogTitle>
-              <DialogDescription>
-                输入来源用户和目标用户编码，系统会批量转移该来源用户的当前待办。
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...handoverForm}>
-              <form className='space-y-4' onSubmit={onHandoverSubmit}>
-                <FormField
-                  control={handoverForm.control}
-                  name='sourceUserId'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>来源用户编码</FormLabel>
-                      <FormControl>
-                        <Input placeholder='例如：usr_001' {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={handoverForm.control}
-                  name='targetUserId'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>目标用户编码</FormLabel>
-                      <FormControl>
-                        <Input placeholder='例如：usr_003' {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={handoverForm.control}
-                  name='comment'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>转办说明</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          className='min-h-24'
-                          placeholder='请输入离职转办说明'
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type='button' variant='outline' onClick={() => setHandoverDialogOpen(false)}>
-                    取消
-                  </Button>
-                  <Button type='submit' disabled={handoverMutation.isPending}>
-                    {handoverMutation.isPending ? '转办中' : '确认转办'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+    <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
+      <DialogTrigger asChild>
+        <Button type='button' variant='outline'>
+          离职转办
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>离职转办</DialogTitle>
+          <DialogDescription>
+            输入来源用户和目标用户编码，系统会批量转移该来源用户的当前待办。
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...handoverForm}>
+          <form className='space-y-4' onSubmit={onHandoverSubmit}>
+            <FormField
+              control={handoverForm.control}
+              name='sourceUserId'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>来源用户编码</FormLabel>
+                  <FormControl>
+                    <Input placeholder='例如：usr_001' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={handoverForm.control}
+              name='targetUserId'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>目标用户编码</FormLabel>
+                  <FormControl>
+                    <Input placeholder='例如：usr_003' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={handoverForm.control}
+              name='comment'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>转办说明</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      className='min-h-24'
+                      placeholder='请输入离职转办说明'
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <Button type='button' variant='outline' onClick={() => setHandoverDialogOpen(false)}>
+                取消
+              </Button>
+              <Button type='submit' disabled={handoverMutation.isPending}>
+                {handoverMutation.isPending ? '转办中' : '确认转办'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -801,13 +842,14 @@ function TaskRuntimeFormCard({
   })
 
   return (
-    <div className='space-y-3 rounded-lg border bg-muted/30 p-4 md:col-span-2'>
-      <div className='space-y-1'>
-        <p className='text-xs text-muted-foreground'>运行表单</p>
-        <p className='text-sm font-medium'>
-          {hasNodeForm ? '节点表单优先' : '流程默认表单回退'}
-        </p>
-      </div>
+    <div className='space-y-3 rounded-lg border bg-muted/20 p-4'>
+      {hasNodeForm ? (
+        <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+          <Badge variant='outline'>
+            节点表单 {detail.effectiveFormKey} · {detail.effectiveFormVersion}
+          </Badge>
+        </div>
+      ) : null}
       {hasNodeForm ? (
         <NodeFormRenderer
           nodeFormKey={detail.nodeFormKey ?? detail.effectiveFormKey}
@@ -821,34 +863,13 @@ function TaskRuntimeFormCard({
           disabled={detail.status === 'COMPLETED' || !showCompletionForm}
         />
       ) : (
-        <ProcessFormRenderer
-          processFormKey={detail.processFormKey}
-          processFormVersion={detail.processFormVersion}
-          value={taskFormData}
-          onChange={(nextValue) => {
-            setTaskFormData(nextValue)
-          }}
-          disabled={detail.status === 'COMPLETED' || !showCompletionForm}
-        />
-      )}
-      <div className='grid gap-2 rounded-md border bg-background p-3 text-xs text-muted-foreground'>
-        <div className='flex flex-wrap gap-3'>
-          <span>
-            流程默认：{detail.processFormKey} · {detail.processFormVersion}
-          </span>
-          <span>生效表单：{detail.effectiveFormKey} · {detail.effectiveFormVersion}</span>
+        <div className='rounded-lg border border-dashed bg-background p-3 text-sm text-muted-foreground'>
+          当前节点没有独立办理表单，请直接填写审批动作和审批意见。
         </div>
-        <p>提交时会同步带上 `taskFormData`。</p>
-      </div>
+      )}
       {showCompletionForm ? (
         <Form {...form}>
-          <form className='space-y-6 rounded-lg border p-4' onSubmit={onSubmitForm}>
-            <div className='space-y-1'>
-              <p className='text-sm font-medium'>审批处理</p>
-              <p className='text-sm text-muted-foreground'>
-                选择审批动作并填写意见，完成后会自动跳转到下一个待办或返回列表。
-              </p>
-            </div>
+          <form className='space-y-4 rounded-lg border bg-background p-4' onSubmit={onSubmitForm}>
             {!hasNodeForm ? (
               <>
                 <FormField
@@ -879,12 +900,11 @@ function TaskRuntimeFormCard({
                       <FormLabel>审批意见</FormLabel>
                       <FormControl>
                         <Textarea
-                          className='min-h-36'
+                          className='min-h-28'
                           placeholder='请输入审批意见'
                           {...field}
                         />
                       </FormControl>
-                      <FormDescription>审批意见会随任务完成状态一起保存。</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -892,7 +912,7 @@ function TaskRuntimeFormCard({
               </>
             ) : (
               <div className='rounded-lg border border-dashed p-3 text-sm text-muted-foreground'>
-                节点表单已接管审批结果与意见输入，提交时会自动根据表单值生成通过/驳回动作。
+                节点表单已接管审批结果与意见输入，提交时会自动根据表单值生成通过或驳回动作。
               </div>
             )}
 
@@ -1191,13 +1211,6 @@ export function WorkbenchTodoListPage() {
 
   return (
     <>
-      <div className='mb-4 flex flex-wrap items-center justify-between gap-2'>
-        <WorkbenchTodoHandoverToolbar />
-        <ContextualCopilotEntry
-          sourceRoute='/workbench/todos/list'
-          label='用 AI 解读当前待办'
-        />
-      </div>
       {tasksQuery.isError ? (
         <Alert variant='destructive' className='mb-4'>
           <AlertTitle>待办列表加载失败</AlertTitle>
@@ -1239,6 +1252,15 @@ export function WorkbenchTodoListPage() {
           label: '发起流程',
           href: '/workbench/start',
         }}
+        extraActions={
+          <>
+            <WorkbenchTodoHandoverAction />
+            <ContextualCopilotEntry
+              sourceRoute='/workbench/todos/list'
+              label='用 AI 解读当前待办'
+            />
+          </>
+        }
       />
     </>
   )
@@ -1381,7 +1403,12 @@ type WorkbenchTodoDetailPageProps = {
   taskId?: string
   businessType?: string
   businessId?: string
-  backHref?: '/workbench/todos/list' | '/oa/query'
+  backHref?:
+    | '/workbench/todos/list'
+    | '/oa/query'
+    | '/oa/leave/list'
+    | '/oa/expense/list'
+    | '/oa/common/list'
   backLabel?: string
 }
 
@@ -1975,9 +2002,6 @@ export function WorkbenchTodoDetailPage({
     return resolveTaskStatusLabel(detail.status)
   }, [detail])
 
-  const onClaimSubmit = claimForm.handleSubmit((values) => {
-    claimMutation.mutate(values)
-  })
   const onTransferSubmit = transferForm.handleSubmit((values) => {
     transferMutation.mutate(values)
   })
@@ -2015,6 +2039,13 @@ export function WorkbenchTodoDetailPage({
       actionsQuery.data?.canTakeBack ||
       actionsQuery.data?.canWakeUp
   )
+  const showHeaderActionToolbar = Boolean(
+    actionsQuery.isLoading ||
+      actionsQuery.data?.canClaim ||
+      actionsQuery.data?.canTransfer ||
+      actionsQuery.data?.canReturn ||
+      hasMoreActions
+  )
   const rejectTargetStrategy =
     useWatch({
       control: rejectForm.control,
@@ -2037,6 +2068,631 @@ export function WorkbenchTodoDetailPage({
                 : detail?.businessType === 'PLM_MATERIAL'
                   ? `/plm/material-master/${locator.businessId}`
                   : '/workbench/todos/list'
+
+  const detailActionToolbar: ReactNode = actionsQuery.isLoading ? (
+    <div className='flex items-center gap-2'>
+      <Skeleton className='h-9 w-20' />
+      <Skeleton className='h-9 w-20' />
+    </div>
+  ) : showHeaderActionToolbar ? (
+    <div className='flex flex-wrap items-center justify-end gap-2'>
+      {hasMoreActions ? (
+        <>
+          {actionsQuery.data?.canDelegate ? (
+            <Dialog open={delegateDialogOpen} onOpenChange={setDelegateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>委派</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>委派</DialogTitle>
+                  <DialogDescription>
+                    当前办理人可以把任务委派给其他用户代办，同时保留原责任关系。
+                  </DialogDescription>
+                </DialogHeader>
+                <Form {...delegateForm}>
+                  <form className='space-y-4' onSubmit={onDelegateSubmit}>
+                    <FormField
+                      control={delegateForm.control}
+                      name='targetUserId'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>委派用户编码</FormLabel>
+                          <FormControl>
+                            <Input placeholder='例如：usr_003' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={delegateForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>委派说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入委派说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setDelegateDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type='submit' disabled={delegateMutation.isPending}>
+                        {delegateMutation.isPending ? '委派中' : '确认委派'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canAddSign ? (
+            <Dialog open={addSignDialogOpen} onOpenChange={setAddSignDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>加签</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>加签</DialogTitle>
+                  <DialogDescription>为当前任务追加一位串行复核办理人。</DialogDescription>
+                </DialogHeader>
+                <Form {...addSignForm}>
+                  <form className='space-y-4' onSubmit={onAddSignSubmit}>
+                    <FormField
+                      control={addSignForm.control}
+                      name='targetUserId'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>加签用户编码</FormLabel>
+                          <FormControl>
+                            <Input placeholder='例如：usr_003' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={addSignForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>加签说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入加签说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setAddSignDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type='submit' disabled={addSignMutation.isPending}>
+                        {addSignMutation.isPending ? '加签中' : '确认加签'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canRemoveSign ? (
+            <Dialog open={removeSignDialogOpen} onOpenChange={setRemoveSignDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>减签</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>减签</DialogTitle>
+                  <DialogDescription>输入待减签的加签任务编号，系统会撤销该串行加签任务。</DialogDescription>
+                </DialogHeader>
+                <Form {...removeSignForm}>
+                  <form className='space-y-4' onSubmit={onRemoveSignSubmit}>
+                    <FormField
+                      control={removeSignForm.control}
+                      name='targetTaskId'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>加签任务编号</FormLabel>
+                          <FormControl>
+                            <Input placeholder='例如：task_xxx' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={removeSignForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>减签说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入减签说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setRemoveSignDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type='submit' disabled={removeSignMutation.isPending}>
+                        {removeSignMutation.isPending ? '减签中' : '确认减签'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canRevoke ? (
+            <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>撤销</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>撤销流程</DialogTitle>
+                  <DialogDescription>仅发起人可撤销，撤销后当前运行中的任务会一并终止。</DialogDescription>
+                </DialogHeader>
+                <Form {...revokeForm}>
+                  <form className='space-y-4' onSubmit={onRevokeSubmit}>
+                    <FormField
+                      control={revokeForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>撤销说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入撤销说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setRevokeDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type='submit' disabled={revokeMutation.isPending}>
+                        {revokeMutation.isPending ? '撤销中' : '确认撤销'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canUrge ? (
+            <Dialog open={urgeDialogOpen} onOpenChange={setUrgeDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>催办</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>催办</DialogTitle>
+                  <DialogDescription>催办不会改变任务状态，但会写入实例动作轨迹。</DialogDescription>
+                </DialogHeader>
+                <Form {...urgeForm}>
+                  <form className='space-y-4' onSubmit={onUrgeSubmit}>
+                    <FormField
+                      control={urgeForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>催办说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入催办说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setUrgeDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type='submit' disabled={urgeMutation.isPending}>
+                        {urgeMutation.isPending ? '催办中' : '确认催办'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canRead ? (
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              disabled={readMutation.isPending}
+              onClick={() => {
+                readMutation.mutate()
+              }}
+            >
+              {readMutation.isPending ? '处理中' : '已阅'}
+            </Button>
+          ) : null}
+
+          {actionsQuery.data?.canRejectRoute ? (
+            <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>驳回</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>驳回处理</DialogTitle>
+                  <DialogDescription>选择驳回目标和重审策略，系统会通过专用驳回接口处理。</DialogDescription>
+                </DialogHeader>
+                <Form {...rejectForm}>
+                  <form className='space-y-4' onSubmit={rejectForm.handleSubmit((values) => { rejectMutation.mutate(values) })}>
+                    <FormField
+                      control={rejectForm.control}
+                      name='targetStrategy'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>驳回目标</FormLabel>
+                          <FormControl>
+                            <select className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm' {...field}>
+                              <option value='PREVIOUS_USER_TASK'>上一步人工节点</option>
+                              <option value='INITIATOR'>发起人</option>
+                              <option value='ANY_USER_TASK'>任意节点</option>
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    {rejectTargetStrategy === 'ANY_USER_TASK' ? (
+                      <FormField
+                        control={rejectForm.control}
+                        name='targetNodeId'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>目标节点编号</FormLabel>
+                            <FormControl>
+                              <Input placeholder='例如：approve_finance' {...field} />
+                            </FormControl>
+                            <FormDescription>当前版本通过节点编号指定任意驳回目标。</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ) : (
+                      <FormField
+                        control={rejectForm.control}
+                        name='targetTaskId'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>目标任务编号</FormLabel>
+                            <FormControl>
+                              <Input placeholder='可选，系统会自动解析默认目标' {...field} />
+                            </FormControl>
+                            <FormDescription>上一步或发起人场景可留空，让系统自动回退。</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+                    <FormField
+                      control={rejectForm.control}
+                      name='reapproveStrategy'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>重审策略</FormLabel>
+                          <FormControl>
+                            <select className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm' {...field}>
+                              <option value='CONTINUE'>继续执行</option>
+                              <option value='RETURN_TO_REJECTED_NODE'>退回驳回节点</option>
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={rejectForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>驳回说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入驳回说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setRejectDialogOpen(false)}>取消</Button>
+                      <Button type='submit' disabled={rejectMutation.isPending}>
+                        {rejectMutation.isPending ? '驳回中' : '确认驳回'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canJump ? (
+            <Dialog open={jumpDialogOpen} onOpenChange={setJumpDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>跳转</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>跳转</DialogTitle>
+                  <DialogDescription>将当前任务强制路由到指定节点或结束节点。</DialogDescription>
+                </DialogHeader>
+                <Form {...jumpForm}>
+                  <form className='space-y-4' onSubmit={jumpForm.handleSubmit((values) => { jumpMutation.mutate(values) })}>
+                    <FormField
+                      control={jumpForm.control}
+                      name='targetNodeId'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>目标节点编号</FormLabel>
+                          <FormControl>
+                            <Input placeholder='例如：approve_finance' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={jumpForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>跳转说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入跳转说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setJumpDialogOpen(false)}>取消</Button>
+                      <Button type='submit' disabled={jumpMutation.isPending}>
+                        {jumpMutation.isPending ? '跳转中' : '确认跳转'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canTakeBack ? (
+            <Dialog open={takeBackDialogOpen} onOpenChange={setTakeBackDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>拿回</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>拿回任务</DialogTitle>
+                  <DialogDescription>在当前办理人未处理前，上一节点提交人可把任务拿回。</DialogDescription>
+                </DialogHeader>
+                <Form {...takeBackForm}>
+                  <form className='space-y-4' onSubmit={takeBackForm.handleSubmit((values) => { takeBackMutation.mutate(values) })}>
+                    <FormField
+                      control={takeBackForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>拿回说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入拿回说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setTakeBackDialogOpen(false)}>取消</Button>
+                      <Button type='submit' disabled={takeBackMutation.isPending}>
+                        {takeBackMutation.isPending ? '拿回中' : '确认拿回'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canWakeUp ? (
+            <Dialog open={wakeUpDialogOpen} onOpenChange={setWakeUpDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>唤醒</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>唤醒流程</DialogTitle>
+                  <DialogDescription>从历史任务重新拉起终态实例，继续后续审批流程。</DialogDescription>
+                </DialogHeader>
+                <Form {...wakeUpForm}>
+                  <form className='space-y-4' onSubmit={wakeUpForm.handleSubmit((values) => { wakeUpMutation.mutate(values) })}>
+                    <FormField
+                      control={wakeUpForm.control}
+                      name='sourceTaskId'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>历史任务编号</FormLabel>
+                          <FormControl>
+                            <Input placeholder='例如：task_001' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={wakeUpForm.control}
+                      name='comment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>唤醒说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入唤醒说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setWakeUpDialogOpen(false)}>取消</Button>
+                      <Button type='submit' disabled={wakeUpMutation.isPending}>
+                        {wakeUpMutation.isPending ? '唤醒中' : '确认唤醒'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+        </>
+      ) : null}
+
+      {actionsQuery.data?.canClaim ? (
+        <Button
+          type='button'
+          size='sm'
+          disabled={claimMutation.isPending}
+          onClick={() => claimMutation.mutate({ comment: '' })}
+        >
+          {claimMutation.isPending ? (
+            <>
+              <Loader2 className='animate-spin' />
+              认领中
+            </>
+          ) : (
+            <>
+              <UserCheck2 />
+              认领任务
+            </>
+          )}
+        </Button>
+      ) : null}
+
+      {actionsQuery.data?.canTransfer ? (
+        <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
+          <DialogTrigger asChild>
+            <Button type='button' size='sm' variant='outline'>
+              <UserRoundPlus />
+              转办
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>转办任务</DialogTitle>
+              <DialogDescription>输入目标用户编码后，当前任务会转到对方待办中。</DialogDescription>
+            </DialogHeader>
+            <Form {...transferForm}>
+              <form className='space-y-4' onSubmit={onTransferSubmit}>
+                <FormField
+                  control={transferForm.control}
+                  name='targetUserId'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>目标用户编码</FormLabel>
+                      <FormControl>
+                        <Input placeholder='例如：usr_003' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={transferForm.control}
+                  name='comment'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>转办说明</FormLabel>
+                      <FormControl>
+                        <Textarea className='min-h-24' placeholder='请输入转办说明' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button type='button' variant='outline' onClick={() => setTransferDialogOpen(false)}>取消</Button>
+                  <Button type='submit' disabled={transferMutation.isPending}>
+                    {transferMutation.isPending ? (
+                      <>
+                        <Loader2 className='animate-spin' />
+                        转办中
+                      </>
+                    ) : '确认转办'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+
+      {actionsQuery.data?.canReturn ? (
+        <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+          <DialogTrigger asChild>
+            <Button type='button' size='sm' variant='outline'>
+              <Undo2 />
+              退回
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>退回上一步</DialogTitle>
+              <DialogDescription>请填写退回说明，系统会把任务重新投递到上一步办理人。</DialogDescription>
+            </DialogHeader>
+            <Form {...returnForm}>
+              <form className='space-y-4' onSubmit={onReturnSubmit}>
+                <FormField
+                  control={returnForm.control}
+                  name='comment'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>退回说明</FormLabel>
+                      <FormControl>
+                        <Textarea className='min-h-24' placeholder='请输入退回说明' {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button type='button' variant='outline' onClick={() => setReturnDialogOpen(false)}>取消</Button>
+                  <Button type='submit' disabled={returnMutation.isPending}>
+                    {returnMutation.isPending ? (
+                      <>
+                        <Loader2 className='animate-spin' />
+                        退回中
+                      </>
+                    ) : '确认退回'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </div>
+  ) : null
 
   return (
     <PageShell
@@ -2076,7 +2732,7 @@ export function WorkbenchTodoDetailPage({
       ) : null}
 
       {detailQuery.isLoading ? (
-        <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
+        <div className='grid gap-4'>
           <Card>
             <CardHeader>
               <Skeleton className='h-8 w-40' />
@@ -2101,7 +2757,7 @@ export function WorkbenchTodoDetailPage({
       ) : null}
 
       {detail ? (
-        <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
+        <div className='grid gap-4'>
           <Card>
             <CardHeader>
               <div className='flex items-center justify-between gap-3'>
@@ -2144,7 +2800,12 @@ export function WorkbenchTodoDetailPage({
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>发起人</dt>
-                    <dd>{detail.applicantUserId}</dd>
+                    <dd>
+                      <ApprovalUserTag
+                        userId={detail.applicantUserId}
+                        displayNames={detail.userDisplayNames}
+                      />
+                    </dd>
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>创建时间</dt>
@@ -2165,19 +2826,34 @@ export function WorkbenchTodoDetailPage({
                   {detail.actingForUserId ? (
                     <div className='flex justify-between gap-3'>
                       <dt className='text-muted-foreground'>代谁办理</dt>
-                      <dd>{detail.actingForUserId}</dd>
+                      <dd>
+                        <ApprovalUserTag
+                          userId={detail.actingForUserId}
+                          displayNames={detail.userDisplayNames}
+                        />
+                      </dd>
                     </div>
                   ) : null}
                   {detail.delegatedByUserId ? (
                     <div className='flex justify-between gap-3'>
                       <dt className='text-muted-foreground'>委派来源</dt>
-                      <dd>{detail.delegatedByUserId}</dd>
+                      <dd>
+                        <ApprovalUserTag
+                          userId={detail.delegatedByUserId}
+                          displayNames={detail.userDisplayNames}
+                        />
+                      </dd>
                     </div>
                   ) : null}
                   {detail.handoverFromUserId ? (
                     <div className='flex justify-between gap-3'>
                       <dt className='text-muted-foreground'>离职转办来源</dt>
-                      <dd>{detail.handoverFromUserId}</dd>
+                      <dd>
+                        <ApprovalUserTag
+                          userId={detail.handoverFromUserId}
+                          displayNames={detail.userDisplayNames}
+                        />
+                      </dd>
                     </div>
                   ) : null}
                 </dl>
@@ -2196,11 +2872,25 @@ export function WorkbenchTodoDetailPage({
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>当前办理人</dt>
-                    <dd>{detail.assigneeUserId ?? '--'}</dd>
+                    <dd>{resolveCurrentHandlerContent(detail)}</dd>
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>候选人</dt>
-                    <dd>{detail.candidateUserIds.join('、') || '--'}</dd>
+                    <dd>
+                      <ApprovalTagList
+                        ids={detail.candidateUserIds}
+                        displayNames={detail.userDisplayNames}
+                      />
+                    </dd>
+                  </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>候选组</dt>
+                    <dd>
+                      <ApprovalTagList
+                        ids={detail.candidateGroupIds}
+                        displayNames={detail.groupDisplayNames}
+                      />
+                    </dd>
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>最新动作</dt>
@@ -2208,7 +2898,12 @@ export function WorkbenchTodoDetailPage({
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>办理人</dt>
-                    <dd>{detail.operatorUserId ?? '--'}</dd>
+                    <dd>
+                      <ApprovalUserTag
+                        userId={detail.operatorUserId}
+                        displayNames={detail.userDisplayNames}
+                      />
+                    </dd>
                   </div>
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>当前待办</dt>
@@ -2234,905 +2929,112 @@ export function WorkbenchTodoDetailPage({
                 </dl>
               </div>
 
-              <div className='md:col-span-2 grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
-                <ApprovalSheetBusinessSection detail={detail} />
-                <div className='space-y-4'>
-                  <ApprovalSheetAutomationStatusCard
-                    automationStatus={detail.automationStatus}
-                    actionTraceCount={detail.automationActionTrace?.length ?? 0}
-                    notificationCount={detail.notificationSendRecords?.length ?? 0}
-                  />
-                  <ApprovalSheetGraph
-                    flowNodes={detail.flowNodes ?? []}
-                    flowEdges={detail.flowEdges ?? []}
-                    taskTrace={detail.taskTrace ?? []}
-                    instanceEvents={detail.instanceEvents ?? []}
-                  />
-                  <ApprovalSheetCountersignSection
-                    countersignGroups={detail.countersignGroups ?? []}
-                  />
-                  <InclusiveGatewaySection
-                    hits={detail.inclusiveGatewayHits ?? []}
-                  />
-                  <ApprovalSheetProcessLinkSection
-                    links={mergeRuntimeStructureLinks(
-                      detail.processLinks ?? [],
-                      detail.runtimeStructureLinks ?? []
-                    )}
-                    currentInstanceId={detail.instanceId}
-                    onConfirmParentResume={(link) => {
-                      confirmParentResumeMutation.mutate({
-                        instanceId: detail.instanceId,
-                        linkId: link.linkId,
-                      })
-                    }}
-                    pendingLinkId={
-                      confirmParentResumeMutation.isPending
-                        ? confirmParentResumeMutation.variables?.linkId ?? null
-                        : null
-                    }
-                  />
-                  <ProcessTerminationSection
-                    snapshot={terminationSnapshotQuery.data ?? null}
-                    audits={terminationAuditQuery.data ?? []}
-                  />
-                  <ProcessCollaborationSection
-                    items={collaborationTraceQuery.data ?? []}
-                  />
-                  <ProcessTimeTravelSection
-                    items={timeTravelTraceQuery.data ?? []}
-                  />
-                  <ApprovalSheetActionTimeline taskTrace={detail.taskTrace ?? []} />
-                  <ApprovalSheetAutomationActionTimeline
-                    automationActionTrace={detail.automationActionTrace ?? []}
-                  />
-                  <NotificationSendRecordSection
-                    notificationSendRecords={detail.notificationSendRecords ?? []}
-                  />
-                </div>
-              </div>
+              <div className='md:col-span-2 space-y-4'>
+                <ApprovalSheetBusinessSection
+                  detail={detail}
+                  headerActions={detailActionToolbar}
+                >
+                  {showCompletionForm ? (
+                    <TaskRuntimeFormCard
+                      key={`${detail.taskId}:${detail.updatedAt}:${detail.effectiveFormKey}:${detail.effectiveFormVersion}`}
+                      detail={detail}
+                      hasNodeForm={hasNodeForm}
+                      showCompletionForm={showCompletionForm}
+                      onSubmit={(payload) => {
+                        if (payload.action === 'REJECT') {
+                          rejectMutation.mutate({
+                            targetStrategy: 'PREVIOUS_USER_TASK',
+                            targetTaskId: '',
+                            targetNodeId: '',
+                            reapproveStrategy: 'CONTINUE',
+                            comment: payload.comment ?? undefined,
+                          })
+                          return
+                        }
 
-              <TaskRuntimeFormCard
-                key={`${detail.taskId}:${detail.updatedAt}:${detail.effectiveFormKey}:${detail.effectiveFormVersion}`}
-                detail={detail}
-                hasNodeForm={hasNodeForm}
-                showCompletionForm={showCompletionForm}
-                onSubmit={(payload) => {
-                  if (payload.action === 'REJECT') {
-                    rejectMutation.mutate({
-                      targetStrategy: 'PREVIOUS_USER_TASK',
-                      targetTaskId: '',
-                      targetNodeId: '',
-                      reapproveStrategy: 'CONTINUE',
-                      comment: payload.comment ?? undefined,
-                    })
-                    return
-                  }
-
-                  completeMutation.mutate(payload)
-                }}
-                isPending={completeMutation.isPending || rejectMutation.isPending}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>任务动作</CardTitle>
-              <CardDescription>
-                根据当前任务权限显示可执行动作，完成后会自动刷新详情或返回待办列表。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='space-y-6'>
-              {actionsQuery.isLoading ? (
-                <div className='space-y-3'>
-                  <Skeleton className='h-10 w-full' />
-                  <Skeleton className='h-24 w-full' />
-                  <Skeleton className='h-10 w-32' />
-                </div>
-              ) : null}
-
-              {hasMoreActions ? (
-                <div className='rounded-lg border p-4'>
-                  <div className='mb-4 space-y-1'>
-                    <p className='text-sm font-medium'>更多动作</p>
-                    <p className='text-sm text-muted-foreground'>
-                      高级运行态动作会写入审批轨迹，执行后自动刷新当前审批单详情。
-                    </p>
-                  </div>
-                  <div className='grid gap-3'>
-                    {actionsQuery.data?.canDelegate ? (
-                      <Dialog open={delegateDialogOpen} onOpenChange={setDelegateDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>委派</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>委派</DialogTitle>
-                            <DialogDescription>
-                              当前办理人可以把任务委派给其他用户代办，同时保留原责任关系。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...delegateForm}>
-                            <form className='space-y-4' onSubmit={onDelegateSubmit}>
-                              <FormField
-                                control={delegateForm.control}
-                                name='targetUserId'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>委派用户编码</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder='例如：usr_003' {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={delegateForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>委派说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入委派说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setDelegateDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={delegateMutation.isPending}>
-                                  {delegateMutation.isPending ? '委派中' : '确认委派'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canAddSign ? (
-                      <Dialog open={addSignDialogOpen} onOpenChange={setAddSignDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>加签</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>加签</DialogTitle>
-                            <DialogDescription>
-                              为当前任务追加一位串行复核办理人。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...addSignForm}>
-                            <form className='space-y-4' onSubmit={onAddSignSubmit}>
-                              <FormField
-                                control={addSignForm.control}
-                                name='targetUserId'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>加签用户编码</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder='例如：usr_003' {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={addSignForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>加签说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入加签说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setAddSignDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={addSignMutation.isPending}>
-                                  {addSignMutation.isPending ? '加签中' : '确认加签'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canRemoveSign ? (
-                      <Dialog open={removeSignDialogOpen} onOpenChange={setRemoveSignDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>减签</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>减签</DialogTitle>
-                            <DialogDescription>
-                              输入待减签的加签任务编号，系统会撤销该串行加签任务。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...removeSignForm}>
-                            <form className='space-y-4' onSubmit={onRemoveSignSubmit}>
-                              <FormField
-                                control={removeSignForm.control}
-                                name='targetTaskId'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>加签任务编号</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder='例如：task_xxx' {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={removeSignForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>减签说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入减签说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setRemoveSignDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={removeSignMutation.isPending}>
-                                  {removeSignMutation.isPending ? '减签中' : '确认减签'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canRevoke ? (
-                      <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>撤销</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>撤销流程</DialogTitle>
-                            <DialogDescription>
-                              仅发起人可撤销，撤销后当前运行中的任务会一并终止。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...revokeForm}>
-                            <form className='space-y-4' onSubmit={onRevokeSubmit}>
-                              <FormField
-                                control={revokeForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>撤销说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入撤销说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setRevokeDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={revokeMutation.isPending}>
-                                  {revokeMutation.isPending ? '撤销中' : '确认撤销'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canUrge ? (
-                      <Dialog open={urgeDialogOpen} onOpenChange={setUrgeDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>催办</Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>催办</DialogTitle>
-                            <DialogDescription>
-                              催办不会改变任务状态，但会写入实例动作轨迹。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...urgeForm}>
-                            <form className='space-y-4' onSubmit={onUrgeSubmit}>
-                              <FormField
-                                control={urgeForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>催办说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入催办说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setUrgeDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={urgeMutation.isPending}>
-                                  {urgeMutation.isPending ? '催办中' : '确认催办'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canRead ? (
-                      <Button
-                        type='button'
-                        variant='outline'
-                        disabled={readMutation.isPending}
-                        onClick={() => {
-                          readMutation.mutate()
-                        }}
-                      >
-                        {readMutation.isPending ? '处理中' : '已阅'}
-                      </Button>
-                    ) : null}
-
-                    {actionsQuery.data?.canRejectRoute ? (
-                      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>
-                            驳回
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>驳回处理</DialogTitle>
-                            <DialogDescription>
-                              选择驳回目标和重审策略，系统会通过专用驳回接口处理。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...rejectForm}>
-                            <form
-                              className='space-y-4'
-                              onSubmit={rejectForm.handleSubmit((values) => {
-                                rejectMutation.mutate(values)
-                              })}
-                            >
-                              <FormField
-                                control={rejectForm.control}
-                                name='targetStrategy'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>驳回目标</FormLabel>
-                                    <FormControl>
-                                      <select
-                                        className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
-                                        {...field}
-                                      >
-                                        <option value='PREVIOUS_USER_TASK'>上一步人工节点</option>
-                                        <option value='INITIATOR'>发起人</option>
-                                        <option value='ANY_USER_TASK'>任意节点</option>
-                                      </select>
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              {rejectTargetStrategy === 'ANY_USER_TASK' ? (
-                                <FormField
-                                  control={rejectForm.control}
-                                  name='targetNodeId'
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>目标节点编号</FormLabel>
-                                      <FormControl>
-                                        <Input placeholder='例如：approve_finance' {...field} />
-                                      </FormControl>
-                                      <FormDescription>当前版本通过节点编号指定任意驳回目标。</FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              ) : (
-                                <FormField
-                                  control={rejectForm.control}
-                                  name='targetTaskId'
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel>目标任务编号</FormLabel>
-                                      <FormControl>
-                                        <Input placeholder='可选，系统会自动解析默认目标' {...field} />
-                                      </FormControl>
-                                      <FormDescription>上一步或发起人场景可留空，让系统自动回退。</FormDescription>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              )}
-                              <FormField
-                                control={rejectForm.control}
-                                name='reapproveStrategy'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>重审策略</FormLabel>
-                                    <FormControl>
-                                      <select
-                                        className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
-                                        {...field}
-                                      >
-                                        <option value='CONTINUE'>继续执行</option>
-                                        <option value='RETURN_TO_REJECTED_NODE'>退回驳回节点</option>
-                                      </select>
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={rejectForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>驳回说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入驳回说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setRejectDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={rejectMutation.isPending}>
-                                  {rejectMutation.isPending ? '驳回中' : '确认驳回'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canJump ? (
-                      <Dialog open={jumpDialogOpen} onOpenChange={setJumpDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>
-                            跳转
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>跳转</DialogTitle>
-                            <DialogDescription>
-                              将当前任务强制路由到指定节点或结束节点。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...jumpForm}>
-                            <form
-                              className='space-y-4'
-                              onSubmit={jumpForm.handleSubmit((values) => {
-                                jumpMutation.mutate(values)
-                              })}
-                            >
-                              <FormField
-                                control={jumpForm.control}
-                                name='targetNodeId'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>目标节点编号</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder='例如：approve_finance' {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={jumpForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>跳转说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入跳转说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setJumpDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={jumpMutation.isPending}>
-                                  {jumpMutation.isPending ? '跳转中' : '确认跳转'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canTakeBack ? (
-                      <Dialog open={takeBackDialogOpen} onOpenChange={setTakeBackDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>
-                            拿回
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>拿回任务</DialogTitle>
-                            <DialogDescription>
-                              在当前办理人未处理前，上一节点提交人可把任务拿回。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...takeBackForm}>
-                            <form
-                              className='space-y-4'
-                              onSubmit={takeBackForm.handleSubmit((values) => {
-                                takeBackMutation.mutate(values)
-                              })}
-                            >
-                              <FormField
-                                control={takeBackForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>拿回说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入拿回说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setTakeBackDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={takeBackMutation.isPending}>
-                                  {takeBackMutation.isPending ? '拿回中' : '确认拿回'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-
-                    {actionsQuery.data?.canWakeUp ? (
-                      <Dialog open={wakeUpDialogOpen} onOpenChange={setWakeUpDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type='button' variant='outline'>
-                            唤醒
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>唤醒流程</DialogTitle>
-                            <DialogDescription>
-                              从历史任务重新拉起终态实例，继续后续审批流程。
-                            </DialogDescription>
-                          </DialogHeader>
-                          <Form {...wakeUpForm}>
-                            <form
-                              className='space-y-4'
-                              onSubmit={wakeUpForm.handleSubmit((values) => {
-                                wakeUpMutation.mutate(values)
-                              })}
-                            >
-                              <FormField
-                                control={wakeUpForm.control}
-                                name='sourceTaskId'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>历史任务编号</FormLabel>
-                                    <FormControl>
-                                      <Input placeholder='例如：task_001' {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <FormField
-                                control={wakeUpForm.control}
-                                name='comment'
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>唤醒说明</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        className='min-h-24'
-                                        placeholder='请输入唤醒说明'
-                                        {...field}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                              <DialogFooter>
-                                <Button type='button' variant='outline' onClick={() => setWakeUpDialogOpen(false)}>
-                                  取消
-                                </Button>
-                                <Button type='submit' disabled={wakeUpMutation.isPending}>
-                                  {wakeUpMutation.isPending ? '唤醒中' : '确认唤醒'}
-                                </Button>
-                              </DialogFooter>
-                            </form>
-                          </Form>
-                        </DialogContent>
-                      </Dialog>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-
-              {actionsQuery.data?.canClaim ? (
-                <Form {...claimForm}>
-                  <form className='space-y-4 rounded-lg border p-4' onSubmit={onClaimSubmit}>
-                    <div className='space-y-1'>
-                      <p className='text-sm font-medium'>认领任务</p>
-                      <p className='text-sm text-muted-foreground'>
-                        当前任务在公共认领池中，认领后会转为你的个人待办。
-                      </p>
-                    </div>
-                    <FormField
-                      control={claimForm.control}
-                      name='comment'
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>认领说明</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              className='min-h-24'
-                              placeholder='可选，填写认领说明'
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                        completeMutation.mutate(payload)
+                      }}
+                      isPending={completeMutation.isPending || rejectMutation.isPending}
                     />
-                    <Button type='submit' disabled={claimMutation.isPending}>
-                      {claimMutation.isPending ? (
-                        <>
-                          <Loader2 className='animate-spin' />
-                          认领中
-                        </>
-                      ) : (
-                        <>
-                          <UserCheck2 />
-                          认领任务
-                        </>
-                      )}
-                    </Button>
-                  </form>
-                </Form>
-              ) : null}
-
-              {actionsQuery.data?.canTransfer ? (
-                <div className='rounded-lg border p-4'>
-                  <div className='mb-4 space-y-1'>
-                    <p className='text-sm font-medium'>转办</p>
-                    <p className='text-sm text-muted-foreground'>
-                      将当前任务转交给其他用户继续处理，并保留转办轨迹。
-                    </p>
-                  </div>
-                  <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button type='button' variant='outline'>
-                        <UserRoundPlus />
-                        转办任务
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>转办任务</DialogTitle>
-                        <DialogDescription>
-                          输入目标用户编码后，当前任务会转到对方待办中。
-                        </DialogDescription>
-                      </DialogHeader>
-                      <Form {...transferForm}>
-                        <form className='space-y-4' onSubmit={onTransferSubmit}>
-                          <FormField
-                            control={transferForm.control}
-                            name='targetUserId'
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>目标用户编码</FormLabel>
-                                <FormControl>
-                                  <Input placeholder='例如：usr_003' {...field} />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={transferForm.control}
-                            name='comment'
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>转办说明</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    className='min-h-24'
-                                    placeholder='请输入转办说明'
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <DialogFooter>
-                            <Button
-                              type='button'
-                              variant='outline'
-                              onClick={() => setTransferDialogOpen(false)}
-                            >
-                              取消
-                            </Button>
-                            <Button type='submit' disabled={transferMutation.isPending}>
-                              {transferMutation.isPending ? (
-                                <>
-                                  <Loader2 className='animate-spin' />
-                                  转办中
-                                </>
-                              ) : (
-                                '确认转办'
-                              )}
-                            </Button>
-                          </DialogFooter>
-                        </form>
-                      </Form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              ) : null}
-
-              {actionsQuery.data?.canReturn ? (
-                <div className='rounded-lg border p-4'>
-                  <div className='mb-4 space-y-1'>
-                    <p className='text-sm font-medium'>退回上一步</p>
-                    <p className='text-sm text-muted-foreground'>
-                      当前版本只支持退回到上一步人工节点，并生成新的待处理任务。
-                    </p>
-                  </div>
-                  <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button type='button' variant='outline'>
-                        <Undo2 />
-                        退回上一步
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>退回上一步</DialogTitle>
-                        <DialogDescription>
-                          请填写退回说明，系统会把任务重新投递到上一步办理人。
-                        </DialogDescription>
-                      </DialogHeader>
-                      <Form {...returnForm}>
-                        <form className='space-y-4' onSubmit={onReturnSubmit}>
-                          <FormField
-                            control={returnForm.control}
-                            name='comment'
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>退回说明</FormLabel>
-                                <FormControl>
-                                  <Textarea
-                                    className='min-h-24'
-                                    placeholder='请输入退回说明'
-                                    {...field}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                          <DialogFooter>
-                            <Button
-                              type='button'
-                              variant='outline'
-                              onClick={() => setReturnDialogOpen(false)}
-                            >
-                              取消
-                            </Button>
-                            <Button type='submit' disabled={returnMutation.isPending}>
-                              {returnMutation.isPending ? (
-                                <>
-                                  <Loader2 className='animate-spin' />
-                                  退回中
-                                </>
-                              ) : (
-                                '确认退回'
-                              )}
-                            </Button>
-                          </DialogFooter>
-                        </form>
-                      </Form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              ) : null}
-
-              {!actionsQuery.isLoading &&
-              !actionsQuery.isError &&
-              !actionsQuery.data?.canClaim &&
-              !actionsQuery.data?.canTransfer &&
-              !actionsQuery.data?.canReturn &&
-              !actionsQuery.data?.canAddSign &&
-              !actionsQuery.data?.canRemoveSign &&
-              !actionsQuery.data?.canRevoke &&
-              !actionsQuery.data?.canUrge &&
-              !actionsQuery.data?.canRead &&
-              !showCompletionForm ? (
-                <Alert>
-                  <AlertTitle>当前没有可执行动作</AlertTitle>
-                  <AlertDescription>
-                    该任务可能已完成，或者当前登录用户不具备处理权限。
-                  </AlertDescription>
-                </Alert>
-              ) : null}
+                  ) : null}
+                </ApprovalSheetBusinessSection>
+                <Card className='border-dashed shadow-none'>
+                  <CardContent className='p-4'>
+                    <Tabs defaultValue='overview' className='gap-4'>
+                      <TabsList className='grid w-full grid-cols-4'>
+                        <TabsTrigger value='overview'>概览</TabsTrigger>
+                        <TabsTrigger value='runtime'>运行态</TabsTrigger>
+                        <TabsTrigger value='automation'>自动化</TabsTrigger>
+                        <TabsTrigger value='trace'>轨迹</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value='overview' className='space-y-4'>
+                        <ApprovalSheetGraph
+                          flowNodes={detail.flowNodes ?? []}
+                          flowEdges={detail.flowEdges ?? []}
+                          taskTrace={detail.taskTrace ?? []}
+                          instanceEvents={detail.instanceEvents ?? []}
+                          userDisplayNames={detail.userDisplayNames}
+                        />
+                        <ApprovalSheetCountersignSection
+                          countersignGroups={detail.countersignGroups ?? []}
+                        />
+                        <InclusiveGatewaySection
+                          hits={detail.inclusiveGatewayHits ?? []}
+                        />
+                      </TabsContent>
+                      <TabsContent value='runtime' className='space-y-4'>
+                        <ApprovalSheetProcessLinkSection
+                          links={mergeRuntimeStructureLinks(
+                            detail.processLinks ?? [],
+                            detail.runtimeStructureLinks ?? []
+                          )}
+                          currentInstanceId={detail.instanceId}
+                          onConfirmParentResume={(link) => {
+                            confirmParentResumeMutation.mutate({
+                              instanceId: detail.instanceId,
+                              linkId: link.linkId,
+                            })
+                          }}
+                          pendingLinkId={
+                            confirmParentResumeMutation.isPending
+                              ? confirmParentResumeMutation.variables?.linkId ?? null
+                              : null
+                          }
+                        />
+                        <ProcessTerminationSection
+                          snapshot={terminationSnapshotQuery.data ?? null}
+                          audits={terminationAuditQuery.data ?? []}
+                        />
+                        <ProcessCollaborationSection
+                          items={collaborationTraceQuery.data ?? []}
+                        />
+                        <ProcessTimeTravelSection
+                          items={timeTravelTraceQuery.data ?? []}
+                        />
+                      </TabsContent>
+                      <TabsContent value='automation' className='space-y-4'>
+                        <ApprovalSheetAutomationStatusCard
+                          automationStatus={detail.automationStatus}
+                          actionTraceCount={detail.automationActionTrace?.length ?? 0}
+                          notificationCount={detail.notificationSendRecords?.length ?? 0}
+                        />
+                        <ApprovalSheetAutomationActionTimeline
+                          automationActionTrace={detail.automationActionTrace ?? []}
+                        />
+                        <NotificationSendRecordSection
+                          notificationSendRecords={detail.notificationSendRecords ?? []}
+                        />
+                      </TabsContent>
+                      <TabsContent value='trace' className='space-y-4'>
+                        <ApprovalSheetActionTimeline
+                          taskTrace={detail.taskTrace ?? []}
+                          userDisplayNames={detail.userDisplayNames}
+                        />
+                      </TabsContent>
+                    </Tabs>
+                  </CardContent>
+                </Card>
+              </div>
             </CardContent>
           </Card>
         </div>

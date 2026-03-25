@@ -64,6 +64,7 @@ export type WorkbenchTaskListItem = {
     | 'HANDOVERED'
   assignmentMode: string | null
   candidateUserIds: string[]
+  candidateGroupIds?: string[]
   assigneeUserId: string | null
   createdAt: string
   updatedAt: string
@@ -117,6 +118,7 @@ export type WorkbenchTaskTraceItem = {
   status: string
   assigneeUserId?: string | null
   candidateUserIds: string[]
+  candidateGroupIds?: string[]
   action?: string | null
   operatorUserId?: string | null
   comment?: string | null
@@ -259,6 +261,8 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   processLinks?: WorkbenchProcessLink[] | null
   runtimeStructureLinks?: WorkbenchRuntimeAppendLink[] | null
   activeTaskIds: string[]
+  userDisplayNames?: Record<string, string> | null
+  groupDisplayNames?: Record<string, string> | null
 }
 
 export type WorkbenchAutomationActionTraceItem = {
@@ -436,6 +440,7 @@ export type StartWorkbenchProcessResponse = {
     status: string
     assignmentMode: string | null
     candidateUserIds: string[]
+    candidateGroupIds?: string[]
     assigneeUserId?: string | null
   }>
 }
@@ -458,6 +463,7 @@ export type CompleteWorkbenchTaskResponse = {
     status: string
     assignmentMode: string | null
     candidateUserIds: string[]
+    candidateGroupIds?: string[]
     assigneeUserId?: string | null
   }>
 }

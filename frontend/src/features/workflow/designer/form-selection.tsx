@@ -1,10 +1,6 @@
 import { useMemo } from 'react'
-import { Badge } from '@/components/ui/badge'
-import { Label } from '@/components/ui/label'
 import {
-  listRuntimeFormKeys,
   listRuntimeFormRegistrations,
-  listRuntimeFormVersions,
   type RuntimeFormKind,
   type RuntimeFormRegistration,
 } from '@/features/forms/runtime/form-component-registry'
@@ -16,12 +12,8 @@ type FormSelectionValue = {
 
 type RuntimeFormSelectorProps = {
   label: string
-  description?: string
   scope: RuntimeFormKind
   emptyMessage: string
-  keyLabel: string
-  versionLabel: string
-  statusLabel: string
   value: FormSelectionValue | null
   onChange: (selection: FormSelectionValue | null) => void
 }
@@ -47,12 +39,8 @@ function findSelectedRegistration(
 // 表单选择器把 key/version 的选择状态集中在一起。
 function RuntimeFormSelector({
   label,
-  description,
   scope,
   emptyMessage,
-  keyLabel,
-  versionLabel,
-  statusLabel,
   value,
   onChange,
 }: RuntimeFormSelectorProps) {
@@ -60,109 +48,59 @@ function RuntimeFormSelector({
     () => listRuntimeFormRegistrations(scope),
     [scope]
   )
-  const formKeys = useMemo(() => listRuntimeFormKeys(scope), [scope])
-  const selectedKey = value?.formKey ?? formKeys[0] ?? ''
-  const selectedVersions = useMemo(
-    () => listRuntimeFormVersions(selectedKey, scope),
-    [scope, selectedKey]
-  )
-  const selectedVersion =
-    value?.formVersion ?? selectedVersions[0]?.formVersion ?? ''
-  const selectedRegistration =
-    findSelectedRegistration(registrations, value) ??
-    selectedVersions.find(
-      (registration) => registration.formVersion === selectedVersion
-    ) ??
-    null
+  const selectedRegistration = findSelectedRegistration(registrations, value)
 
   return (
     <div className='space-y-2'>
-      <div className='space-y-0.5'>
-        <div className='text-sm font-medium'>{label}</div>
-        {description ? (
-          <p className='text-[11px] leading-4 text-muted-foreground'>{description}</p>
-        ) : null}
-      </div>
-      <div className='grid gap-3 md:grid-cols-2'>
-          <div className='grid gap-2'>
-            <Label htmlFor={`${scope}-form-key`}>{keyLabel}</Label>
-            <select
-              id={`${scope}-form-key`}
-              aria-label={keyLabel}
-              className='h-10 rounded-md border border-input bg-background px-3 py-2 text-sm'
-              value={selectedKey}
-              onChange={(event) => {
-                const nextKey = event.target.value
-                const nextVersions = listRuntimeFormVersions(nextKey, scope)
-                onChange(
-                  nextKey && nextVersions[0]
-                    ? {
-                        formKey: nextKey,
-                        formVersion: nextVersions[0].formVersion,
-                      }
-                    : null
-                )
-              }}
-            >
-              {formKeys.length > 0 ? null : <option value=''>{emptyMessage}</option>}
-              {formKeys.map((formKey) => {
-                const record = registrations.find(
-                  (registration) => registration.formKey === formKey
-                )
-                return (
-                  <option key={formKey} value={formKey}>
-                    {record?.title ?? formKey} ({formKey})
-                  </option>
-                )
-              })}
-            </select>
-          </div>
+      <label
+        htmlFor={`${scope}-form-registration`}
+        className='text-sm font-medium'
+      >
+        {label}
+      </label>
+      <select
+        id={`${scope}-form-registration`}
+        aria-label={label}
+        className='h-10 rounded-md border border-input bg-background px-3 py-2 text-sm'
+        value={
+          selectedRegistration
+            ? `${selectedRegistration.formKey}@@${selectedRegistration.formVersion}`
+            : ''
+        }
+        onChange={(event) => {
+          const nextValue = event.target.value
+          const nextRegistration = registrations.find(
+            (registration) =>
+              `${registration.formKey}@@${registration.formVersion}` === nextValue
+          )
 
-          <div className='grid gap-2'>
-            <Label htmlFor={`${scope}-form-version`}>{versionLabel}</Label>
-            <select
-              id={`${scope}-form-version`}
-              aria-label={versionLabel}
-              className='h-10 rounded-md border border-input bg-background px-3 py-2 text-sm'
-              value={selectedVersion}
-              onChange={(event) => {
-                const nextVersion = event.target.value
-                onChange(
-                  selectedKey && nextVersion
-                    ? {
-                        formKey: selectedKey,
-                        formVersion: nextVersion,
-                      }
-                    : null
-                )
-              }}
-            >
-              {selectedVersions.length > 0 ? null : (
-                <option value=''>请先选择表单编码</option>
-              )}
-              {selectedVersions.map((registration) => (
-                <option key={registration.formVersion} value={registration.formVersion}>
-                  {registration.formVersion}
-                </option>
-              ))}
-            </select>
-          </div>
+          onChange(
+            nextRegistration
+              ? {
+                  formKey: nextRegistration.formKey,
+                  formVersion: nextRegistration.formVersion,
+                }
+              : null
+          )
+        }}
+      >
+        <option value=''>
+          {registrations.length > 0 ? '请选择表单' : emptyMessage}
+        </option>
+        {registrations.map((registration) => (
+          <option
+            key={`${registration.formKey}@@${registration.formVersion}`}
+            value={`${registration.formKey}@@${registration.formVersion}`}
+          >
+            {registration.title} · {registration.formVersion}
+          </option>
+        ))}
+      </select>
+      {selectedRegistration ? (
+        <div className='rounded-md bg-muted/35 px-3 py-2 text-xs text-muted-foreground'>
+          编码：{selectedRegistration.formKey}
         </div>
-
-        {selectedRegistration ? (
-          <div className='flex flex-wrap items-center gap-2 rounded-xl bg-muted/30 px-3 py-2 text-sm'>
-            <span className='font-medium leading-none'>{selectedRegistration.title}</span>
-            <div className='flex flex-wrap gap-2'>
-              <Badge variant='secondary'>{statusLabel}</Badge>
-              <Badge variant='outline'>{selectedRegistration.formKey}</Badge>
-              <Badge variant='outline'>{selectedRegistration.formVersion}</Badge>
-            </div>
-          </div>
-        ) : (
-          <div className='rounded-xl border border-dashed px-3 py-2 text-sm text-muted-foreground'>
-            {emptyMessage}
-          </div>
-        )}
+      ) : null}
     </div>
   )
 }
@@ -180,24 +118,18 @@ export type NodeFormSelection = {
 // 流程默认表单选择器只处理流程级表单注册。
 export function ProcessFormSelector({
   label,
-  description,
   value,
   onChange,
 }: {
   label: string
-  description?: string
   value: ProcessFormSelection | null
   onChange: (selection: ProcessFormSelection | null) => void
 }) {
   return (
     <RuntimeFormSelector
       label={label}
-      description={description}
       scope='PROCESS_FORM'
       emptyMessage='暂无可选流程表单'
-      keyLabel='流程默认表单编码'
-      versionLabel='流程默认表单版本'
-      statusLabel='流程表单已注册'
       value={
         value
           ? {
@@ -223,24 +155,18 @@ export function ProcessFormSelector({
 // 节点表单选择器只处理节点级表单注册。
 export function NodeFormSelector({
   label,
-  description,
   value,
   onChange,
 }: {
   label: string
-  description?: string
   value: NodeFormSelection | null
   onChange: (selection: NodeFormSelection | null) => void
 }) {
   return (
     <RuntimeFormSelector
       label={label}
-      description={description}
       scope='NODE_FORM'
       emptyMessage='暂无可选节点表单'
-      keyLabel='节点表单编码'
-      versionLabel='节点表单版本'
-      statusLabel='节点表单已注册'
       value={
         value
           ? {

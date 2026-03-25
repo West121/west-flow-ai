@@ -32,6 +32,15 @@ export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
     component: OALeaveStartForm,
   },
   {
+    kind: 'PROCESS_FORM',
+    processKey: 'oa_leave',
+    formKey: 'oa-leave-start-form',
+    formVersion: '1.1.0',
+    title: 'OA 请假发起表单',
+    description: '流程发起默认表单',
+    component: OALeaveStartForm,
+  },
+  {
     kind: 'NODE_FORM',
     processKey: 'oa_leave',
     formKey: 'oa-leave-approve-form',

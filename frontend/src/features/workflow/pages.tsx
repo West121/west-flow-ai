@@ -1,5 +1,5 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
@@ -15,7 +15,6 @@ import {
   useViewport,
 } from '@xyflow/react'
 import {
-  AlarmClockCheck,
   Bot,
   CircleDotDashed,
   LayoutGrid,
@@ -113,6 +112,27 @@ const designerStructurePresets: DesignerStructurePreset[] = [
   },
 ]
 
+const paletteToneClassNames = {
+  brand: 'bg-sky-500/12 text-sky-700 dark:text-sky-300',
+  success: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
+  warning: 'bg-amber-500/12 text-amber-700 dark:text-amber-300',
+  neutral: 'bg-slate-500/12 text-slate-700 dark:text-slate-300',
+} satisfies Record<WorkflowNodeTemplate['tone'], string>
+
+const paletteKindBadgeLabels = {
+  start: '开始',
+  approver: '审批',
+  subprocess: '子流程',
+  'dynamic-builder': '动态构建',
+  condition: '排他',
+  inclusive: '包容',
+  parallel: '并行',
+  cc: '抄送',
+  timer: '定时',
+  trigger: '触发',
+  end: '结束',
+} satisfies Record<WorkflowNodeTemplate['kind'], string>
+
 const workflowNodeTypes = {
   workflow: WorkflowNodeCard,
 }
@@ -137,6 +157,14 @@ const defaultDefinitionMeta: ProcessDefinitionMeta = {
   processFormKey: defaultProcessForm?.formKey ?? '',
   processFormVersion: defaultProcessForm?.formVersion ?? '',
   formFields: defaultLeaveFormFields,
+}
+const emptyDefinitionMeta: ProcessDefinitionMeta = {
+  processKey: '',
+  processName: '',
+  category: '',
+  processFormKey: '',
+  processFormVersion: '',
+  formFields: [],
 }
 
 type PersistedDesignerDraft = {
@@ -390,117 +418,102 @@ function DesignerPalette({
   const baseTemplates = workflowNodeTemplates.filter(
     (template) => !isAdvancedStructureTemplate(template.kind)
   )
+  const allNodeTemplates = [...baseTemplates, ...advancedTemplates]
+
+  const renderTemplateButton = (
+    template: WorkflowNodeTemplate,
+    options?: { compact?: boolean }
+  ) => {
+    const Icon = template.icon
+
+    return (
+      <button
+        key={template.kind}
+        type='button'
+        draggable
+        onDoubleClick={() => onAppendNode(template)}
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = 'move'
+          event.dataTransfer.setData(
+            'application/west-flow-node',
+            template.kind
+          )
+        }}
+        className={cn(
+          'w-full rounded-2xl border bg-background/90 text-left transition',
+          'hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm',
+          options?.compact ? 'p-3' : 'p-3.5'
+        )}
+      >
+        <div className='flex items-center gap-3'>
+          <div
+            className={cn(
+              'flex size-11 shrink-0 items-center justify-center rounded-2xl',
+              paletteToneClassNames[template.tone]
+            )}
+          >
+            <Icon className='size-5' />
+          </div>
+          <div className='min-w-0 flex-1'>
+            <div className='flex items-center justify-between gap-2'>
+              <span className='truncate text-sm font-semibold leading-5'>
+                {template.label}
+              </span>
+              <div className='flex items-center gap-2'>
+                <span className='rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground'>
+                  {paletteKindBadgeLabels[template.kind]}
+                </span>
+                <MoveDiagonal2 className='size-3.5 shrink-0 text-muted-foreground' />
+              </div>
+            </div>
+          </div>
+        </div>
+      </button>
+    )
+  }
 
   return (
-    <Card className='h-full border-dashed bg-card/95'>
-      <CardHeader className='space-y-2'>
-        <CardTitle className='flex items-center gap-2'>
+    <Card className='h-full border-0 bg-transparent shadow-none'>
+      <CardHeader className='space-y-2 px-1 pt-1'>
+        <CardTitle className='flex items-center gap-2 text-base'>
           <Waypoints className='size-4' />
           节点面板
         </CardTitle>
       </CardHeader>
-      <CardContent className='flex flex-col gap-3'>
-        <div className='rounded-2xl border border-primary/15 bg-primary/[0.04] p-3'>
-          <div className='mb-3 flex items-start justify-between gap-3'>
-            <div>
-              <p className='text-sm font-semibold'>高级结构</p>
-            </div>
-            <Badge variant='secondary' className='shrink-0'>
-              复杂编排
-            </Badge>
-            </div>
-          <div className='grid grid-cols-2 gap-2'>
-            {advancedTemplates.map((template) => {
-              const Icon = template.icon
-              return (
-                <button
-                  key={template.kind}
-                  type='button'
-                  draggable
-                  onDoubleClick={() => onAppendNode(template)}
-                  onDragStart={(event) => {
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData(
-                      'application/west-flow-node',
-                      template.kind
-                    )
-                  }}
-                  className='rounded-2xl border bg-background/90 p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm'
-                >
-                  <div className='mb-2 flex items-center justify-between gap-2'>
-                    <div className='flex size-9 items-center justify-center rounded-2xl bg-primary/10 text-primary'>
-                      <Icon className='size-4' />
-                    </div>
-                    <MoveDiagonal2 className='size-3.5 text-muted-foreground' />
-                  </div>
-                  <p className='text-sm font-medium'>{template.label}</p>
-                  <p className='mt-1 text-xs leading-5 text-muted-foreground'>
-                    {template.description}
-                  </p>
-                </button>
-              )
-            })}
+      <CardContent className='flex flex-col gap-4 px-1 pb-1'>
+        <section className='space-y-3'>
+          <div className='px-1'>
+            <p className='text-sm font-semibold'>节点</p>
           </div>
-          <Separator className='my-3' />
-          <div className='grid gap-2'>
+          <div className='space-y-2'>
+            {allNodeTemplates.map((template) =>
+              renderTemplateButton(template, { compact: true })
+            )}
+          </div>
+        </section>
+
+        <Separator />
+
+        <section className='space-y-3'>
+          <div className='px-1'>
+            <p className='text-sm font-semibold'>模板</p>
+          </div>
+          <div className='space-y-2'>
             {designerStructurePresets.map((preset) => (
               <button
                 key={preset.id}
                 type='button'
-                className='rounded-2xl border bg-background/95 px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]'
+                className='w-full rounded-2xl border bg-background/95 px-3 py-3 text-left transition hover:border-primary/40 hover:bg-primary/[0.03]'
                 onClick={() => onAppendPreset(preset.id)}
               >
                 <div className='flex items-center justify-between gap-3'>
                   <p className='text-sm font-medium'>{preset.title}</p>
-                  <Badge variant='outline'>插入模板</Badge>
+                  <Badge variant='outline'>模板</Badge>
                 </div>
               </button>
             ))}
           </div>
-        </div>
-
-        <div className='grid grid-cols-2 gap-2'>
-          {baseTemplates.map((template, index) => {
-          const Icon = template.icon
-          const shouldSpanTwoColumns =
-            baseTemplates.length % 2 === 1 && index === baseTemplates.length - 1
-
-          return (
-            <button
-              key={template.kind}
-              type='button'
-              draggable
-              onDoubleClick={() => onAppendNode(template)}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move'
-                event.dataTransfer.setData(
-                  'application/west-flow-node',
-                  template.kind
-                )
-              }}
-              className={cn(
-                'group rounded-2xl border bg-background/80 p-3 text-left transition',
-                'hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm',
-                shouldSpanTwoColumns && 'col-span-2'
-              )}
-            >
-              <div className='flex items-start gap-2.5'>
-                <div className='flex size-9 items-center justify-center rounded-2xl bg-primary/10 text-primary'>
-                  <Icon className='size-4' />
-                </div>
-                <div className='flex min-w-0 flex-1 flex-col gap-1'>
-                  <span className='truncate text-sm font-medium'>
-                    {template.label}
-                  </span>
-                  <p className='text-[11px] leading-4 text-muted-foreground'>
-                    {template.description}
-                  </p>
-                </div>
-              </div>
-            </button>
-          )
-          })}
-        </div>
+        </section>
       </CardContent>
     </Card>
   )
@@ -556,10 +569,15 @@ function WorkflowDesignerWorkspace({
   const undo = useWorkflowDesignerStore((state) => state.undo)
   const redo = useWorkflowDesignerStore((state) => state.redo)
   const reactFlow = useReactFlow<WorkflowNode>()
+  const queryClient = useQueryClient()
   const viewport = useViewport()
+  const [activePropertyTab, setActivePropertyTab] = useState<'flow' | 'node'>(
+    'flow'
+  )
   const [definitionMetaOverrides, setDefinitionMetaOverrides] = useState<
     Partial<ProcessDefinitionMeta>
   >({})
+  const designerHydratedRef = useRef(false)
   const draftKey = useMemo(
     () => buildDesignerDraftKey(processDefinitionId),
     [processDefinitionId]
@@ -577,29 +595,43 @@ function WorkflowDesignerWorkspace({
 
   const definitionMeta = useMemo<ProcessDefinitionMeta>(() => {
     const baseMeta =
-      detailQuery.data === undefined
-        ? defaultDefinitionMeta
-        : {
-            processKey: detailQuery.data.processKey,
-            processName: detailQuery.data.processName,
-            category: detailQuery.data.category,
-            processFormKey: detailQuery.data.dsl.processFormKey,
-            processFormVersion: detailQuery.data.dsl.processFormVersion,
-            formFields: detailQuery.data.dsl.formFields ?? [],
-          }
+      processDefinitionId
+        ? detailQuery.data === undefined
+          ? emptyDefinitionMeta
+          : {
+              processKey: detailQuery.data.processKey,
+              processName: detailQuery.data.processName,
+              category: detailQuery.data.category,
+              processFormKey: detailQuery.data.dsl.processFormKey,
+              processFormVersion: detailQuery.data.dsl.processFormVersion,
+              formFields: detailQuery.data.dsl.formFields ?? [],
+            }
+        : defaultDefinitionMeta
 
     return {
       ...baseMeta,
       ...definitionMetaOverrides,
     }
-  }, [definitionMetaOverrides, detailQuery.data])
+  }, [definitionMetaOverrides, detailQuery.data, processDefinitionId])
+  const definitionMetaRef = useRef(definitionMeta)
+
+  useEffect(() => {
+    definitionMetaRef.current = definitionMeta
+  }, [definitionMeta])
 
   const saveMutation = useMutation({
     mutationFn: async () =>
       saveProcessDefinition(
-        workflowSnapshotToProcessDefinitionDsl(snapshot, definitionMeta)
+        workflowSnapshotToProcessDefinitionDsl(
+          useWorkflowDesignerStore.getState().history.present,
+          definitionMetaRef.current
+        )
       ),
     onSuccess: (response) => {
+      queryClient.setQueryData(
+        ['process-definition-detail', response.processDefinitionId],
+        response
+      )
       hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(response))
       setDefinitionMetaOverrides({})
       void navigate({
@@ -618,9 +650,16 @@ function WorkflowDesignerWorkspace({
   const publishMutation = useMutation({
     mutationFn: async () =>
       publishProcessDefinition(
-        workflowSnapshotToProcessDefinitionDsl(snapshot, definitionMeta)
+        workflowSnapshotToProcessDefinitionDsl(
+          useWorkflowDesignerStore.getState().history.present,
+          definitionMetaRef.current
+        )
       ),
     onSuccess: (response) => {
+      queryClient.setQueryData(
+        ['process-definition-detail', response.processDefinitionId],
+        response
+      )
       hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(response))
       setDefinitionMetaOverrides({})
       void navigate({
@@ -642,24 +681,21 @@ function WorkflowDesignerWorkspace({
   )
 
   useEffect(() => {
+    designerHydratedRef.current = false
     const persistedDraft = readPersistedDesignerDraft(draftKey)
-    if (persistedDraft) {
-      hydrateSnapshot(persistedDraft.snapshot)
+
+    if (!processDefinitionId) {
+      if (persistedDraft) {
+        hydrateSnapshot(persistedDraft.snapshot)
+      } else {
+        resetDesigner()
+      }
+      designerHydratedRef.current = true
       const timer = window.setTimeout(() => {
-        if (persistedDraft.viewport) {
+        if (persistedDraft?.viewport) {
           reactFlow.setViewport(persistedDraft.viewport, { duration: 0 })
           return
         }
-
-        reactFlow.fitView({ padding: 0.18, duration: 350 })
-      }, 120)
-
-      return () => window.clearTimeout(timer)
-    }
-
-    if (!processDefinitionId) {
-      resetDesigner()
-      const timer = window.setTimeout(() => {
         reactFlow.fitView({ padding: 0.18, duration: 350 })
       }, 120)
 
@@ -667,10 +703,16 @@ function WorkflowDesignerWorkspace({
     }
 
     if (!detailQuery.data) {
+      hydrateSnapshot({
+        nodes: [],
+        edges: [],
+        selectedNodeId: null,
+      })
       return
     }
 
     hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(detailQuery.data))
+    designerHydratedRef.current = true
     const timer = window.setTimeout(() => {
       reactFlow.fitView({ padding: 0.18, duration: 350 })
     }, 120)
@@ -686,6 +728,9 @@ function WorkflowDesignerWorkspace({
   ])
 
   useEffect(() => {
+    if (!designerHydratedRef.current || processDefinitionId) {
+      return
+    }
     writePersistedDesignerDraft(draftKey, {
       snapshot,
       viewport: viewport
@@ -696,7 +741,7 @@ function WorkflowDesignerWorkspace({
           }
         : null,
     })
-  }, [draftKey, snapshot, viewport])
+  }, [draftKey, processDefinitionId, snapshot, viewport])
 
   const handleConnect: OnConnect = (connection) => {
     connectNodes(connection)
@@ -734,6 +779,14 @@ function WorkflowDesignerWorkspace({
       description='流程设计、布局调整和属性配置都在同一屏完成。'
       actions={
         <>
+          <Button
+            variant='outline'
+            onClick={() => {
+              void navigate({ to: '/workflow/definitions/list' })
+            }}
+          >
+            返回流程定义
+          </Button>
           <Button
             variant='outline'
             disabled={!canUndo}
@@ -831,8 +884,13 @@ function WorkflowDesignerWorkspace({
                   onNodesChange={applyNodeChanges}
                   onEdgesChange={applyEdgeChanges}
                   onConnect={handleConnect}
-                  onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                  onPaneClick={() => setSelectedNodeId(null)}
+                  onNodeClick={(_, node) => {
+                    setSelectedNodeId(node.id)
+                    setActivePropertyTab('node')
+                  }}
+                  onPaneClick={() => {
+                    setSelectedNodeId(null)
+                  }}
                   onNodeDrag={(_, node) => {
                     setHelperLines(findHelperLines(node, nodes))
                   }}
@@ -915,7 +973,6 @@ function WorkflowDesignerWorkspace({
               </div>
               <ProcessFormSelector
                 label='流程默认表单'
-                description='发起页默认使用'
                 value={
                   definitionMeta.processFormKey && definitionMeta.processFormVersion
                     ? {
@@ -932,44 +989,21 @@ function WorkflowDesignerWorkspace({
                   }))
                 }
               />
-              <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-1'>
-                <div className='rounded-2xl border p-4'>
-                  <p className='text-xs text-muted-foreground'>当前节点数</p>
-                  <p className='mt-2 text-2xl font-semibold'>{nodes.length}</p>
-                </div>
-                <div className='rounded-2xl border p-4'>
-                  <p className='text-xs text-muted-foreground'>当前连线数</p>
-                  <p className='mt-2 text-2xl font-semibold'>{edges.length}</p>
-                </div>
-              </div>
-              <Separator />
-              <div className='space-y-3 rounded-2xl border p-4 text-sm'>
-                <div className='flex items-center gap-2 font-medium'>
-                  <AlarmClockCheck className='size-4 text-primary' />
-                  当前模板
-                </div>
-                <p className='text-muted-foreground'>
-                  默认加载请假审批案例。
-                </p>
-              </div>
             </CardContent>
           </Card>
         }
         nodeSettings={
-          <Card className='bg-card/95'>
-            <CardHeader className='space-y-1'>
-              <CardTitle>节点配置</CardTitle>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-4 text-sm'>
-              <NodeConfigPanel
-                node={selectedNode}
-                edges={edges}
-                processFormFields={definitionMeta.formFields}
-                onApply={updateNodeDraft}
-              />
-            </CardContent>
-          </Card>
+          <div className='text-sm'>
+            <NodeConfigPanel
+              node={selectedNode}
+              edges={edges}
+              processFormFields={definitionMeta.formFields}
+              onApply={updateNodeDraft}
+            />
+          </div>
         }
+        activeTab={activePropertyTab}
+        onActiveTabChange={setActivePropertyTab}
       />
     </PageShell>
   )

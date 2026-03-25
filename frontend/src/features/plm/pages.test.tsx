@@ -274,8 +274,8 @@ describe('plm pages', () => {
 
     expect(screen.getByText('PLM 发起中心')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 推荐 PLM 入口' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fstart')
+      screen.getByRole('button', { name: '用 AI 推荐 PLM 入口' })
+    ).toHaveAttribute('data-source-route', '/plm/start')
     expect(screen.getByRole('link', { name: '发起 ECR' })).toHaveAttribute(
       'href',
       '/plm/ecr/create'
@@ -409,8 +409,8 @@ describe('plm pages', () => {
 
     renderWithQuery(<PLMECRCreatePage />)
     expect(
-      screen.getByRole('link', { name: '用 AI 辅助填写 ECR' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fecr%2Fcreate')
+      screen.getByRole('button', { name: '用 AI 辅助填写 ECR' })
+    ).toHaveAttribute('data-source-route', '/plm/ecr/create')
     fireEvent.change(screen.getByLabelText('变更标题'), {
       target: { value: '结构件变更' },
     })
@@ -448,8 +448,8 @@ describe('plm pages', () => {
 
     renderWithQuery(<PLMECOCreatePage />)
     expect(
-      screen.getByRole('link', { name: '用 AI 辅助填写 ECO' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Feco%2Fcreate')
+      screen.getByRole('button', { name: '用 AI 辅助填写 ECO' })
+    ).toHaveAttribute('data-source-route', '/plm/eco/create')
     fireEvent.change(screen.getByLabelText('执行标题'), {
       target: { value: 'ECO 下发' },
     })
@@ -488,11 +488,8 @@ describe('plm pages', () => {
 
     renderWithQuery(<PLMMaterialChangeCreatePage />)
     expect(
-      screen.getByRole('link', { name: '用 AI 辅助填写物料变更' })
-    ).toHaveAttribute(
-      'href',
-      '/ai?sourceRoute=%2Fplm%2Fmaterial-master%2Fcreate'
-    )
+      screen.getByRole('button', { name: '用 AI 辅助填写物料变更' })
+    ).toHaveAttribute('data-source-route', '/plm/material-master/create')
     fireEvent.change(screen.getByLabelText('物料编码'), {
       target: { value: 'MAT-001' },
     })
@@ -538,8 +535,8 @@ describe('plm pages', () => {
 
     expect(await screen.findByText('PLM 流程查询')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 解读 PLM 查询结果' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fquery')
+      screen.getByRole('button', { name: '用 AI 解读 PLM 查询结果' })
+    ).toHaveAttribute('data-source-route', '/plm/query')
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()
     expect(screen.getByText('total:1')).toBeInTheDocument()
     expect(
@@ -557,11 +554,11 @@ describe('plm pages', () => {
 
     expect(screen.getByText('PLM 发起中心')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 推荐 PLM 入口' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fstart')
+      screen.getByRole('button', { name: '用 AI 推荐 PLM 入口' })
+    ).toHaveAttribute('data-source-route', '/plm/start')
     expect(
-      screen.getByRole('link', { name: '用 AI 辅助填写 ECR' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fecr%2Fcreate')
+      screen.getByRole('button', { name: '用 AI 辅助填写 ECR' })
+    ).toHaveAttribute('data-source-route', '/plm/ecr/create')
     expect(
       screen.getByRole('button', { name: '发起 ECR 变更申请' })
     ).toBeInTheDocument()
@@ -644,8 +641,8 @@ describe('plm pages', () => {
 
     expect(await screen.findByText('ECR 变更申请详情')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 解读当前 PLM 单据' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Fplm%2Fecr%2Fecr_001')
+      screen.getByRole('button', { name: '用 AI 解读当前 PLM 单据' })
+    ).toHaveAttribute('data-source-route', '/plm/ecr/ecr_001')
     expect(await screen.findByText('业务单详情')).toBeInTheDocument()
     expect(await screen.findByText('审批单联查')).toBeInTheDocument()
     expect(await screen.findByText('结构件变更')).toBeInTheDocument()

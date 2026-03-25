@@ -1,9 +1,8 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
-import { Check, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { Check, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -25,7 +24,6 @@ import {
   joinListValue,
   parseListValue,
 } from './config'
-import { NodeFormSelector } from './form-selection'
 import { WorkflowFieldSelector, WorkflowFormulaEditor } from './expression-tools'
 import { WorkflowPrincipalPickerField } from './selection-picker'
 import {
@@ -48,7 +46,6 @@ import {
   type WorkflowProcessFormField,
   type WorkflowReapprovePolicy,
   type WorkflowReminderChannel,
-  type WorkflowFieldBindingSource,
   type WorkflowSubprocessBusinessBindingMode,
   type WorkflowSubprocessCallScope,
   type WorkflowSubprocessChildFinishPolicy,
@@ -445,51 +442,6 @@ const nodeConfigFormSchema = z
           path: ['approver', 'formulaExpression'],
         })
       }
-      if (!values.approver.nodeFormKey.trim() && values.approver.fieldBindingsJson.trim() !== '[]') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: '配置字段绑定前请先填写节点表单编码',
-          path: ['approver', 'nodeFormKey'],
-        })
-      }
-      try {
-        const parsedBindings = JSON.parse(values.approver.fieldBindingsJson)
-        if (!Array.isArray(parsedBindings)) {
-          throw new Error('not array')
-        }
-        parsedBindings.forEach((binding, index) => {
-          const candidate = binding as Partial<WorkflowFieldBinding>
-          if (
-            !candidate ||
-            !candidate.sourceFieldKey?.trim() ||
-            !candidate.targetFieldKey?.trim()
-          ) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: '字段绑定里的 sourceFieldKey 和 targetFieldKey 不能为空',
-              path: ['approver', 'fieldBindingsJson'],
-            })
-          }
-          if (
-            candidate.source !== 'PROCESS_FORM' &&
-            candidate.source !== 'NODE_FORM'
-          ) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: '字段绑定来源必须是 PROCESS_FORM 或 NODE_FORM',
-              path: ['approver', 'fieldBindingsJson'],
-            })
-          }
-          void index
-        })
-      } catch {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: '字段绑定必须是合法的 JSON 数组',
-          path: ['approver', 'fieldBindingsJson'],
-        })
-      }
-
       const operations = Object.values(values.approver.operations).filter(Boolean)
       if (operations.length < 1) {
         ctx.addIssue({
@@ -1098,10 +1050,6 @@ function parseVariableMappingsJson(json: string): WorkflowSubprocessVariableMapp
   }
 }
 
-function serializeFieldBindings(bindings: WorkflowFieldBinding[]) {
-  return JSON.stringify(bindings, null, 2)
-}
-
 function serializeVariableMappings(bindings: WorkflowSubprocessVariableMapping[]) {
   return JSON.stringify(bindings, null, 2)
 }
@@ -1230,146 +1178,6 @@ function VariableMappingEditor({
                   )
                 }
                 aria-label={`删除映射 ${index + 1}`}
-              >
-                <Trash2 className='size-4' />
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function FieldBindingEditor({
-  value,
-  onChange,
-  processFieldOptions,
-}: {
-  value: string
-  onChange: (value: string) => void
-  processFieldOptions: WorkflowProcessFormField[]
-}) {
-  const bindings = useMemo(() => parseFieldBindingsJson(value), [value])
-  const fieldOptions = useMemo(
-    () =>
-      processFieldOptions.map((field) => ({
-        fieldKey: field.fieldKey,
-        label: field.label,
-        valueType: field.valueType,
-      })),
-    [processFieldOptions]
-  )
-
-  function updateBindings(
-    updater: (current: WorkflowFieldBinding[]) => WorkflowFieldBinding[]
-  ) {
-    onChange(serializeFieldBindings(updater(bindings)))
-  }
-
-  function updateBindingSource(index: number, source: WorkflowFieldBindingSource) {
-    updateBindings((current) =>
-      current.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, source } : item
-      )
-    )
-  }
-
-  return (
-    <div className='grid gap-3 rounded-xl border border-dashed p-3'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='grid gap-1'>
-          <Label>字段绑定</Label>
-          <p className='text-xs text-muted-foreground'>
-            用可视化方式配置流程表单与节点表单之间的字段映射。
-          </p>
-        </div>
-        <Button
-          type='button'
-          variant='secondary'
-          size='sm'
-          onClick={() =>
-            updateBindings((current) => [
-              ...current,
-              {
-                source: 'PROCESS_FORM',
-                sourceFieldKey: '',
-                targetFieldKey: '',
-              },
-            ])
-          }
-        >
-          <Plus className='mr-1 size-4' />
-          新增绑定
-        </Button>
-      </div>
-
-      {bindings.length === 0 ? (
-        <div className='rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground'>
-          暂未配置字段绑定，节点表单会按默认字段自行渲染。
-        </div>
-      ) : null}
-
-      <div className='grid gap-3'>
-        {bindings.map((binding, index) => (
-          <div
-            key={`binding-${index}`}
-            className='grid gap-3 rounded-xl border bg-background p-3 md:grid-cols-[180px_1fr_1fr_auto]'
-          >
-            <div className='grid gap-2'>
-              <Label>来源</Label>
-              <Select
-                value={binding.source}
-                onValueChange={(next) =>
-                  updateBindingSource(index, next as WorkflowFieldBindingSource)
-                }
-              >
-                <SelectTrigger className='w-full'>
-                  <SelectValue placeholder='请选择来源' />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value='PROCESS_FORM'>流程表单</SelectItem>
-                  <SelectItem value='NODE_FORM'>节点表单</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <WorkflowFieldSelector
-              label='来源字段'
-              value={binding.sourceFieldKey}
-              onChange={(next) =>
-                updateBindings((current) =>
-                  current.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, sourceFieldKey: next } : item
-                  )
-                )
-              }
-              options={fieldOptions}
-              placeholder='请选择来源字段'
-            />
-            <WorkflowFieldSelector
-              label='目标字段'
-              value={binding.targetFieldKey}
-              onChange={(next) =>
-                updateBindings((current) =>
-                  current.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, targetFieldKey: next } : item
-                  )
-                )
-              }
-              options={fieldOptions}
-              placeholder='请输入目标字段编码'
-            />
-            <div className='flex items-end justify-end'>
-              <Button
-                type='button'
-                variant='ghost'
-                size='icon'
-                onClick={() =>
-                  updateBindings((current) =>
-                    current.filter((_, itemIndex) => itemIndex !== index)
-                  )
-                }
-                aria-label={`删除字段绑定 ${index + 1}`}
               >
                 <Trash2 className='size-4' />
               </Button>
@@ -1909,7 +1717,6 @@ export function NodeConfigPanel({
   node,
   edges,
   onApply,
-  onReset,
   processFormFields = [],
 }: {
   node: WorkflowNode | null
@@ -1928,7 +1735,6 @@ export function NodeConfigPanel({
         priority?: number
       }>
     ) => void
-  onReset?: () => void
   processFormFields?: WorkflowProcessFormField[]
 }) {
   const outgoingEdges = useMemo(
@@ -2084,14 +1890,6 @@ export function NodeConfigPanel({
     control: form.control,
     name: 'approver.reminderPolicy.enabled',
   })
-  const selectedNodeFormKey = useWatch({
-    control: form.control,
-    name: 'approver.nodeFormKey',
-  })
-  const selectedNodeFormVersion = useWatch({
-    control: form.control,
-    name: 'approver.nodeFormVersion',
-  })
   const selectedApproverUserIds = useWatch({
     control: form.control,
     name: 'approver.userIds',
@@ -2136,32 +1934,28 @@ export function NodeConfigPanel({
     control: form.control,
     name: 'inclusive.branches',
   })
+  const watchedValues = useWatch({ control: form.control })
   const selectedTriggerMode = useWatch({
     control: form.control,
     name: 'trigger.triggerMode',
   })
+  const lastAppliedSignatureRef = useRef<string>('')
   const operationsError =
     (form.formState.errors.approver?.operations as { message?: string } | undefined)
       ?.message ?? ''
 
   useEffect(() => {
     if (!node) {
+      lastAppliedSignatureRef.current = ''
       return
     }
 
-    form.reset(buildFormValues(node, edges))
+    const nextValues = buildFormValues(node, edges)
+    form.reset(nextValues)
+    lastAppliedSignatureRef.current = JSON.stringify(nextValues)
   }, [edges, form, node])
 
-  function handleReset() {
-    if (!node) {
-      return
-    }
-
-    form.reset(buildFormValues(node, edges))
-    onReset?.()
-  }
-
-  function submit(values: NodeConfigFormValues) {
+  const applyValues = useCallback((values: NodeConfigFormValues) => {
     if (!node) {
       return
     }
@@ -2228,34 +2022,48 @@ export function NodeConfigPanel({
       },
       edgePatches
     )
+  }, [node, onApply])
 
-    toast.success('节点配置已应用到画布。')
-  }
+  useEffect(() => {
+    if (!node || !watchedValues || !form.formState.isDirty) {
+      return
+    }
+
+    const nextSignature = JSON.stringify(watchedValues)
+    if (nextSignature === lastAppliedSignatureRef.current) {
+      return
+    }
+
+    const timer = window.setTimeout(async () => {
+      const valid = await form.trigger(undefined, { shouldFocus: false })
+      if (!valid) {
+        return
+      }
+      const values = form.getValues()
+      const signature = JSON.stringify(values)
+      if (signature === lastAppliedSignatureRef.current) {
+        return
+      }
+      applyValues(values)
+      lastAppliedSignatureRef.current = signature
+    }, 180)
+
+    return () => window.clearTimeout(timer)
+  }, [applyValues, form, node, watchedValues])
 
   if (!node) {
-    return (
-      <div className='rounded-2xl border border-dashed p-4 text-sm text-muted-foreground'>
-        请选择一个节点后在这里编辑名称、描述和关键配置。
-      </div>
-    )
+    return <div className='py-6' />
   }
 
   return (
     <Form {...form}>
-      <form
-        className='flex flex-col gap-4'
-        onSubmit={form.handleSubmit(submit)}
-      >
-        <div className='flex flex-col gap-3 rounded-2xl border p-4'>
+      <form className='flex flex-col gap-4'>
+        <section className='space-y-3'>
           <div className='flex items-center justify-between gap-3'>
             <div>
               <p className='text-sm font-semibold'>{node.data.label}</p>
               <p className='text-xs text-muted-foreground'>节点编码：{node.id}</p>
             </div>
-            <Button type='button' variant='ghost' size='sm' onClick={handleReset}>
-              <RotateCcw data-icon='inline-start' />
-              重置
-            </Button>
           </div>
 
           <FormField
@@ -2285,24 +2093,18 @@ export function NodeConfigPanel({
               </FormItem>
             )}
           />
-        </div>
+        </section>
 
         {selectedKind === 'start' ? (
-          <div className='flex flex-col gap-3 rounded-2xl border p-4'>
-            <div className='flex items-center gap-2 text-sm font-medium'>
-              <Check className='size-4 text-primary' />
-              发起节点
-            </div>
+          <section className='space-y-3 border-t pt-4'>
+            <div className='text-sm font-medium'>发起节点</div>
             <FormField
               control={form.control}
               name='start.initiatorEditable'
               render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
-                  <div className='space-y-1'>
+                <FormItem className='flex flex-row items-center justify-between gap-4 py-2'>
+                  <div>
                     <FormLabel>发起人可编辑</FormLabel>
-                    <p className='text-xs text-muted-foreground'>
-                      允许发起流程时修改发起人信息。
-                    </p>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -2310,15 +2112,12 @@ export function NodeConfigPanel({
                 </FormItem>
               )}
             />
-          </div>
+          </section>
         ) : null}
 
         {selectedKind === 'subprocess' ? (
-          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
-            <div className='flex items-center gap-2 text-sm font-medium'>
-              <Check className='size-4 text-primary' />
-              子流程节点
-            </div>
+          <section className='space-y-4 border-t pt-4'>
+            <div className='text-sm font-medium'>子流程节点</div>
 
             <FormField
               control={form.control}
@@ -2605,15 +2404,12 @@ export function NodeConfigPanel({
                 </FormItem>
               )}
             />
-          </div>
+          </section>
         ) : null}
 
         {selectedKind === 'dynamic-builder' ? (
-          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
-            <div className='flex items-center gap-2 text-sm font-medium'>
-              <Check className='size-4 text-primary' />
-              动态构建节点
-            </div>
+          <section className='space-y-4 border-t pt-4'>
+            <div className='text-sm font-medium'>动态构建节点</div>
 
             <div className='grid gap-4 md:grid-cols-2'>
               <FormField
@@ -3130,15 +2926,12 @@ export function NodeConfigPanel({
                 </FormItem>
               )}
             />
-          </div>
+          </section>
         ) : null}
 
         {selectedKind === 'approver' ? (
-          <div className='flex flex-col gap-4 rounded-2xl border p-4'>
-            <div className='flex items-center gap-2 text-sm font-medium'>
-              <Check className='size-4 text-primary' />
-              审批节点
-            </div>
+          <section className='space-y-4 border-t pt-4'>
+            <div className='text-sm font-medium'>审批节点</div>
 
             <FormField
               control={form.control}
@@ -3169,7 +2962,6 @@ export function NodeConfigPanel({
               <WorkflowPrincipalPickerField
                 kind='USER'
                 label='人员编码'
-                description='支持多选，已选人员会写入审批节点处理人。'
                 value={parseListValue(selectedApproverUserIds)}
                 onChange={(next) =>
                   form.setValue('approver.userIds', next.join(', '), {
@@ -3185,7 +2977,6 @@ export function NodeConfigPanel({
               <WorkflowPrincipalPickerField
                 kind='ROLE'
                 label='角色编码'
-                description='支持多选，写入角色编码列表。'
                 value={parseListValue(selectedApproverRoleCodes)}
                 onChange={(next) =>
                   form.setValue('approver.roleCodes', next.join(', '), {
@@ -3202,7 +2993,6 @@ export function NodeConfigPanel({
               <WorkflowPrincipalPickerField
                 kind='DEPARTMENT'
                 label='部门编码'
-                description='支持选择指定部门，保留部门 ID 作为流程配置值。'
                 value={parseListValue(selectedApproverDepartmentRef)}
                 onChange={(next) =>
                   form.setValue('approver.departmentRef', next[0] ?? '', {
@@ -3222,7 +3012,6 @@ export function NodeConfigPanel({
                   <FormItem>
                     <WorkflowFieldSelector
                       label='表单字段编码'
-                      description='从流程表单字段中选择一个来源字段。'
                       value={field.value}
                       onChange={field.onChange}
                       options={processFieldOptions}
@@ -3241,7 +3030,6 @@ export function NodeConfigPanel({
                   <FormItem>
                     <WorkflowFormulaEditor
                       label='处理人公式'
-                      description='使用受控表达式计算处理人编码，建议返回单个 userId。'
                       value={field.value}
                       onChange={field.onChange}
                       fieldOptions={processFieldOptions}
@@ -3252,57 +3040,6 @@ export function NodeConfigPanel({
                 )}
               />
             ) : null}
-
-            <FormField
-              control={form.control}
-              name='approver.nodeFormKey'
-              render={({ field }) => (
-                <FormItem>
-                  <NodeFormSelector
-                    label='节点覆盖表单'
-                    description='任务页优先使用'
-                    value={
-                      selectedNodeFormKey || selectedNodeFormVersion
-                        ? {
-                            nodeFormKey: selectedNodeFormKey,
-                            nodeFormVersion: selectedNodeFormVersion,
-                          }
-                        : null
-                    }
-                    onChange={(selection) => {
-                      field.onChange(selection?.nodeFormKey ?? '')
-                      form.setValue(
-                        'approver.nodeFormVersion',
-                        selection?.nodeFormVersion ?? '',
-                        {
-                          shouldDirty: true,
-                          shouldTouch: true,
-                          shouldValidate: true,
-                        }
-                      )
-                    }}
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name='approver.fieldBindingsJson'
-              render={({ field }) => (
-                <FormItem>
-                  <FormControl>
-                    <FieldBindingEditor
-                      value={field.value}
-                      onChange={field.onChange}
-                      processFieldOptions={processFormFields}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             <FormField
               control={form.control}
@@ -3401,12 +3138,9 @@ export function NodeConfigPanel({
                 control={form.control}
                 name='approver.autoFinishRemaining'
                 render={({ field }) => (
-                  <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
-                    <div className='space-y-1'>
+                  <FormItem className='flex flex-row items-center justify-between gap-4 py-2'>
+                    <div>
                       <FormLabel>自动结束剩余任务</FormLabel>
-                      <p className='text-xs text-muted-foreground'>
-                        任意一人处理完成后，自动结束同组其他未处理任务。
-                      </p>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -3420,12 +3154,9 @@ export function NodeConfigPanel({
               control={form.control}
               name='approver.timeoutPolicy.enabled'
               render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
-                  <div className='space-y-1'>
+                <FormItem className='flex flex-row items-center justify-between gap-4 py-2'>
+                  <div>
                     <FormLabel>超时审批</FormLabel>
-                    <p className='text-xs text-muted-foreground'>
-                      人工审批节点超时后可自动通过或自动拒绝。
-                    </p>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -3435,7 +3166,7 @@ export function NodeConfigPanel({
             />
 
             {selectedTimeoutEnabled ? (
-              <div className='grid gap-4 rounded-xl border bg-muted/20 p-4'>
+              <div className='grid gap-4 border-l-2 border-muted pl-4'>
                 <FormField
                   control={form.control}
                   name='approver.timeoutPolicy.durationMinutes'
@@ -3480,12 +3211,9 @@ export function NodeConfigPanel({
               control={form.control}
               name='approver.reminderPolicy.enabled'
               render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
-                  <div className='space-y-1'>
+                <FormItem className='flex flex-row items-center justify-between gap-4 py-2'>
+                  <div>
                     <FormLabel>自动提醒</FormLabel>
-                    <p className='text-xs text-muted-foreground'>
-                      按设定节奏向待办审批人发送提醒。
-                    </p>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -3495,7 +3223,7 @@ export function NodeConfigPanel({
             />
 
             {selectedReminderEnabled ? (
-              <div className='grid gap-4 rounded-xl border bg-muted/20 p-4'>
+              <div className='grid gap-4 border-l-2 border-muted pl-4'>
                 <div className='grid gap-4 md:grid-cols-3'>
                   <FormField
                     control={form.control}
@@ -3581,7 +3309,7 @@ export function NodeConfigPanel({
                     control={form.control}
                     name={`approver.operations.${option.key}`}
                     render={({ field }) => (
-                      <FormItem className='flex flex-row items-center gap-3 rounded-xl border px-3 py-2'>
+                      <FormItem className='flex flex-row items-center gap-3 py-2'>
                         <FormControl>
                           <Checkbox
                             checked={field.value}
@@ -3603,12 +3331,9 @@ export function NodeConfigPanel({
               control={form.control}
               name='approver.commentRequired'
               render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-xl border px-3 py-2'>
-                  <div className='space-y-1'>
+                <FormItem className='flex flex-row items-center justify-between gap-4 py-2'>
+                  <div>
                     <FormLabel>强制填写审批意见</FormLabel>
-                    <p className='text-xs text-muted-foreground'>
-                      通过弹框、表单或工具栏约束审批意见必填。
-                    </p>
                   </div>
                   <FormControl>
                     <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -3616,7 +3341,7 @@ export function NodeConfigPanel({
                 </FormItem>
               )}
             />
-          </div>
+          </section>
         ) : null}
 
         {selectedKind === 'cc' ? (
@@ -4485,16 +4210,6 @@ export function NodeConfigPanel({
           </div>
         ) : null}
 
-        <div className='flex flex-wrap gap-2'>
-          <Button type='submit'>
-            <Save data-icon='inline-start' />
-            应用到画布
-          </Button>
-          <Button type='button' variant='outline' onClick={handleReset}>
-            <RotateCcw data-icon='inline-start' />
-            恢复默认
-          </Button>
-        </div>
       </form>
     </Form>
   )

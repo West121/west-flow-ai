@@ -8,6 +8,8 @@ type WorkflowDesignerLayoutProps = {
   canvas: ReactNode
   flowSettings: ReactNode
   nodeSettings: ReactNode
+  activeTab: 'flow' | 'node'
+  onActiveTabChange: (value: 'flow' | 'node') => void
 }
 
 // 设计器三栏布局只管结构，不碰具体表单字段，方便后续把右侧配置继续拆分。
@@ -16,6 +18,8 @@ export function WorkflowDesignerLayout({
   canvas,
   flowSettings,
   nodeSettings,
+  activeTab,
+  onActiveTabChange,
 }: WorkflowDesignerLayoutProps) {
   return (
     <div
@@ -49,7 +53,11 @@ export function WorkflowDesignerLayout({
             <CardTitle>属性面板</CardTitle>
           </CardHeader>
           <CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-4'>
-            <Tabs defaultValue='flow' className='flex min-h-0 flex-1 flex-col'>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => onActiveTabChange(value as 'flow' | 'node')}
+              className='flex min-h-0 flex-1 flex-col'
+            >
               <TabsList className='grid w-full grid-cols-2'>
                 <TabsTrigger value='flow'>流程属性</TabsTrigger>
                 <TabsTrigger value='node'>节点属性</TabsTrigger>

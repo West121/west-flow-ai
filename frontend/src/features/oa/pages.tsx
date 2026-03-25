@@ -26,10 +26,16 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
+import { ProFormActions, ProFormSection, ProFormShell } from '@/features/shared/pro-form'
 import { PageShell } from '@/features/shared/page-shell'
-import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import { type NavigateFn } from '@/hooks/use-table-url-state'
+import { ProTable, type ProTableBoardColumn } from '@/features/shared/pro-table'
 import {
   createApprovalSheetColumns,
+  formatApprovalSheetDateTime,
+  resolveApprovalSheetAutomationStatusLabel,
+  resolveApprovalSheetInstanceStatusLabel,
   summarizeApprovalSheets,
 } from '@/features/workbench/approval-sheet-list'
 import { WorkbenchTodoDetailPage } from '@/features/workbench/pages'
@@ -42,7 +48,7 @@ import {
 } from '@/lib/api/oa'
 import {
   listApprovalSheets,
-  WORKBENCH_RUNTIME_ENDPOINTS,
+  type ApprovalSheetListItem,
 } from '@/lib/api/workbench'
 
 const leaveFormSchema = z.object({
@@ -77,9 +83,14 @@ type ExpenseFormValues = z.infer<typeof expenseFormSchema>
 type CommonFormValues = z.infer<typeof commonFormSchema>
 type OABusinessType = 'OA_LEAVE' | 'OA_EXPENSE' | 'OA_COMMON'
 
+type OABoardStatus = 'RUNNING' | 'APPROVED' | 'REJECTED' | 'REVOKED'
+
 const leaveDetailRoute = getRouteApi('/_authenticated/oa/leave/$billId')
 const expenseDetailRoute = getRouteApi('/_authenticated/oa/expense/$billId')
 const commonDetailRoute = getRouteApi('/_authenticated/oa/common/$billId')
+const leaveListRoute = getRouteApi('/_authenticated/oa/leave/list')
+const expenseListRoute = getRouteApi('/_authenticated/oa/expense/list')
+const commonListRoute = getRouteApi('/_authenticated/oa/common/list')
 const oaQueryRoute = getRouteApi('/_authenticated/oa/query')
 
 // 发起成功后优先回到首个待办，便于直接继续处理流程。
@@ -165,6 +176,62 @@ function LaunchSummaryCard({
   )
 }
 
+function resolveOABoardStatus(item: ApprovalSheetListItem): OABoardStatus {
+  if (item.instanceStatus === 'RUNNING') {
+    return 'RUNNING'
+  }
+
+  if (item.latestAction === 'REJECT' || item.latestAction === 'REJECT_ROUTE') {
+    return 'REJECTED'
+  }
+
+  if (item.latestAction === 'REVOKE' || item.latestAction === 'WITHDRAW') {
+    return 'REVOKED'
+  }
+
+  return 'APPROVED'
+}
+
+function buildOABoardColumns(
+  records: ApprovalSheetListItem[]
+): ProTableBoardColumn<ApprovalSheetListItem>[] {
+  const grouped = {
+    RUNNING: [] as ApprovalSheetListItem[],
+    APPROVED: [] as ApprovalSheetListItem[],
+    REJECTED: [] as ApprovalSheetListItem[],
+    REVOKED: [] as ApprovalSheetListItem[],
+  }
+
+  for (const record of records) {
+    grouped[resolveOABoardStatus(record)].push(record)
+  }
+
+  return [
+    { key: 'RUNNING', title: '审批中', items: grouped.RUNNING },
+    { key: 'APPROVED', title: '已通过', items: grouped.APPROVED },
+    { key: 'REJECTED', title: '已驳回', items: grouped.REJECTED },
+    { key: 'REVOKED', title: '已撤销', items: grouped.REVOKED },
+  ]
+}
+
+function OABoardCard({ item }: { item: ApprovalSheetListItem }) {
+  return (
+    <div className='rounded-xl border bg-background p-4 shadow-sm'>
+      <div className='space-y-1'>
+        <div className='text-sm font-semibold'>{item.businessTitle ?? item.processName}</div>
+        <div className='text-xs text-muted-foreground'>{item.billNo ?? item.instanceId}</div>
+      </div>
+      <div className='mt-3 grid gap-2 text-xs text-muted-foreground'>
+        <div>发起人：{item.initiatorUserId}</div>
+        <div>当前节点：{item.currentNodeName ?? '--'}</div>
+        <div>实例状态：{resolveApprovalSheetInstanceStatusLabel(item.instanceStatus)}</div>
+        <div>自动化：{resolveApprovalSheetAutomationStatusLabel(item.automationStatus)}</div>
+        <div>更新时间：{formatApprovalSheetDateTime(item.updatedAt)}</div>
+      </div>
+    </div>
+  )
+}
+
 function LeaveCreateForm() {
   const navigate = useNavigate()
   const form = useForm<LeaveFormValues>({
@@ -183,22 +250,18 @@ function LeaveCreateForm() {
   })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>请假申请</CardTitle>
-        <CardDescription>先填写请假业务表单，提交后自动发起对应流程。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form
-            className='space-y-6'
-            onSubmit={form.handleSubmit((values) =>
-              launchMutation.mutate({
-                days: Number(values.days),
-                reason: values.reason.trim(),
-              })
-            )}
-          >
+    <ProFormShell title='请假申请' description='先填写请假业务表单，提交后自动发起对应流程。'>
+      <Form {...form}>
+        <form
+          className='space-y-6'
+          onSubmit={form.handleSubmit((values) =>
+            launchMutation.mutate({
+              days: Number(values.days),
+              reason: values.reason.trim(),
+            })
+          )}
+        >
+          <ProFormSection title='申请信息' columns={1}>
             <FormField
               control={form.control}
               name='days'
@@ -213,7 +276,9 @@ function LeaveCreateForm() {
                 </FormItem>
               )}
             />
+          </ProFormSection>
 
+          <ProFormSection title='申请说明' columns={1}>
             <FormField
               control={form.control}
               name='reason'
@@ -227,26 +292,26 @@ function LeaveCreateForm() {
                 </FormItem>
               )}
             />
+          </ProFormSection>
 
-            <div className='flex flex-wrap items-center gap-3'>
-              <Button type='submit' disabled={launchMutation.isPending}>
-                {launchMutation.isPending ? (
-                  <>
-                    <Loader2 className='animate-spin' />
-                    发起中
-                  </>
-                ) : (
-                  '发起请假申请'
-                )}
-              </Button>
-              <Button asChild type='button' variant='outline'>
-                <Link to='/workbench/start'>返回业务入口</Link>
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <ProFormActions>
+            <Button type='submit' disabled={launchMutation.isPending}>
+              {launchMutation.isPending ? (
+                <>
+                  <Loader2 className='animate-spin' />
+                  发起中
+                </>
+              ) : (
+                '发起请假申请'
+              )}
+            </Button>
+            <Button asChild type='button' variant='outline'>
+              <Link to='/workbench/start'>返回业务入口</Link>
+            </Button>
+          </ProFormActions>
+        </form>
+      </Form>
+    </ProFormShell>
   )
 }
 
@@ -269,22 +334,18 @@ function ExpenseCreateForm() {
   })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>报销申请</CardTitle>
-        <CardDescription>填写金额和事由，提交后自动匹配当前生效流程。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form
-            className='space-y-6'
-            onSubmit={form.handleSubmit((values) =>
-              launchMutation.mutate({
-                amount: Number(values.amount),
-                reason: values.reason.trim(),
-              })
-            )}
-          >
+    <ProFormShell title='报销申请' description='填写金额和事由，提交后自动匹配当前生效流程。'>
+      <Form {...form}>
+        <form
+          className='space-y-6'
+          onSubmit={form.handleSubmit((values) =>
+            launchMutation.mutate({
+              amount: Number(values.amount),
+              reason: values.reason.trim(),
+            })
+          )}
+        >
+          <ProFormSection title='报销信息' columns={1}>
             <FormField
               control={form.control}
               name='amount'
@@ -299,7 +360,9 @@ function ExpenseCreateForm() {
                 </FormItem>
               )}
             />
+          </ProFormSection>
 
+          <ProFormSection title='报销说明' columns={1}>
             <FormField
               control={form.control}
               name='reason'
@@ -313,26 +376,26 @@ function ExpenseCreateForm() {
                 </FormItem>
               )}
             />
+          </ProFormSection>
 
-            <div className='flex flex-wrap items-center gap-3'>
-              <Button type='submit' disabled={launchMutation.isPending}>
-                {launchMutation.isPending ? (
-                  <>
-                    <Loader2 className='animate-spin' />
-                    发起中
-                  </>
-                ) : (
-                  '发起报销申请'
-                )}
-              </Button>
-              <Button asChild type='button' variant='outline'>
-                <Link to='/workbench/start'>返回业务入口</Link>
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <ProFormActions>
+            <Button type='submit' disabled={launchMutation.isPending}>
+              {launchMutation.isPending ? (
+                <>
+                  <Loader2 className='animate-spin' />
+                  发起中
+                </>
+              ) : (
+                '发起报销申请'
+              )}
+            </Button>
+            <Button asChild type='button' variant='outline'>
+              <Link to='/workbench/start'>返回业务入口</Link>
+            </Button>
+          </ProFormActions>
+        </form>
+      </Form>
+    </ProFormShell>
   )
 }
 
@@ -354,22 +417,18 @@ function CommonCreateForm() {
   })
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>通用申请</CardTitle>
-        <CardDescription>用于标准 OA 之外的通用业务申请入口。</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form
-            className='space-y-6'
-            onSubmit={form.handleSubmit((values) =>
-              launchMutation.mutate({
-                title: values.title.trim(),
-                content: values.content.trim(),
-              })
-            )}
-          >
+    <ProFormShell title='通用申请' description='用于标准 OA 之外的通用业务申请入口。'>
+      <Form {...form}>
+        <form
+          className='space-y-6'
+          onSubmit={form.handleSubmit((values) =>
+            launchMutation.mutate({
+              title: values.title.trim(),
+              content: values.content.trim(),
+            })
+          )}
+        >
+          <ProFormSection title='申请信息' columns={1}>
             <FormField
               control={form.control}
               name='title'
@@ -383,7 +442,9 @@ function CommonCreateForm() {
                 </FormItem>
               )}
             />
+          </ProFormSection>
 
+          <ProFormSection title='申请内容' columns={1}>
             <FormField
               control={form.control}
               name='content'
@@ -397,26 +458,125 @@ function CommonCreateForm() {
                 </FormItem>
               )}
             />
+          </ProFormSection>
 
-            <div className='flex flex-wrap items-center gap-3'>
-              <Button type='submit' disabled={launchMutation.isPending}>
-                {launchMutation.isPending ? (
-                  <>
-                    <Loader2 className='animate-spin' />
-                    发起中
-                  </>
-                ) : (
-                  '发起通用申请'
-                )}
-              </Button>
-              <Button asChild type='button' variant='outline'>
-                <Link to='/workbench/start'>返回业务入口</Link>
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
+          <ProFormActions>
+            <Button type='submit' disabled={launchMutation.isPending}>
+              {launchMutation.isPending ? (
+                <>
+                  <Loader2 className='animate-spin' />
+                  发起中
+                </>
+              ) : (
+                '发起通用申请'
+              )}
+            </Button>
+            <Button asChild type='button' variant='outline'>
+              <Link to='/workbench/start'>返回业务入口</Link>
+            </Button>
+          </ProFormActions>
+        </form>
+      </Form>
+    </ProFormShell>
+  )
+}
+
+function OABusinessListPage({
+  title,
+  description,
+  sourceRoute,
+  businessType,
+  createHref,
+  createLabel,
+  search,
+  navigate,
+}: {
+  title: string
+  description: string
+  sourceRoute: string
+  businessType: OABusinessType
+  createHref: '/oa/leave/create' | '/oa/expense/create' | '/oa/common/create'
+  createLabel: string
+  search: ListQuerySearch
+  navigate: NavigateFn
+}) {
+  const approvalSheetsQuery = useQuery({
+    queryKey: ['oa', 'business-list', businessType, search],
+    queryFn: () =>
+      listApprovalSheets({
+        ...search,
+        view: 'INITIATED',
+        businessTypes: [businessType],
+      }),
+  })
+
+  const pageData = approvalSheetsQuery.data ?? {
+    page: search.page,
+    pageSize: search.pageSize,
+    total: 0,
+    pages: 0,
+    records: [],
+    groups: [],
+  }
+  const summary = summarizeApprovalSheets(pageData.records)
+
+  return (
+    <>
+      {approvalSheetsQuery.isError ? (
+        <Alert variant='destructive' className='mb-4'>
+          <AlertTitle>{title}加载失败</AlertTitle>
+          <AlertDescription>
+            {approvalSheetsQuery.error instanceof Error
+              ? approvalSheetsQuery.error.message
+              : '请稍后重试'}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      <ProTable
+        title={title}
+        description={description}
+        searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
+        search={search}
+        navigate={navigate}
+        columns={createApprovalSheetColumns('oa')}
+        data={pageData.records}
+        total={pageData.total}
+        supportsBoard
+        resolveBoardColumns={buildOABoardColumns}
+        renderBoardCard={(item) => <OABoardCard item={item} />}
+        onRefresh={() => void approvalSheetsQuery.refetch()}
+        summaries={[
+          {
+            label: '审批单总量',
+            value: String(pageData.total),
+            hint: '当前登录人在该业务下发起的审批单总量。',
+          },
+          {
+            label: '进行中',
+            value: String(summary.running),
+            hint: '仍在审批中的业务单据数量。',
+          },
+          {
+            label: '已完成',
+            value: String(summary.completed),
+            hint: '已经结束的业务单据数量。',
+          },
+        ]}
+        createActionNode={
+          <Button asChild>
+            <Link to={createHref} search={{}}>
+              {createLabel}
+            </Link>
+          </Button>
+        }
+        extraActions={
+          <ContextualCopilotEntry
+            sourceRoute={sourceRoute}
+            label='用 AI 解读当前业务列表'
+          />
+        }
+      />
+    </>
   )
 }
 
@@ -445,6 +605,24 @@ export function OALeaveCreatePage() {
   )
 }
 
+export function OALeaveListPage() {
+  const search = leaveListRoute.useSearch()
+  const navigate = leaveListRoute.useNavigate()
+
+  return (
+    <OABusinessListPage
+      title='请假申请列表'
+      description='查看我发起的请假单据和对应审批进度，默认从列表进入再发起新申请。'
+      sourceRoute='/oa/leave/list'
+      businessType='OA_LEAVE'
+      createHref='/oa/leave/create'
+      createLabel='发起请假申请'
+      search={search}
+      navigate={navigate}
+    />
+  )
+}
+
 export function OAExpenseCreatePage() {
   return (
     <PageShell
@@ -470,6 +648,24 @@ export function OAExpenseCreatePage() {
   )
 }
 
+export function OAExpenseListPage() {
+  const search = expenseListRoute.useSearch()
+  const navigate = expenseListRoute.useNavigate()
+
+  return (
+    <OABusinessListPage
+      title='报销申请列表'
+      description='查看我发起的报销单据和审批进度，默认从列表进入再发起新申请。'
+      sourceRoute='/oa/expense/list'
+      businessType='OA_EXPENSE'
+      createHref='/oa/expense/create'
+      createLabel='发起报销申请'
+      search={search}
+      navigate={navigate}
+    />
+  )
+}
+
 export function OACommonCreatePage() {
   return (
     <PageShell
@@ -492,6 +688,24 @@ export function OACommonCreatePage() {
         <LaunchSummaryCard response={null} />
       </div>
     </PageShell>
+  )
+}
+
+export function OACommonListPage() {
+  const search = commonListRoute.useSearch()
+  const navigate = commonListRoute.useNavigate()
+
+  return (
+    <OABusinessListPage
+      title='通用申请列表'
+      description='查看我发起的通用申请和审批进度，默认从列表进入再发起新申请。'
+      sourceRoute='/oa/common/list'
+      businessType='OA_COMMON'
+      createHref='/oa/common/create'
+      createLabel='发起通用申请'
+      search={search}
+      navigate={navigate}
+    />
   )
 }
 
@@ -530,16 +744,19 @@ export function OAQueryPage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      <ResourceListPage
+      <ProTable
         title='OA 流程查询'
         description='按审批单维度查看我发起的 OA 业务，详情页直接展示业务表单、流程轨迹和流程图回顾。'
-        endpoint={WORKBENCH_RUNTIME_ENDPOINTS.approvalSheetsPage}
         searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
         search={search}
         navigate={navigate}
         columns={createApprovalSheetColumns('oa')}
         data={pageData.records}
         total={pageData.total}
+        supportsBoard
+        resolveBoardColumns={buildOABoardColumns}
+        renderBoardCard={(item) => <OABoardCard item={item} />}
+        onRefresh={() => void approvalSheetsQuery.refetch()}
         summaries={[
           {
             label: 'OA 审批单总量',
@@ -557,10 +774,13 @@ export function OAQueryPage() {
             hint: '已经结束的 OA 单据数量。',
           },
         ]}
-        createAction={{
-          label: '发起 OA 申请',
-          href: '/workbench/start',
-        }}
+        createActionNode={
+          <Button asChild>
+            <Link to='/workbench/start' search={{}}>
+              发起 OA 申请
+            </Link>
+          </Button>
+        }
         extraActions={
           <ContextualCopilotEntry
             sourceRoute='/oa/query'
@@ -580,7 +800,12 @@ export function OAApprovalSheetDetailPage({
 }: {
   businessType: OABusinessType
   billId: string
-  backHref?: '/oa/query' | '/workbench/todos/list'
+  backHref?:
+    | '/oa/query'
+    | '/oa/leave/list'
+    | '/oa/expense/list'
+    | '/oa/common/list'
+    | '/workbench/todos/list'
   backLabel?: string
 }) {
   return (
@@ -600,8 +825,8 @@ export function OALeaveBillDetailPage() {
     <OAApprovalSheetDetailPage
       businessType='OA_LEAVE'
       billId={billId}
-      backHref='/oa/query'
-      backLabel='返回 OA 流程查询'
+      backHref='/oa/leave/list'
+      backLabel='返回请假申请列表'
     />
   )
 }
@@ -613,8 +838,8 @@ export function OAExpenseBillDetailPage() {
     <OAApprovalSheetDetailPage
       businessType='OA_EXPENSE'
       billId={billId}
-      backHref='/oa/query'
-      backLabel='返回 OA 流程查询'
+      backHref='/oa/expense/list'
+      backLabel='返回报销申请列表'
     />
   )
 }
@@ -626,8 +851,8 @@ export function OACommonBillDetailPage() {
     <OAApprovalSheetDetailPage
       businessType='OA_COMMON'
       billId={billId}
-      backHref='/oa/query'
-      backLabel='返回 OA 流程查询'
+      backHref='/oa/common/list'
+      backLabel='返回通用申请列表'
     />
   )
 }

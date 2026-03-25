@@ -4,7 +4,6 @@ import {
   BackgroundVariant,
   Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   type Edge,
@@ -14,12 +13,15 @@ import { Pause, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ApprovalTagList, ApprovalUserTag } from './approval-actor-tags'
 import {
   type WorkbenchFlowEdge,
   type WorkbenchFlowNode,
   type WorkbenchProcessInstanceEvent,
   type WorkbenchTaskTraceItem,
 } from '@/lib/api/workbench'
+import { WorkflowNodeCard } from '@/features/workflow/designer/workflow-node'
+import { type WorkflowNodeData } from '@/features/workflow/designer/types'
 import {
   formatApprovalSheetBoolean,
   formatApprovalSheetDateTime,
@@ -35,6 +37,7 @@ type ApprovalSheetGraphProps = {
   flowEdges: WorkbenchFlowEdge[]
   taskTrace: WorkbenchTaskTraceItem[]
   instanceEvents: WorkbenchProcessInstanceEvent[]
+  userDisplayNames?: Record<string, string> | null
 }
 
 type PlaybackEvent = {
@@ -74,41 +77,48 @@ function buildPlaybackEvents(
   }))
 }
 
-// 节点基础样式按类型区分，方便回顾时快速识别。
-function baseNodeStyle(nodeType: string) {
-  if (nodeType === 'start') {
-    return {
-      borderColor: 'rgb(34 197 94)',
-      backgroundColor: 'rgba(34, 197, 94, 0.08)',
-    }
-  }
+const previewNodeTypes = {
+  workflow: WorkflowNodeCard,
+}
 
-  if (nodeType === 'end') {
-    return {
-      borderColor: 'rgb(100 116 139)',
-      backgroundColor: 'rgba(100, 116, 139, 0.08)',
-    }
-  }
-
-  if (nodeType === 'approver') {
-    return {
-      borderColor: 'rgb(245 158 11)',
-      backgroundColor: 'rgba(245, 158, 11, 0.08)',
-    }
-  }
-
-  return {
-    borderColor: 'rgb(59 130 246)',
-    backgroundColor: 'rgba(59, 130, 246, 0.06)',
+function resolvePreviewNodeKind(nodeType: string): WorkflowNodeData['kind'] {
+  switch (nodeType) {
+    case 'start':
+    case 'approver':
+    case 'subprocess':
+    case 'dynamic-builder':
+    case 'condition':
+    case 'inclusive':
+    case 'cc':
+    case 'timer':
+    case 'trigger':
+    case 'parallel':
+    case 'end':
+      return nodeType
+    default:
+      return 'approver'
   }
 }
 
-// 流程图回顾组件负责高亮当前节点和已走过的路径。
+function resolvePreviewNodeTone(nodeType: string): WorkflowNodeData['tone'] {
+  if (nodeType === 'start') {
+    return 'success'
+  }
+  if (nodeType === 'end') {
+    return 'neutral'
+  }
+  if (nodeType === 'approver') {
+    return 'brand'
+  }
+  return 'warning'
+}
+
 function ApprovalSheetGraphInner({
   flowNodes,
   flowEdges,
   taskTrace,
   instanceEvents,
+  userDisplayNames,
 }: ApprovalSheetGraphProps) {
   const [mode, setMode] = useState<'idle' | 'playing' | 'paused'>('idle')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -169,43 +179,34 @@ function ApprovalSheetGraphInner({
   const nodes = useMemo<Node[]>(
     () =>
       flowNodes.map((node) => {
-        const baseStyle = baseNodeStyle(node.type)
         const isActive = node.id === activeNodeId
         const isCompleted = completedNodeIds.has(node.id)
         const isVisited = visitedNodeIds.has(node.id)
 
-        // 节点样式只表达三件事：当前、已完成、已经过。
         return {
           id: node.id,
+          type: 'workflow',
           position: node.position,
           data: {
-            label: `${node.name}\n${isActive ? '当前节点' : isCompleted ? '已完成' : isVisited ? '已到达' : '未到达'}`,
+            kind: resolvePreviewNodeKind(node.type),
+            label: node.name,
+            description: '',
+            tone: resolvePreviewNodeTone(node.type),
+            config: {},
+            previewStatus: isActive
+              ? 'ACTIVE'
+              : isCompleted
+                ? 'COMPLETED'
+                : isVisited
+                  ? 'VISITED'
+                  : 'IDLE',
+          } as WorkflowNodeData & {
+            previewStatus: 'ACTIVE' | 'COMPLETED' | 'VISITED' | 'IDLE'
           },
           draggable: false,
           selectable: false,
           style: {
-            width: Math.max(node.ui?.width ?? 180, 180),
-            minHeight: Math.max(node.ui?.height ?? 72, 72),
-            borderWidth: isActive ? 2 : 1,
-            borderStyle: 'solid',
-            borderColor: isActive
-              ? 'rgb(59 130 246)'
-              : isCompleted
-                ? 'rgb(16 185 129)'
-                : baseStyle.borderColor,
-            backgroundColor: isActive
-              ? 'rgba(59, 130, 246, 0.12)'
-              : isCompleted
-                ? 'rgba(16, 185, 129, 0.10)'
-                : baseStyle.backgroundColor,
-            borderRadius: 18,
-            boxShadow: isActive
-              ? '0 0 0 4px rgba(59, 130, 246, 0.12)'
-              : '0 8px 24px rgba(15, 23, 42, 0.06)',
-            whiteSpace: 'pre-line',
-            fontSize: 13,
-            lineHeight: 1.5,
-            padding: 12,
+            width: Math.max(node.ui?.width ?? 220, 220),
           },
         }
       }),
@@ -224,7 +225,6 @@ function ApprovalSheetGraphInner({
           id: edge.id,
           source: edge.source,
           target: edge.target,
-          label: edge.label ?? undefined,
           animated: isActive,
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -237,10 +237,6 @@ function ApprovalSheetGraphInner({
               : targetCompleted || targetVisited
                 ? '#16a34a'
                 : '#94a3b8',
-          },
-          labelStyle: {
-            fill: '#475569',
-            fontSize: 12,
           },
         }
       }),
@@ -296,39 +292,45 @@ function ApprovalSheetGraphInner({
           <Badge variant='outline'>事件数 {playbackEvents.length}</Badge>
         </div>
 
-        <div className='grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_360px]'>
-          <div className='h-[440px] overflow-hidden rounded-2xl border bg-background/80'>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              fitView
-              minZoom={0.5}
-              maxZoom={1.5}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              elementsSelectable={false}
-              panOnDrag
-              zoomOnDoubleClick={false}
-              proOptions={{ hideAttribution: true }}
-            >
-              <MiniMap
-                pannable
-                zoomable
-                className='rounded-xl border bg-background/90'
-              />
-              <Controls showInteractive={false} position='bottom-left' />
-              <Background variant={BackgroundVariant.Dots} gap={18} size={1.1} />
-            </ReactFlow>
+        <div className='space-y-4'>
+          <div className='min-w-0 overflow-hidden rounded-2xl border bg-background/80'>
+            <div className='h-[460px] min-w-0'>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={previewNodeTypes}
+                fitView
+                fitViewOptions={{ padding: 0.18 }}
+                minZoom={0.45}
+                maxZoom={1.5}
+                nodesDraggable={false}
+                nodesConnectable={false}
+                elementsSelectable={false}
+                panOnDrag
+                zoomOnDoubleClick={false}
+                proOptions={{ hideAttribution: true }}
+              >
+                <Controls showInteractive={false} position='bottom-left' />
+                <Background variant={BackgroundVariant.Dots} gap={18} size={1.1} />
+              </ReactFlow>
+            </div>
           </div>
 
-          <div className='space-y-4'>
+          <div className='space-y-4 min-w-0'>
             <div className='rounded-lg border bg-muted/20 p-4'>
               <p className='text-sm font-medium'>当前播放事件</p>
-              <p className='mt-2 text-sm'>
-                {activePlaybackEvent
-                  ? `${activePlaybackEvent.label} · ${formatApprovalSheetText(activePlaybackEvent.operatorUserId)}`
-                  : '暂无实例事件'}
-              </p>
+              {activePlaybackEvent ? (
+                <div className='mt-2 flex flex-wrap items-center gap-2 text-sm'>
+                  <span>{activePlaybackEvent.label}</span>
+                  <ApprovalUserTag
+                    userId={activePlaybackEvent.operatorUserId}
+                    displayNames={userDisplayNames}
+                    fallback='系统触发'
+                  />
+                </div>
+              ) : (
+                <p className='mt-2 text-sm'>暂无实例事件</p>
+              )}
               <p className='mt-1 text-xs text-muted-foreground'>
                 {activePlaybackEvent
                   ? formatApprovalSheetDateTime(activePlaybackEvent.occurredAt)
@@ -336,7 +338,7 @@ function ApprovalSheetGraphInner({
               </p>
             </div>
 
-            <div className='max-h-[440px] space-y-3 overflow-y-auto pr-1'>
+            <div className='max-h-[320px] min-w-0 space-y-3 overflow-auto rounded-lg border bg-muted/10 p-3 pr-2'>
               {taskTrace.length ? (
                 taskTrace.map((item, index) => {
                   const active = item.nodeId === activeNodeId
@@ -349,9 +351,9 @@ function ApprovalSheetGraphInner({
                       }`}
                     >
                       <div className='flex flex-wrap items-center justify-between gap-3'>
-                        <div>
+                        <div className='min-w-0'>
                           <p className='font-medium'>{item.nodeName}</p>
-                          <p className='text-xs text-muted-foreground'>节点 ID：{item.nodeId}</p>
+                          <p className='truncate text-xs text-muted-foreground'>节点 ID：{item.nodeId}</p>
                         </div>
                         <Badge variant={active ? 'default' : 'secondary'}>
                           {resolveApprovalSheetResultLabel(item)}
@@ -361,8 +363,24 @@ function ApprovalSheetGraphInner({
                       <dl className='mt-4 grid gap-2 text-sm'>
                         <div className='flex justify-between gap-3'>
                           <dt className='text-muted-foreground'>办理人</dt>
-                          <dd>{formatApprovalSheetText(item.assigneeUserId ?? item.operatorUserId)}</dd>
+                          <dd>
+                            <ApprovalUserTag
+                              userId={item.assigneeUserId ?? item.operatorUserId}
+                              displayNames={userDisplayNames}
+                            />
+                          </dd>
                         </div>
+                        {item.candidateUserIds?.length ? (
+                          <div className='flex justify-between gap-3'>
+                            <dt className='text-muted-foreground'>候选人</dt>
+                            <dd>
+                              <ApprovalTagList
+                                ids={item.candidateUserIds}
+                                displayNames={userDisplayNames}
+                              />
+                            </dd>
+                          </div>
+                        ) : null}
                         <div className='flex justify-between gap-3'>
                           <dt className='text-muted-foreground'>读取时间</dt>
                           <dd>{formatApprovalSheetDateTime(item.readTime)}</dd>

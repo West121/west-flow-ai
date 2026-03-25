@@ -86,12 +86,14 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   ResourceListPage: ({
     title,
     createAction,
+    extraActions,
     data,
     total,
   }: {
     title: string
     total?: number
     createAction?: { label: string; href: string }
+    extraActions?: React.ReactNode
     data: Array<{
       taskId?: string
       instanceId?: string
@@ -104,6 +106,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   }) => (
     <div>
       <h2>{title}</h2>
+      {extraActions}
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
       <span>total:{total ?? data.length}</span>
       {data.map((item) => (
@@ -181,6 +184,7 @@ function createWorkbenchTaskDetail(
     status: 'PENDING',
     assignmentMode: 'USER',
     candidateUserIds: ['usr_002'],
+    candidateGroupIds: [],
     assigneeUserId: 'usr_002',
     action: null,
     operatorUserId: null,
@@ -287,6 +291,7 @@ function createWorkbenchTaskDetail(
         status: 'PENDING',
         assigneeUserId: 'usr_002',
         candidateUserIds: ['usr_002'],
+        candidateGroupIds: [],
         action: null,
         operatorUserId: null,
         comment: '待处理',
@@ -436,10 +441,10 @@ describe('workbench pages', () => {
     renderWithQuery(<WorkbenchTodoListPage />)
 
     expect(await screen.findByText('公共认领请假审批')).toBeInTheDocument()
-    expect(screen.getByText('待认领')).toBeInTheDocument()
+    expect(screen.getAllByText('待认领').length).toBeGreaterThan(0)
     expect(
-      screen.getByRole('link', { name: '用 AI 解读当前待办' })
-    ).toHaveAttribute('href', '/ai')
+      screen.getByRole('button', { name: '用 AI 解读当前待办' })
+    ).toHaveAttribute('data-source-route', '/workbench/todos/list')
   })
 
   it('shows the handover toolbar entry on the todo list', async () => {
@@ -448,7 +453,10 @@ describe('workbench pages', () => {
     expect(
       await screen.findByRole('button', { name: '离职转办' })
     ).toBeInTheDocument()
-    expect(screen.getByText('流程管理员可以批量将某个来源用户的待办转给目标用户。')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '离职转办' }))
+    expect(
+      await screen.findByText('输入来源用户和目标用户编码，系统会批量转移该来源用户的当前待办。')
+    ).toBeInTheDocument()
   })
 
   it('shows business entry cards instead of the legacy processKey form', async () => {
@@ -457,8 +465,8 @@ describe('workbench pages', () => {
     expect(screen.queryByLabelText('流程标识')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('业务单号')).not.toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 推荐发起入口' })
-    ).toHaveAttribute('href', '/ai')
+      screen.getByRole('button', { name: '用 AI 推荐发起入口' })
+    ).toHaveAttribute('data-source-route', '/workbench/start')
     expect(
       screen.getByRole('link', { name: '请假申请' })
     ).toHaveAttribute('href', '/oa/leave/create')
@@ -665,8 +673,9 @@ describe('workbench pages', () => {
       nodeId: 'approve_manager',
       nodeName: '共享审批池',
       status: 'PENDING_CLAIM',
-      assignmentMode: 'USER',
-      candidateUserIds: ['usr_001', 'usr_002'],
+      assignmentMode: 'DEPARTMENT',
+      candidateUserIds: [],
+      candidateGroupIds: ['dept_002'],
       assigneeUserId: null,
       businessData: {
         billId: 'leave_001',
@@ -708,7 +717,8 @@ describe('workbench pages', () => {
           nodeName: '共享审批池',
           status: 'PENDING_CLAIM',
           assigneeUserId: null,
-          candidateUserIds: ['usr_001', 'usr_002'],
+          candidateUserIds: [],
+          candidateGroupIds: ['dept_002'],
           action: null,
           operatorUserId: null,
           comment: '待认领',
@@ -734,7 +744,7 @@ describe('workbench pages', () => {
 
     expect(await screen.findByText('业务正文')).toBeInTheDocument()
     expect(screen.getByText('业务表单正文')).toBeInTheDocument()
-    expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
+    expect(screen.getAllByText('请假申请').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '播放回顾' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '暂停回顾' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '继续回顾' })).toBeInTheDocument()
@@ -745,11 +755,13 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('办理时长').length).toBeGreaterThan(0)
     expect(screen.getAllByText('是否超时').length).toBeGreaterThan(0)
     expect(screen.getAllByText('审批意见摘要').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('待认领').length).toBeGreaterThan(0)
+    expect(screen.getByText('dept_002')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 解读当前审批单' })
-    ).toHaveAttribute('href', '/ai')
+      screen.getByRole('button', { name: '用 AI 解读当前审批单' })
+    ).toHaveAttribute('data-source-route', '/workbench/todos/task_claim_001')
     expect(await screen.findByRole('button', { name: '认领任务' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '退回上一步' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '退回' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '驳回' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '跳转' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '拿回' })).not.toBeInTheDocument()
@@ -812,6 +824,11 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_auto_001' />)
     renderWithQuery(<WorkbenchDoneListPage />)
+
+    await screen.findByText('业务正文')
+    const automationTab = await screen.findByRole('tab', { name: '自动化' })
+    fireEvent.mouseDown(automationTab)
+    fireEvent.click(automationTab)
 
     expect(await screen.findAllByText('自动动作轨迹')).not.toHaveLength(0)
     expect(screen.getAllByText('通知发送记录').length).toBeGreaterThan(0)
@@ -1134,6 +1151,11 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_history_001' />)
 
+    await screen.findByText('业务正文')
+    const traceTab = await screen.findByRole('tab', { name: '轨迹' })
+    fireEvent.mouseDown(traceTab)
+    fireEvent.click(traceTab)
+
     expect(await screen.findByText('动作轨迹')).toBeInTheDocument()
     expect(screen.getAllByText('驳回到上一步人工节点').length).toBeGreaterThan(0)
     expect(screen.getAllByText('跳转').length).toBeGreaterThan(0)
@@ -1268,6 +1290,11 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_subprocess_001' />)
 
+    await screen.findByText('业务正文')
+    const runtimeTab = await screen.findByRole('tab', { name: '运行态' })
+    fireEvent.mouseDown(runtimeTab)
+    fireEvent.click(runtimeTab)
+
     expect(await screen.findByText('主子流程')).toBeInTheDocument()
     expect(screen.getByText('主流程实例：pi_001')).toBeInTheDocument()
     expect(screen.getByText('子流程实例：pi_child_001')).toBeInTheDocument()
@@ -1360,8 +1387,8 @@ describe('workbench pages', () => {
     expect(screen.getAllByText('包容分支').length).toBeGreaterThan(0)
     expect(screen.getByText('命中路径')).toBeInTheDocument()
     expect(screen.getByText('跳过路径')).toBeInTheDocument()
-    expect(screen.getByText('财务审批')).toBeInTheDocument()
-    expect(screen.getByText('人事审批')).toBeInTheDocument()
+    expect(screen.getAllByText('财务审批').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('人事审批').length).toBeGreaterThan(0)
   })
 
   it('shows append and dynamic build runtime structure links in approval detail', async () => {
@@ -1490,6 +1517,11 @@ describe('workbench pages', () => {
     })
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_runtime_001' />)
+
+    await screen.findByText('业务正文')
+    const runtimeTab = await screen.findByRole('tab', { name: '运行态' })
+    fireEvent.mouseDown(runtimeTab)
+    fireEvent.click(runtimeTab)
 
     expect(await screen.findByText('运行态结构')).toBeInTheDocument()
     expect(screen.getAllByText('主子流程').length).toBeGreaterThan(0)
@@ -1637,6 +1669,11 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_001' />)
 
+    await screen.findByText('业务正文')
+    const runtimeTab = await screen.findByRole('tab', { name: '运行态' })
+    fireEvent.mouseDown(runtimeTab)
+    fireEvent.click(runtimeTab)
+
     expect(await screen.findByText('终止高级策略')).toBeInTheDocument()
     expect(screen.getByText('协同轨迹')).toBeInTheDocument()
     expect(screen.getByText('穿越时空轨迹')).toBeInTheDocument()
@@ -1679,7 +1716,7 @@ describe('workbench pages', () => {
     })
 
     expect(await screen.findByText('业务正文')).toBeInTheDocument()
-    expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
+    expect(screen.getAllByText('请假申请').length).toBeGreaterThan(0)
     expect(
       screen.getByRole('link', { name: '返回 OA 流程查询' })
     ).toHaveAttribute('href', '/oa/query')
@@ -1757,6 +1794,11 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_005' />)
 
+    await screen.findByText('业务正文')
+    const traceTab = await screen.findByRole('tab', { name: '轨迹' })
+    fireEvent.mouseDown(traceTab)
+    fireEvent.click(traceTab)
+
     expect(await screen.findByText('动作轨迹')).toBeInTheDocument()
     expect(screen.getAllByText('部门负责人审批').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '加签' })).toBeInTheDocument()
@@ -1806,7 +1848,7 @@ describe('workbench pages', () => {
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_001' />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '转办任务' }))
+    fireEvent.click(await screen.findByRole('button', { name: '转办' }))
     fireEvent.change(screen.getByLabelText('目标用户编码'), {
       target: { value: 'usr_003' },
     })
@@ -1933,26 +1975,10 @@ describe('workbench pages', () => {
       nextTasks: [],
     })
 
-    const view = renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_004' />)
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_004' />)
 
-    await waitFor(() => {
-      expect(view.container.querySelectorAll('input').length).toBeGreaterThan(0)
-    })
-
-    const dayInput = Array.from(view.container.querySelectorAll('input')).find(
-      (element) =>
-        element.getAttribute('type') === 'number' && !element.hasAttribute('disabled')
-    )
-    fireEvent.change(dayInput as HTMLElement, {
-      target: { value: '3' },
-    })
-    const reasonInput = Array.from(view.container.querySelectorAll('textarea')).find(
-      (element) => !element.hasAttribute('disabled')
-    )
-    fireEvent.change(reasonInput as HTMLElement, {
-      target: { value: '外出处理事务' },
-    })
-    fireEvent.change(screen.getByLabelText('审批意见'), {
+    await screen.findByText('当前节点没有独立办理表单，请直接填写审批动作和审批意见。')
+    fireEvent.change(await screen.findByLabelText('审批意见'), {
       target: { value: '同意，请按流程执行' },
     })
     fireEvent.click(screen.getByRole('button', { name: '完成任务' }))
@@ -1964,8 +1990,8 @@ describe('workbench pages', () => {
           action: 'APPROVE',
           comment: '同意，请按流程执行',
           taskFormData: {
-            days: 3,
-            reason: '外出处理事务',
+            days: 2,
+            reason: '请假',
           },
         }
       )

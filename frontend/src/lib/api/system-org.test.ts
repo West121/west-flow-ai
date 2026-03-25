@@ -296,4 +296,41 @@ describe('system organization api', () => {
       })
     ).resolves.toEqual({ postId: 'post_new' })
   })
+
+  it('loads associated users for departments and posts', async () => {
+    getMock
+      .mockResolvedValueOnce(
+        okResponse([
+          {
+            userId: 'usr_001',
+            displayName: '张三',
+            username: 'zhangsan',
+            departmentName: '财务部',
+            postName: '报销审核岗',
+            status: 'ENABLED',
+          },
+        ])
+      )
+      .mockResolvedValueOnce(
+        okResponse([
+          {
+            userId: 'usr_002',
+            displayName: '李四',
+            username: 'lisi',
+            departmentName: '人事部',
+            postName: '人事BP',
+            status: 'ENABLED',
+          },
+        ])
+      )
+
+    const { getDepartmentUsers, getPostUsers } = await import('./system-org')
+
+    await expect(getDepartmentUsers('dept_001')).resolves.toMatchObject([
+      { userId: 'usr_001', username: 'zhangsan' },
+    ])
+    await expect(getPostUsers('post_002')).resolves.toMatchObject([
+      { userId: 'usr_002', username: 'lisi' },
+    ])
+  })
 })

@@ -9,6 +9,7 @@ export type PLMLaunchTask = {
   status: string
   assignmentMode: string | null
   candidateUserIds: string[]
+  candidateGroupIds?: string[]
   assigneeUserId: string | null
 }
 

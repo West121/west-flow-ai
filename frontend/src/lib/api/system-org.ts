@@ -2,6 +2,7 @@ import {
   type ListQuerySearch,
   toPaginationRequest,
 } from '@/features/shared/table/query-contract'
+import { type SystemAssociatedUser } from './system-users'
 import { apiClient, unwrapResponse, type ApiSuccessResponse } from './client'
 
 export type OrganizationStatus = 'ENABLED' | 'DISABLED'
@@ -265,6 +266,16 @@ export async function updateDepartment(
   return unwrapResponse(response)
 }
 
+export async function getDepartmentUsers(
+  departmentId: string
+): Promise<SystemAssociatedUser[]> {
+  const response = await apiClient.get<ApiSuccessResponse<SystemAssociatedUser[]>>(
+    `/system/departments/${departmentId}/users`
+  )
+
+  return unwrapResponse(response)
+}
+
 export async function listPosts(
   search: ListQuerySearch
 ): Promise<PostPageResponse> {
@@ -315,6 +326,16 @@ export async function updatePost(
   const response = await apiClient.put<ApiSuccessResponse<{ postId: string }>>(
     `/system/posts/${postId}`,
     payload
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function getPostUsers(
+  postId: string
+): Promise<SystemAssociatedUser[]> {
+  const response = await apiClient.get<ApiSuccessResponse<SystemAssociatedUser[]>>(
+    `/system/posts/${postId}/users`
   )
 
   return unwrapResponse(response)

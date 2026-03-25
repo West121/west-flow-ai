@@ -177,7 +177,7 @@ describe('AICopilotPage', () => {
     renderWithQuery(<AICopilotPage />)
 
     expect(await screen.findByText('待办分流建议')).toBeInTheDocument()
-    expect(screen.getByText('会话工位')).toBeInTheDocument()
+    expect(screen.getByText('会话')).toBeInTheDocument()
     await waitFor(() =>
       expect(aiCopilotApiMocks.getAICopilotSession).toHaveBeenCalledWith(
         'session_001'

@@ -1,7 +1,7 @@
-import { Link } from '@tanstack/react-router'
 import { Bot, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '@/stores/auth-store'
+import { useAICopilotShellStore } from '@/stores/ai-copilot-shell-store'
 
 const EMPTY_AI_CAPABILITIES: string[] = []
 
@@ -18,22 +18,21 @@ export function ContextualCopilotEntry({
   const aiCapabilities = useAuthStore(
     (state) => state.currentUser?.aiCapabilities ?? EMPTY_AI_CAPABILITIES
   )
+  const openCopilot = useAICopilotShellStore((state) => state.openCopilot)
 
   if (!aiCapabilities.includes('ai:copilot:open')) {
     return null
   }
 
   return (
-    <Button asChild variant={variant}>
-      <Link
-        to='/ai'
-        search={{
-          sourceRoute,
-        }}
-      >
-        {variant === 'default' ? <Bot /> : <Sparkles />}
-        {label}
-      </Link>
+    <Button
+      type='button'
+      variant={variant}
+      onClick={() => openCopilot(sourceRoute)}
+      data-source-route={sourceRoute}
+    >
+      {variant === 'default' ? <Bot /> : <Sparkles />}
+      {label}
     </Button>
   )
 }

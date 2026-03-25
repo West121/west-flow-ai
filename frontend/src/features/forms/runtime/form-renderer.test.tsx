@@ -42,6 +42,25 @@ describe('runtime form renderers', () => {
     })
   })
 
+  it('renders the leave process form for version 1.1.0', () => {
+    render(
+      <ProcessFormRenderer
+        processFormKey='oa-leave-start-form'
+        processFormVersion='1.1.0'
+        value={{
+          days: 2,
+          reason: '事假',
+        }}
+        onChange={() => {}}
+      />
+    )
+
+    expect(screen.queryByText('表单组件未注册')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('表单编码 oa-leave-start-form · 版本 1.1.0')
+    ).toBeInTheDocument()
+  })
+
   it('renders the registered node form and propagates task form data changes', () => {
     const onChange = vi.fn()
 

@@ -55,6 +55,7 @@ import {
   createRole,
   getRoleDetail,
   getRoleFormOptions,
+  getRoleUsers,
   listRoles,
   updateRole,
   type DataScopeType,
@@ -66,6 +67,7 @@ import {
 } from '@/lib/api/system-roles'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
+import { AssociatedUsersDialog } from './associated-users-dialog'
 
 const rolesRoute = getRouteApi('/_authenticated/system/roles/list')
 
@@ -267,7 +269,10 @@ function PageLoadingState({
   )
 }
 
-const roleColumns: ColumnDef<SystemRoleRecord>[] = [
+function buildRoleColumns(
+  onShowUsers: (row: SystemRoleRecord) => void
+): ColumnDef<SystemRoleRecord>[] {
+  return [
   {
     accessorKey: 'roleName',
     header: '角色名称',
@@ -317,6 +322,13 @@ const roleColumns: ColumnDef<SystemRoleRecord>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
+        <Button
+          variant='ghost'
+          className='h-8 px-2'
+          onClick={() => onShowUsers(row.original)}
+        >
+          关联用户
+        </Button>
         <Button asChild variant='ghost' className='h-8 px-2'>
           <Link to='/system/roles/$roleId' params={{ roleId: row.original.roleId }}>
             详情
@@ -334,6 +346,7 @@ const roleColumns: ColumnDef<SystemRoleRecord>[] = [
     ),
   },
 ]
+}
 
 function ScopeValueSelect({
   options,
@@ -384,9 +397,15 @@ function ScopeValueSelect({
 export function RolesListPage() {
   const search = rolesRoute.useSearch()
   const navigate = rolesRoute.useNavigate()
+  const [selectedRole, setSelectedRole] = useState<SystemRoleRecord | null>(null)
   const query = useQuery({
     queryKey: ['system-roles', search],
     queryFn: () => listRoles(search),
+  })
+  const usersQuery = useQuery({
+    queryKey: ['system-role-users', selectedRole?.roleId],
+    queryFn: () => getRoleUsers(selectedRole!.roleId),
+    enabled: Boolean(selectedRole?.roleId),
   })
 
   const summaries = useMemo(() => {
@@ -440,22 +459,42 @@ export function RolesListPage() {
   }
 
   return (
-    <ResourceListPage
-      title='角色管理'
-    description='角色列表页支持分页、模糊查询和排序，角色详情与编辑使用独立页面，不和组织模块混在同一个容器里。'
-      endpoint='/system/roles/page'
-      searchPlaceholder='搜索角色名称、角色编码或描述'
-      search={search}
-      navigate={navigate}
-      columns={roleColumns}
-      data={query.data.records}
-      total={query.data.total}
-      summaries={summaries}
-      createAction={{
-        label: '新建角色',
-        href: '/system/roles/create',
-      }}
-    />
+    <>
+      <ResourceListPage
+        title='角色管理'
+        description='角色列表页支持分页、模糊查询和排序，角色详情与编辑使用独立页面，不和组织模块混在同一个容器里。'
+        endpoint='/system/roles/page'
+        searchPlaceholder='搜索角色名称、角色编码或描述'
+        search={search}
+        navigate={navigate}
+        columns={buildRoleColumns(setSelectedRole)}
+        data={query.data.records}
+        total={query.data.total}
+        summaries={summaries}
+        createAction={{
+          label: '新建角色',
+          href: '/system/roles/create',
+        }}
+      />
+      <AssociatedUsersDialog
+        open={Boolean(selectedRole)}
+        title='角色关联用户'
+        description={
+          selectedRole
+            ? `查看角色「${selectedRole.roleName}」当前关联的用户。`
+            : '查看当前角色关联的用户。'
+        }
+        users={usersQuery.data}
+        isLoading={usersQuery.isLoading}
+        isError={usersQuery.isError}
+        onRetry={() => void usersQuery.refetch()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedRole(null)
+          }
+        }}
+      />
+    </>
   )
 }
 

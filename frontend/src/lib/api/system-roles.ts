@@ -2,6 +2,7 @@ import {
   type ListQuerySearch,
   toPaginationRequest,
 } from '@/features/shared/table/query-contract'
+import { type SystemAssociatedUser } from './system-users'
 import { apiClient, unwrapResponse, type ApiSuccessResponse } from './client'
 
 export type SystemRoleStatus = 'ENABLED' | 'DISABLED'
@@ -139,6 +140,16 @@ export async function updateRole(
   const response = await apiClient.put<ApiSuccessResponse<{ roleId: string }>>(
     `/system/roles/${roleId}`,
     payload
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function getRoleUsers(
+  roleId: string
+): Promise<SystemAssociatedUser[]> {
+  const response = await apiClient.get<ApiSuccessResponse<SystemAssociatedUser[]>>(
+    `/system/roles/${roleId}/users`
   )
 
   return unwrapResponse(response)

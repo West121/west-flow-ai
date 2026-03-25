@@ -6,6 +6,15 @@ import { apiClient, unwrapResponse, type ApiSuccessResponse } from './client'
 
 export type SystemUserStatus = 'ENABLED' | 'DISABLED'
 
+export type SystemAssociatedUser = {
+  userId: string
+  displayName: string
+  username: string
+  departmentName: string
+  postName: string
+  status: SystemUserStatus
+}
+
 export type SystemUserRecord = {
   userId: string
   displayName: string

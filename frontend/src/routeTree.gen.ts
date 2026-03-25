@@ -78,10 +78,13 @@ import { Route as AuthenticatedPlmEcrCreateRouteImport } from './routes/_authent
 import { Route as AuthenticatedPlmEcrBillIdRouteImport } from './routes/_authenticated/plm/ecr/$billId'
 import { Route as AuthenticatedPlmEcoCreateRouteImport } from './routes/_authenticated/plm/eco/create'
 import { Route as AuthenticatedPlmEcoBillIdRouteImport } from './routes/_authenticated/plm/eco/$billId'
+import { Route as AuthenticatedOaLeaveListRouteImport } from './routes/_authenticated/oa/leave/list'
 import { Route as AuthenticatedOaLeaveCreateRouteImport } from './routes/_authenticated/oa/leave/create'
 import { Route as AuthenticatedOaLeaveBillIdRouteImport } from './routes/_authenticated/oa/leave/$billId'
+import { Route as AuthenticatedOaExpenseListRouteImport } from './routes/_authenticated/oa/expense/list'
 import { Route as AuthenticatedOaExpenseCreateRouteImport } from './routes/_authenticated/oa/expense/create'
 import { Route as AuthenticatedOaExpenseBillIdRouteImport } from './routes/_authenticated/oa/expense/$billId'
+import { Route as AuthenticatedOaCommonListRouteImport } from './routes/_authenticated/oa/common/list'
 import { Route as AuthenticatedOaCommonCreateRouteImport } from './routes/_authenticated/oa/common/create'
 import { Route as AuthenticatedOaCommonBillIdRouteImport } from './routes/_authenticated/oa/common/$billId'
 import { Route as AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRouteImport } from './routes/_authenticated/workflow/versions/$processDefinitionId/index'
@@ -559,6 +562,12 @@ const AuthenticatedPlmEcoBillIdRoute =
     path: '/plm/eco/$billId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOaLeaveListRoute =
+  AuthenticatedOaLeaveListRouteImport.update({
+    id: '/oa/leave/list',
+    path: '/oa/leave/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedOaLeaveCreateRoute =
   AuthenticatedOaLeaveCreateRouteImport.update({
     id: '/oa/leave/create',
@@ -571,6 +580,12 @@ const AuthenticatedOaLeaveBillIdRoute =
     path: '/oa/leave/$billId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOaExpenseListRoute =
+  AuthenticatedOaExpenseListRouteImport.update({
+    id: '/oa/expense/list',
+    path: '/oa/expense/list',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedOaExpenseCreateRoute =
   AuthenticatedOaExpenseCreateRouteImport.update({
     id: '/oa/expense/create',
@@ -581,6 +596,12 @@ const AuthenticatedOaExpenseBillIdRoute =
   AuthenticatedOaExpenseBillIdRouteImport.update({
     id: '/oa/expense/$billId',
     path: '/oa/expense/$billId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedOaCommonListRoute =
+  AuthenticatedOaCommonListRouteImport.update({
+    id: '/oa/common/list',
+    path: '/oa/common/list',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedOaCommonCreateRoute =
@@ -1072,10 +1093,13 @@ export interface FileRoutesByFullPath {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/oa/common/list': typeof AuthenticatedOaCommonListRoute
   '/oa/expense/$billId': typeof AuthenticatedOaExpenseBillIdRoute
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/oa/expense/list': typeof AuthenticatedOaExpenseListRoute
   '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/oa/leave/list': typeof AuthenticatedOaLeaveListRoute
   '/plm/eco/$billId': typeof AuthenticatedPlmEcoBillIdRoute
   '/plm/eco/create': typeof AuthenticatedPlmEcoCreateRoute
   '/plm/ecr/$billId': typeof AuthenticatedPlmEcrBillIdRoute
@@ -1221,10 +1245,13 @@ export interface FileRoutesByTo {
   '/users': typeof AuthenticatedUsersIndexRoute
   '/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/oa/common/list': typeof AuthenticatedOaCommonListRoute
   '/oa/expense/$billId': typeof AuthenticatedOaExpenseBillIdRoute
   '/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/oa/expense/list': typeof AuthenticatedOaExpenseListRoute
   '/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/oa/leave/list': typeof AuthenticatedOaLeaveListRoute
   '/plm/eco/$billId': typeof AuthenticatedPlmEcoBillIdRoute
   '/plm/eco/create': typeof AuthenticatedPlmEcoCreateRoute
   '/plm/ecr/$billId': typeof AuthenticatedPlmEcrBillIdRoute
@@ -1373,10 +1400,13 @@ export interface FileRoutesById {
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/_authenticated/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
+  '/_authenticated/oa/common/list': typeof AuthenticatedOaCommonListRoute
   '/_authenticated/oa/expense/$billId': typeof AuthenticatedOaExpenseBillIdRoute
   '/_authenticated/oa/expense/create': typeof AuthenticatedOaExpenseCreateRoute
+  '/_authenticated/oa/expense/list': typeof AuthenticatedOaExpenseListRoute
   '/_authenticated/oa/leave/$billId': typeof AuthenticatedOaLeaveBillIdRoute
   '/_authenticated/oa/leave/create': typeof AuthenticatedOaLeaveCreateRoute
+  '/_authenticated/oa/leave/list': typeof AuthenticatedOaLeaveListRoute
   '/_authenticated/plm/eco/$billId': typeof AuthenticatedPlmEcoBillIdRoute
   '/_authenticated/plm/eco/create': typeof AuthenticatedPlmEcoCreateRoute
   '/_authenticated/plm/ecr/$billId': typeof AuthenticatedPlmEcrBillIdRoute
@@ -1525,10 +1555,13 @@ export interface FileRouteTypes {
     | '/users'
     | '/oa/common/$billId'
     | '/oa/common/create'
+    | '/oa/common/list'
     | '/oa/expense/$billId'
     | '/oa/expense/create'
+    | '/oa/expense/list'
     | '/oa/leave/$billId'
     | '/oa/leave/create'
+    | '/oa/leave/list'
     | '/plm/eco/$billId'
     | '/plm/eco/create'
     | '/plm/ecr/$billId'
@@ -1674,10 +1707,13 @@ export interface FileRouteTypes {
     | '/users'
     | '/oa/common/$billId'
     | '/oa/common/create'
+    | '/oa/common/list'
     | '/oa/expense/$billId'
     | '/oa/expense/create'
+    | '/oa/expense/list'
     | '/oa/leave/$billId'
     | '/oa/leave/create'
+    | '/oa/leave/list'
     | '/plm/eco/$billId'
     | '/plm/eco/create'
     | '/plm/ecr/$billId'
@@ -1825,10 +1861,13 @@ export interface FileRouteTypes {
     | '/_authenticated/users/'
     | '/_authenticated/oa/common/$billId'
     | '/_authenticated/oa/common/create'
+    | '/_authenticated/oa/common/list'
     | '/_authenticated/oa/expense/$billId'
     | '/_authenticated/oa/expense/create'
+    | '/_authenticated/oa/expense/list'
     | '/_authenticated/oa/leave/$billId'
     | '/_authenticated/oa/leave/create'
+    | '/_authenticated/oa/leave/list'
     | '/_authenticated/plm/eco/$billId'
     | '/_authenticated/plm/eco/create'
     | '/_authenticated/plm/ecr/$billId'
@@ -2447,6 +2486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlmEcoBillIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/oa/leave/list': {
+      id: '/_authenticated/oa/leave/list'
+      path: '/oa/leave/list'
+      fullPath: '/oa/leave/list'
+      preLoaderRoute: typeof AuthenticatedOaLeaveListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/oa/leave/create': {
       id: '/_authenticated/oa/leave/create'
       path: '/oa/leave/create'
@@ -2461,6 +2507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOaLeaveBillIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/oa/expense/list': {
+      id: '/_authenticated/oa/expense/list'
+      path: '/oa/expense/list'
+      fullPath: '/oa/expense/list'
+      preLoaderRoute: typeof AuthenticatedOaExpenseListRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/oa/expense/create': {
       id: '/_authenticated/oa/expense/create'
       path: '/oa/expense/create'
@@ -2473,6 +2526,13 @@ declare module '@tanstack/react-router' {
       path: '/oa/expense/$billId'
       fullPath: '/oa/expense/$billId'
       preLoaderRoute: typeof AuthenticatedOaExpenseBillIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/oa/common/list': {
+      id: '/_authenticated/oa/common/list'
+      path: '/oa/common/list'
+      fullPath: '/oa/common/list'
+      preLoaderRoute: typeof AuthenticatedOaCommonListRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/oa/common/create': {
@@ -3046,10 +3106,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedOaCommonBillIdRoute: typeof AuthenticatedOaCommonBillIdRoute
   AuthenticatedOaCommonCreateRoute: typeof AuthenticatedOaCommonCreateRoute
+  AuthenticatedOaCommonListRoute: typeof AuthenticatedOaCommonListRoute
   AuthenticatedOaExpenseBillIdRoute: typeof AuthenticatedOaExpenseBillIdRoute
   AuthenticatedOaExpenseCreateRoute: typeof AuthenticatedOaExpenseCreateRoute
+  AuthenticatedOaExpenseListRoute: typeof AuthenticatedOaExpenseListRoute
   AuthenticatedOaLeaveBillIdRoute: typeof AuthenticatedOaLeaveBillIdRoute
   AuthenticatedOaLeaveCreateRoute: typeof AuthenticatedOaLeaveCreateRoute
+  AuthenticatedOaLeaveListRoute: typeof AuthenticatedOaLeaveListRoute
   AuthenticatedPlmEcoBillIdRoute: typeof AuthenticatedPlmEcoBillIdRoute
   AuthenticatedPlmEcoCreateRoute: typeof AuthenticatedPlmEcoCreateRoute
   AuthenticatedPlmEcrBillIdRoute: typeof AuthenticatedPlmEcrBillIdRoute
@@ -3186,10 +3249,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedOaCommonBillIdRoute: AuthenticatedOaCommonBillIdRoute,
   AuthenticatedOaCommonCreateRoute: AuthenticatedOaCommonCreateRoute,
+  AuthenticatedOaCommonListRoute: AuthenticatedOaCommonListRoute,
   AuthenticatedOaExpenseBillIdRoute: AuthenticatedOaExpenseBillIdRoute,
   AuthenticatedOaExpenseCreateRoute: AuthenticatedOaExpenseCreateRoute,
+  AuthenticatedOaExpenseListRoute: AuthenticatedOaExpenseListRoute,
   AuthenticatedOaLeaveBillIdRoute: AuthenticatedOaLeaveBillIdRoute,
   AuthenticatedOaLeaveCreateRoute: AuthenticatedOaLeaveCreateRoute,
+  AuthenticatedOaLeaveListRoute: AuthenticatedOaLeaveListRoute,
   AuthenticatedPlmEcoBillIdRoute: AuthenticatedPlmEcoBillIdRoute,
   AuthenticatedPlmEcoCreateRoute: AuthenticatedPlmEcoCreateRoute,
   AuthenticatedPlmEcrBillIdRoute: AuthenticatedPlmEcrBillIdRoute,

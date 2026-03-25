@@ -54,6 +54,20 @@ export function AICopilotPage({
 }: {
   sourceRoute?: string
 }) {
+  return (
+    <Main fixed fluid className='p-4 sm:p-6'>
+      <AICopilotWorkspace sourceRoute={sourceRoute} mode='page' />
+    </Main>
+  )
+}
+
+export function AICopilotWorkspace({
+  sourceRoute = '',
+  mode = 'page',
+}: {
+  sourceRoute?: string
+  mode?: 'page' | 'drawer'
+}) {
   const queryClient = useQueryClient()
   const [activeSessionId, setActiveSessionId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -276,262 +290,289 @@ export function AICopilotPage({
   }
 
   return (
-    <Main fixed fluid className='p-4 sm:p-6'>
-      <div className='relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/90 text-slate-50 shadow-[0_30px_100px_-50px_rgba(15,23,42,0.95)] backdrop-blur-2xl'>
-        <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.24),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.18),_transparent_22%),linear-gradient(135deg,_rgba(255,255,255,0.04),_transparent_45%)]' />
-        <div className='relative grid min-h-[calc(100svh-8rem)] gap-4 p-4 sm:p-5 xl:grid-cols-[320px_minmax(0,1fr)]'>
-          <aside className='flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'>
-            <div className='border-b border-white/10 px-4 py-4'>
-              <div className='flex items-start justify-between gap-3'>
-                <div>
-                  <p className='text-xs uppercase tracking-[0.28em] text-cyan-200/70'>
-                    AI Copilot
-                  </p>
-                  <h1 className='mt-2 text-lg font-semibold text-white'>
-                    会话工位
-                  </h1>
-                  <p className='mt-1 text-sm text-slate-300'>
-                    这里通过真实 HTTP API 拉取会话、消息和确认卡状态，不再使用本地内存 store。
-                  </p>
-                </div>
-                <Button
-                  type='button'
-                  size='icon'
-                  variant='outline'
-                  className='border-white/15 bg-white/5 text-slate-50 hover:bg-white/10 hover:text-white'
-                  onClick={handleCreateSession}
-                >
-                  <Plus />
-                </Button>
+    <div
+      className={cn(
+        'flex min-h-0 flex-1 flex-col overflow-hidden text-slate-50',
+        mode === 'page'
+          ? 'relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/90 shadow-[0_30px_100px_-50px_rgba(15,23,42,0.95)] backdrop-blur-2xl'
+          : 'bg-slate-950'
+      )}
+    >
+      <div className='pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(14,165,233,0.24),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.18),_transparent_22%),linear-gradient(135deg,_rgba(255,255,255,0.04),_transparent_45%)]' />
+      <div
+        className={cn(
+          'relative grid min-h-0 flex-1 gap-4 p-4 sm:p-5',
+          mode === 'page'
+            ? 'min-h-[calc(100svh-8rem)] xl:grid-cols-[320px_minmax(0,1fr)]'
+            : 'h-full xl:grid-cols-[280px_minmax(0,1fr)]'
+        )}
+      >
+        <aside className='flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'>
+          <div className='border-b border-white/10 px-4 py-4'>
+            <div className='flex items-start justify-between gap-3'>
+              <div>
+                <p className='text-xs uppercase tracking-[0.28em] text-cyan-200/70'>
+                  AI Copilot
+                </p>
+                <h1 className='mt-2 text-lg font-semibold text-white'>会话</h1>
+                <p className='mt-1 text-sm text-slate-300'>
+                  选择会话，继续当前页面上下文。
+                </p>
               </div>
-
-              <div className='mt-4 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
-                <Search className='size-4 text-slate-300' />
-                <Input
-                  value={searchTerm}
-                  onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder='搜索会话或标签…'
-                  className='h-auto border-0 bg-transparent p-0 text-sm text-white shadow-none placeholder:text-slate-400 focus-visible:ring-0'
-                />
-              </div>
+              <Button
+                type='button'
+                size='icon'
+                variant='outline'
+                className='border-white/15 bg-white/5 text-slate-50 hover:bg-white/10 hover:text-white'
+                onClick={handleCreateSession}
+              >
+                <Plus />
+              </Button>
             </div>
 
-            <ScrollArea className='min-h-0 flex-1'>
-              <div className='space-y-3 p-4'>
+            <div className='mt-4 flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2'>
+              <Search className='size-4 text-slate-300' />
+              <Input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder='搜索会话或标签…'
+                className='h-auto border-0 bg-transparent p-0 text-sm text-white shadow-none placeholder:text-slate-400 focus-visible:ring-0'
+              />
+            </div>
+          </div>
+
+          <ScrollArea className='min-h-0 flex-1'>
+            <div className='space-y-3 p-4'>
+              <div className='flex items-center justify-between gap-3'>
                 <SectionLabel
                   icon={<SquareStack className='size-3.5' />}
                   title='会话列表'
                   description={`${filteredSessions.length} 个会话`}
                 />
-                <div className='space-y-2'>
-                  {filteredSessions.map((session) => {
-                    const isActive = session.sessionId === effectiveActiveSessionId
-
-                    return (
-                      <button
-                        key={session.sessionId}
-                        type='button'
-                        onClick={() => setActiveSessionId(session.sessionId)}
-                        className={cn(
-                          'group w-full rounded-2xl border px-3 py-3 text-left transition-all duration-200',
-                          isActive
-                            ? 'border-cyan-300/50 bg-cyan-300/12 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
-                            : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
-                        )}
-                      >
-                        <div className='flex items-start justify-between gap-3'>
-                          <div>
-                            <p className='text-sm font-medium text-white'>
-                              {session.title}
-                            </p>
-                            <p className='mt-1 line-clamp-2 text-xs leading-5 text-slate-300'>
-                              {session.preview}
-                            </p>
-                          </div>
-                          <ArrowRight
-                            className={cn(
-                              'mt-0.5 size-4 shrink-0 transition-transform',
-                              isActive
-                                ? 'text-cyan-200'
-                                : 'text-slate-400 group-hover:translate-x-0.5'
-                            )}
-                          />
-                        </div>
-                        <div className='mt-3 flex flex-wrap gap-2'>
-                          {session.contextTags.slice(0, 3).map((tag) => (
-                            <span
-                              key={tag}
-                              className='rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200'
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                        <div className='mt-3 flex items-center justify-between text-[11px] text-slate-400'>
-                          <span>{session.messageCount} 条消息</span>
-                          <span>{formatDate(session.updatedAt)}</span>
-                        </div>
-                      </button>
-                    )
-                  })}
-                  {!filteredSessions.length ? (
-                    <div className='rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-slate-300'>
-                      没有找到匹配的会话，先试试新的搜索词。
-                    </div>
-                  ) : null}
-                </div>
-
-                <Separator className='bg-white/10' />
-
-                <SectionLabel
-                  icon={<Clock3 className='size-3.5' />}
-                  title='历史快照'
-                  description='当前会话最近的消息预览'
-                />
-                <div className='space-y-2'>
-                  {recentHistory.map((message) => (
-                    <HistoryRow key={message.messageId} message={message} />
-                  ))}
-                  {!recentHistory.length ? (
-                    <div className='rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-slate-300'>
-                      当前会话暂无历史记录。
-                    </div>
-                  ) : null}
-                </div>
+                {activeContextLabel && mode === 'drawer' ? (
+                  <BadgePill tone='subtle'>{activeContextLabel}</BadgePill>
+                ) : null}
               </div>
-            </ScrollArea>
-          </aside>
+              <div className='space-y-2'>
+                {filteredSessions.map((session) => {
+                  const isActive = session.sessionId === effectiveActiveSessionId
 
-          <section className='flex min-h-0 flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'>
-            <div className='border-b border-white/10 px-5 py-4'>
-              <div className='flex flex-wrap items-start justify-between gap-4'>
-                <div>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <BadgePill icon={<Sparkles className='size-3.5' />}>
-                      AI Copilot
-                    </BadgePill>
-                    {activeSession ? (
-                      <BadgePill tone='subtle'>{activeSession.status}</BadgePill>
-                    ) : null}
-                    {activeContextLabel ? (
-                      <BadgePill tone='subtle'>
-                        上下文：{activeContextLabel}
-                      </BadgePill>
+                  return (
+                    <button
+                      key={session.sessionId}
+                      type='button'
+                      onClick={() => setActiveSessionId(session.sessionId)}
+                      className={cn(
+                        'group w-full rounded-2xl border px-3 py-3 text-left transition-all duration-200',
+                        isActive
+                          ? 'border-cyan-300/50 bg-cyan-300/12 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
+                          : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                      )}
+                    >
+                      <div className='flex items-start justify-between gap-3'>
+                        <div>
+                          <p className='text-sm font-medium text-white'>
+                            {session.title}
+                          </p>
+                          <p className='mt-1 line-clamp-2 text-xs leading-5 text-slate-300'>
+                            {session.preview}
+                          </p>
+                        </div>
+                        <ArrowRight
+                          className={cn(
+                            'mt-0.5 size-4 shrink-0 transition-transform',
+                            isActive
+                              ? 'text-cyan-200'
+                              : 'text-slate-400 group-hover:translate-x-0.5'
+                          )}
+                        />
+                      </div>
+                      <div className='mt-3 flex flex-wrap gap-2'>
+                        {session.contextTags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            className='rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200'
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      <div className='mt-3 flex items-center justify-between text-[11px] text-slate-400'>
+                        <span>{session.messageCount} 条消息</span>
+                        <span>{formatDate(session.updatedAt)}</span>
+                      </div>
+                    </button>
+                  )
+                })}
+                {!filteredSessions.length ? (
+                  <div className='rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-slate-300'>
+                    没有找到匹配的会话，先试试新的搜索词。
+                  </div>
+                ) : null}
+              </div>
+              {mode === 'page' ? (
+                <>
+                  <Separator className='bg-white/10' />
+
+                  <SectionLabel
+                    icon={<Clock3 className='size-3.5' />}
+                    title='历史快照'
+                    description='当前会话最近的消息预览'
+                  />
+                  <div className='space-y-2'>
+                    {recentHistory.map((message) => (
+                      <HistoryRow key={message.messageId} message={message} />
+                    ))}
+                    {!recentHistory.length ? (
+                      <div className='rounded-2xl border border-dashed border-white/10 bg-white/5 px-4 py-6 text-sm text-slate-300'>
+                        当前会话暂无历史记录。
+                      </div>
                     ) : null}
                   </div>
-                  <h2 className='mt-3 text-2xl font-semibold text-white'>
-                    {activeSession?.title ?? '请选择一个会话'}
-                  </h2>
-                  <p className='mt-2 max-w-3xl text-sm leading-6 text-slate-300'>
-                    这里是毛玻璃聊天面板，消息流、确认卡、表单预览卡和统计卡都会从 HTTP API 实时读取。
-                  </p>
-                </div>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <Button
-                    type='button'
-                    variant='outline'
-                    className='border-white/15 bg-white/5 text-slate-50 hover:bg-white/10'
-                    onClick={() => void activeSessionQuery.refetch()}
-                  >
-                    <RefreshCw className='size-4' />
-                    刷新会话
-                  </Button>
-                  <Button
-                    type='button'
-                    className='bg-cyan-400 text-slate-950 hover:bg-cyan-300'
-                    onClick={handleCreateSession}
-                  >
-                    <Plus className='size-4' />
-                    新建会话
-                  </Button>
-                </div>
-              </div>
-              {loadErrorMessage ? (
-                <p className='mt-3 rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-50'>
-                  {loadErrorMessage}
-                </p>
+                </>
               ) : null}
             </div>
+          </ScrollArea>
+        </aside>
 
-            <div className='grid min-h-0 flex-1 gap-0 xl:grid-cols-[minmax(0,1fr)_340px]'>
-              <div className='flex min-h-0 flex-col border-r border-white/10'>
-                <ScrollArea className='min-h-0 flex-1'>
-                  <div className='space-y-4 p-5'>
-                    {isLoading ? (
-                      <ShellSkeleton />
-                    ) : activeSession ? (
-                      activeSession.history.map((message) => (
-                        <MessageBubble
-                          key={message.messageId}
-                          message={message}
-                          pendingConfirmationId={pendingConfirmationId}
-                          onConfirm={(confirmationId) =>
-                            handleResolveConfirmation(confirmationId, 'confirm')
-                          }
-                          onCancel={(confirmationId) =>
-                            handleResolveConfirmation(confirmationId, 'cancel')
-                          }
-                        />
-                      ))
-                    ) : (
-                      <EmptyState />
-                    )}
-                  </div>
-                </ScrollArea>
+        <section className='flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'>
+          <div className='border-b border-white/10 px-5 py-4'>
+            <div className='flex flex-wrap items-start justify-between gap-4'>
+              <div>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <BadgePill icon={<Sparkles className='size-3.5' />}>
+                    AI Copilot
+                  </BadgePill>
+                  {activeSession ? (
+                    <BadgePill tone='subtle'>{activeSession.status}</BadgePill>
+                  ) : null}
+                  {activeContextLabel ? (
+                    <BadgePill tone='subtle'>
+                      上下文：{activeContextLabel}
+                    </BadgePill>
+                  ) : null}
+                </div>
+                <h2 className='mt-3 text-2xl font-semibold text-white'>
+                  {activeSession?.title ?? '请选择一个会话'}
+                </h2>
+                <p className='mt-2 max-w-3xl text-sm leading-6 text-slate-300'>
+                  在当前页面语境下对话、确认和继续处理。
+                </p>
+              </div>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button
+                  type='button'
+                  variant='outline'
+                  className='border-white/15 bg-white/5 text-slate-50 hover:bg-white/10'
+                  onClick={() => void activeSessionQuery.refetch()}
+                >
+                  <RefreshCw className='size-4' />
+                  刷新会话
+                </Button>
+                <Button
+                  type='button'
+                  className='bg-cyan-400 text-slate-950 hover:bg-cyan-300'
+                  onClick={handleCreateSession}
+                >
+                  <Plus className='size-4' />
+                  新建会话
+                </Button>
+              </div>
+            </div>
+            {loadErrorMessage ? (
+              <p className='mt-3 rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-50'>
+                {loadErrorMessage}
+              </p>
+            ) : null}
+          </div>
 
-                <div className='border-t border-white/10 bg-slate-950/60 p-4 backdrop-blur-xl'>
-                  <div className='mb-3 flex flex-wrap gap-2'>
-                    {[
-                      '梳理当前待办',
-                      '生成确认卡',
-                      '预览表单',
-                      '输出统计卡',
-                    ].map((preset) => (
-                      <button
-                        key={preset}
-                        type='button'
-                        onClick={() => setDraft(preset)}
-                        className='rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 transition-colors hover:border-white/20 hover:bg-white/10'
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                  <div className='mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400'>
-                    <span>
-                      {activeContextLabel
-                        ? `当前会话会沿用 ${activeContextLabel} 的页面语境。`
-                        : '当前会话未绑定业务页面语境。'}
-                    </span>
-                    <span>Ctrl/Cmd + Enter 快速发送</span>
-                  </div>
-                  <div className='flex flex-col gap-3 md:flex-row md:items-end'>
-                    <Textarea
-                      ref={composerRef}
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      onKeyDown={handleComposerKeyDown}
-                      placeholder='输入一条 Copilot 指令，例如：帮我生成一个确认卡和统计摘要'
-                      className='min-h-24 flex-1 resize-none border-white/10 bg-white/5 text-sm text-white placeholder:text-slate-400 focus-visible:ring-cyan-300/60'
-                    />
-                    <Button
+          <div
+            className={cn(
+              'grid min-h-0 flex-1',
+              mode === 'page'
+                ? 'xl:grid-cols-[minmax(0,1fr)_340px]'
+                : 'grid-cols-[minmax(0,1fr)]'
+            )}
+          >
+            <div className='flex min-h-0 min-w-0 flex-col border-r border-white/10'>
+              <ScrollArea className='min-h-0 flex-1'>
+                <div className='space-y-4 p-5'>
+                  {isLoading ? (
+                    <ShellSkeleton />
+                  ) : activeSession ? (
+                    activeSession.history.map((message) => (
+                      <MessageBubble
+                        key={message.messageId}
+                        message={message}
+                        pendingConfirmationId={pendingConfirmationId}
+                        onConfirm={(confirmationId) =>
+                          handleResolveConfirmation(confirmationId, 'confirm')
+                        }
+                        onCancel={(confirmationId) =>
+                          handleResolveConfirmation(confirmationId, 'cancel')
+                        }
+                      />
+                    ))
+                  ) : (
+                    <EmptyState />
+                  )}
+                </div>
+              </ScrollArea>
+
+              <div className='border-t border-white/10 bg-slate-950/60 p-4 backdrop-blur-xl'>
+                <div className='mb-3 flex flex-wrap gap-2'>
+                  {[
+                    '梳理当前待办',
+                    '生成确认卡',
+                    '预览表单',
+                    '输出统计卡',
+                  ].map((preset) => (
+                    <button
+                      key={preset}
                       type='button'
-                      className='md:h-24 md:w-40'
-                      disabled={
-                        !draft.trim() ||
-                        sendMessageMutation.isPending ||
-                        !effectiveActiveSessionId
-                      }
-                      onClick={() => void handleSendMessage()}
+                      onClick={() => setDraft(preset)}
+                      className='rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 transition-colors hover:border-white/20 hover:bg-white/10'
                     >
-                      <SendHorizontal className='size-4' />
-                      {sendMessageMutation.isPending ? '发送中…' : '发送'}
-                    </Button>
-                  </div>
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+                <div className='mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400'>
+                  <span>
+                    {activeContextLabel
+                      ? `当前会话会沿用 ${activeContextLabel} 的页面语境。`
+                      : '当前会话未绑定业务页面语境。'}
+                  </span>
+                  <span>Ctrl/Cmd + Enter 快速发送</span>
+                </div>
+                <div className='flex flex-col gap-3 md:flex-row md:items-end'>
+                  <Textarea
+                    ref={composerRef}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={handleComposerKeyDown}
+                    placeholder='输入一条 Copilot 指令，例如：帮我生成一个确认卡和统计摘要'
+                    className='min-h-24 flex-1 resize-none border-white/10 bg-white/5 text-sm text-white placeholder:text-slate-400 focus-visible:ring-cyan-300/60'
+                  />
+                  <Button
+                    type='button'
+                    className='md:h-24 md:w-40'
+                    disabled={
+                      !draft.trim() ||
+                      sendMessageMutation.isPending ||
+                      !effectiveActiveSessionId
+                    }
+                    onClick={() => void handleSendMessage()}
+                  >
+                    <SendHorizontal className='size-4' />
+                    {sendMessageMutation.isPending ? '发送中…' : '发送'}
+                  </Button>
                 </div>
               </div>
+            </div>
 
-              <div className='flex min-h-0 flex-col bg-white/[0.03]'>
+            {mode === 'page' ? (
+              <div className='flex min-h-0 min-w-0 flex-col bg-white/[0.03]'>
                 <div className='border-b border-white/10 px-4 py-4'>
                   <div className='flex items-center justify-between gap-3'>
                     <div>
@@ -646,7 +687,7 @@ export function AICopilotPage({
                                         'confirm',
                                         argumentsOverride
                                       )
-                                : undefined
+                                  : undefined
                             }
                             onCancel={
                               confirmBlock && confirmBlock.cancelLabel
@@ -674,11 +715,11 @@ export function AICopilotPage({
                   </div>
                 </ScrollArea>
               </div>
-            </div>
-          </section>
-        </div>
+            ) : null}
+          </div>
+        </section>
       </div>
-    </Main>
+    </div>
   )
 }
 
@@ -1498,6 +1539,7 @@ function ExecutionSummaryBanner({
     typeof result.toolCallId === 'string' ? result.toolCallId : null
   const taskHandleAction = resolveTaskHandleActionLabel(block)
   const taskHandleTaskId = resolveTaskHandleTaskId(block)
+  const sourceLabel = resolveDisplaySourceLabel(block)
   const bannerClass =
     tone === 'success'
       ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-50'
@@ -1521,7 +1563,7 @@ function ExecutionSummaryBanner({
         <span>{defaultLabel}</span>
         {taskHandleAction ? <span>待办动作：{taskHandleAction}</span> : null}
         {taskHandleTaskId ? <span>待办编号：{taskHandleTaskId}</span> : null}
-        {block.sourceName ? <span>命中：{block.sourceName}</span> : null}
+        {sourceLabel ? <span>命中：{sourceLabel}</span> : null}
         {block.toolType ? <span>动作：{block.toolType}</span> : null}
         {toolCallId ? <span>调用：{toolCallId}</span> : null}
         {confirmationId ? <span>确认单：{confirmationId}</span> : null}
@@ -1619,7 +1661,9 @@ function TraceMeta({
     { sourceType?: string; sourceKey?: string; sourceName?: string; toolType?: string }
   >
 }) {
-  if (!block.sourceType && !block.sourceName && !block.sourceKey && !block.toolType) {
+  const sourceLabel = resolveDisplaySourceLabel(block)
+
+  if (!block.sourceType && !sourceLabel && !block.sourceKey && !block.toolType) {
     return null
   }
 
@@ -1627,14 +1671,34 @@ function TraceMeta({
     <div className='flex flex-wrap gap-2 pt-1'>
       {block.sourceType ? <BadgePill tone='subtle'>来源：{block.sourceType}</BadgePill> : null}
       {block.toolType ? <BadgePill tone='subtle'>工具：{block.toolType}</BadgePill> : null}
-      {block.sourceName ? (
-        <span className='text-xs text-slate-300'>命中：{block.sourceName}</span>
+      {sourceLabel ? (
+        <span className='text-xs text-slate-300'>命中：{sourceLabel}</span>
       ) : null}
       {block.sourceKey ? (
         <span className='text-xs text-slate-400'>键：{block.sourceKey}</span>
       ) : null}
     </div>
   )
+}
+
+function resolveDisplaySourceLabel(
+  block: {
+    sourceName?: string | null
+    summary?: string | null
+  }
+) {
+  const sourceName = String(block.sourceName ?? '').trim()
+  const summary = String('summary' in block ? block.summary ?? '' : '').trim()
+
+  if (!sourceName) {
+    return null
+  }
+
+  if (sourceName === summary) {
+    return null
+  }
+
+  return sourceName
 }
 
 function TraceTimeline({ trace }: { trace: AICopilotTraceStep[] }) {

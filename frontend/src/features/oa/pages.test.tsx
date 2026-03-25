@@ -4,9 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   OAApprovalSheetDetailPage,
   OACommonCreatePage,
+  OACommonListPage,
   OAExpenseCreatePage,
+  OAExpenseListPage,
   OAQueryPage,
   OALeaveCreatePage,
+  OALeaveListPage,
 } from './pages'
 
 const { navigateMock, oaApiMocks } = vi.hoisted(() => ({
@@ -96,22 +99,30 @@ vi.mock('@/features/shared/page-shell', () => ({
   ),
 }))
 
-vi.mock('@/features/shared/crud/resource-list-page', () => ({
-  ResourceListPage: ({
+vi.mock('@/features/shared/pro-table', () => ({
+  ProTable: ({
     title,
     extraActions,
-    createAction,
+    createActionNode,
     data,
+    supportsBoard,
   }: {
     title: string
     extraActions?: React.ReactNode
-    createAction?: { label: string; href: string }
+    createActionNode?: React.ReactNode
     data: Array<{ instanceId: string; businessTitle?: string; billNo?: string }>
+    supportsBoard?: boolean
   }) => (
     <div>
       <h2>{title}</h2>
+      {supportsBoard ? (
+        <>
+          <button type='button'>表格</button>
+          <button type='button'>看板</button>
+        </>
+      ) : null}
       {extraActions}
-      {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
+      {createActionNode}
       {data.map((item) => (
         <div key={item.instanceId}>{item.businessTitle ?? item.billNo}</div>
       ))}
@@ -382,12 +393,72 @@ describe('oa pages', () => {
     expect(await screen.findByText('OA 流程查询')).toBeInTheDocument()
     expect(screen.getByText('请假申请 · 外出处理事务')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 解读 OA 查询结果' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fquery')
+      screen.getByRole('button', { name: '用 AI 解读 OA 查询结果' })
+    ).toHaveAttribute('data-source-route', '/oa/query')
     expect(
       screen.getByRole('link', { name: '发起 OA 申请' })
     ).toHaveAttribute('href', '/workbench/start')
   })
+
+  it.each([
+    {
+      name: 'OALeaveListPage',
+      renderPage: OALeaveListPage,
+      businessTypes: ['OA_LEAVE'],
+      title: '请假申请列表',
+      createLabel: '发起请假申请',
+      createHref: '/oa/leave/create',
+      copilotSourceRoute: '/oa/leave/list',
+    },
+    {
+      name: 'OAExpenseListPage',
+      renderPage: OAExpenseListPage,
+      businessTypes: ['OA_EXPENSE'],
+      title: '报销申请列表',
+      createLabel: '发起报销申请',
+      createHref: '/oa/expense/create',
+      copilotSourceRoute: '/oa/expense/list',
+    },
+    {
+      name: 'OACommonListPage',
+      renderPage: OACommonListPage,
+      businessTypes: ['OA_COMMON'],
+      title: '通用申请列表',
+      createLabel: '发起通用申请',
+      createHref: '/oa/common/create',
+      copilotSourceRoute: '/oa/common/list',
+    },
+  ] as const)(
+    'loads business list on $name with filtered approval sheets',
+    async ({ renderPage, businessTypes, title, createLabel, createHref, copilotSourceRoute }) => {
+      oaApiMocks.listApprovalSheets.mockResolvedValue(mockApprovalSheetPage())
+
+      const RenderPage = renderPage
+      renderWithQuery(<RenderPage />)
+
+      await waitFor(() => {
+        expect(oaApiMocks.listApprovalSheets).toHaveBeenCalledWith({
+          page: 1,
+          pageSize: 20,
+          keyword: '',
+          filters: [],
+          sorts: [],
+          groups: [],
+          view: 'INITIATED',
+          businessTypes,
+        })
+      })
+
+      expect(await screen.findByText(title)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: createLabel })).toHaveAttribute(
+        'href',
+        createHref
+      )
+      expect(
+        screen.getByRole('button', { name: '用 AI 解读当前业务列表' })
+      ).toHaveAttribute('data-source-route', copilotSourceRoute)
+    }
+  )
 
   it('loads OA approval sheet detail by business locator', async () => {
     oaApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
@@ -416,10 +487,10 @@ describe('oa pages', () => {
 
     expect(await screen.findByText('审批单详情')).toBeInTheDocument()
     expect(screen.getByText('业务正文')).toBeInTheDocument()
-    expect(screen.getByText('LEAVE-001')).toBeInTheDocument()
+    expect(screen.getByText('请假申请')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 解读当前审批单' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fleave%2Fleave_001')
+      screen.getByRole('button', { name: '用 AI 解读当前审批单' })
+    ).toHaveAttribute('data-source-route', '/oa/leave/leave_001')
   })
 
   it('exposes OA launch, query, and Copilot context links as a smoke path', async () => {
@@ -436,12 +507,12 @@ describe('oa pages', () => {
       screen.getByRole('button', { name: '发起请假申请' })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 辅助填写请假申请' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fleave%2Fcreate')
+      screen.getByRole('button', { name: '用 AI 辅助填写请假申请' })
+    ).toHaveAttribute('data-source-route', '/oa/leave/create')
     expect(await screen.findByText('OA 流程查询')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: '用 AI 解读 OA 查询结果' })
-    ).toHaveAttribute('href', '/ai?sourceRoute=%2Foa%2Fquery')
+      screen.getByRole('button', { name: '用 AI 解读 OA 查询结果' })
+    ).toHaveAttribute('data-source-route', '/oa/query')
     expect(
       screen.getByRole('link', { name: '发起 OA 申请' })
     ).toHaveAttribute('href', '/workbench/start')
@@ -451,27 +522,30 @@ describe('oa pages', () => {
     {
       name: 'OALeaveCreatePage',
       buttonLabel: '用 AI 辅助填写请假申请',
-      href: '/ai?sourceRoute=%2Foa%2Fleave%2Fcreate',
+      sourceRoute: '/oa/leave/create',
       renderPage: OALeaveCreatePage,
     },
     {
       name: 'OAExpenseCreatePage',
       buttonLabel: '用 AI 辅助填写报销申请',
-      href: '/ai?sourceRoute=%2Foa%2Fexpense%2Fcreate',
+      sourceRoute: '/oa/expense/create',
       renderPage: OAExpenseCreatePage,
     },
     {
       name: 'OACommonCreatePage',
       buttonLabel: '用 AI 辅助填写通用申请',
-      href: '/ai?sourceRoute=%2Foa%2Fcommon%2Fcreate',
+      sourceRoute: '/oa/common/create',
       renderPage: OACommonCreatePage,
     },
-  ] as const)('renders Copilot entry on $name', async ({ buttonLabel, href, renderPage }) => {
+  ] as const)('renders Copilot entry on $name', async ({ buttonLabel, sourceRoute, renderPage }) => {
     const RenderPage = renderPage
 
     renderWithQuery(<RenderPage />)
 
-    expect(screen.getByRole('link', { name: buttonLabel })).toHaveAttribute('href', href)
+    expect(screen.getByRole('button', { name: buttonLabel })).toHaveAttribute(
+      'data-source-route',
+      sourceRoute
+    )
   })
 
 })

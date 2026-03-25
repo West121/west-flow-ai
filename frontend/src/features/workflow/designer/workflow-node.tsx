@@ -35,6 +35,20 @@ const toneClassNames = {
   },
 } satisfies Record<string, Record<string, string>>
 
+const kindBadgeLabels = {
+  start: '开始',
+  approver: '审批',
+  subprocess: '子流程',
+  condition: '排他',
+  inclusive: '包容',
+  'dynamic-builder': '动态构建',
+  parallel: '并行',
+  cc: '抄送',
+  timer: '定时',
+  trigger: '触发',
+  end: '结束',
+} satisfies Record<WorkflowNodeData['kind'], string>
+
 // 不同节点种类用不同图标，帮助画布识别。
 function renderIcon(kind: WorkflowNodeData['kind']) {
   switch (kind) {
@@ -69,32 +83,30 @@ export function WorkflowNodeCard({
   const workflowData = data as WorkflowNodeData
   const classes =
     toneClassNames[workflowData.tone as keyof typeof toneClassNames]
+  const previewStatus = (workflowData as WorkflowNodeData & {
+    previewStatus?: 'ACTIVE' | 'COMPLETED' | 'VISITED' | 'IDLE'
+  }).previewStatus
   const showTarget = workflowData.kind !== 'start'
   const showSource = workflowData.kind !== 'end'
-  const handleClassName =
-    'size-4.5 rounded-full border-[3px] border-background bg-primary shadow-sm'
 
   return (
     <div
       className={cn(
         'relative w-[220px] rounded-2xl border bg-card/95 p-4 shadow-sm backdrop-blur',
         'transition-[box-shadow,transform] duration-200',
-        selected && ['shadow-lg ring-2', classes.ring]
+        selected && ['shadow-lg ring-2', classes.ring],
+        previewStatus === 'ACTIVE' && ['shadow-lg ring-2', classes.ring],
+        previewStatus === 'COMPLETED' &&
+          'border-emerald-300 bg-emerald-50/80 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/20',
+        previewStatus === 'VISITED' &&
+          'border-sky-200 bg-sky-50/70 dark:border-sky-900 dark:bg-sky-950/10'
       )}
     >
       {showTarget ? (
         <Handle
           type='target'
           position={Position.Top}
-          className={handleClassName}
-        />
-      ) : null}
-      {showTarget ? (
-        <Handle
-          id='target-left'
-          type='target'
-          position={Position.Left}
-          className={handleClassName}
+          isConnectableStart={false}
         />
       ) : null}
 
@@ -118,12 +130,9 @@ export function WorkflowNodeCard({
                 classes.badge
               )}
             >
-              {workflowData.kind}
+              {kindBadgeLabels[workflowData.kind]}
             </span>
           </div>
-          <p className='line-clamp-2 text-xs leading-5 text-muted-foreground'>
-            {workflowData.description}
-          </p>
         </div>
       </div>
 
@@ -131,15 +140,7 @@ export function WorkflowNodeCard({
         <Handle
           type='source'
           position={Position.Bottom}
-          className={handleClassName}
-        />
-      ) : null}
-      {showSource ? (
-        <Handle
-          id='source-right'
-          type='source'
-          position={Position.Right}
-          className={handleClassName}
+          isConnectableEnd={false}
         />
       ) : null}
     </div>

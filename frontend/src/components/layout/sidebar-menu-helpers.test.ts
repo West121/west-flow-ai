@@ -52,12 +52,22 @@ describe('sidebar menu helpers', () => {
       {
         items: [
           {
-            title: '待办列表',
-            url: '/workbench/todos/list',
-          },
-          {
-            title: '业务发起',
-            url: '/workbench/start',
+            title: '流程中心',
+            items: [
+              {
+                title: '待办列表',
+                url: '/workbench/todos/list',
+              },
+              {
+                title: '发起流程',
+                items: [
+                  {
+                    title: '业务发起',
+                    url: '/workbench/start',
+                  },
+                ],
+              },
+            ],
           },
         ],
       },
@@ -115,11 +125,21 @@ describe('sidebar menu helpers', () => {
         items: [
           {
             title: '工作台',
-            url: '/',
+            items: [
+              {
+                title: '工作台',
+                url: '/',
+              },
+            ],
           },
           {
-            title: '角色管理',
-            url: '/system/roles/list',
+            title: '组织管理',
+            items: [
+              {
+                title: '角色管理',
+                url: '/system/roles/list',
+              },
+            ],
           },
         ],
       },
@@ -129,13 +149,18 @@ describe('sidebar menu helpers', () => {
   it('flattens menu tree for command menu search', () => {
     expect(flattenSidebarMenuItems(tree)).toEqual([
       {
-        groupTitle: '待办列表',
-        title: '待办列表',
+        groupTitle: '流程中心',
+        title: '流程中心',
+        url: '/workbench',
+      },
+      {
+        groupTitle: '流程中心',
+        title: '流程中心 / 待办列表',
         url: '/workbench/todos/list',
       },
       {
-        groupTitle: '业务发起',
-        title: '业务发起',
+        groupTitle: '流程中心',
+        title: '流程中心 / 发起流程 / 业务发起',
         url: '/workbench/start',
       },
     ])

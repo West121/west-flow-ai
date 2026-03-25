@@ -7,6 +7,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { AICopilotLauncher } from '@/components/layout/ai-copilot-launcher'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SkipToMain } from '@/components/skip-to-main'
+import { AICopilotDrawer } from '@/features/ai/drawer'
 
 type AuthenticatedLayoutProps = {
   children?: React.ReactNode
@@ -35,6 +36,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
           >
             {children ?? <Outlet />}
             <AICopilotLauncher />
+            <AICopilotDrawer />
           </SidebarInset>
         </SidebarProvider>
       </LayoutProvider>

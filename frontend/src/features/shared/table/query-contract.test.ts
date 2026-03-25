@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   listQuerySearchSchema,
+  stripDefaultListQuerySearchValues,
   toPaginationRequest,
 } from '@/features/shared/table/query-contract'
 
@@ -38,6 +39,28 @@ describe('listQuerySearchSchema', () => {
       filters: [],
       sorts: [],
       groups: [],
+    })
+  })
+
+  it('strips default query values for clean urls', () => {
+    expect(
+      stripDefaultListQuerySearchValues(
+        listQuerySearchSchema.parse({
+          page: 1,
+          pageSize: 20,
+          keyword: '',
+          filters: [],
+          sorts: [],
+          groups: [],
+        })
+      )
+    ).toEqual({
+      page: undefined,
+      pageSize: undefined,
+      keyword: undefined,
+      filters: undefined,
+      sorts: undefined,
+      groups: undefined,
     })
   })
 })

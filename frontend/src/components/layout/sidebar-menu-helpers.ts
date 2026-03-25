@@ -1,5 +1,5 @@
 import type { SidebarMenuNode } from '@/lib/api/system-menus'
-import type { NavGroup, NavItem } from './types'
+import type { NavCollapsible, NavGroup, NavItem } from './types'
 import { menuIconRegistry } from './menu-icon-registry'
 
 function hasChildren(item: NavItem): item is NavItem & { items: NavItem[] } {
@@ -16,28 +16,38 @@ function resolveIcon(iconName: string | null) {
 
 function toNavItem(node: SidebarMenuNode): NavItem | null {
   const icon = resolveIcon(node.iconName)
-  if (node.menuType !== 'MENU' || !node.routePath) {
+  if (node.menuType === 'MENU') {
+    if (!node.routePath) {
+      return null
+    }
+
+    return {
+      title: node.title,
+      url: node.routePath,
+      icon,
+    }
+  }
+
+  const children = node.children
+    .map((child) => toNavItem(child))
+    .filter((child): child is NavItem => child !== null)
+
+  if (children.length === 0) {
     return null
   }
 
   return {
     title: node.title,
-    url: node.routePath,
     icon,
-  }
+    url: node.routePath ?? undefined,
+    items: children,
+  } satisfies NavCollapsible
 }
 
-function flattenMenuNodes(menuTree: SidebarMenuNode[]): NavItem[] {
-  return menuTree.flatMap((node) => {
-    const current = toNavItem(node)
-    const descendants = flattenMenuNodes(node.children)
-    return current == null ? descendants : [current, ...descendants]
-  })
-}
-
-// 侧边栏现在直接按后端菜单树渲染，不再把目录拆成分组标题。
 export function buildNavGroups(menuTree: SidebarMenuNode[]): NavGroup[] {
-  const items = flattenMenuNodes(menuTree)
+  const items = menuTree
+    .map((node) => toNavItem(node))
+    .filter((item): item is NavItem => item !== null)
 
   if (items.length === 0) {
     return []

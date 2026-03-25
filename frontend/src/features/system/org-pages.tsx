@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
@@ -56,8 +55,10 @@ import {
   getCompanyFormOptions,
   getDepartmentDetail,
   getDepartmentFormOptions,
+  getDepartmentUsers,
   getPostDetail,
   getPostFormOptions,
+  getPostUsers,
   listCompanies,
   listDepartments,
   listPosts,
@@ -67,8 +68,10 @@ import {
   type SaveCompanyPayload,
 } from '@/lib/api/system-org'
 import { handleServerError } from '@/lib/handle-server-error'
-import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import { ProFormActions, ProFormShell } from '@/features/shared/pro-form'
+import { ProTable } from '@/features/shared/pro-table'
 import { PageShell } from '@/features/shared/page-shell'
+import { AssociatedUsersDialog } from './associated-users-dialog'
 
 const rolesRoute = getRouteApi('/_authenticated/system/roles/list')
 const companiesRoute = getRouteApi('/_authenticated/system/companies/list')
@@ -364,7 +367,10 @@ const companyColumns: ColumnDef<CompanyRow>[] = [
   },
 ]
 
-const departmentColumns: ColumnDef<DepartmentRow>[] = [
+function buildDepartmentColumns(
+  onShowUsers: (row: DepartmentRow) => void
+): ColumnDef<DepartmentRow>[] {
+  return [
   {
     accessorKey: 'departmentName',
     header: '部门名称',
@@ -404,6 +410,13 @@ const departmentColumns: ColumnDef<DepartmentRow>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
+        <Button
+          variant='ghost'
+          className='h-8 px-2'
+          onClick={() => onShowUsers(row.original)}
+        >
+          关联用户
+        </Button>
         <Button asChild variant='ghost' className='h-8 px-2'>
           <Link
             to='/system/departments/$departmentId'
@@ -424,8 +437,12 @@ const departmentColumns: ColumnDef<DepartmentRow>[] = [
     ),
   },
 ]
+}
 
-const postColumns: ColumnDef<PostRow>[] = [
+function buildPostColumns(
+  onShowUsers: (row: PostRow) => void
+): ColumnDef<PostRow>[] {
+  return [
   {
     accessorKey: 'postName',
     header: '岗位名称',
@@ -463,6 +480,13 @@ const postColumns: ColumnDef<PostRow>[] = [
     enableSorting: false,
     cell: ({ row }) => (
       <div className='flex items-center gap-2'>
+        <Button
+          variant='ghost'
+          className='h-8 px-2'
+          onClick={() => onShowUsers(row.original)}
+        >
+          关联用户
+        </Button>
         <Button asChild variant='ghost' className='h-8 px-2'>
           <Link to='/system/posts/$postId' params={{ postId: row.original.postId }} search={{}}>
             详情
@@ -480,6 +504,7 @@ const postColumns: ColumnDef<PostRow>[] = [
     ),
   },
 ]
+}
 
 // 公司表单页负责创建和编辑共用逻辑。
 function CompanyFormPage({
@@ -602,36 +627,12 @@ function CompanyFormPage({
       title={isEdit ? '编辑公司' : '新建公司'}
       description='公司页面独立承载组织顶层实体维护，不和部门、岗位混合在同一个弹窗里处理。'
       actions={
-        <>
-          <Button
-            type='submit'
-            form='company-form'
-            disabled={isSubmitting}
-            onClick={() => setSubmitAction('list')}
-          >
-            {isSubmitting ? (
-              <Loader2 className='animate-spin' data-icon='inline-start' />
-            ) : (
-              <Save data-icon='inline-start' />
-            )}
-            保存并返回列表
-          </Button>
-          <Button
-            type='submit'
-            form='company-form'
-            variant='outline'
-            disabled={isSubmitting}
-            onClick={() => setSubmitAction('continue')}
-          >
-            保存并继续编辑
-          </Button>
-          <Button asChild variant='ghost'>
-            <Link to='/system/companies/list' search={{}}>
-              <ArrowLeft data-icon='inline-start' />
-              返回列表
-            </Link>
-          </Button>
-        </>
+        <Button asChild variant='ghost'>
+          <Link to='/system/companies/list' search={{}}>
+            <ArrowLeft data-icon='inline-start' />
+            返回列表
+          </Link>
+        </Button>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
@@ -641,14 +642,37 @@ function CompanyFormPage({
             onSubmit={form.handleSubmit(onSubmit)}
             className='flex flex-col gap-4'
           >
-            <Card>
-              <CardHeader>
-                <CardTitle>公司信息</CardTitle>
-                <CardDescription>
-                  当前基线先维护公司名称和启用状态，后续会继续扩展企业编码、法人和租户隔离配置。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='grid gap-4'>
+            <ProFormShell
+              title='公司信息'
+              description='当前基线先维护公司名称和启用状态，后续会继续扩展企业编码、法人和租户隔离配置。'
+              actions={
+                <ProFormActions>
+                  <Button
+                    type='submit'
+                    form='company-form'
+                    disabled={isSubmitting}
+                    onClick={() => setSubmitAction('list')}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className='animate-spin' data-icon='inline-start' />
+                    ) : (
+                      <Save data-icon='inline-start' />
+                    )}
+                    保存并返回列表
+                  </Button>
+                  <Button
+                    type='submit'
+                    form='company-form'
+                    variant='outline'
+                    disabled={isSubmitting}
+                    onClick={() => setSubmitAction('continue')}
+                  >
+                    保存并继续编辑
+                  </Button>
+                </ProFormActions>
+              }
+            >
+              <div className='grid gap-4'>
                 <FormField
                   control={form.control}
                   name='companyName'
@@ -688,8 +712,8 @@ function CompanyFormPage({
                     </FormItem>
                   )}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </ProFormShell>
           </form>
         </Form>
 
@@ -887,36 +911,12 @@ function DepartmentFormPage({
       title={isEdit ? '编辑部门' : '新建部门'}
       description='部门页独立承载组织层级维护，支持公司归属和父子部门关系配置。'
       actions={
-        <>
-          <Button
-            type='submit'
-            form='department-form'
-            disabled={isSubmitting}
-            onClick={() => setSubmitAction('list')}
-          >
-            {isSubmitting ? (
-              <Loader2 className='animate-spin' data-icon='inline-start' />
-            ) : (
-              <Save data-icon='inline-start' />
-            )}
-            保存并返回列表
-          </Button>
-          <Button
-            type='submit'
-            form='department-form'
-            variant='outline'
-            disabled={isSubmitting}
-            onClick={() => setSubmitAction('continue')}
-          >
-            保存并继续编辑
-          </Button>
-          <Button asChild variant='ghost'>
-            <Link to='/system/departments/list' search={{}}>
-              <ArrowLeft data-icon='inline-start' />
-              返回列表
-            </Link>
-          </Button>
-        </>
+        <Button asChild variant='ghost'>
+          <Link to='/system/departments/list' search={{}}>
+            <ArrowLeft data-icon='inline-start' />
+            返回列表
+          </Link>
+        </Button>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
@@ -926,14 +926,37 @@ function DepartmentFormPage({
             onSubmit={form.handleSubmit(onSubmit)}
             className='flex flex-col gap-4'
           >
-            <Card>
-              <CardHeader>
-                <CardTitle>部门信息</CardTitle>
-                <CardDescription>
-                  维护部门名称、公司归属和树形父级。后续可在这里继续扩展负责人和数据范围。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='grid gap-4'>
+            <ProFormShell
+              title='部门信息'
+              description='维护部门名称、公司归属和树形父级。后续可在这里继续扩展负责人和数据范围。'
+              actions={
+                <ProFormActions>
+                  <Button
+                    type='submit'
+                    form='department-form'
+                    disabled={isSubmitting}
+                    onClick={() => setSubmitAction('list')}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className='animate-spin' data-icon='inline-start' />
+                    ) : (
+                      <Save data-icon='inline-start' />
+                    )}
+                    保存并返回列表
+                  </Button>
+                  <Button
+                    type='submit'
+                    form='department-form'
+                    variant='outline'
+                    disabled={isSubmitting}
+                    onClick={() => setSubmitAction('continue')}
+                  >
+                    保存并继续编辑
+                  </Button>
+                </ProFormActions>
+              }
+            >
+              <div className='grid gap-4'>
                 <FormField
                   control={form.control}
                   name='companyId'
@@ -1033,8 +1056,8 @@ function DepartmentFormPage({
                     </FormItem>
                   )}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </ProFormShell>
           </form>
         </Form>
 
@@ -1230,36 +1253,12 @@ function PostFormPage({
       title={isEdit ? '编辑岗位' : '新建岗位'}
       description='岗位页独立承载岗位与部门挂靠配置，后续审批节点默认会基于岗位查找处理人。'
       actions={
-        <>
-          <Button
-            type='submit'
-            form='post-form'
-            disabled={isSubmitting}
-            onClick={() => setSubmitAction('list')}
-          >
-            {isSubmitting ? (
-              <Loader2 className='animate-spin' data-icon='inline-start' />
-            ) : (
-              <Save data-icon='inline-start' />
-            )}
-            保存并返回列表
-          </Button>
-          <Button
-            type='submit'
-            form='post-form'
-            variant='outline'
-            disabled={isSubmitting}
-            onClick={() => setSubmitAction('continue')}
-          >
-            保存并继续编辑
-          </Button>
-          <Button asChild variant='ghost'>
-            <Link to='/system/posts/list' search={{}}>
-              <ArrowLeft data-icon='inline-start' />
-              返回列表
-            </Link>
-          </Button>
-        </>
+        <Button asChild variant='ghost'>
+          <Link to='/system/posts/list' search={{}}>
+            <ArrowLeft data-icon='inline-start' />
+            返回列表
+          </Link>
+        </Button>
       }
     >
       <div className='grid gap-4 xl:grid-cols-[minmax(0,2fr)_360px]'>
@@ -1269,14 +1268,37 @@ function PostFormPage({
             onSubmit={form.handleSubmit(onSubmit)}
             className='flex flex-col gap-4'
           >
-            <Card>
-              <CardHeader>
-                <CardTitle>岗位信息</CardTitle>
-                <CardDescription>
-                  当前基线维护岗位和部门挂靠。后续会继续扩展岗位职责、审批策略和兼任限制。
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='grid gap-4'>
+            <ProFormShell
+              title='岗位信息'
+              description='当前基线维护岗位和部门挂靠。后续会继续扩展岗位职责、审批策略和兼任限制。'
+              actions={
+                <ProFormActions>
+                  <Button
+                    type='submit'
+                    form='post-form'
+                    disabled={isSubmitting}
+                    onClick={() => setSubmitAction('list')}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className='animate-spin' data-icon='inline-start' />
+                    ) : (
+                      <Save data-icon='inline-start' />
+                    )}
+                    保存并返回列表
+                  </Button>
+                  <Button
+                    type='submit'
+                    form='post-form'
+                    variant='outline'
+                    disabled={isSubmitting}
+                    onClick={() => setSubmitAction('continue')}
+                  >
+                    保存并继续编辑
+                  </Button>
+                </ProFormActions>
+              }
+            >
+              <div className='grid gap-4'>
                 <FormField
                   control={form.control}
                   name='companyId'
@@ -1373,8 +1395,8 @@ function PostFormPage({
                     </FormItem>
                   )}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </ProFormShell>
           </form>
         </Form>
 
@@ -1412,16 +1434,14 @@ function PostFormPage({
   )
 }
 
-// 角色列表页只承接查询和跳转。
 export function RolesListPage() {
   const search = rolesRoute.useSearch()
   const navigate = rolesRoute.useNavigate()
 
   return (
-    <ResourceListPage
+    <ProTable
       title='角色列表'
       description='角色模块下一阶段会继续接真实接口。本轮优先完成组织管理闭环，因此暂保留角色列表基线。'
-      endpoint='/api/v1/system/roles/page'
       searchPlaceholder='搜索角色名称或权限范围'
       search={search}
       navigate={navigate}
@@ -1447,11 +1467,13 @@ export function RolesListPage() {
         { label: '系统角色', value: '6', hint: '默认角色由平台预置维护。' },
         { label: '自定义角色', value: '12', hint: '业务管理员可扩展配置。' },
       ]}
+      onRefresh={() => void 0}
+      onExport={() => void 0}
+      createActionNode={null}
     />
   )
 }
 
-// 公司列表页只承接查询和跳转。
 export function CompaniesListPage() {
   const search = companiesRoute.useSearch()
   const navigate = companiesRoute.useNavigate()
@@ -1470,6 +1492,14 @@ export function CompaniesListPage() {
         createdAt: formatDateTime(record.createdAt),
       })),
     [query.data?.records]
+  )
+  const createActionNode = (
+    <Button asChild>
+      <Link to='/system/companies/create' search={{}}>
+        <Save data-icon='inline-start' />
+        新建公司
+      </Link>
+    </Button>
   )
 
   const summaries = useMemo(() => {
@@ -1496,10 +1526,9 @@ export function CompaniesListPage() {
   }, [query.data])
 
   return (
-    <ResourceListPage<CompanyRow>
+    <ProTable<CompanyRow>
       title='公司列表'
       description='公司列表页承载组织顶层实体维护，已接入真实分页接口和独立详情/编辑页。'
-      endpoint='/api/v1/system/companies/page'
       searchPlaceholder='搜索公司名称'
       search={search}
       navigate={navigate}
@@ -1507,19 +1536,28 @@ export function CompaniesListPage() {
       data={rows}
       total={query.data?.total}
       summaries={summaries}
-      createAction={{ label: '新建公司', href: '/system/companies/create' }}
+      createActionNode={createActionNode}
+      onRefresh={() => void query.refetch()}
+      onExport={() => void 0}
     />
   )
 }
 
-// 部门列表页只承接查询和跳转。
 export function DepartmentsListPage() {
   const search = departmentsRoute.useSearch()
   const navigate = departmentsRoute.useNavigate()
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentRow | null>(
+    null
+  )
   const query = useQuery({
     queryKey: ['system-departments', search],
     queryFn: () => listDepartments(search),
     placeholderData: (previous) => previous,
+  })
+  const usersQuery = useQuery({
+    queryKey: ['system-department-users', selectedDepartment?.departmentId],
+    queryFn: () => getDepartmentUsers(selectedDepartment!.departmentId),
+    enabled: Boolean(selectedDepartment?.departmentId),
   })
 
   const rows = useMemo<DepartmentRow[]>(
@@ -1533,6 +1571,14 @@ export function DepartmentsListPage() {
         createdAt: formatDateTime(record.createdAt),
       })),
     [query.data?.records]
+  )
+  const createActionNode = (
+    <Button asChild>
+      <Link to='/system/departments/create' search={{}}>
+        <Save data-icon='inline-start' />
+        新建部门
+      </Link>
+    </Button>
   )
 
   const summaries = useMemo(() => {
@@ -1560,30 +1606,56 @@ export function DepartmentsListPage() {
   }, [query.data])
 
   return (
-    <ResourceListPage<DepartmentRow>
-      title='部门列表'
-      description='部门列表页已接通真实接口，支持独立创建、详情和编辑页面，后续继续扩展组织树能力。'
-      endpoint='/api/v1/system/departments/page'
-      searchPlaceholder='搜索部门名称或所属公司'
-      search={search}
-      navigate={navigate}
-      columns={departmentColumns}
-      data={rows}
-      total={query.data?.total}
-      summaries={summaries}
-      createAction={{ label: '新建部门', href: '/system/departments/create' }}
-    />
+    <>
+      <ProTable<DepartmentRow>
+        title='部门列表'
+        description='部门列表页已接通真实接口，支持独立创建、详情和编辑页面，后续继续扩展组织树能力。'
+        searchPlaceholder='搜索部门名称或所属公司'
+        search={search}
+        navigate={navigate}
+        columns={buildDepartmentColumns(setSelectedDepartment)}
+        data={rows}
+        total={query.data?.total}
+        summaries={summaries}
+        createActionNode={createActionNode}
+        onRefresh={() => void query.refetch()}
+        onExport={() => void 0}
+      />
+      <AssociatedUsersDialog
+        open={Boolean(selectedDepartment)}
+        title='部门关联用户'
+        description={
+          selectedDepartment
+            ? `查看部门「${selectedDepartment.departmentName}」当前关联的用户。`
+            : '查看当前部门关联的用户。'
+        }
+        users={usersQuery.data}
+        isLoading={usersQuery.isLoading}
+        isError={usersQuery.isError}
+        onRetry={() => void usersQuery.refetch()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedDepartment(null)
+          }
+        }}
+      />
+    </>
   )
 }
 
-// 岗位列表页只承接查询和跳转。
 export function PostsListPage() {
   const search = postsRoute.useSearch()
   const navigate = postsRoute.useNavigate()
+  const [selectedPost, setSelectedPost] = useState<PostRow | null>(null)
   const query = useQuery({
     queryKey: ['system-posts', search],
     queryFn: () => listPosts(search),
     placeholderData: (previous) => previous,
+  })
+  const usersQuery = useQuery({
+    queryKey: ['system-post-users', selectedPost?.postId],
+    queryFn: () => getPostUsers(selectedPost!.postId),
+    enabled: Boolean(selectedPost?.postId),
   })
 
   const rows = useMemo<PostRow[]>(
@@ -1597,6 +1669,14 @@ export function PostsListPage() {
         createdAt: formatDateTime(record.createdAt),
       })),
     [query.data?.records]
+  )
+  const createActionNode = (
+    <Button asChild>
+      <Link to='/system/posts/create' search={{}}>
+        <Save data-icon='inline-start' />
+        新建岗位
+      </Link>
+    </Button>
   )
 
   const summaries = useMemo(() => {
@@ -1621,19 +1701,40 @@ export function PostsListPage() {
   }, [query.data])
 
   return (
-    <ResourceListPage<PostRow>
-      title='岗位列表'
-      description='岗位列表页已接通真实接口，承接岗位维护和与审批节点的后续映射关系。'
-      endpoint='/api/v1/system/posts/page'
-      searchPlaceholder='搜索岗位名称、所属部门或所属公司'
-      search={search}
-      navigate={navigate}
-      columns={postColumns}
-      data={rows}
-      total={query.data?.total}
-      summaries={summaries}
-      createAction={{ label: '新建岗位', href: '/system/posts/create' }}
-    />
+    <>
+      <ProTable<PostRow>
+        title='岗位列表'
+        description='岗位列表页已接通真实接口，承接岗位维护和与审批节点的后续映射关系。'
+        searchPlaceholder='搜索岗位名称、所属部门或所属公司'
+        search={search}
+        navigate={navigate}
+        columns={buildPostColumns(setSelectedPost)}
+        data={rows}
+        total={query.data?.total}
+        summaries={summaries}
+        createActionNode={createActionNode}
+        onRefresh={() => void query.refetch()}
+        onExport={() => void 0}
+      />
+      <AssociatedUsersDialog
+        open={Boolean(selectedPost)}
+        title='岗位关联用户'
+        description={
+          selectedPost
+            ? `查看岗位「${selectedPost.postName}」当前关联的用户。`
+            : '查看当前岗位关联的用户。'
+        }
+        users={usersQuery.data}
+        isLoading={usersQuery.isLoading}
+        isError={usersQuery.isError}
+        onRetry={() => void usersQuery.refetch()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedPost(null)
+          }
+        }}
+      />
+    </>
   )
 }
 

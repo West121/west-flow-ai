@@ -153,4 +153,25 @@ describe('system role api', () => {
       })
     ).resolves.toEqual({ roleId: 'role_new' })
   })
+
+  it('loads associated users for a role', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse([
+        {
+          userId: 'usr_001',
+          displayName: '张三',
+          username: 'zhangsan',
+          departmentName: '财务部',
+          postName: '报销审核岗',
+          status: 'ENABLED',
+        },
+      ])
+    )
+
+    const { getRoleUsers } = await import('./system-roles')
+
+    await expect(getRoleUsers('role_dept_manager')).resolves.toMatchObject([
+      { userId: 'usr_001', username: 'zhangsan' },
+    ])
+  })
 })

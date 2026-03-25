@@ -7,6 +7,7 @@ export type OALaunchTask = {
   status: string
   assignmentMode: string | null
   candidateUserIds: string[]
+  candidateGroupIds?: string[]
   assigneeUserId: string | null
 }
 
