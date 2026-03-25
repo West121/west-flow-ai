@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import {
   BadgeCheck,
-  Bell,
   ChevronsUpDown,
   LogOut,
   Sparkles,
@@ -140,12 +139,6 @@ export function NavUser({ user }: NavUserProps) {
                   <Link to='/settings/account'>
                     <BadgeCheck />
                     账号设置
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link to='/settings/notifications'>
-                    <Bell />
-                    通知设置
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>

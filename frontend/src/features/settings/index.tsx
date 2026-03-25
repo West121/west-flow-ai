@@ -1,5 +1,5 @@
 import { Outlet } from '@tanstack/react-router'
-import { Bell, Palette, Wrench, UserCog } from 'lucide-react'
+import { Palette, Wrench, UserCog } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
@@ -25,11 +25,6 @@ const sidebarNavItems = [
     href: '/settings/appearance',
     icon: <Palette size={18} />,
   },
-  {
-    title: '通知',
-    href: '/settings/notifications',
-    icon: <Bell size={18} />,
-  },
 ]
 
 // 设置模块壳层，统一顶部工具栏和左侧分栏导航。
@@ -52,7 +47,7 @@ export function Settings() {
             设置
           </h1>
           <p className='text-muted-foreground'>
-            管理当前账户资料、外观偏好和通知设置。
+            管理当前账户资料和外观偏好。
           </p>
         </div>
         <Separator className='my-4 lg:my-6' />
