@@ -12,12 +12,38 @@ import {
   OALeaveListPage,
 } from './pages'
 
-const { navigateMock, oaApiMocks } = vi.hoisted(() => ({
+const { navigateMock, routeSearchState, oaApiMocks } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
+  routeSearchState: {
+    current: {
+      page: 1,
+      pageSize: 20,
+      keyword: '',
+      filters: [],
+      sorts: [],
+      groups: [],
+      draftId: undefined as string | undefined,
+    },
+  },
   oaApiMocks: {
     createOALeaveBill: vi.fn(),
     createOAExpenseBill: vi.fn(),
     createOACommonRequestBill: vi.fn(),
+    saveOALeaveDraft: vi.fn(),
+    updateOALeaveDraft: vi.fn(),
+    submitOALeaveDraft: vi.fn(),
+    saveOAExpenseDraft: vi.fn(),
+    updateOAExpenseDraft: vi.fn(),
+    submitOAExpenseDraft: vi.fn(),
+    saveOACommonRequestDraft: vi.fn(),
+    updateOACommonRequestDraft: vi.fn(),
+    submitOACommonRequestDraft: vi.fn(),
+    getOALeaveBillDetail: vi.fn(),
+    getOAExpenseBillDetail: vi.fn(),
+    getOACommonRequestBillDetail: vi.fn(),
+    listOALeaveDrafts: vi.fn(),
+    listOAExpenseDrafts: vi.fn(),
+    listOACommonDrafts: vi.fn(),
     listApprovalSheets: vi.fn(),
     getApprovalSheetDetailByBusiness: vi.fn(),
     getWorkbenchTaskDetail: vi.fn(),
@@ -27,6 +53,17 @@ const { navigateMock, oaApiMocks } = vi.hoisted(() => ({
     transferWorkbenchTask: vi.fn(),
     returnWorkbenchTask: vi.fn(),
   },
+}))
+
+const advancedRuntimeApiMocks = vi.hoisted(() => ({
+  getProcessTerminationSnapshot: vi.fn(),
+  listProcessCollaborationTrace: vi.fn(),
+  listProcessTerminationAuditTrail: vi.fn(),
+  listProcessTimeTravelTrace: vi.fn(),
+}))
+
+const systemUserApiMocks = vi.hoisted(() => ({
+  listSystemUsers: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -55,14 +92,7 @@ vi.mock('@tanstack/react-router', () => ({
   },
   useNavigate: () => navigateMock,
   getRouteApi: () => ({
-    useSearch: () => ({
-      page: 1,
-      pageSize: 20,
-      keyword: '',
-      filters: [],
-      sorts: [],
-      groups: [],
-    }),
+    useSearch: () => routeSearchState.current,
     useNavigate: () => navigateMock,
   }),
 }))
@@ -131,12 +161,16 @@ vi.mock('@/features/shared/pro-table', () => ({
 }))
 
 vi.mock('@/lib/api/oa', () => oaApiMocks)
+vi.mock('@/lib/api/system-users', () => systemUserApiMocks)
 vi.mock('@/lib/api/workbench', () => ({
   ...oaApiMocks,
   WORKBENCH_RUNTIME_ENDPOINTS: {
     approvalSheetsPage: '/process-runtime/approval-sheets/page',
     tasksPage: '/process-runtime/tasks/page',
   },
+}))
+vi.mock('@/lib/api/process-runtime-advanced', () => ({
+  ...advancedRuntimeApiMocks,
 }))
 
 function renderWithQuery(ui: React.ReactNode) {
@@ -265,6 +299,53 @@ function mockApprovalSheetPage() {
 describe('oa pages', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    routeSearchState.current = {
+      page: 1,
+      pageSize: 20,
+      keyword: '',
+      filters: [],
+      sorts: [],
+      groups: [],
+      draftId: undefined,
+    }
+    oaApiMocks.listOALeaveDrafts.mockResolvedValue([])
+    oaApiMocks.listOAExpenseDrafts.mockResolvedValue([])
+    oaApiMocks.listOACommonDrafts.mockResolvedValue([])
+    advancedRuntimeApiMocks.getProcessTerminationSnapshot.mockResolvedValue(null)
+    advancedRuntimeApiMocks.listProcessTerminationAuditTrail.mockResolvedValue([])
+    advancedRuntimeApiMocks.listProcessCollaborationTrace.mockResolvedValue([])
+    advancedRuntimeApiMocks.listProcessTimeTravelTrace.mockResolvedValue([])
+    systemUserApiMocks.listSystemUsers.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 2,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          userId: 'usr_002',
+          displayName: '李四',
+          username: 'lisi',
+          mobile: '13800000002',
+          email: 'lisi@westflow.cn',
+          departmentName: '人力资源部',
+          postName: '部门负责人',
+          status: 'ENABLED',
+          createdAt: '2026-03-22T09:00:00+08:00',
+        },
+        {
+          userId: 'usr_005',
+          displayName: '王主管',
+          username: 'wangzhuguan',
+          mobile: '13800000005',
+          email: 'wangzhuguan@westflow.cn',
+          departmentName: '运营中心',
+          postName: '总监',
+          status: 'ENABLED',
+          createdAt: '2026-03-22T09:00:00+08:00',
+        },
+      ],
+    })
   })
 
   afterEach(() => {
@@ -276,30 +357,116 @@ describe('oa pages', () => {
 
     renderWithQuery(<OALeaveCreatePage />)
 
+    fireEvent.click(screen.getByRole('combobox', { name: '请假类型' }))
+    fireEvent.click(screen.getByRole('option', { name: '病假' }))
     fireEvent.change(screen.getByLabelText('请假天数'), {
       target: { value: '3' },
     })
+    fireEvent.click(screen.getByRole('switch', { name: '是否紧急' }))
+    fireEvent.click(screen.getByLabelText('直属负责人'))
+    const managerOptions = await screen.findAllByText('王主管')
+    fireEvent.click(managerOptions[managerOptions.length - 1]!)
     fireEvent.change(screen.getByLabelText('请假原因'), {
       target: { value: '外出处理事务' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '发起请假申请' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交请假申请' }))
 
     await waitFor(() => {
-      expect(oaApiMocks.createOALeaveBill).toHaveBeenCalledWith(
-        {
-          days: 3,
-          reason: '外出处理事务',
-        },
-        expect.objectContaining({
-          client: expect.any(Object),
-        })
-      )
+      expect(oaApiMocks.createOALeaveBill).toHaveBeenCalledWith({
+        leaveType: 'SICK',
+        days: 3,
+        reason: '外出处理事务',
+        urgent: true,
+        managerUserId: 'usr_005',
+      })
     })
 
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith({
         to: '/oa/leave/$billId',
         params: { billId: 'bill_001' },
+      })
+    })
+  })
+
+  it('saves 请假草稿 and keeps editing route with draftId', async () => {
+    oaApiMocks.saveOALeaveDraft.mockResolvedValue({
+      billId: 'leave_draft_001',
+      billNo: 'LEAVE-DRAFT-001',
+      processInstanceId: null,
+      activeTasks: [],
+    })
+
+    renderWithQuery(<OALeaveCreatePage />)
+
+    fireEvent.change(screen.getByLabelText('请假天数'), {
+      target: { value: '2' },
+    })
+    fireEvent.click(screen.getByLabelText('直属负责人'))
+    const managerOptions = await screen.findAllByText('李四')
+    fireEvent.click(managerOptions[managerOptions.length - 1]!)
+    fireEvent.change(screen.getByLabelText('请假原因'), {
+      target: { value: '家中有事' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '暂存草稿' }))
+
+    await waitFor(() => {
+      expect(oaApiMocks.saveOALeaveDraft).toHaveBeenCalledWith({
+        leaveType: 'ANNUAL',
+        days: 2,
+        reason: '家中有事',
+        urgent: false,
+        managerUserId: 'usr_002',
+      })
+    })
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith({
+        to: '/oa/leave/create',
+        search: { draftId: 'leave_draft_001' },
+        replace: true,
+      })
+    })
+  })
+
+  it('loads leave draft and submits through draft endpoint', async () => {
+    routeSearchState.current = {
+      ...routeSearchState.current,
+      draftId: 'leave_draft_002',
+    }
+    oaApiMocks.getOALeaveBillDetail.mockResolvedValue({
+      billId: 'leave_draft_002',
+      billNo: 'LEAVE-DRAFT-002',
+      sceneCode: 'default',
+      leaveType: 'SICK',
+      days: 5,
+      reason: '草稿原因',
+      urgent: true,
+      managerUserId: 'usr_005',
+      processInstanceId: null,
+      status: 'DRAFT',
+    })
+    oaApiMocks.submitOALeaveDraft.mockResolvedValue(mockLaunchResponse())
+
+    renderWithQuery(<OALeaveCreatePage />)
+
+    await waitFor(() => {
+      expect(oaApiMocks.getOALeaveBillDetail).toHaveBeenCalledWith('leave_draft_002')
+    })
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('请假天数')).toHaveValue(5)
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '提交请假申请' }))
+
+    await waitFor(() => {
+      expect(oaApiMocks.submitOALeaveDraft).toHaveBeenCalledWith('leave_draft_002', {
+        leaveType: 'SICK',
+        days: 5,
+        reason: '草稿原因',
+        urgent: true,
+        managerUserId: 'usr_005',
       })
     })
   })
@@ -315,18 +482,13 @@ describe('oa pages', () => {
     fireEvent.change(screen.getByLabelText('报销事由'), {
       target: { value: '客户接待' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '发起报销申请' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交报销申请' }))
 
     await waitFor(() => {
-      expect(oaApiMocks.createOAExpenseBill).toHaveBeenCalledWith(
-        {
-          amount: 128.5,
-          reason: '客户接待',
-        },
-        expect.objectContaining({
-          client: expect.any(Object),
-        })
-      )
+      expect(oaApiMocks.createOAExpenseBill).toHaveBeenCalledWith({
+        amount: 128.5,
+        reason: '客户接待',
+      })
     })
 
     await waitFor(() => {
@@ -350,18 +512,13 @@ describe('oa pages', () => {
     fireEvent.change(screen.getByLabelText('申请内容'), {
       target: { value: '申请借用一台演示电脑' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '发起通用申请' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交通用申请' }))
 
     await waitFor(() => {
-      expect(oaApiMocks.createOACommonRequestBill).toHaveBeenCalledWith(
-        {
-          title: '资产借用',
-          content: '申请借用一台演示电脑',
-        },
-        expect.objectContaining({
-          client: expect.any(Object),
-        })
-      )
+      expect(oaApiMocks.createOACommonRequestBill).toHaveBeenCalledWith({
+        title: '资产借用',
+        content: '申请借用一台演示电脑',
+      })
     })
 
     await waitFor(() => {
@@ -380,7 +537,7 @@ describe('oa pages', () => {
     await waitFor(() => {
       expect(oaApiMocks.listApprovalSheets).toHaveBeenCalledWith({
         page: 1,
-        pageSize: 20,
+        pageSize: 200,
         keyword: '',
         filters: [],
         sorts: [],
@@ -432,6 +589,24 @@ describe('oa pages', () => {
     'loads business list on $name with filtered approval sheets',
     async ({ renderPage, businessTypes, title, createLabel, createHref, copilotSourceRoute }) => {
       oaApiMocks.listApprovalSheets.mockResolvedValue(mockApprovalSheetPage())
+      oaApiMocks.listOALeaveDrafts.mockResolvedValue(
+        businessTypes[0] === 'OA_LEAVE'
+          ? [
+              {
+                billId: 'leave_draft_001',
+                billNo: 'LEAVE-DRAFT-001',
+                businessType: 'OA_LEAVE',
+                businessTitle: '请假草稿',
+                sceneCode: 'default',
+                processInstanceId: null,
+                status: 'DRAFT',
+                creatorUserId: 'usr_001',
+                createdAt: '2026-03-22T08:00:00+08:00',
+                updatedAt: '2026-03-22T08:30:00+08:00',
+              },
+            ]
+          : []
+      )
 
       const RenderPage = renderPage
       renderWithQuery(<RenderPage />)
@@ -439,7 +614,7 @@ describe('oa pages', () => {
       await waitFor(() => {
         expect(oaApiMocks.listApprovalSheets).toHaveBeenCalledWith({
           page: 1,
-          pageSize: 20,
+          pageSize: 200,
           keyword: '',
           filters: [],
           sorts: [],
@@ -450,6 +625,9 @@ describe('oa pages', () => {
       })
 
       expect(await screen.findByText(title)).toBeInTheDocument()
+      if (businessTypes[0] === 'OA_LEAVE') {
+        expect(screen.getByText('请假草稿')).toBeInTheDocument()
+      }
       expect(screen.getByRole('link', { name: createLabel })).toHaveAttribute(
         'href',
         createHref
@@ -504,7 +682,7 @@ describe('oa pages', () => {
     )
 
     expect(
-      screen.getByRole('button', { name: '发起请假申请' })
+      screen.getByRole('button', { name: '提交请假申请' })
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: '用 AI 辅助填写请假申请' })
@@ -541,6 +719,12 @@ describe('oa pages', () => {
     const RenderPage = renderPage
 
     renderWithQuery(<RenderPage />)
+
+    if (RenderPage === OALeaveCreatePage) {
+      await waitFor(() => {
+        expect(systemUserApiMocks.listSystemUsers).toHaveBeenCalled()
+      })
+    }
 
     expect(screen.getByRole('button', { name: buttonLabel })).toHaveAttribute(
       'data-source-route',

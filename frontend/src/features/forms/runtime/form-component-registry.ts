@@ -1,4 +1,5 @@
 import { type ComponentType } from 'react'
+import { type WorkflowProcessFormField } from '@/features/workflow/designer/types'
 import {
   OALeaveApproveForm,
 } from '@/features/forms/components/node/oa-leave-approve-form'
@@ -17,8 +18,17 @@ export type RuntimeFormRegistration = {
   formVersion: string
   title: string
   description: string
+  fields?: WorkflowProcessFormField[]
   component: RuntimeFormComponent
 }
+
+const leaveProcessFormFields: WorkflowProcessFormField[] = [
+  { fieldKey: 'leaveType', label: '请假类型', valueType: 'string' },
+  { fieldKey: 'days', label: '请假天数', valueType: 'number' },
+  { fieldKey: 'reason', label: '请假原因', valueType: 'string' },
+  { fieldKey: 'urgent', label: '是否紧急', valueType: 'boolean' },
+  { fieldKey: 'managerUserId', label: '直属负责人', valueType: 'string' },
+]
 
 // 运行态表单注册表，页面根据表单 key 和版本找到对应实现。
 export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
@@ -29,6 +39,7 @@ export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
     formVersion: '1.0.0',
     title: 'OA 请假发起表单',
     description: '流程发起默认表单',
+    fields: leaveProcessFormFields,
     component: OALeaveStartForm,
   },
   {
@@ -38,6 +49,7 @@ export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
     formVersion: '1.1.0',
     title: 'OA 请假发起表单',
     description: '流程发起默认表单',
+    fields: leaveProcessFormFields,
     component: OALeaveStartForm,
   },
   {
@@ -113,6 +125,10 @@ export function findProcessRuntimeFormByProcessKey(processKey: string) {
         registration.processKey === processKey
     ) ?? null
   )
+}
+
+export function resolveRuntimeProcessFormFields(processKey: string) {
+  return findProcessRuntimeFormByProcessKey(processKey)?.fields ?? []
 }
 
 // 只按表单 key 解析组件实现，渲染器会在上层先校验注册项。

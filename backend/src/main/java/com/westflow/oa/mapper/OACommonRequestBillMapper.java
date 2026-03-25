@@ -1,7 +1,9 @@
 package com.westflow.oa.mapper;
 
 import com.westflow.oa.api.OACommonRequestBillDetailResponse;
+import com.westflow.oa.api.OABillDraftListItemResponse;
 import com.westflow.oa.model.OACommonRequestBillRecord;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -43,6 +45,16 @@ public interface OACommonRequestBillMapper {
 
     @Update("""
             UPDATE oa_common_request_bill
+            SET scene_code = #{sceneCode},
+                title = #{title},
+                content = #{content},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{id}
+            """)
+    int updateDraft(OACommonRequestBillRecord record);
+
+    @Update("""
+            UPDATE oa_common_request_bill
             SET process_instance_id = #{processInstanceId},
                 status = #{status},
                 updated_at = CURRENT_TIMESTAMP
@@ -67,4 +79,23 @@ public interface OACommonRequestBillMapper {
             WHERE id = #{billId}
             """)
     OACommonRequestBillDetailResponse selectDetail(@Param("billId") String billId);
+
+    @Select("""
+            SELECT
+              id AS billId,
+              bill_no AS billNo,
+              'OA_COMMON' AS businessType,
+              COALESCE(title, '未命名草稿') AS businessTitle,
+              scene_code AS sceneCode,
+              process_instance_id AS processInstanceId,
+              status,
+              creator_user_id AS creatorUserId,
+              created_at AS createdAt,
+              updated_at AS updatedAt
+            FROM oa_common_request_bill
+            WHERE creator_user_id = #{creatorUserId}
+              AND status = 'DRAFT'
+            ORDER BY updated_at DESC
+            """)
+    List<OABillDraftListItemResponse> selectDraftsByCreatorUserId(@Param("creatorUserId") String creatorUserId);
 }

@@ -15,7 +15,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 @ActiveProfiles("test")
-@Sql(scripts = "classpath:db/migration/V1__init.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
+@Sql(
+        scripts = {
+                "classpath:db/migration/V1__init.sql",
+                "classpath:db/migration/V10__align_oa_leave_form_schema.sql"
+        },
+        executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD
+)
 class SeededProcessDefinitionCatalogTest {
 
     @Autowired
@@ -76,9 +82,10 @@ class SeededProcessDefinitionCatalogTest {
                 "approve_hr_specialist",
                 "approve_manager_field",
                 "approve_director_formula",
-                "\"fieldKey\":\"leaveDays\"",
+                "\"fieldKey\":\"days\"",
+                "\"fieldKey\":\"reason\"",
                 "\"operator\":\"GT\"",
-                "\"formulaExpression\":\"urgent == true || leaveDays >= 5\"",
+                "\"formulaExpression\":\"urgent == true || days >= 5\"",
                 "\"assignment\":{\"mode\":\"ROLE\"",
                 "\"assignment\":{\"mode\":\"DEPARTMENT\"",
                 "\"assignment\":{\"mode\":\"FORM_FIELD\"",
@@ -91,9 +98,9 @@ class SeededProcessDefinitionCatalogTest {
                 "flowable:candidateGroups=\"dept_002\"",
                 "flowable:candidateGroups=\"role_hr\"",
                 "flowable:assignee=\"managerUserId\"",
-                "flowable:assignee=\"${leaveDays >= 5 ? 'usr_005' : (managerUserId != null ? managerUserId : 'usr_002')}\"",
-                "leaveDays > 3",
-                "urgent == true || leaveDays >= 5"
+                "flowable:assignee=\"${days >= 5 ? 'usr_005' : (managerUserId != null ? managerUserId : 'usr_002')}\"",
+                "days > 3",
+                "urgent == true || days >= 5"
         );
     }
 }

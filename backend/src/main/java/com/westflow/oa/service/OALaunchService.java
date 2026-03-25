@@ -5,6 +5,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.oa.api.CreateOACommonRequestBillRequest;
 import com.westflow.oa.api.CreateOAExpenseBillRequest;
 import com.westflow.oa.api.CreateOALeaveBillRequest;
+import com.westflow.oa.api.OABillDraftListItemResponse;
 import com.westflow.oa.api.OACommonRequestBillDetailResponse;
 import com.westflow.oa.api.OAExpenseBillDetailResponse;
 import com.westflow.oa.api.OALaunchResponse;
@@ -24,6 +25,7 @@ import com.westflow.processruntime.service.FlowableRuntimeStartService;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -52,31 +54,22 @@ public class OALaunchService {
      */
     @Transactional
     public OALaunchResponse createLeaveBill(CreateOALeaveBillRequest request) {
-        // 先落业务单，再启动流程实例，避免流程实例和业务单脱节。
-        String billId = buildId("leave");
-        String billNo = buildBillNo("LEAVE");
-        String sceneCode = normalizeSceneCode(request.sceneCode());
-        String userId = currentUserId();
-        String reason = request.reason().trim();
-        oaLeaveBillMapper.insert(new OALeaveBillRecord(
-                billId,
-                billNo,
-                sceneCode,
-                request.days(),
-                reason,
-                null,
-                "DRAFT",
-                userId
-        ));
-        StartProcessResponse startResponse = startBusinessProcess(
-                "OA_LEAVE",
-                sceneCode,
-                billId,
-                buildLeaveFormData(request.days(), reason)
-        );
-        oaLeaveBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
-        insertLink("OA_LEAVE", billId, startResponse, userId);
-        return toLaunchResponse(billId, billNo, startResponse);
+        return submitLeaveDraftInternal(saveLeaveDraftInternal(null, request, false).billId(), request);
+    }
+
+    @Transactional
+    public OALaunchResponse saveLeaveDraft(CreateOALeaveBillRequest request) {
+        return saveLeaveDraftInternal(null, request, true);
+    }
+
+    @Transactional
+    public OALaunchResponse updateLeaveDraft(String billId, CreateOALeaveBillRequest request) {
+        return saveLeaveDraftInternal(billId, request, true);
+    }
+
+    @Transactional
+    public OALaunchResponse submitLeaveDraft(String billId, CreateOALeaveBillRequest request) {
+        return submitLeaveDraftInternal(billId, request);
     }
 
     /**
@@ -84,29 +77,22 @@ public class OALaunchService {
      */
     @Transactional
     public OALaunchResponse createExpenseBill(CreateOAExpenseBillRequest request) {
-        String billId = buildId("expense");
-        String billNo = buildBillNo("EXPENSE");
-        String sceneCode = normalizeSceneCode(request.sceneCode());
-        String userId = currentUserId();
-        oaExpenseBillMapper.insert(new OAExpenseBillRecord(
-                billId,
-                billNo,
-                sceneCode,
-                request.amount(),
-                request.reason().trim(),
-                null,
-                "DRAFT",
-                userId
-        ));
-        StartProcessResponse startResponse = startBusinessProcess(
-                "OA_EXPENSE",
-                sceneCode,
-                billId,
-                Map.of("amount", request.amount(), "reason", request.reason().trim())
-        );
-        oaExpenseBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
-        insertLink("OA_EXPENSE", billId, startResponse, userId);
-        return toLaunchResponse(billId, billNo, startResponse);
+        return submitExpenseDraftInternal(saveExpenseDraftInternal(null, request, false).billId(), request);
+    }
+
+    @Transactional
+    public OALaunchResponse saveExpenseDraft(CreateOAExpenseBillRequest request) {
+        return saveExpenseDraftInternal(null, request, true);
+    }
+
+    @Transactional
+    public OALaunchResponse updateExpenseDraft(String billId, CreateOAExpenseBillRequest request) {
+        return saveExpenseDraftInternal(billId, request, true);
+    }
+
+    @Transactional
+    public OALaunchResponse submitExpenseDraft(String billId, CreateOAExpenseBillRequest request) {
+        return submitExpenseDraftInternal(billId, request);
     }
 
     /**
@@ -114,29 +100,22 @@ public class OALaunchService {
      */
     @Transactional
     public OALaunchResponse createCommonRequestBill(CreateOACommonRequestBillRequest request) {
-        String billId = buildId("common");
-        String billNo = buildBillNo("COMMON");
-        String sceneCode = normalizeSceneCode(request.sceneCode());
-        String userId = currentUserId();
-        oaCommonRequestBillMapper.insert(new OACommonRequestBillRecord(
-                billId,
-                billNo,
-                sceneCode,
-                request.title().trim(),
-                request.content().trim(),
-                null,
-                "DRAFT",
-                userId
-        ));
-        StartProcessResponse startResponse = startBusinessProcess(
-                "OA_COMMON",
-                sceneCode,
-                billId,
-                Map.of("title", request.title().trim(), "content", request.content().trim())
-        );
-        oaCommonRequestBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
-        insertLink("OA_COMMON", billId, startResponse, userId);
-        return toLaunchResponse(billId, billNo, startResponse);
+        return submitCommonDraftInternal(saveCommonDraftInternal(null, request, false).billId(), request);
+    }
+
+    @Transactional
+    public OALaunchResponse saveCommonRequestDraft(CreateOACommonRequestBillRequest request) {
+        return saveCommonDraftInternal(null, request, true);
+    }
+
+    @Transactional
+    public OALaunchResponse updateCommonRequestDraft(String billId, CreateOACommonRequestBillRequest request) {
+        return saveCommonDraftInternal(billId, request, true);
+    }
+
+    @Transactional
+    public OALaunchResponse submitCommonRequestDraft(String billId, CreateOACommonRequestBillRequest request) {
+        return submitCommonDraftInternal(billId, request);
     }
 
     /**
@@ -170,6 +149,143 @@ public class OALaunchService {
             throw resourceNotFound("通用申请单不存在", billId);
         }
         return detail;
+    }
+
+    public List<OABillDraftListItemResponse> leaveDrafts() {
+        return oaLeaveBillMapper.selectDraftsByCreatorUserId(currentUserId());
+    }
+
+    public List<OABillDraftListItemResponse> expenseDrafts() {
+        return oaExpenseBillMapper.selectDraftsByCreatorUserId(currentUserId());
+    }
+
+    public List<OABillDraftListItemResponse> commonDrafts() {
+        return oaCommonRequestBillMapper.selectDraftsByCreatorUserId(currentUserId());
+    }
+
+    private OALaunchResponse saveLeaveDraftInternal(String billId, CreateOALeaveBillRequest request, boolean draftOnly) {
+        String draftBillId = billId == null || billId.isBlank() ? buildId("leave") : billId;
+        String billNo = billId == null || billId.isBlank() ? buildBillNo("LEAVE") : requireLeaveDraft(draftBillId).billNo();
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String userId = currentUserId();
+        String leaveType = normalizeLeaveType(request.leaveType());
+        String reason = request.reason().trim();
+        boolean urgent = Boolean.TRUE.equals(request.urgent());
+        String managerUserId = normalizeManagerUserId(request.managerUserId());
+        OALeaveBillRecord record = new OALeaveBillRecord(
+                draftBillId,
+                billNo,
+                sceneCode,
+                leaveType,
+                request.days(),
+                reason,
+                urgent,
+                managerUserId,
+                null,
+                "DRAFT",
+                userId
+        );
+        if (billId == null || billId.isBlank()) {
+            oaLeaveBillMapper.insert(record);
+        } else {
+            oaLeaveBillMapper.updateDraft(record);
+        }
+        return toDraftResponse(draftBillId, billNo);
+    }
+
+    private OALaunchResponse submitLeaveDraftInternal(String billId, CreateOALeaveBillRequest request) {
+        OALeaveBillDetailResponse draft = requireLeaveDraft(billId);
+        saveLeaveDraftInternal(billId, request, false);
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String leaveType = normalizeLeaveType(request.leaveType());
+        String reason = request.reason().trim();
+        boolean urgent = Boolean.TRUE.equals(request.urgent());
+        String managerUserId = normalizeManagerUserId(request.managerUserId());
+        StartProcessResponse startResponse = startBusinessProcess(
+                "OA_LEAVE",
+                sceneCode,
+                billId,
+                buildLeaveFormData(leaveType, request.days(), reason, urgent, managerUserId)
+        );
+        oaLeaveBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
+        insertLink("OA_LEAVE", billId, startResponse, currentUserId());
+        return toLaunchResponse(billId, draft.billNo(), startResponse);
+    }
+
+    private OALaunchResponse saveExpenseDraftInternal(String billId, CreateOAExpenseBillRequest request, boolean draftOnly) {
+        String draftBillId = billId == null || billId.isBlank() ? buildId("expense") : billId;
+        String billNo = billId == null || billId.isBlank() ? buildBillNo("EXPENSE") : requireExpenseDraft(draftBillId).billNo();
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String userId = currentUserId();
+        OAExpenseBillRecord record = new OAExpenseBillRecord(
+                draftBillId,
+                billNo,
+                sceneCode,
+                request.amount(),
+                request.reason().trim(),
+                null,
+                "DRAFT",
+                userId
+        );
+        if (billId == null || billId.isBlank()) {
+            oaExpenseBillMapper.insert(record);
+        } else {
+            oaExpenseBillMapper.updateDraft(record);
+        }
+        return toDraftResponse(draftBillId, billNo);
+    }
+
+    private OALaunchResponse submitExpenseDraftInternal(String billId, CreateOAExpenseBillRequest request) {
+        OAExpenseBillDetailResponse draft = requireExpenseDraft(billId);
+        saveExpenseDraftInternal(billId, request, false);
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        StartProcessResponse startResponse = startBusinessProcess(
+                "OA_EXPENSE",
+                sceneCode,
+                billId,
+                Map.of("amount", request.amount(), "reason", request.reason().trim())
+        );
+        oaExpenseBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
+        insertLink("OA_EXPENSE", billId, startResponse, currentUserId());
+        return toLaunchResponse(billId, draft.billNo(), startResponse);
+    }
+
+    private OALaunchResponse saveCommonDraftInternal(String billId, CreateOACommonRequestBillRequest request, boolean draftOnly) {
+        String draftBillId = billId == null || billId.isBlank() ? buildId("common") : billId;
+        String billNo = billId == null || billId.isBlank() ? buildBillNo("COMMON") : requireCommonDraft(draftBillId).billNo();
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        String userId = currentUserId();
+        OACommonRequestBillRecord record = new OACommonRequestBillRecord(
+                draftBillId,
+                billNo,
+                sceneCode,
+                request.title().trim(),
+                request.content().trim(),
+                null,
+                "DRAFT",
+                userId
+        );
+        if (billId == null || billId.isBlank()) {
+            oaCommonRequestBillMapper.insert(record);
+        } else {
+            oaCommonRequestBillMapper.updateDraft(record);
+        }
+        return toDraftResponse(draftBillId, billNo);
+    }
+
+    private OALaunchResponse submitCommonDraftInternal(String billId, CreateOACommonRequestBillRequest request) {
+        OACommonRequestBillDetailResponse draft = requireCommonDraft(billId);
+        saveCommonDraftInternal(billId, request, false);
+        String sceneCode = normalizeSceneCode(request.sceneCode());
+        StartProcessResponse startResponse = startBusinessProcess(
+                "OA_COMMON",
+                sceneCode,
+                billId,
+                Map.of("title", request.title().trim(), "content", request.content().trim())
+        );
+        oaCommonRequestBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
+        insertLink("OA_COMMON", billId, startResponse, currentUserId());
+        return toLaunchResponse(billId, draft.billNo(), startResponse);
     }
 
     private StartProcessResponse startBusinessProcess(
@@ -211,18 +327,73 @@ public class OALaunchService {
         );
     }
 
-    private Map<String, Object> buildLeaveFormData(Integer days, String reason) {
+    private OALaunchResponse toDraftResponse(String billId, String billNo) {
+        return new OALaunchResponse(
+                billId,
+                billNo,
+                null,
+                null,
+                List.of()
+        );
+    }
+
+    private OALeaveBillDetailResponse requireLeaveDraft(String billId) {
+        OALeaveBillDetailResponse detail = leaveDetail(billId);
+        if (!"DRAFT".equals(detail.status()) || detail.processInstanceId() != null) {
+            throw resourceNotFound("请假草稿不存在", billId);
+        }
+        return detail;
+    }
+
+    private OAExpenseBillDetailResponse requireExpenseDraft(String billId) {
+        OAExpenseBillDetailResponse detail = expenseDetail(billId);
+        if (!"DRAFT".equals(detail.status()) || detail.processInstanceId() != null) {
+            throw resourceNotFound("报销草稿不存在", billId);
+        }
+        return detail;
+    }
+
+    private OACommonRequestBillDetailResponse requireCommonDraft(String billId) {
+        OACommonRequestBillDetailResponse detail = commonDetail(billId);
+        if (!"DRAFT".equals(detail.status()) || detail.processInstanceId() != null) {
+            throw resourceNotFound("通用申请草稿不存在", billId);
+        }
+        return detail;
+    }
+
+    private Map<String, Object> buildLeaveFormData(
+            String leaveType,
+            Integer days,
+            String reason,
+            boolean urgent,
+            String managerUserId
+    ) {
         Map<String, Object> formData = new LinkedHashMap<>();
+        formData.put("leaveType", leaveType);
         formData.put("days", days);
         formData.put("leaveDays", days);
         formData.put("reason", reason);
-        formData.put("urgent", false);
-        formData.put("managerUserId", null);
+        formData.put("urgent", urgent);
+        formData.put("managerUserId", managerUserId);
         return formData;
     }
 
     private String normalizeSceneCode(String sceneCode) {
         return sceneCode == null || sceneCode.isBlank() ? "default" : sceneCode.trim();
+    }
+
+    private String normalizeLeaveType(String leaveType) {
+        if (leaveType == null || leaveType.isBlank()) {
+            return "ANNUAL";
+        }
+        return leaveType.trim().toUpperCase();
+    }
+
+    private String normalizeManagerUserId(String managerUserId) {
+        if (managerUserId == null || managerUserId.isBlank()) {
+            return "usr_002";
+        }
+        return managerUserId.trim();
     }
 
     private String currentUserId() {

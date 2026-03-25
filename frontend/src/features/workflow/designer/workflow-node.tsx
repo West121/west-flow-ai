@@ -35,6 +35,27 @@ const toneClassNames = {
   },
 } satisfies Record<string, Record<string, string>>
 
+const previewStatusClassNames = {
+  ACTIVE: {
+    card: 'border-sky-300 bg-sky-50/80 shadow-sm dark:border-sky-800 dark:bg-sky-950/20',
+    ring: 'ring-sky-500/30',
+    badge: 'bg-sky-500/12 text-sky-700 dark:text-sky-300',
+    icon: 'bg-sky-500/15 text-sky-700 dark:text-sky-200',
+  },
+  COMPLETED: {
+    card: 'border-emerald-300 bg-emerald-50/80 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/20',
+    ring: 'ring-emerald-500/30',
+    badge: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
+    icon: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-200',
+  },
+  VISITED: {
+    card: 'border-emerald-300 bg-emerald-50/80 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/20',
+    ring: 'ring-emerald-500/30',
+    badge: 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300',
+    icon: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-200',
+  },
+} as const
+
 const kindBadgeLabels = {
   start: '开始',
   approver: '审批',
@@ -86,6 +107,10 @@ export function WorkflowNodeCard({
   const previewStatus = (workflowData as WorkflowNodeData & {
     previewStatus?: 'ACTIVE' | 'COMPLETED' | 'VISITED' | 'IDLE'
   }).previewStatus
+  const previewClasses =
+    previewStatus && previewStatus !== 'IDLE'
+      ? previewStatusClassNames[previewStatus]
+      : null
   const showTarget = workflowData.kind !== 'start'
   const showSource = workflowData.kind !== 'end'
 
@@ -94,12 +119,9 @@ export function WorkflowNodeCard({
       className={cn(
         'relative w-[220px] rounded-2xl border bg-card/95 p-4 shadow-sm backdrop-blur',
         'transition-[box-shadow,transform] duration-200',
-        selected && ['shadow-lg ring-2', classes.ring],
-        previewStatus === 'ACTIVE' && ['shadow-lg ring-2', classes.ring],
-        previewStatus === 'COMPLETED' &&
-          'border-emerald-300 bg-emerald-50/80 shadow-sm dark:border-emerald-800 dark:bg-emerald-950/20',
-        previewStatus === 'VISITED' &&
-          'border-sky-200 bg-sky-50/70 dark:border-sky-900 dark:bg-sky-950/10'
+        selected && ['shadow-lg ring-2', previewClasses?.ring ?? classes.ring],
+        previewClasses?.card,
+        previewStatus === 'ACTIVE' && ['shadow-lg ring-2', previewClasses?.ring ?? classes.ring]
       )}
     >
       {showTarget ? (
@@ -114,7 +136,7 @@ export function WorkflowNodeCard({
         <div
           className={cn(
             'flex size-11 shrink-0 items-center justify-center rounded-2xl',
-            classes.icon
+            previewClasses?.icon ?? classes.icon
           )}
         >
           {renderIcon(workflowData.kind)}
@@ -127,7 +149,7 @@ export function WorkflowNodeCard({
             <span
               className={cn(
                 'rounded-full px-2 py-0.5 text-[11px] font-medium',
-                classes.badge
+                previewClasses?.badge ?? classes.badge
               )}
             >
               {kindBadgeLabels[workflowData.kind]}

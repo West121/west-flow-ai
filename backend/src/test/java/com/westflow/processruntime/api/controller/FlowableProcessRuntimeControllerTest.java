@@ -148,7 +148,22 @@ class FlowableProcessRuntimeControllerTest {
                 .getResponse()
                 .getContentAsString()).path("data");
         assertThat(actionsBody.path("canClaim").asBoolean()).isTrue();
-        assertThat(actionsBody.path("canApprove").asBoolean()).isTrue();
+        assertThat(actionsBody.path("canApprove").asBoolean()).isFalse();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "未认领前直接办理",
+                                  "taskFormData": {
+                                    "approvedDays": 2
+                                  }
+                                }
+                                """))
+                .andExpect(status().is4xxClientError());
 
         JsonNode claimBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/claim", taskId)
                         .header("Authorization", "Bearer " + managerToken)
@@ -163,6 +178,15 @@ class FlowableProcessRuntimeControllerTest {
                 .getResponse()
                 .getContentAsString()).path("data");
         assertThat(claimBody.path("assigneeUserId").asText()).isEqualTo("usr_002");
+
+        JsonNode claimedDetailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(claimedDetailBody.path("readTime").isNull()).isFalse();
+        assertThat(claimedDetailBody.path("taskTrace").get(0).path("readTime").isNull()).isFalse();
 
         JsonNode completeBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", taskId)
                         .header("Authorization", "Bearer " + managerToken)
@@ -852,6 +876,7 @@ class FlowableProcessRuntimeControllerTest {
 
         JsonNode startBody = startProcess(applicantToken, "leave_025");
         String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+        claimTask(managerToken, taskId, "认领后追加任务");
 
         JsonNode appendBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/append", taskId)
                         .header("Authorization", "Bearer " + managerToken)
@@ -921,6 +946,7 @@ class FlowableProcessRuntimeControllerTest {
 
         JsonNode startBody = startProcess(applicantToken, "leave_026");
         String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+        claimTask(managerToken, taskId, "认领后追加子流程");
 
         JsonNode appendBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/append-subprocess", taskId)
                         .header("Authorization", "Bearer " + managerToken)
@@ -1490,6 +1516,7 @@ class FlowableProcessRuntimeControllerTest {
         seedLeaveBill("leave_003");
 
         String taskId = startProcess(applicantToken, "leave_003").path("activeTasks").get(0).path("taskId").asText();
+        claimTask(managerToken, taskId, "认领后转办");
 
         JsonNode transferBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/transfer", taskId)
                         .header("Authorization", "Bearer " + managerToken)
@@ -1667,6 +1694,7 @@ class FlowableProcessRuntimeControllerTest {
         seedLeaveBill("leave_007");
 
         String taskId = startProcess(applicantToken, "leave_007").path("activeTasks").get(0).path("taskId").asText();
+        claimTask(managerToken, taskId, "认领后委派");
 
         JsonNode delegateBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/delegate", taskId)
                         .header("Authorization", "Bearer " + managerToken)
@@ -1728,7 +1756,29 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(revokeBody.path("nextTasks").size()).isEqualTo(0);
 
         JsonNode byBusinessBody = approvalDetailByBusiness(applicantToken, "leave_008");
-        assertThat(byBusinessBody.path("instanceStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(byBusinessBody.path("instanceStatus").asText()).isEqualTo("REVOKED");
+
+        JsonNode initiatedPage = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/approval-sheets/page")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "view": "INITIATED",
+                                  "businessTypes": ["OA_LEAVE"],
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(initiatedPage.path("total").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(initiatedPage.path("records").get(0).path("instanceStatus").asText()).isEqualTo("REVOKED");
     }
 
     @Test
@@ -1838,6 +1888,7 @@ class FlowableProcessRuntimeControllerTest {
         seedLeaveBill("leave_011");
 
         String taskId = startProcess(applicantToken, "leave_011").path("activeTasks").get(0).path("taskId").asText();
+        claimTask(managerToken, taskId, "认领后加签");
 
         JsonNode beforeActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
                         .header("Authorization", "Bearer " + managerToken))
@@ -2138,6 +2189,21 @@ class FlowableProcessRuntimeControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .param("businessType", "OA_LEAVE")
                         .param("businessId", businessId))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+    }
+
+    private JsonNode claimTask(String token, String taskId, String comment) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "%s"
+                                }
+                                """.formatted(comment)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()

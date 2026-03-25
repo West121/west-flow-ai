@@ -17,7 +17,9 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -106,6 +108,94 @@ class OAControllerTest {
         assertThat(runtimeService.createProcessInstanceQuery()
                 .processInstanceBusinessKey(billId)
                 .count()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldSaveUpdateAndSubmitLeaveDraft() throws Exception {
+        String token = login();
+        publishLeaveProcess();
+        seedLeaveBinding();
+
+        String saveResponse = mockMvc.perform(post("/api/v1/oa/leaves/draft")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sceneCode": "default",
+                                  "leaveType": "ANNUAL",
+                                  "days": 2,
+                                  "reason": "先保存草稿",
+                                  "urgent": false,
+                                  "managerUserId": "usr_002"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode saveData = objectMapper.readTree(saveResponse).path("data");
+        String billId = saveData.path("billId").asText();
+        assertThat(saveData.path("processInstanceId").asText()).isBlank();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM oa_leave_bill WHERE id = ?",
+                String.class,
+                billId
+        )).isEqualTo("DRAFT");
+
+        mockMvc.perform(get("/api/v1/oa/leaves/drafts")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/v1/oa/leaves/{billId}/draft", billId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sceneCode": "default",
+                                  "leaveType": "SICK",
+                                  "days": 5,
+                                  "reason": "更新草稿后提交",
+                                  "urgent": true,
+                                  "managerUserId": "usr_005"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        String submitResponse = mockMvc.perform(post("/api/v1/oa/leaves/{billId}/submit", billId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sceneCode": "default",
+                                  "leaveType": "SICK",
+                                  "days": 5,
+                                  "reason": "更新草稿后提交",
+                                  "urgent": true,
+                                  "managerUserId": "usr_005"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode submitData = objectMapper.readTree(submitResponse).path("data");
+        assertThat(submitData.path("billId").asText()).isEqualTo(billId);
+        assertThat(submitData.path("processInstanceId").asText()).isNotBlank();
+        JsonNode billRow = objectMapper.valueToTree(
+                jdbcTemplate.queryForMap(
+                        "SELECT leave_type, days, reason, urgent, manager_user_id, status, process_instance_id FROM oa_leave_bill WHERE id = ?",
+                        billId
+                )
+        );
+        assertThat(billRow.path("leave_type").asText()).isEqualTo("SICK");
+        assertThat(billRow.path("days").asInt()).isEqualTo(5);
+        assertThat(billRow.path("reason").asText()).isEqualTo("更新草稿后提交");
+        assertThat(billRow.path("urgent").asBoolean()).isTrue();
+        assertThat(billRow.path("manager_user_id").asText()).isEqualTo("usr_005");
+        assertThat(billRow.path("status").asText()).isEqualTo("RUNNING");
+        assertThat(billRow.path("process_instance_id").asText()).isEqualTo(submitData.path("processInstanceId").asText());
     }
 
     private String login() throws Exception {

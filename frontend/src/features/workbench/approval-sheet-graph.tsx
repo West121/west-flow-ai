@@ -6,6 +6,7 @@ import {
   MarkerType,
   ReactFlow,
   ReactFlowProvider,
+  type ReactFlowInstance,
   type Edge,
   type Node,
 } from '@xyflow/react'
@@ -23,6 +24,7 @@ import {
 import { WorkflowNodeCard } from '@/features/workflow/designer/workflow-node'
 import { type WorkflowNodeData } from '@/features/workflow/designer/types'
 import {
+  resolveApprovalSheetActingModeLabel,
   formatApprovalSheetBoolean,
   formatApprovalSheetDateTime,
   formatApprovalSheetDuration,
@@ -37,6 +39,7 @@ type ApprovalSheetGraphProps = {
   flowEdges: WorkbenchFlowEdge[]
   taskTrace: WorkbenchTaskTraceItem[]
   instanceEvents: WorkbenchProcessInstanceEvent[]
+  instanceStatus?: string | null
   userDisplayNames?: Record<string, string> | null
 }
 
@@ -48,33 +51,98 @@ type PlaybackEvent = {
   operatorUserId: string | null
 }
 
+type TraversalState = {
+  visitedNodeIds: Set<string>
+  visitedEdgeIds: Set<string>
+  activeEdgeIds: Set<string>
+}
+
 // 回顾优先使用实例事件；如果后端没有给足事件，再回退到任务轨迹。
 // 先从实例事件构造播放序列，不够时再回退到任务轨迹。
 function buildPlaybackEvents(
+  flowNodes: WorkbenchFlowNode[],
   instanceEvents: WorkbenchProcessInstanceEvent[],
-  taskTrace: WorkbenchTaskTraceItem[]
+  taskTrace: WorkbenchTaskTraceItem[],
+  instanceStatus?: string | null
 ): PlaybackEvent[] {
+  const startNodeId = findStartNodeId(flowNodes)
+  const endNodeId = flowNodes.find((node) => node.type === 'end')?.id ?? null
   const directEvents = instanceEvents
-    .filter((event) => Boolean(event.nodeId))
+    .filter(
+      (event) =>
+        Boolean(event.nodeId) ||
+        event.eventType === 'START_PROCESS' ||
+        event.eventType === 'INSTANCE_STARTED' ||
+        event.eventType === 'INSTANCE_COMPLETED' ||
+        event.eventType === 'INSTANCE_REVOKED' ||
+        event.eventType === 'INSTANCE_TERMINATED'
+    )
     .map((event) => ({
       id: event.eventId,
-      nodeId: event.nodeId ?? '',
+      nodeId: (() => {
+        if ((event.eventType === 'START_PROCESS' || event.eventType === 'INSTANCE_STARTED') && startNodeId) {
+          return startNodeId
+        }
+        if (
+          (event.eventType === 'INSTANCE_COMPLETED' ||
+            event.eventType === 'INSTANCE_REVOKED' ||
+            event.eventType === 'INSTANCE_TERMINATED') &&
+          endNodeId
+        ) {
+          return endNodeId
+        }
+        return event.nodeId ?? ''
+      })(),
       label: event.eventName,
       occurredAt: event.occurredAt,
       operatorUserId: event.operatorUserId ?? null,
     }))
 
-  if (directEvents.length > 0) {
-    return directEvents
-  }
-
-  return taskTrace.map((item) => ({
-    id: item.taskId,
+  const traceEvents = taskTrace.map((item) => ({
+    id: `task:${item.taskId}`,
     nodeId: item.nodeId,
-    label: resolveApprovalSheetResultLabel(item),
+    label: item.nodeName,
     occurredAt: item.handleEndTime ?? item.handleStartTime ?? item.receiveTime ?? null,
     operatorUserId: item.operatorUserId ?? item.assigneeUserId ?? null,
   }))
+
+  const merged = [...directEvents, ...traceEvents]
+
+  if (
+    instanceStatus === 'COMPLETED' &&
+    endNodeId &&
+    !merged.some((event) => event.nodeId === endNodeId)
+  ) {
+    const lastOccurredAt = merged[merged.length - 1]?.occurredAt ?? null
+    const endOccurredAt = lastOccurredAt
+      ? new Date(new Date(lastOccurredAt).getTime() + 1).toISOString()
+      : null
+    merged.push({
+      id: 'instance:end',
+      nodeId: endNodeId,
+      label: '流程结束',
+      occurredAt: endOccurredAt,
+      operatorUserId: null,
+    })
+  }
+
+  const sorted = merged
+    .filter((event) => Boolean(event.nodeId))
+    .sort((left, right) => {
+      const leftTime = left.occurredAt ? new Date(left.occurredAt).getTime() : Number.MAX_SAFE_INTEGER
+      const rightTime = right.occurredAt ? new Date(right.occurredAt).getTime() : Number.MAX_SAFE_INTEGER
+      return leftTime - rightTime
+    })
+
+  const deduped = new Map<string, PlaybackEvent>()
+  for (const event of sorted) {
+    const key = `${event.nodeId}:${event.occurredAt ?? ''}:${event.label}`
+    if (!deduped.has(key)) {
+      deduped.set(key, event)
+    }
+  }
+
+  return Array.from(deduped.values())
 }
 
 const previewNodeTypes = {
@@ -113,20 +181,112 @@ function resolvePreviewNodeTone(nodeType: string): WorkflowNodeData['tone'] {
   return 'warning'
 }
 
+function findStartNodeId(flowNodes: WorkbenchFlowNode[]) {
+  return flowNodes.find((node) => node.type === 'start')?.id ?? flowNodes[0]?.id ?? null
+}
+
+function buildOutgoingEdgeMap(flowEdges: WorkbenchFlowEdge[]) {
+  return flowEdges.reduce<Map<string, WorkbenchFlowEdge[]>>((map, edge) => {
+    const list = map.get(edge.source) ?? []
+    list.push(edge)
+    map.set(edge.source, list)
+    return map
+  }, new Map())
+}
+
+function findPathEdgeIds(
+  flowEdges: WorkbenchFlowEdge[],
+  sourceNodeId: string | null,
+  targetNodeId: string | null
+) {
+  if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) {
+    return [] as string[]
+  }
+
+  const outgoingEdgeMap = buildOutgoingEdgeMap(flowEdges)
+  const queue: Array<{ nodeId: string; edgeIds: string[] }> = [
+    { nodeId: sourceNodeId, edgeIds: [] },
+  ]
+  const visited = new Set<string>([sourceNodeId])
+
+  while (queue.length > 0) {
+    const current = queue.shift()
+    if (!current) {
+      continue
+    }
+    const edges = outgoingEdgeMap.get(current.nodeId) ?? []
+    for (const edge of edges) {
+      const nextEdgeIds = [...current.edgeIds, edge.id]
+      if (edge.target === targetNodeId) {
+        return nextEdgeIds
+      }
+      if (!visited.has(edge.target)) {
+        visited.add(edge.target)
+        queue.push({ nodeId: edge.target, edgeIds: nextEdgeIds })
+      }
+    }
+  }
+
+  return [] as string[]
+}
+
+function buildTraversalState(
+  flowNodes: WorkbenchFlowNode[],
+  flowEdges: WorkbenchFlowEdge[],
+  focusNodeIds: string[],
+  activeIndex: number
+): TraversalState {
+  const startNodeId = findStartNodeId(flowNodes)
+  const sequence = [startNodeId, ...focusNodeIds].filter(
+    (value, index, list): value is string => Boolean(value) && list.indexOf(value) === index
+  )
+  const edgeById = new Map(flowEdges.map((edge) => [edge.id, edge]))
+  const visitedNodeIds = new Set<string>()
+  const visitedEdgeIds = new Set<string>()
+  const activeEdgeIds = new Set<string>()
+
+  if (sequence.length === 0) {
+    return { visitedNodeIds, visitedEdgeIds, activeEdgeIds }
+  }
+
+  visitedNodeIds.add(sequence[0]!)
+
+  for (let index = 1; index < sequence.length; index += 1) {
+    const pathEdgeIds = findPathEdgeIds(flowEdges, sequence[index - 1]!, sequence[index]!)
+    const isActiveSegment = index - 1 === activeIndex
+
+    for (const edgeId of pathEdgeIds) {
+      visitedEdgeIds.add(edgeId)
+      if (isActiveSegment) {
+        activeEdgeIds.add(edgeId)
+      }
+      const edge = edgeById.get(edgeId)
+      if (edge) {
+        visitedNodeIds.add(edge.source)
+        visitedNodeIds.add(edge.target)
+      }
+    }
+  }
+
+  return { visitedNodeIds, visitedEdgeIds, activeEdgeIds }
+}
+
 function ApprovalSheetGraphInner({
   flowNodes,
   flowEdges,
   taskTrace,
   instanceEvents,
+  instanceStatus,
   userDisplayNames,
 }: ApprovalSheetGraphProps) {
   const [mode, setMode] = useState<'idle' | 'playing' | 'paused'>('idle')
   const [activeIndex, setActiveIndex] = useState(0)
+  const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<Node, Edge> | null>(null)
 
   // 播放态只负责按时间顺序推进高亮，不影响原始流程数据。
   const playbackEvents = useMemo(
-    () => buildPlaybackEvents(instanceEvents, taskTrace),
-    [instanceEvents, taskTrace]
+    () => buildPlaybackEvents(flowNodes, instanceEvents, taskTrace, instanceStatus),
+    [flowNodes, instanceEvents, instanceStatus, taskTrace]
   )
 
   useEffect(() => {
@@ -149,10 +309,70 @@ function ApprovalSheetGraphInner({
   }, [mode, playbackEvents.length])
 
   const activePlaybackEvent = playbackEvents[activeIndex] ?? null
-  const activeNodeId = activePlaybackEvent?.nodeId
-    ?? taskTrace.find((item) => item.status === 'PENDING' || item.status === 'PENDING_CLAIM')?.nodeId
-    ?? taskTrace[taskTrace.length - 1]?.nodeId
-    ?? null
+  const taskTraceByNodeId = useMemo(
+    () =>
+      taskTrace.reduce<Map<string, WorkbenchTaskTraceItem>>((map, item) => {
+        if (!map.has(item.nodeId)) {
+          map.set(item.nodeId, item)
+        }
+        return map
+      }, new Map()),
+    [taskTrace]
+  )
+  const timelineItems = useMemo(
+    () =>
+      playbackEvents.map((event) => {
+        const traceItem = taskTraceByNodeId.get(event.nodeId) ?? null
+        return {
+          event,
+          traceItem,
+        }
+      }),
+    [playbackEvents, taskTraceByNodeId]
+  )
+  const playbackFocusNodeIds = useMemo(() => {
+    const activePathNodeIds = playbackEvents
+      .slice(0, activeIndex + 1)
+      .map((event) => event.nodeId)
+      .filter(Boolean)
+
+    if (mode === 'playing') {
+      return activePathNodeIds
+    }
+
+    if (
+      instanceStatus === 'COMPLETED' ||
+      instanceStatus === 'REVOKED' ||
+      instanceStatus === 'TERMINATED'
+    ) {
+      return playbackEvents.map((event) => event.nodeId).filter(Boolean)
+    }
+
+    const tracePathNodeIds = taskTrace
+      .filter((item) => item.handleEndTime || item.status === 'PENDING' || item.status === 'PENDING_CLAIM')
+      .map((item) => item.nodeId)
+      .filter(Boolean)
+
+    return tracePathNodeIds.length > 0 ? tracePathNodeIds : activePathNodeIds
+  }, [activeIndex, instanceStatus, mode, playbackEvents, taskTrace])
+  const activeNodeId = useMemo(() => {
+    if (
+      instanceStatus === 'REVOKED' ||
+      instanceStatus === 'COMPLETED' ||
+      instanceStatus === 'TERMINATED'
+    ) {
+      return activePlaybackEvent?.nodeId ?? null
+    }
+    return activePlaybackEvent?.nodeId
+      ?? taskTrace.find((item) => item.status === 'PENDING' || item.status === 'PENDING_CLAIM')?.nodeId
+      ?? taskTrace[taskTrace.length - 1]?.nodeId
+      ?? null
+  }, [activePlaybackEvent?.nodeId, instanceStatus, taskTrace])
+
+  const traversalState = useMemo(
+    () => buildTraversalState(flowNodes, flowEdges, playbackFocusNodeIds, activeIndex),
+    [activeIndex, flowEdges, flowNodes, playbackFocusNodeIds]
+  )
 
   // 已完成节点用于标记流程跑过的路径。
   const completedNodeIds = useMemo(
@@ -165,21 +385,23 @@ function ApprovalSheetGraphInner({
     [taskTrace]
   )
 
-  const visitedNodeIds = useMemo(
-    () =>
-      new Set(
-        playbackEvents
-          .slice(0, activeIndex + 1)
-          .map((event) => event.nodeId)
-          .filter(Boolean)
-      ),
-    [activeIndex, playbackEvents]
-  )
+  const visitedNodeIds = useMemo(() => {
+    const next = new Set<string>(traversalState.visitedNodeIds)
+    if (activeNodeId) {
+      next.add(activeNodeId)
+    }
+    return next
+  }, [activeNodeId, traversalState.visitedNodeIds])
 
   const nodes = useMemo<Node[]>(
     () =>
       flowNodes.map((node) => {
-        const isActive = node.id === activeNodeId
+        const highlightActiveNode =
+          node.id === activeNodeId &&
+          (mode === 'playing' ||
+            (instanceStatus !== 'COMPLETED' &&
+              instanceStatus !== 'REVOKED' &&
+              instanceStatus !== 'TERMINATED'))
         const isCompleted = completedNodeIds.has(node.id)
         const isVisited = visitedNodeIds.has(node.id)
 
@@ -193,7 +415,7 @@ function ApprovalSheetGraphInner({
             description: '',
             tone: resolvePreviewNodeTone(node.type),
             config: {},
-            previewStatus: isActive
+            previewStatus: highlightActiveNode
               ? 'ACTIVE'
               : isCompleted
                 ? 'COMPLETED'
@@ -210,37 +432,61 @@ function ApprovalSheetGraphInner({
           },
         }
       }),
-    [activeNodeId, completedNodeIds, flowNodes, visitedNodeIds]
+    [activeNodeId, completedNodeIds, flowNodes, instanceStatus, mode, visitedNodeIds]
   )
+
+  useEffect(() => {
+    if (!flowInstance || !activeNodeId || mode !== 'playing') {
+      return
+    }
+
+    const node = flowNodes.find((item) => item.id === activeNodeId)
+    if (!node) {
+      return
+    }
+
+    const width = Math.max(node.ui?.width ?? 220, 220)
+    flowInstance.setCenter(node.position.x + width / 2, node.position.y + 44, {
+      zoom: 0.82,
+      duration: 450,
+    })
+  }, [activeNodeId, flowInstance, flowNodes, mode])
 
   const edges = useMemo<Edge[]>(
     () =>
       flowEdges.map((edge) => {
-        const targetCompleted = completedNodeIds.has(edge.target)
-        const targetVisited = visitedNodeIds.has(edge.target)
-        const isActive = edge.target === activeNodeId
+        const isActive = mode === 'playing' && traversalState.activeEdgeIds.has(edge.id)
+        const isTraversed = traversalState.visitedEdgeIds.has(edge.id)
+        const isPlaying = mode === 'playing'
+        const edgeColor = isActive
+          ? '#2563eb'
+          : isTraversed
+            ? '#16a34a'
+            : '#94a3b8'
 
-        // 边的颜色跟随目标节点状态变化，便于看出流转路径。
         return {
           id: edge.id,
           source: edge.source,
           target: edge.target,
-          animated: isActive,
+          type: 'smoothstep',
+          pathOptions: {
+            borderRadius: 18,
+            offset: 18,
+          },
+          animated: isPlaying && (isActive || isTraversed),
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: isActive || targetCompleted || targetVisited ? '#2563eb' : '#94a3b8',
+            color: edgeColor,
           },
           style: {
-            strokeWidth: isActive ? 2.5 : 1.5,
-            stroke: isActive
-              ? '#2563eb'
-              : targetCompleted || targetVisited
-                ? '#16a34a'
-                : '#94a3b8',
+            strokeWidth: isActive ? 2.6 : isTraversed ? 2 : 1.5,
+            strokeDasharray: isPlaying && (isActive || isTraversed) ? '7 5' : undefined,
+            strokeLinecap: 'round',
+            stroke: edgeColor,
           },
         }
       }),
-    [activeNodeId, completedNodeIds, flowEdges, visitedNodeIds]
+    [flowEdges, mode, traversalState.activeEdgeIds, traversalState.visitedEdgeIds]
   )
 
   return (
@@ -299,6 +545,7 @@ function ApprovalSheetGraphInner({
                 nodes={nodes}
                 edges={edges}
                 nodeTypes={previewNodeTypes}
+                onInit={setFlowInstance}
                 fitView
                 fitViewOptions={{ padding: 0.18 }}
                 minZoom={0.45}
@@ -316,103 +563,163 @@ function ApprovalSheetGraphInner({
             </div>
           </div>
 
-          <div className='space-y-4 min-w-0'>
-            <div className='rounded-lg border bg-muted/20 p-4'>
-              <p className='text-sm font-medium'>当前播放事件</p>
+          <div className='min-w-0 rounded-lg border bg-muted/10 p-4'>
+            <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+              <div>
+                <p className='text-sm font-medium'>回顾时间轴</p>
+                <p className='mt-1 text-xs text-muted-foreground'>
+                  {activePlaybackEvent
+                    ? `当前播放：${activePlaybackEvent.label} · ${formatApprovalSheetDateTime(activePlaybackEvent.occurredAt)}`
+                    : '等待回顾数据'}
+                </p>
+              </div>
               {activePlaybackEvent ? (
-                <div className='mt-2 flex flex-wrap items-center gap-2 text-sm'>
-                  <span>{activePlaybackEvent.label}</span>
-                  <ApprovalUserTag
-                    userId={activePlaybackEvent.operatorUserId}
-                    displayNames={userDisplayNames}
-                    fallback='系统触发'
-                  />
-                </div>
-              ) : (
-                <p className='mt-2 text-sm'>暂无实例事件</p>
-              )}
-              <p className='mt-1 text-xs text-muted-foreground'>
-                {activePlaybackEvent
-                  ? formatApprovalSheetDateTime(activePlaybackEvent.occurredAt)
-                  : '等待回顾数据'}
-              </p>
+                <ApprovalUserTag
+                  userId={activePlaybackEvent.operatorUserId}
+                  displayNames={userDisplayNames}
+                  fallback='系统触发'
+                />
+              ) : null}
             </div>
 
-            <div className='max-h-[320px] min-w-0 space-y-3 overflow-auto rounded-lg border bg-muted/10 p-3 pr-2'>
-              {taskTrace.length ? (
-                taskTrace.map((item, index) => {
-                  const active = item.nodeId === activeNodeId
+            <div className='max-h-[360px] min-w-0 overflow-auto pr-2'>
+              {timelineItems.length ? (
+                <ol className='space-y-0'>
+                  {timelineItems.map(({ event, traceItem }, index) => {
+                    const active = event.id === activePlaybackEvent?.id
 
-                  return (
-                    <div
-                      key={`${item.taskId}:${item.nodeId}:${index}`}
-                      className={`rounded-lg border p-4 ${
-                        active ? 'border-primary bg-primary/5' : 'bg-background'
-                      }`}
-                    >
-                      <div className='flex flex-wrap items-center justify-between gap-3'>
-                        <div className='min-w-0'>
-                          <p className='font-medium'>{item.nodeName}</p>
-                          <p className='truncate text-xs text-muted-foreground'>节点 ID：{item.nodeId}</p>
-                        </div>
-                        <Badge variant={active ? 'default' : 'secondary'}>
-                          {resolveApprovalSheetResultLabel(item)}
-                        </Badge>
-                      </div>
-
-                      <dl className='mt-4 grid gap-2 text-sm'>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>办理人</dt>
-                          <dd>
-                            <ApprovalUserTag
-                              userId={item.assigneeUserId ?? item.operatorUserId}
-                              displayNames={userDisplayNames}
-                            />
-                          </dd>
-                        </div>
-                        {item.candidateUserIds?.length ? (
-                          <div className='flex justify-between gap-3'>
-                            <dt className='text-muted-foreground'>候选人</dt>
-                            <dd>
-                              <ApprovalTagList
-                                ids={item.candidateUserIds}
-                                displayNames={userDisplayNames}
-                              />
-                            </dd>
+                    return (
+                      <li
+                        key={`${event.id}:${event.nodeId}:${index}`}
+                        className='grid grid-cols-[124px_24px_minmax(0,1fr)] gap-3 pb-5 last:pb-0'
+                      >
+                        <div className='pt-0.5 text-right text-xs text-muted-foreground'>
+                          <div className='font-medium text-foreground'>
+                            {formatApprovalSheetDateTime(
+                              traceItem?.handleEndTime
+                                ?? traceItem?.handleStartTime
+                                ?? traceItem?.receiveTime
+                                ?? event.occurredAt
+                            )}
                           </div>
-                        ) : null}
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>读取时间</dt>
-                          <dd>{formatApprovalSheetDateTime(item.readTime)}</dd>
+                          <div className='mt-1'>
+                            {traceItem?.handleEndTime
+                              ? '完成'
+                              : traceItem?.handleStartTime
+                                ? '处理中'
+                                : traceItem?.receiveTime
+                                  ? '已接收'
+                                  : event.label === '流程结束'
+                                    ? '结束'
+                                    : event.label.includes('发起')
+                                      ? '发起'
+                                  : '待处理'}
+                          </div>
                         </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>接收时间</dt>
-                          <dd>{formatApprovalSheetDateTime(item.receiveTime)}</dd>
+                        <div className='flex flex-col items-center'>
+                          <span
+                            className={`mt-1 size-3 rounded-full border-2 border-background shadow-sm ring-4 ${
+                              active
+                                ? 'bg-sky-500 ring-sky-500/15'
+                                : 'bg-emerald-500 ring-emerald-500/10'
+                            }`}
+                          />
+                          {index < timelineItems.length - 1 ? (
+                            <span className='mt-2 h-full min-h-10 w-px bg-border' />
+                          ) : null}
                         </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>办理开始时间</dt>
-                          <dd>{formatApprovalSheetDateTime(item.handleStartTime)}</dd>
+                        <div
+                          className={`space-y-2 border-l pl-4 ${
+                            active ? 'border-sky-300' : 'border-border'
+                          }`}
+                        >
+                          <div className='flex flex-wrap items-center gap-2'>
+                            <span className='font-medium leading-none'>
+                              {traceItem?.nodeName ?? event.label}
+                            </span>
+                            <Badge variant={active ? 'default' : 'secondary'}>
+                              {traceItem
+                                ? resolveApprovalSheetResultLabel(traceItem)
+                                : event.label === '流程结束'
+                                  ? '已完成'
+                                  : '发起'}
+                            </Badge>
+                          </div>
+
+                          <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
+                            <span className='flex items-center gap-1'>
+                              办理人：
+                              <ApprovalUserTag
+                                userId={
+                                  traceItem?.assigneeUserId
+                                  ?? traceItem?.operatorUserId
+                                  ?? event.operatorUserId
+                                }
+                                displayNames={userDisplayNames}
+                                fallback={event.label.includes('发起') ? '发起人' : '--'}
+                              />
+                            </span>
+                            {traceItem?.candidateUserIds?.length ? (
+                              <span className='flex items-center gap-1'>
+                                候选人：
+                                <ApprovalTagList
+                                  ids={traceItem.candidateUserIds}
+                                  displayNames={userDisplayNames}
+                                />
+                              </span>
+                            ) : null}
+                            <span>接收：{formatApprovalSheetDateTime(traceItem?.receiveTime)}</span>
+                            <span>读取：{formatApprovalSheetDateTime(traceItem?.readTime)}</span>
+                            <span>开始：{formatApprovalSheetDateTime(traceItem?.handleStartTime)}</span>
+                            <span>完成：{formatApprovalSheetDateTime(traceItem?.handleEndTime)}</span>
+                            <span>时长：{formatApprovalSheetDuration(traceItem?.handleDurationSeconds)}</span>
+                            <span>超时：{formatApprovalSheetBoolean(false)}</span>
+                          </div>
+
+                          {(traceItem?.actingMode ||
+                            traceItem?.actingForUserId ||
+                            traceItem?.delegatedByUserId ||
+                            traceItem?.handoverFromUserId) ? (
+                            <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
+                              <span>办理模式：{resolveApprovalSheetActingModeLabel(traceItem?.actingMode)}</span>
+                              {traceItem?.actingForUserId ? (
+                                <span className='flex items-center gap-1'>
+                                  代谁办理：
+                                  <ApprovalUserTag
+                                    userId={traceItem.actingForUserId}
+                                    displayNames={userDisplayNames}
+                                  />
+                                </span>
+                              ) : null}
+                              {traceItem?.delegatedByUserId ? (
+                                <span className='flex items-center gap-1'>
+                                  委派来源：
+                                  <ApprovalUserTag
+                                    userId={traceItem.delegatedByUserId}
+                                    displayNames={userDisplayNames}
+                                  />
+                                </span>
+                              ) : null}
+                              {traceItem?.handoverFromUserId ? (
+                                <span className='flex items-center gap-1'>
+                                  离职转办来源：
+                                  <ApprovalUserTag
+                                    userId={traceItem.handoverFromUserId}
+                                    displayNames={userDisplayNames}
+                                  />
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+
+                          <p className='text-sm text-foreground/90'>
+                            审批意见：{formatApprovalSheetText(traceItem?.comment)}
+                          </p>
                         </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>办理完成时间</dt>
-                          <dd>{formatApprovalSheetDateTime(item.handleEndTime)}</dd>
-                        </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>办理时长</dt>
-                          <dd>{formatApprovalSheetDuration(item.handleDurationSeconds)}</dd>
-                        </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>是否超时</dt>
-                          <dd>{formatApprovalSheetBoolean(false)}</dd>
-                        </div>
-                        <div className='flex justify-between gap-3'>
-                          <dt className='text-muted-foreground'>审批意见摘要</dt>
-                          <dd>{formatApprovalSheetText(item.comment)}</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  )
-                })
+                      </li>
+                    )
+                  })}
+                </ol>
               ) : (
                 <div className='rounded-lg border border-dashed p-6 text-sm text-muted-foreground'>
                   当前实例还没有审批轨迹。

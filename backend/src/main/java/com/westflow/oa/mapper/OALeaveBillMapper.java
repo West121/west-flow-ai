@@ -1,7 +1,9 @@
 package com.westflow.oa.mapper;
 
 import com.westflow.oa.api.OALeaveBillDetailResponse;
+import com.westflow.oa.api.OABillDraftListItemResponse;
 import com.westflow.oa.model.OALeaveBillRecord;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -19,8 +21,11 @@ public interface OALeaveBillMapper {
               id,
               bill_no,
               scene_code,
+              leave_type,
               days,
               reason,
+              urgent,
+              manager_user_id,
               process_instance_id,
               status,
               creator_user_id,
@@ -30,8 +35,11 @@ public interface OALeaveBillMapper {
               #{id},
               #{billNo},
               #{sceneCode},
+              #{leaveType},
               #{days},
               #{reason},
+              #{urgent},
+              #{managerUserId},
               #{processInstanceId},
               #{status},
               #{creatorUserId},
@@ -40,6 +48,19 @@ public interface OALeaveBillMapper {
             )
             """)
     int insert(OALeaveBillRecord record);
+
+    @Update("""
+            UPDATE oa_leave_bill
+            SET scene_code = #{sceneCode},
+                leave_type = #{leaveType},
+                days = #{days},
+                reason = #{reason},
+                urgent = #{urgent},
+                manager_user_id = #{managerUserId},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{id}
+            """)
+    int updateDraft(OALeaveBillRecord record);
 
     @Update("""
             UPDATE oa_leave_bill
@@ -59,12 +80,34 @@ public interface OALeaveBillMapper {
               id AS billId,
               bill_no AS billNo,
               scene_code AS sceneCode,
+              leave_type AS leaveType,
               days,
               reason,
+              urgent,
+              manager_user_id AS managerUserId,
               process_instance_id AS processInstanceId,
               status
             FROM oa_leave_bill
             WHERE id = #{billId}
             """)
     OALeaveBillDetailResponse selectDetail(@Param("billId") String billId);
+
+    @Select("""
+            SELECT
+              id AS billId,
+              bill_no AS billNo,
+              'OA_LEAVE' AS businessType,
+              CONCAT('请假申请 · ', COALESCE(reason, '未命名草稿')) AS businessTitle,
+              scene_code AS sceneCode,
+              process_instance_id AS processInstanceId,
+              status,
+              creator_user_id AS creatorUserId,
+              created_at AS createdAt,
+              updated_at AS updatedAt
+            FROM oa_leave_bill
+            WHERE creator_user_id = #{creatorUserId}
+              AND status = 'DRAFT'
+            ORDER BY updated_at DESC
+            """)
+    List<OABillDraftListItemResponse> selectDraftsByCreatorUserId(@Param("creatorUserId") String creatorUserId);
 }

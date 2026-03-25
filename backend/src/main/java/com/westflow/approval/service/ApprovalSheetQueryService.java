@@ -42,7 +42,7 @@ public class ApprovalSheetQueryService {
     private Map<String, Object> resolveLeaveBusinessData(String businessKey) {
         return queryBusinessData(
                 """
-                SELECT id, bill_no, scene_code, days, reason, process_instance_id, status, creator_user_id
+                SELECT id, bill_no, scene_code, leave_type, days, reason, urgent, manager_user_id, process_instance_id, status, creator_user_id
                 FROM oa_leave_bill
                 WHERE id = ?
                 """,
@@ -52,11 +52,14 @@ public class ApprovalSheetQueryService {
                     data.put("billId", resultSet.getObject(1));
                     data.put("billNo", resultSet.getObject(2));
                     data.put("sceneCode", resultSet.getObject(3));
-                    data.put("days", resultSet.getObject(4));
-                    data.put("reason", resultSet.getObject(5));
-                    data.put("processInstanceId", resultSet.getObject(6));
-                    data.put("status", resultSet.getObject(7));
-                    data.put("creatorUserId", resultSet.getObject(8));
+                    data.put("leaveType", resultSet.getObject(4));
+                    data.put("days", resultSet.getObject(5));
+                    data.put("reason", resultSet.getObject(6));
+                    data.put("urgent", resultSet.getObject(7));
+                    data.put("managerUserId", resultSet.getObject(8));
+                    data.put("processInstanceId", resultSet.getObject(9));
+                    data.put("status", resultSet.getObject(10));
+                    data.put("creatorUserId", resultSet.getObject(11));
                     return data;
                 }
         );

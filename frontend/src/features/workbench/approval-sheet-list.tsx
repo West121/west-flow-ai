@@ -30,6 +30,12 @@ export function formatApprovalSheetDateTime(value: string | null | undefined) {
 // 实例状态标签在工作台和 OA 页面保持一致。
 export function resolveApprovalSheetInstanceStatusLabel(status: string) {
   switch (status) {
+    case 'DRAFT':
+      return '草稿'
+    case 'REVOKED':
+      return '已撤销'
+    case 'TERMINATED':
+      return '已终止'
     case 'COMPLETED':
       return '已完成'
     case 'RUNNING':
@@ -39,7 +45,16 @@ export function resolveApprovalSheetInstanceStatusLabel(status: string) {
 }
 
 function resolveApprovalSheetInstanceStatusVariant(status: string) {
-  return status === 'COMPLETED' ? 'secondary' : 'destructive'
+  if (status === 'DRAFT') {
+    return 'outline'
+  }
+  if (status === 'COMPLETED') {
+    return 'secondary'
+  }
+  if (status === 'REVOKED' || status === 'TERMINATED') {
+    return 'outline'
+  }
+  return 'destructive'
 }
 
 // 流程中心把自动化状态直接暴露成标签，便于一眼看出规则是否已经生效。
@@ -87,6 +102,35 @@ function renderApprovalSheetDetailAction({
   mode: ApprovalSheetLinkMode
 }) {
   if (mode === 'oa' && item.businessId) {
+    if (item.instanceStatus === 'DRAFT') {
+      if (item.businessType === 'OA_LEAVE') {
+        return (
+          <Button asChild size='sm' variant='outline'>
+            <Link to='/oa/leave/create' search={{ draftId: item.businessId }}>
+              继续编辑
+            </Link>
+          </Button>
+        )
+      }
+      if (item.businessType === 'OA_EXPENSE') {
+        return (
+          <Button asChild size='sm' variant='outline'>
+            <Link to='/oa/expense/create' search={{ draftId: item.businessId }}>
+              继续编辑
+            </Link>
+          </Button>
+        )
+      }
+      if (item.businessType === 'OA_COMMON') {
+        return (
+          <Button asChild size='sm' variant='outline'>
+            <Link to='/oa/common/create' search={{ draftId: item.businessId }}>
+              继续编辑
+            </Link>
+          </Button>
+        )
+      }
+    }
     if (item.businessType === 'OA_LEAVE') {
       return (
         <Button asChild size='sm' variant='outline'>
@@ -137,6 +181,7 @@ function renderApprovalSheetDetailAction({
 export function summarizeApprovalSheets(records: ApprovalSheetListItem[]) {
   return {
     total: records.length,
+    draft: records.filter((record) => record.instanceStatus === 'DRAFT').length,
     running: records.filter((record) => record.instanceStatus === 'RUNNING').length,
     completed: records.filter((record) => record.instanceStatus === 'COMPLETED').length,
   }

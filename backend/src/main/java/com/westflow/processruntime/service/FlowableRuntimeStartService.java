@@ -187,8 +187,9 @@ public class FlowableRuntimeStartService {
     private Map<String, Object> buildStartVariables(PublishedProcessDefinition definition, StartProcessRequest request) {
         Map<String, Object> variables = new LinkedHashMap<>();
         if (request.formData() != null && !request.formData().isEmpty()) {
-            variables.putAll(request.formData());
-            variables.put("westflowFormData", new LinkedHashMap<>(request.formData()));
+            Map<String, Object> normalizedFormData = normalizeStartFormData(request.businessType(), request.formData());
+            variables.putAll(normalizedFormData);
+            variables.put("westflowFormData", new LinkedHashMap<>(normalizedFormData));
         }
         variables.put("westflowProcessDefinitionId", definition.processDefinitionId());
         variables.put("westflowProcessKey", definition.processKey());
@@ -203,6 +204,22 @@ public class FlowableRuntimeStartService {
                 .filter(node -> "approver".equals(node.type()))
                 .forEach(node -> appendCountersignStartVariables(variables, node));
         return variables;
+    }
+
+    private Map<String, Object> normalizeStartFormData(String businessType, Map<String, Object> formData) {
+        Map<String, Object> normalized = new LinkedHashMap<>(formData);
+        if (!"OA_LEAVE".equalsIgnoreCase(businessType)) {
+            return normalized;
+        }
+        Object days = normalized.get("days");
+        Object leaveDays = normalized.get("leaveDays");
+        if (days == null && leaveDays != null) {
+            normalized.put("days", leaveDays);
+        }
+        if (leaveDays == null && days != null) {
+            normalized.put("leaveDays", days);
+        }
+        return normalized;
     }
 
     private void appendSubprocessStartVariables(

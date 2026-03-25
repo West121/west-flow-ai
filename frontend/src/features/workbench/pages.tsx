@@ -123,6 +123,9 @@ import {
   type WorkbenchTaskDetail,
   type WorkbenchTaskListItem,
 } from '@/lib/api/workbench'
+import { getDepartmentUsers } from '@/lib/api/system-org'
+import { getRoleUsers } from '@/lib/api/system-roles'
+import { type SystemAssociatedUser } from '@/lib/api/system-users'
 import {
   confirmProcessLinkParentResume,
   getProcessTerminationSnapshot,
@@ -135,6 +138,38 @@ const workbenchTodoListRoute = getRouteApi('/_authenticated/workbench/todos/list
 const workbenchDoneListRoute = getRouteApi('/_authenticated/workbench/done/list')
 const workbenchInitiatedListRoute = getRouteApi('/_authenticated/workbench/initiated/list')
 const workbenchCopiedListRoute = getRouteApi('/_authenticated/workbench/copied/list')
+
+async function loadCandidateHandlerUsers(detail: {
+  taskId: string | null
+  candidateGroupIds: string[]
+}): Promise<SystemAssociatedUser[]> {
+  const requests: Array<Promise<SystemAssociatedUser[]>> = []
+
+  for (const groupId of detail.candidateGroupIds ?? []) {
+    if (groupId.startsWith('role_')) {
+      requests.push(getRoleUsers(groupId))
+      continue
+    }
+    if (groupId.startsWith('dept_')) {
+      requests.push(getDepartmentUsers(groupId))
+    }
+  }
+
+  if (requests.length === 0) {
+    return []
+  }
+
+  const groups = await Promise.all(requests)
+  const merged = new Map<string, SystemAssociatedUser>()
+
+  for (const users of groups) {
+    for (const user of users) {
+      merged.set(user.userId, user)
+    }
+  }
+
+  return Array.from(merged.values())
+}
 
 // 统一把流程相关时间转成中文可读格式。
 function formatDateTime(value: string | null | undefined) {
@@ -158,6 +193,13 @@ function formatDateTime(value: string | null | undefined) {
 }
 
 function resolveCurrentHandlerContent(detail: WorkbenchTaskDetail) {
+  if (
+    detail.instanceStatus === 'REVOKED' ||
+    detail.instanceStatus === 'COMPLETED' ||
+    detail.instanceStatus === 'TERMINATED'
+  ) {
+    return '--'
+  }
   if (detail.assigneeUserId) {
     return (
       <ApprovalUserTag
@@ -173,8 +215,12 @@ function resolveCurrentHandlerContent(detail: WorkbenchTaskDetail) {
 }
 
 // 待办状态在列表里只展示最直观的中文标签。
-function resolveTaskStatusLabel(status: WorkbenchTaskListItem['status']) {
+function resolveTaskStatusLabel(status: string) {
   switch (status) {
+    case 'REVOKED':
+      return '已撤销'
+    case 'TAKEN_BACK':
+      return '已拿回'
     case 'PENDING_CLAIM':
       return '待认领'
     case 'PENDING':
@@ -408,7 +454,7 @@ function ApprovalSheetListToolbar({
   )
 }
 
-// 动作轨迹按任务节点串起审批动作和办理信息。
+// 审批过程改成紧凑时间轴，强调顺序而不是平铺信息块。
 function ApprovalSheetActionTimeline({
   taskTrace,
   userDisplayNames,
@@ -421,23 +467,67 @@ function ApprovalSheetActionTimeline({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>动作轨迹</CardTitle>
+        <CardTitle>审批过程</CardTitle>
         <CardDescription>
-          按任务节点回放审批动作、办理人、意见和时间点，便于快速定位流程走向。
+          按时间顺序查看节点流转、办理人和审批意见，快速定位流程推进过程。
         </CardDescription>
       </CardHeader>
       <CardContent>
         {items.length ? (
-          <ol className='space-y-3 border-l border-dashed pl-4'>
+          <ol className='space-y-0'>
             {items.map((item, index) => (
-              <li key={`${item.taskId}:${item.nodeId}:${index}`} className='space-y-2'>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <Badge variant='secondary'>{resolveApprovalSheetResultLabel(item)}</Badge>
-                  <span className='font-medium'>{item.nodeName}</span>
+              <li
+                key={`${item.taskId}:${item.nodeId}:${index}`}
+                className='grid grid-cols-[120px_24px_minmax(0,1fr)] gap-3 pb-5 last:pb-0'
+              >
+                <div className='pt-0.5 text-right text-xs text-muted-foreground'>
+                  <div className='font-medium text-foreground'>
+                    {formatDateTime(item.handleEndTime ?? item.handleStartTime ?? item.receiveTime)}
+                  </div>
+                  <div className='mt-1'>
+                    {item.handleEndTime
+                      ? '完成'
+                      : item.handleStartTime
+                        ? '处理中'
+                        : item.receiveTime
+                          ? '已接收'
+                          : '待处理'}
+                  </div>
                 </div>
-                <div className='grid gap-1 text-sm text-muted-foreground'>
+                <div className='flex flex-col items-center'>
+                  <span className='mt-1 size-3 rounded-full border-2 border-background bg-emerald-500 shadow-sm ring-4 ring-emerald-500/10' />
+                  {index < items.length - 1 ? (
+                    <span className='mt-2 h-full min-h-10 w-px bg-border' />
+                  ) : null}
+                </div>
+                <div className='space-y-2 pb-1'>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <span className='font-medium leading-none'>{item.nodeName}</span>
+                    <Badge variant='secondary'>{resolveApprovalSheetResultLabel(item)}</Badge>
+                  </div>
+
+                  <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
+                    <span className='flex items-center gap-1'>
+                      办理人：
+                      <ApprovalUserTag
+                        userId={item.operatorUserId ?? item.assigneeUserId}
+                        displayNames={userDisplayNames}
+                      />
+                    </span>
+                    <span>接收：{formatDateTime(item.receiveTime)}</span>
+                    <span>开始：{formatDateTime(item.handleStartTime)}</span>
+                    <span>完成：{formatDateTime(item.handleEndTime)}</span>
+                    <span>
+                      时长：
+                      {item.handleDurationSeconds === null ||
+                      item.handleDurationSeconds === undefined
+                        ? '--'
+                        : `${item.handleDurationSeconds} 秒`}
+                    </span>
+                  </div>
+
                   {(item.actingMode || item.actingForUserId || item.delegatedByUserId || item.handoverFromUserId) ? (
-                    <div className='flex flex-wrap gap-x-3 gap-y-1'>
+                    <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
                       <span>办理模式：{resolveApprovalSheetActingModeLabel(item.actingMode)}</span>
                       {item.actingForUserId ? (
                         <span className='flex items-center gap-1'>
@@ -468,29 +558,10 @@ function ApprovalSheetActionTimeline({
                       ) : null}
                     </div>
                   ) : null}
-                  <div className='flex flex-wrap gap-x-3 gap-y-1'>
-                    <span className='flex items-center gap-1'>
-                      办理人：
-                      <ApprovalUserTag
-                        userId={item.operatorUserId ?? item.assigneeUserId}
-                        displayNames={userDisplayNames}
-                      />
-                    </span>
-                    <span>接收时间：{formatDateTime(item.receiveTime)}</span>
-                    <span>读取时间：{formatDateTime(item.readTime)}</span>
-                  </div>
-                  <div className='flex flex-wrap gap-x-3 gap-y-1'>
-                    <span>开始时间：{formatDateTime(item.handleStartTime)}</span>
-                    <span>完成时间：{formatDateTime(item.handleEndTime)}</span>
-                    <span>
-                      时长：
-                      {item.handleDurationSeconds === null ||
-                      item.handleDurationSeconds === undefined
-                        ? '--'
-                        : `${item.handleDurationSeconds} 秒`}
-                    </span>
-                  </div>
-                  <p>意见：{formatApprovalSheetText(item.comment)}</p>
+
+                  <p className='text-sm text-foreground/90'>
+                    审批意见：{formatApprovalSheetText(item.comment)}
+                  </p>
                 </div>
               </li>
             ))}
@@ -1495,10 +1566,29 @@ export function WorkbenchTodoDetailPage({
     detail?.activeTaskIds[0] ?? (locator.mode === 'task' ? locator.taskId : null)
   const rootInstanceId =
     detail?.processLinks?.[0]?.rootInstanceId ?? detail?.instanceId ?? null
+  const candidateHandlerTaskId = detail?.taskId ?? null
+  const candidateHandlerGroupIds = detail?.candidateGroupIds ?? []
   const actionsQuery = useQuery({
     queryKey: ['workbench', 'todo-actions', resolvedTaskId ?? 'none'],
     queryFn: () => getWorkbenchTaskActions(resolvedTaskId as string),
     enabled: Boolean(resolvedTaskId),
+  })
+  const candidateHandlersQuery = useQuery({
+    queryKey: [
+      'workbench',
+      'candidate-handlers',
+      candidateHandlerTaskId ?? 'none',
+      ...candidateHandlerGroupIds,
+    ],
+    queryFn: () =>
+      loadCandidateHandlerUsers({
+        taskId: candidateHandlerTaskId,
+        candidateGroupIds: candidateHandlerGroupIds,
+      }),
+    enabled:
+      Boolean(candidateHandlerTaskId)
+      && candidateHandlerGroupIds.length > 0
+      && !detail?.assigneeUserId,
   })
   const collaborationTraceQuery = useQuery({
     queryKey: ['workbench', 'collaboration-trace', detail?.instanceId ?? 'none'],
@@ -1747,6 +1837,7 @@ export function WorkbenchTodoDetailPage({
       queryClient.invalidateQueries({ queryKey: ['workbench', 'time-travel-trace'] }),
       queryClient.invalidateQueries({ queryKey: ['workbench', 'termination-snapshot'] }),
       queryClient.invalidateQueries({ queryKey: ['workbench', 'termination-audit'] }),
+      queryClient.invalidateQueries({ queryKey: ['oa'] }),
     ])
   }
 
@@ -2892,6 +2983,25 @@ export function WorkbenchTodoDetailPage({
                       />
                     </dd>
                   </div>
+                  {!detail.assigneeUserId && candidateHandlersQuery.data?.length ? (
+                    <div className='flex justify-between gap-3'>
+                      <dt className='text-muted-foreground'>可办理人员</dt>
+                      <dd>
+                        <div className='flex flex-wrap justify-end gap-2'>
+                          {candidateHandlersQuery.data.map((user) => (
+                            <ApprovalUserTag
+                              key={user.userId}
+                              userId={user.userId}
+                              displayNames={{
+                                ...detail.userDisplayNames,
+                                [user.userId]: user.displayName,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </dd>
+                    </div>
+                  ) : null}
                   <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>最新动作</dt>
                     <dd>{detail.action ?? '--'}</dd>
@@ -2973,6 +3083,7 @@ export function WorkbenchTodoDetailPage({
                           flowEdges={detail.flowEdges ?? []}
                           taskTrace={detail.taskTrace ?? []}
                           instanceEvents={detail.instanceEvents ?? []}
+                          instanceStatus={detail.instanceStatus}
                           userDisplayNames={detail.userDisplayNames}
                         />
                         <ApprovalSheetCountersignSection

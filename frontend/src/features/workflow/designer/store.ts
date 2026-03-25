@@ -105,7 +105,7 @@ function createInitialSnapshot(): WorkflowSnapshot {
   condition.data.config = buildConditionConfig({
     defaultEdgeId: 'edge-leave-short',
     expressionMode: 'FIELD_COMPARE',
-    expressionFieldKey: 'leaveDays',
+    expressionFieldKey: 'days',
   })
 
   managerRole.data.label = '直属主管审批'
@@ -169,7 +169,7 @@ function createInitialSnapshot(): WorkflowSnapshot {
       roleCodes: [],
       departmentRef: '',
       formFieldKey: '',
-      formulaExpression: `ifElse(leaveDays >= 5, "usr_005", managerUserId)`,
+      formulaExpression: `ifElse(days >= 5, "usr_005", managerUserId)`,
     },
   })
 
@@ -211,7 +211,7 @@ function createInitialSnapshot(): WorkflowSnapshot {
         label: '请假天数大于 3 天',
         data: {
           condition: buildCondition('FIELD', {
-            fieldKey: 'leaveDays',
+            fieldKey: 'days',
             operator: 'GT',
             value: '3',
           }),
@@ -225,7 +225,7 @@ function createInitialSnapshot(): WorkflowSnapshot {
         label: '紧急或长假',
         data: {
           condition: buildCondition('FORMULA', {
-            formulaExpression: 'urgent == true || leaveDays >= 5',
+            formulaExpression: 'urgent == true || days >= 5',
           }),
         },
       },
@@ -453,7 +453,7 @@ function createPresetNodes(
       sceneCode: 'leave_overtime_approval',
       executionStrategy: 'RULE_FIRST',
       fallbackStrategy: 'KEEP_CURRENT',
-      ruleExpression: 'ifElse(leaveDays >= 5, "DIRECTOR_CHAIN", "HR_RECORD")',
+      ruleExpression: 'ifElse(days >= 5, "DIRECTOR_CHAIN", "HR_RECORD")',
       appendPolicy: 'SERIAL_AFTER_CURRENT',
       maxGeneratedCount: 3,
       terminatePolicy: 'TERMINATE_GENERATED_ONLY',
@@ -517,7 +517,7 @@ function createPresetNodes(
         data: {
           condition: normalizeEdgeCondition({
             type: 'FIELD',
-            fieldKey: 'leaveDays',
+            fieldKey: 'days',
             operator: 'GE',
             value: '3',
           }),

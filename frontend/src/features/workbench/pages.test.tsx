@@ -737,7 +737,7 @@ describe('workbench pages', () => {
       canReject: false,
       canRejectRoute: false,
       canTransfer: false,
-      canReturn: true,
+      canReturn: false,
     })
 
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_claim_001' />)
@@ -749,23 +749,114 @@ describe('workbench pages', () => {
     expect(screen.getByRole('button', { name: '暂停回顾' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '继续回顾' })).toBeInTheDocument()
     expect(screen.getAllByText('办理人').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('读取时间').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('办理开始时间').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('办理完成时间').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('办理时长').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('是否超时').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('审批意见摘要').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/读取：/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/开始：/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/完成：/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/时长：/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/超时：/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/审批意见：/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('待认领').length).toBeGreaterThan(0)
     expect(screen.getByText('dept_002')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: '用 AI 解读当前审批单' })
     ).toHaveAttribute('data-source-route', '/workbench/todos/task_claim_001')
     expect(await screen.findByRole('button', { name: '认领任务' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '退回' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '退回' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '驳回' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '跳转' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '拿回' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '唤醒' })).not.toBeInTheDocument()
+  })
+
+  it('merges instance events and task trace for playback on completed approval sheets', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_playback_001',
+        status: 'COMPLETED',
+        instanceStatus: 'COMPLETED',
+        activeTaskIds: [],
+        instanceEvents: [
+          {
+            eventId: 'evt_001',
+            eventType: 'START_PROCESS',
+            eventName: '发起流程',
+            nodeId: 'approve_manager',
+            taskId: 'task_manager',
+            operatorUserId: 'usr_001',
+            occurredAt: '2026-03-22T09:00:00+08:00',
+          },
+        ],
+        taskTrace: [
+          {
+            taskId: 'task_manager',
+            nodeId: 'approve_manager',
+            nodeName: '部门负责人审批',
+            taskKind: 'NORMAL',
+            status: 'COMPLETED',
+            assigneeUserId: 'usr_002',
+            candidateUserIds: [],
+            candidateGroupIds: [],
+            action: null,
+            operatorUserId: 'usr_002',
+            comment: '同意',
+            receiveTime: '2026-03-22T09:01:00+08:00',
+            readTime: null,
+            handleStartTime: '2026-03-22T09:01:00+08:00',
+            handleEndTime: '2026-03-22T09:05:00+08:00',
+            handleDurationSeconds: 240,
+          },
+          {
+            taskId: 'task_hr',
+            nodeId: 'approve_hr',
+            nodeName: 'HR 备案',
+            taskKind: 'NORMAL',
+            status: 'COMPLETED',
+            assigneeUserId: 'usr_004',
+            candidateUserIds: [],
+            candidateGroupIds: [],
+            action: null,
+            operatorUserId: 'usr_004',
+            comment: '已备案',
+            receiveTime: '2026-03-22T09:05:30+08:00',
+            readTime: null,
+            handleStartTime: '2026-03-22T09:05:30+08:00',
+            handleEndTime: '2026-03-22T09:06:00+08:00',
+            handleDurationSeconds: 30,
+          },
+          {
+            taskId: 'task_director',
+            nodeId: 'approve_director',
+            nodeName: '总监确认',
+            taskKind: 'NORMAL',
+            status: 'COMPLETED',
+            assigneeUserId: 'usr_005',
+            candidateUserIds: [],
+            candidateGroupIds: [],
+            action: null,
+            operatorUserId: 'usr_005',
+            comment: '同意',
+            receiveTime: '2026-03-22T09:06:10+08:00',
+            readTime: null,
+            handleStartTime: '2026-03-22T09:06:10+08:00',
+            handleEndTime: '2026-03-22T09:08:00+08:00',
+            handleDurationSeconds: 110,
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: false,
+      canReject: false,
+      canRejectRoute: false,
+      canTransfer: false,
+      canReturn: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_playback_001' />)
+
+    expect(await screen.findByText('流程图回顾')).toBeInTheDocument()
+    expect(screen.getByText('事件数 5')).toBeInTheDocument()
   })
 
   it('shows automation trace, notification records and automation status in the workflow center', async () => {
@@ -1156,7 +1247,7 @@ describe('workbench pages', () => {
     fireEvent.mouseDown(traceTab)
     fireEvent.click(traceTab)
 
-    expect(await screen.findByText('动作轨迹')).toBeInTheDocument()
+    expect(await screen.findByText('审批过程')).toBeInTheDocument()
     expect(screen.getAllByText('驳回到上一步人工节点').length).toBeGreaterThan(0)
     expect(screen.getAllByText('跳转').length).toBeGreaterThan(0)
     expect(screen.getAllByText('拿回').length).toBeGreaterThan(0)
@@ -1799,7 +1890,7 @@ describe('workbench pages', () => {
     fireEvent.mouseDown(traceTab)
     fireEvent.click(traceTab)
 
-    expect(await screen.findByText('动作轨迹')).toBeInTheDocument()
+    expect(await screen.findByText('审批过程')).toBeInTheDocument()
     expect(screen.getAllByText('部门负责人审批').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '加签' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '减签' })).toBeInTheDocument()

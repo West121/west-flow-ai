@@ -14,13 +14,29 @@ export type OALaunchTask = {
 export type OALaunchResponse = {
   billId: string
   billNo: string
-  processInstanceId: string
+  processInstanceId: string | null
   activeTasks: OALaunchTask[]
 }
 
+export type OADraftListItem = {
+  billId: string
+  billNo: string
+  businessType: 'OA_LEAVE' | 'OA_EXPENSE' | 'OA_COMMON'
+  businessTitle: string
+  sceneCode?: string | null
+  processInstanceId?: string | null
+  status: 'DRAFT'
+  creatorUserId: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type OALeaveBillPayload = {
+  leaveType?: string
   days: number
   reason: string
+  urgent?: boolean
+  managerUserId?: string
 }
 
 export type OAExpenseBillPayload = {
@@ -39,11 +55,39 @@ export type OABillDetail = {
   [key: string]: unknown
 }
 
-async function postOALaunch<TPayload>(
+export type OALeaveBillDetail = OABillDetail & {
+  sceneCode: string
+  leaveType: string
+  days: number
+  reason: string
+  urgent: boolean
+  managerUserId: string
+  processInstanceId: string | null
+  status: string
+}
+
+export type OAExpenseBillDetail = OABillDetail & {
+  sceneCode: string
+  amount: number
+  reason: string
+  processInstanceId: string | null
+  status: string
+}
+
+export type OACommonRequestBillDetail = OABillDetail & {
+  sceneCode: string
+  title: string
+  content: string
+  processInstanceId: string | null
+  status: string
+}
+
+async function requestOALaunch<TPayload>(
+  method: 'post' | 'put',
   url: string,
   payload: TPayload
 ): Promise<OALaunchResponse> {
-  const response = await apiClient.post<{
+  const response = await apiClient[method]<{
     code: 'OK'
     message: string
     data: OALaunchResponse
@@ -53,11 +97,13 @@ async function postOALaunch<TPayload>(
   return unwrapResponse(response)
 }
 
-async function getOABillDetail(url: string): Promise<OABillDetail> {
+async function getOABillDetail<TDetail extends OABillDetail>(
+  url: string
+): Promise<TDetail> {
   const response = await apiClient.get<{
     code: 'OK'
     message: string
-    data: OABillDetail
+    data: TDetail
     requestId: string
   }>(url)
 
@@ -67,35 +113,117 @@ async function getOABillDetail(url: string): Promise<OABillDetail> {
 export async function createOALeaveBill(
   payload: OALeaveBillPayload
 ): Promise<OALaunchResponse> {
-  return postOALaunch('/oa/leaves', payload)
+  return requestOALaunch('post', '/oa/leaves', payload)
+}
+
+export async function saveOALeaveDraft(
+  payload: OALeaveBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('post', '/oa/leaves/draft', payload)
+}
+
+export async function updateOALeaveDraft(
+  billId: string,
+  payload: OALeaveBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('put', `/oa/leaves/${billId}/draft`, payload)
+}
+
+export async function submitOALeaveDraft(
+  billId: string,
+  payload: OALeaveBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('post', `/oa/leaves/${billId}/submit`, payload)
 }
 
 export async function createOAExpenseBill(
   payload: OAExpenseBillPayload
 ): Promise<OALaunchResponse> {
-  return postOALaunch('/oa/expenses', payload)
+  return requestOALaunch('post', '/oa/expenses', payload)
+}
+
+export async function saveOAExpenseDraft(
+  payload: OAExpenseBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('post', '/oa/expenses/draft', payload)
+}
+
+export async function updateOAExpenseDraft(
+  billId: string,
+  payload: OAExpenseBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('put', `/oa/expenses/${billId}/draft`, payload)
+}
+
+export async function submitOAExpenseDraft(
+  billId: string,
+  payload: OAExpenseBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('post', `/oa/expenses/${billId}/submit`, payload)
 }
 
 export async function createOACommonRequestBill(
   payload: OACommonRequestBillPayload
 ): Promise<OALaunchResponse> {
-  return postOALaunch('/oa/common-requests', payload)
+  return requestOALaunch('post', '/oa/common-requests', payload)
+}
+
+export async function saveOACommonRequestDraft(
+  payload: OACommonRequestBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('post', '/oa/common-requests/draft', payload)
+}
+
+export async function updateOACommonRequestDraft(
+  billId: string,
+  payload: OACommonRequestBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('put', `/oa/common-requests/${billId}/draft`, payload)
+}
+
+export async function submitOACommonRequestDraft(
+  billId: string,
+  payload: OACommonRequestBillPayload
+): Promise<OALaunchResponse> {
+  return requestOALaunch('post', `/oa/common-requests/${billId}/submit`, payload)
 }
 
 export async function getOALeaveBillDetail(
   billId: string
-): Promise<OABillDetail> {
-  return getOABillDetail(`/oa/leaves/${billId}`)
+): Promise<OALeaveBillDetail> {
+  return getOABillDetail<OALeaveBillDetail>(`/oa/leaves/${billId}`)
 }
 
 export async function getOAExpenseBillDetail(
   billId: string
-): Promise<OABillDetail> {
-  return getOABillDetail(`/oa/expenses/${billId}`)
+): Promise<OAExpenseBillDetail> {
+  return getOABillDetail<OAExpenseBillDetail>(`/oa/expenses/${billId}`)
 }
 
 export async function getOACommonRequestBillDetail(
   billId: string
-): Promise<OABillDetail> {
-  return getOABillDetail(`/oa/common-requests/${billId}`)
+): Promise<OACommonRequestBillDetail> {
+  return getOABillDetail<OACommonRequestBillDetail>(`/oa/common-requests/${billId}`)
+}
+
+async function getDraftList(url: string): Promise<OADraftListItem[]> {
+  const response = await apiClient.get<{
+    code: 'OK'
+    message: string
+    data: OADraftListItem[]
+    requestId: string
+  }>(url)
+  return unwrapResponse(response)
+}
+
+export async function listOALeaveDrafts(): Promise<OADraftListItem[]> {
+  return getDraftList('/oa/leaves/drafts')
+}
+
+export async function listOAExpenseDrafts(): Promise<OADraftListItem[]> {
+  return getDraftList('/oa/expenses/drafts')
+}
+
+export async function listOACommonDrafts(): Promise<OADraftListItem[]> {
+  return getDraftList('/oa/common-requests/drafts')
 }

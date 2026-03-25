@@ -47,6 +47,7 @@ import { getApiErrorMessage } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 import {
   findProcessRuntimeFormByProcessKey,
+  resolveRuntimeProcessFormFields,
 } from '@/features/forms/runtime/form-component-registry'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
@@ -142,14 +143,10 @@ const workflowEdgeTypes = {
 }
 
 const helperLineThreshold = 16
-const defaultLeaveFormFields: ProcessDefinitionMeta['formFields'] = [
-  { fieldKey: 'leaveType', label: '请假类型', valueType: 'string' },
-  { fieldKey: 'leaveDays', label: '请假天数', valueType: 'number' },
-  { fieldKey: 'urgent', label: '是否紧急', valueType: 'boolean' },
-  { fieldKey: 'managerUserId', label: '直属负责人', valueType: 'string' },
-]
 // 默认先挂一套请假流程表单，保证设计器打开后就能直接预览和发布。
 const defaultProcessForm = findProcessRuntimeFormByProcessKey('oa_leave')
+const defaultLeaveFormFields: ProcessDefinitionMeta['formFields'] =
+  resolveRuntimeProcessFormFields('oa_leave')
 const defaultDefinitionMeta: ProcessDefinitionMeta = {
   processKey: 'oa_leave',
   processName: '请假审批',

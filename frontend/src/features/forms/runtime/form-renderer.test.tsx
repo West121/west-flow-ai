@@ -1,17 +1,60 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NodeFormRenderer } from './node-form-renderer'
 import { ProcessFormRenderer } from './process-form-renderer'
 
+const systemUserApiMocks = vi.hoisted(() => ({
+  listSystemUsers: vi.fn(),
+}))
+
+vi.mock('@/lib/api/system-users', () => systemUserApiMocks)
+
 describe('runtime form renderers', () => {
-  it('renders the registered process form and propagates form data changes', () => {
+  beforeEach(() => {
+    systemUserApiMocks.listSystemUsers.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 2,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          userId: 'usr_002',
+          displayName: '李四',
+          username: 'lisi',
+          mobile: '13800000002',
+          email: 'lisi@westflow.cn',
+          departmentName: '人力资源部',
+          postName: '部门负责人',
+          status: 'ENABLED',
+          createdAt: '2026-03-22T09:00:00+08:00',
+        },
+        {
+          userId: 'usr_005',
+          displayName: '王主管',
+          username: 'wangzhuguan',
+          mobile: '13800000005',
+          email: 'wangzhuguan@westflow.cn',
+          departmentName: '运营中心',
+          postName: '总监',
+          status: 'ENABLED',
+          createdAt: '2026-03-22T09:00:00+08:00',
+        },
+      ],
+    })
+  })
+
+  it('renders the registered process form and propagates form data changes', async () => {
     const onChange = vi.fn()
 
     function TestHarness() {
       const [value, setValue] = useState<Record<string, unknown>>({
+        leaveType: 'ANNUAL',
         days: 2,
         reason: '事假',
+        urgent: false,
+        managerUserId: 'usr_002',
       })
 
       return (
@@ -29,16 +72,28 @@ describe('runtime form renderers', () => {
 
     render(<TestHarness />)
 
+    fireEvent.click(screen.getByRole('combobox', { name: '请假类型' }))
+    fireEvent.click(screen.getByRole('option', { name: '病假' }))
     fireEvent.change(screen.getByLabelText('请假天数'), {
       target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('switch', { name: '是否紧急' }))
+    fireEvent.click(screen.getByLabelText('直属负责人'))
+    await waitFor(() => {
+      const managerOptions = screen.getAllByText('王主管')
+      fireEvent.click(managerOptions[managerOptions.length - 1]!)
     })
     fireEvent.change(screen.getByLabelText('请假原因'), {
       target: { value: '外出处理事务' },
     })
 
     expect(onChange).toHaveBeenLastCalledWith({
+      leaveType: 'SICK',
       days: 3,
+      leaveDays: 3,
       reason: '外出处理事务',
+      urgent: true,
+      managerUserId: 'usr_005',
     })
   })
 
@@ -48,8 +103,11 @@ describe('runtime form renderers', () => {
         processFormKey='oa-leave-start-form'
         processFormVersion='1.1.0'
         value={{
+          leaveType: 'ANNUAL',
           days: 2,
           reason: '事假',
+          urgent: false,
+          managerUserId: 'usr_002',
         }}
         onChange={() => {}}
       />

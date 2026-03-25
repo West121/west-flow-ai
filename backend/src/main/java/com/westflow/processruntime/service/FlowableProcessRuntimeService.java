@@ -6,6 +6,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.identity.mapper.IdentityAccessMapper;
 import com.westflow.identity.response.CurrentUserResponse;
 import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processdef.model.ProcessDslPayload;
@@ -120,6 +121,8 @@ public class FlowableProcessRuntimeService {
     ) {
     }
 
+    private final IdentityAccessMapper identityAccessMapper;
+
     private record InclusiveSelectionSummary(
             Integer eligibleTargetCount,
             List<String> selectedEdgeIds,
@@ -152,7 +155,10 @@ public class FlowableProcessRuntimeService {
      * 发起真实 Flowable 流程实例。
      */
     public StartProcessResponse start(StartProcessRequest request) {
-        return flowableRuntimeStartService.start(request);
+        StartProcessResponse response = flowableRuntimeStartService.start(request);
+        syncBusinessProcessLinkOnStart(request, response);
+        updateBusinessProcessLink(request.businessType(), request.businessKey(), response.instanceId(), response.status());
+        return response;
     }
 
     /**
@@ -719,15 +725,18 @@ public class FlowableProcessRuntimeService {
         List<String> candidateGroupIds = candidateGroups(task.getId());
         boolean isCandidate = isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
         boolean isAssignee = currentUserId().equals(task.getAssignee());
-        boolean canHandle = isAssignee || isCandidate;
+        boolean canClaim = task.getAssignee() == null && isCandidate;
+        boolean canHandle = isAssignee;
         boolean blockedByAddSign = isNormalTask && hasActiveAddSignChild(task.getId());
         boolean blockedByAppendPolicy = isNormalTask && isBlockedByPendingAppendStructures(task);
         boolean canTakeBack = isNormalTask && canTakeBack(task);
         boolean canAddSign = isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy;
         boolean canRemoveSign = isNormalTask && canHandle && blockedByAddSign && !blockedByAppendPolicy;
-        boolean canRead = "CC".equals(taskKind) && canHandle && "CC_PENDING".equals(resolveTaskStatus(task));
+        boolean canRead = "CC".equals(taskKind)
+                && (isAssignee || isCandidate)
+                && "CC_PENDING".equals(resolveTaskStatus(task));
         return new TaskActionAvailabilityResponse(
-                isFlowHandleTask && task.getAssignee() == null && isCandidate,
+                isFlowHandleTask && canClaim,
                 isFlowHandleTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 isFlowHandleTask && canHandle,
@@ -1150,10 +1159,9 @@ public class FlowableProcessRuntimeService {
      * 完成 Flowable 待办，并返回下一批活动任务。
      */
     public CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
-        Task task = requireActiveTask(taskId);
+        Task task = requireTaskForAction(taskId, "办理");
         String taskKind = resolveTaskKind(task);
         String operatorUserId = normalizeUserId(request.operatorUserId());
-        task = claimTaskIfNeeded(task, operatorUserId);
         RuntimeAppendLinkRecord appendLink = runtimeAppendLinkService.getByTargetTaskId(taskId);
         if ("CC".equals(taskKind)) {
             throw actionNotAllowed("当前抄送任务不支持办理", Map.of("taskId", taskId));
@@ -1397,6 +1405,7 @@ public class FlowableProcessRuntimeService {
     public CompleteTaskResponse revoke(String taskId, RevokeTaskRequest request) {
         Task task = requireActiveTask(taskId);
         String comment = request == null ? null : request.comment();
+        String processInstanceId = task.getProcessInstanceId();
         String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
 
         if (initiatorUserId == null || !initiatorUserId.equals(currentUserId())) {
@@ -1410,16 +1419,16 @@ public class FlowableProcessRuntimeService {
 
         appendComment(task, comment);
         flowableEngineFacade.runtimeService().setVariables(
-                task.getProcessInstanceId(),
+                processInstanceId,
                 actionVariables("REVOKE", currentUserId(), comment, Map.of())
         );
         flowableEngineFacade.runtimeService().deleteProcessInstance(
-                task.getProcessInstanceId(),
-                comment == null || comment.isBlank() ? "流程已撤销" : comment
+                processInstanceId,
+                "WESTFLOW_REVOKED"
         );
 
         appendInstanceEvent(
-                task.getProcessInstanceId(),
+                processInstanceId,
                 task.getId(),
                 task.getTaskDefinitionKey(),
                 "TASK_REVOKED",
@@ -1442,8 +1451,13 @@ public class FlowableProcessRuntimeService {
                 null
         );
 
+        findBusinessLinkByInstanceId(processInstanceId).ifPresent(link -> {
+            updateBusinessProcessLink(link.businessType(), link.businessId(), processInstanceId, "REVOKED");
+            updateBusinessLinkStatus(processInstanceId, "REVOKED");
+        });
+
         return new CompleteTaskResponse(
-                task.getProcessInstanceId(),
+                processInstanceId,
                 task.getId(),
                 "REVOKED",
                 List.of()
@@ -1898,6 +1912,9 @@ public class FlowableProcessRuntimeService {
         String nodeName = referenceActiveTask != null
                 ? referenceActiveTask.getName()
                 : referenceHistoricTask == null ? null : referenceHistoricTask.getName();
+        Map<String, Object> referenceTaskLocalVariables = referenceActiveTask != null
+                ? ensureReadTimeAndReturnLocalVariables(referenceActiveTask)
+                : referenceHistoricTask == null ? Map.of() : historicTaskLocalVariables(referenceHistoricTask.getId());
         Map<String, Object> nodeConfig = nodeConfig(payload, nodeId);
         String nodeFormKey = stringValue(nodeConfig.get("nodeFormKey"));
         String nodeFormVersion = stringValue(nodeConfig.get("nodeFormVersion"));
@@ -1988,7 +2005,7 @@ public class FlowableProcessRuntimeService {
                 stringValue(variables.get("westflowLastOperatorUserId")),
                 stringValue(variables.get("westflowLastComment")),
                 createdAt,
-                createdAt,
+                readTimeValue(referenceTaskLocalVariables),
                 createdAt,
                 completedAt,
                 handleDurationSeconds,
@@ -2706,6 +2723,39 @@ public class FlowableProcessRuntimeService {
                 null,
                 null
         ));
+        if (processInstance.getEndTime() != null || processInstance.getDeleteReason() != null) {
+            String eventType = "INSTANCE_COMPLETED";
+            String eventName = "流程结束";
+            if ("WESTFLOW_REVOKED".equals(processInstance.getDeleteReason())) {
+                eventType = "INSTANCE_REVOKED";
+                eventName = "流程已撤销";
+            } else if (processInstance.getDeleteReason() != null) {
+                eventType = "INSTANCE_TERMINATED";
+                eventName = "流程已终止";
+            }
+            events.add(new ProcessInstanceEventResponse(
+                    processInstance.getId() + "::end",
+                    processInstance.getId(),
+                    null,
+                    null,
+                    eventType,
+                    eventName,
+                    "INSTANCE",
+                    null,
+                    null,
+                    null,
+                    processInstance.getStartUserId(),
+                    toOffsetDateTime(processInstance.getEndTime()),
+                    Map.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            ));
+        }
         for (ProcessTaskTraceItemResponse item : taskTrace) {
             OffsetDateTime occurredAt = item.handleEndTime() != null ? item.handleEndTime() : item.receiveTime();
             events.add(new ProcessInstanceEventResponse(
@@ -2892,10 +2942,7 @@ public class FlowableProcessRuntimeService {
 
     private ApprovalSheetListItemResponse toApprovalSheetFromLink(BusinessLinkSnapshot link) {
         HistoricProcessInstance historicProcessInstance = requireHistoricProcessInstance(link.processInstanceId());
-        Map<String, Object> variables = runtimeVariables(link.processInstanceId());
-        if (variables.isEmpty()) {
-            variables = historicVariables(link.processInstanceId());
-        }
+        Map<String, Object> variables = runtimeOrHistoricVariables(link.processInstanceId());
         String processKey = stringValue(variables.get("westflowProcessKey"));
         PublishedProcessDefinition definition = resolvePublishedDefinition(
                 link.processDefinitionId(),
@@ -2923,6 +2970,8 @@ public class FlowableProcessRuntimeService {
                 .orElse(null);
         Map<String, Object> businessData = approvalSheetQueryService.resolveBusinessData(link.businessType(), link.businessId());
         Task currentTask = activeTasks.stream().findFirst().orElse(null);
+        String latestAction = stringValue(variables.get("westflowLastAction"));
+        String instanceStatus = resolveApprovalSheetInstanceStatus(link, historicProcessInstance, activeTasks, latestAction);
         OffsetDateTime updatedAt = currentTask != null
                 ? toOffsetDateTime(currentTask.getCreateTime())
                 : latestHistoricTask == null ? toOffsetDateTime(historicProcessInstance.getStartTime()) : toOffsetDateTime(latestHistoricTask.getEndTime());
@@ -2938,31 +2987,55 @@ public class FlowableProcessRuntimeService {
                 link.startUserId(),
                 currentTask != null ? currentTask.getName() : latestHistoricTask == null ? null : latestHistoricTask.getName(),
                 currentTask != null ? currentTask.getId() : latestHistoricTask == null ? null : latestHistoricTask.getId(),
-                currentTask != null ? resolveTaskStatus(currentTask) : latestHistoricTask == null ? null : "COMPLETED",
+                currentTask != null
+                        ? resolveTaskStatus(currentTask)
+                        : latestHistoricTask == null ? null : resolveHistoricTaskStatus(latestHistoricTask, historicProcessInstance),
                 currentTask != null ? currentTask.getAssignee() : latestHistoricTask == null ? null : latestHistoricTask.getAssignee(),
-                currentTask == null ? "COMPLETED" : "RUNNING",
-                stringValue(variables.get("westflowLastAction")),
+                instanceStatus,
+                latestAction,
                 stringValue(variables.get("westflowLastOperatorUserId")),
-                currentTask == null ? "SUCCESS" : "PENDING",
+                currentTask == null ? ("REVOKED".equals(instanceStatus) ? "REVOKED" : "SUCCESS") : "PENDING",
                 toOffsetDateTime(historicProcessInstance.getStartTime()),
                 updatedAt,
                 toOffsetDateTime(historicProcessInstance.getEndTime())
         );
     }
 
+    private String resolveApprovalSheetInstanceStatus(
+            BusinessLinkSnapshot link,
+            HistoricProcessInstance historicProcessInstance,
+            List<Task> activeTasks,
+            String latestAction
+    ) {
+        String status = resolveInstanceStatus(historicProcessInstance, activeTasks);
+        if ("REVOKED".equals(status)) {
+            return status;
+        }
+        if ("REVOKED".equals(link.status()) || "REVOKE".equals(latestAction)) {
+            return "REVOKED";
+        }
+        return status;
+    }
+
     private Task requireTaskForAction(String taskId, String actionLabel) {
         Task task = requireActiveTask(taskId);
         List<String> candidateUserIds = candidateUsers(taskId);
         List<String> candidateGroupIds = candidateGroups(taskId);
-        boolean canHandle = currentUserId().equals(task.getAssignee())
-                || isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
-        if (!canHandle) {
+        boolean isAssignee = currentUserId().equals(task.getAssignee());
+        boolean isCandidate = isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
+        if (!isAssignee) {
+            if (task.getAssignee() == null && isCandidate) {
+                throw actionNotAllowed(
+                        "请先认领任务后再执行" + actionLabel,
+                        eventDetails("taskId", taskId, "userId", currentUserId(), "assigneeUserId", task.getAssignee())
+                );
+            }
             throw actionNotAllowed(
                     "当前任务不允许执行" + actionLabel,
                     eventDetails("taskId", taskId, "userId", currentUserId(), "assigneeUserId", task.getAssignee())
             );
         }
-        return claimTaskIfNeeded(task, currentUserId());
+        return task;
     }
 
     private Task requireTaskForAppend(String taskId) {
@@ -2970,10 +3043,22 @@ public class FlowableProcessRuntimeService {
         List<String> candidateUserIds = candidateUsers(taskId);
         List<String> candidateGroupIds = candidateGroups(taskId);
         String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
-        boolean canAppend = currentUserId().equals(task.getAssignee())
-                || isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds)
-                || currentUserId().equals(initiatorUserId);
+        boolean isAssignee = currentUserId().equals(task.getAssignee());
+        boolean isCandidate = isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
+        boolean isInitiator = currentUserId().equals(initiatorUserId);
+        boolean canAppend = isAssignee || isInitiator;
         if (!canAppend) {
+            if (task.getAssignee() == null && isCandidate) {
+                throw actionNotAllowed(
+                        "请先认领任务后再执行追加",
+                        eventDetails(
+                                "taskId", taskId,
+                                "userId", currentUserId(),
+                                "assigneeUserId", task.getAssignee(),
+                                "initiatorUserId", initiatorUserId
+                        )
+                );
+            }
             throw actionNotAllowed(
                     "当前任务不允许执行追加",
                     eventDetails(
@@ -2984,10 +3069,10 @@ public class FlowableProcessRuntimeService {
                     )
             );
         }
-        if (currentUserId().equals(initiatorUserId)) {
+        if (isInitiator) {
             return task;
         }
-        return claimTaskIfNeeded(task, currentUserId());
+        return task;
     }
 
     // 在委派、催办场景下校验目标用户。
@@ -3092,6 +3177,25 @@ public class FlowableProcessRuntimeService {
             return requireActiveTask(task.getId());
         }
         return task;
+    }
+
+    private Map<String, Object> ensureReadTimeAndReturnLocalVariables(Task task) {
+        if (task == null) {
+            return Map.of();
+        }
+        Map<String, Object> localVariables = taskLocalVariables(task.getId());
+        if (!"NORMAL".equals(resolveTaskKind(task))) {
+            return localVariables;
+        }
+        if (task.getAssignee() == null || !currentUserId().equals(task.getAssignee())) {
+            return localVariables;
+        }
+        if (readTimeValue(localVariables) != null) {
+            return localVariables;
+        }
+        flowableEngineFacade.taskService()
+                .setVariableLocal(task.getId(), "westflowReadTime", Timestamp.from(Instant.now()));
+        return taskLocalVariables(task.getId());
     }
 
     private List<Task> activeTasksAssignedTo(String assigneeUserId) {
@@ -4735,6 +4839,9 @@ public class FlowableProcessRuntimeService {
     private List<String> currentCandidateGroupIds() {
         CurrentUserResponse currentUser = identityAuthService.currentUser();
         LinkedHashSet<String> groupIds = new LinkedHashSet<>();
+        identityAccessMapper.selectRoleIdsByUserId(currentUser.userId()).stream()
+                .filter(roleId -> roleId != null && !roleId.isBlank())
+                .forEach(groupIds::add);
         if (currentUser.activeDepartmentId() != null && !currentUser.activeDepartmentId().isBlank()) {
             groupIds.add(currentUser.activeDepartmentId());
         }
@@ -5207,6 +5314,25 @@ public class FlowableProcessRuntimeService {
         return links.stream().findFirst();
     }
 
+    private void syncBusinessProcessLinkOnStart(StartProcessRequest request, StartProcessResponse response) {
+        Optional<BusinessLinkSnapshot> existingLink = findBusinessLink(request.businessType(), request.businessKey());
+        if (existingLink.isPresent()
+                && Objects.equals(existingLink.get().processInstanceId(), response.instanceId())
+                && Objects.equals(existingLink.get().processDefinitionId(), response.processDefinitionId())
+                && Objects.equals(existingLink.get().startUserId(), currentUserId())
+                && Objects.equals(existingLink.get().status(), response.status())) {
+            return;
+        }
+        insertBusinessLink(
+                request.businessType(),
+                request.businessKey(),
+                response.instanceId(),
+                response.processDefinitionId(),
+                currentUserId(),
+                response.status()
+        );
+    }
+
     private String resolveProcessInstanceIdByBusinessKey(String businessId) {
         List<org.flowable.engine.runtime.ProcessInstance> runtimeInstances = flowableEngineFacade.runtimeService()
                 .createProcessInstanceQuery()
@@ -5561,6 +5687,18 @@ public class FlowableProcessRuntimeService {
                 // 其他业务类型后续再按业务表扩展更新逻辑。
             }
         }
+    }
+
+    private void updateBusinessLinkStatus(String processInstanceId, String status) {
+        jdbcTemplate.update(
+                """
+                UPDATE wf_business_process_link
+                SET status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE process_instance_id = ?
+                """,
+                status,
+                processInstanceId
+        );
     }
 
     private ContractException taskNotFound(String taskId) {

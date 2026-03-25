@@ -371,6 +371,17 @@ public class AiCopilotConfiguration {
         return value == null ? "" : value.toString().trim();
     }
 
+    private static Boolean booleanValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        String text = value.toString().trim();
+        return text.isEmpty() ? null : Boolean.parseBoolean(text);
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> mapValue(Object value) {
         if (value instanceof Map<?, ?> map) {
@@ -400,8 +411,11 @@ public class AiCopilotConfiguration {
             case "OA_LEAVE" -> toLaunchResult(
                     oaLaunchService.createLeaveBill(new CreateOALeaveBillRequest(
                             sceneCode,
-                            parseInt(formData.get("days"), 0),
-                            stringValue(formData.get("reason"))
+                            stringValue(formData.get("leaveType")),
+                            parseInt(formData.get("days") != null ? formData.get("days") : formData.get("leaveDays"), 0),
+                            stringValue(formData.get("reason")),
+                            booleanValue(formData.get("urgent")),
+                            stringValue(formData.get("managerUserId"))
                     ))
             );
             case "OA_EXPENSE" -> toLaunchResult(

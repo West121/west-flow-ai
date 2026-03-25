@@ -23,6 +23,16 @@ public interface IdentityAccessMapper {
     List<String> selectRoleCodesByUserId(@Param("userId") String userId);
 
     @Select("""
+            SELECT DISTINCT r.id
+            FROM wf_user_role ur
+            INNER JOIN wf_role r ON r.id = ur.role_id
+            WHERE ur.user_id = #{userId}
+              AND r.enabled = TRUE
+            ORDER BY r.id ASC
+            """)
+    List<String> selectRoleIdsByUserId(@Param("userId") String userId);
+
+    @Select("""
             SELECT DISTINCT m.permission_code
             FROM wf_user_role ur
             INNER JOIN wf_role r ON r.id = ur.role_id

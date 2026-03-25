@@ -96,8 +96,11 @@ const businessDataLabelMap: Record<string, string> = {
   status: '业务状态',
   creatorUserId: '发起人',
   processInstanceId: '实例编号',
+  leaveType: '请假类型',
   days: '请假天数',
   reason: '申请原因',
+  urgent: '是否紧急',
+  managerUserId: '直属负责人',
   amount: '报销金额',
   title: '申请标题',
   content: '申请内容',
@@ -199,6 +202,10 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   }
 
   switch (item.status) {
+    case 'REVOKED':
+      return '已撤销'
+    case 'TAKEN_BACK':
+      return '已拿回'
     case 'AUTO_FINISHED':
       return '自动结束'
     case 'COMPLETED':

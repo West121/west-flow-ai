@@ -2552,11 +2552,11 @@ export function NodeConfigPanel({
                           value={field.value}
                           onChange={field.onChange}
                           fieldOptions={processFieldOptions}
-                          placeholder='例如：ifElse(leaveDays >= 5, "DIRECTOR_CHAIN", "HR_RECORD")'
+                          placeholder='例如：ifElse(days >= 5, "DIRECTOR_CHAIN", "HR_RECORD")'
                         />
                         <div className='flex flex-wrap gap-2'>
                           {[
-                            'ifElse(leaveDays >= 3, "FINANCE_AND_HR", "HR_ONLY")',
+                            'ifElse(days >= 3, "FINANCE_AND_HR", "HR_ONLY")',
                             'ifElse(leaveType == "ANNUAL", "DIRECTOR_CHAIN", "MANAGER_ONLY")',
                             'ifElse(amount >= 5000, "PURCHASE_REVIEW", "DIRECT_PASS")',
                           ].map((snippet, index) => (
@@ -2784,7 +2784,7 @@ export function NodeConfigPanel({
                             value={field.value}
                             onChange={field.onChange}
                             fieldOptions={processFieldOptions}
-                            placeholder='例如：ifElse(leaveDays >= 5, "usr_005", managerUserId)'
+                            placeholder='例如：ifElse(days >= 5, "usr_005", managerUserId)'
                           />
                         </FormControl>
                         <FormMessage />
@@ -3033,7 +3033,7 @@ export function NodeConfigPanel({
                       value={field.value}
                       onChange={field.onChange}
                       fieldOptions={processFieldOptions}
-                      placeholder='例如：leaveDays >= 5 ? "usr_004" : managerUserId'
+                      placeholder='例如：days >= 5 ? "usr_004" : managerUserId'
                     />
                     <FormMessage />
                   </FormItem>
