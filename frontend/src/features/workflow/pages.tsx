@@ -37,6 +37,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { useTheme } from '@/context/theme-provider'
 import {
   getProcessDefinitionDetail,
   listProcessDefinitions,
@@ -566,6 +567,7 @@ function WorkflowDesignerWorkspace({
   const undo = useWorkflowDesignerStore((state) => state.undo)
   const redo = useWorkflowDesignerStore((state) => state.redo)
   const reactFlow = useReactFlow<WorkflowNode>()
+  const { resolvedTheme } = useTheme()
   const queryClient = useQueryClient()
   const viewport = useViewport()
   const [activePropertyTab, setActivePropertyTab] = useState<'flow' | 'node'>(
@@ -898,6 +900,7 @@ function WorkflowDesignerWorkspace({
                   maxZoom={1.6}
                   snapToGrid
                   snapGrid={[20, 20]}
+                  colorMode={resolvedTheme}
                   proOptions={{ hideAttribution: true }}
                   defaultEdgeOptions={{
                     type: 'quickInsert',

@@ -14,6 +14,7 @@ import { Pause, Play, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useTheme } from '@/context/theme-provider'
 import { ApprovalTagList, ApprovalUserTag } from './approval-actor-tags'
 import {
   type WorkbenchFlowEdge,
@@ -282,6 +283,7 @@ function ApprovalSheetGraphInner({
   const [mode, setMode] = useState<'idle' | 'playing' | 'paused'>('idle')
   const [activeIndex, setActiveIndex] = useState(0)
   const [flowInstance, setFlowInstance] = useState<ReactFlowInstance<Node, Edge> | null>(null)
+  const { resolvedTheme } = useTheme()
 
   // 播放态只负责按时间顺序推进高亮，不影响原始流程数据。
   const playbackEvents = useMemo(
@@ -555,6 +557,7 @@ function ApprovalSheetGraphInner({
                 elementsSelectable={false}
                 panOnDrag
                 zoomOnDoubleClick={false}
+                colorMode={resolvedTheme}
                 proOptions={{ hideAttribution: true }}
               >
                 <Controls showInteractive={false} position='bottom-left' />
