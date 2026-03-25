@@ -22,6 +22,7 @@ import com.westflow.system.log.response.LoginLogDetailResponse;
 import com.westflow.system.log.response.LoginLogListItemResponse;
 import com.westflow.system.log.response.SystemNotificationLogDetailResponse;
 import com.westflow.system.log.response.SystemNotificationLogListItemResponse;
+import com.westflow.system.log.service.IpRegionService;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ public class SystemLogService {
     private final NotificationLogMapper notificationLogMapper;
     private final NotificationChannelMapper notificationChannelMapper;
     private final IdentityAuthService fixtureAuthService;
+    private final IpRegionService ipRegionService;
 
     public PageResponse<AuditLogListItemResponse> pageAudit(PageRequest request) {
         ensureAccess();
@@ -103,6 +105,7 @@ public class SystemLogService {
                 record.loginId(),
                 record.username(),
                 record.clientIp(),
+                ipRegionService.resolve(record.clientIp()),
                 record.userAgent(),
                 record.errorMessage(),
                 record.durationMs(),
@@ -152,6 +155,7 @@ public class SystemLogService {
                 record.userId(),
                 record.resultMessage(),
                 record.clientIp(),
+                ipRegionService.resolve(record.clientIp()),
                 record.userAgent(),
                 record.durationMs(),
                 record.createdAt()

@@ -190,6 +190,7 @@ class SystemLogControllerTest {
         JsonNode auditDetailData = objectMapper.readTree(auditDetail).path("data");
         assertThat(auditDetailData.path("requestId").asText()).isEqualTo("req_workflow_001");
         assertThat(auditDetailData.path("module").asText()).isEqualTo("system");
+        assertThat(auditDetailData.path("ipRegion").asText()).isNotBlank();
 
         String loginResponse = mockMvc.perform(post("/api/v1/system/logs/login/page")
                         .header("Authorization", "Bearer " + token)
@@ -238,6 +239,7 @@ class SystemLogControllerTest {
                 .getContentAsString();
         JsonNode loginDetailData = objectMapper.readTree(loginDetail).path("data");
         assertThat(loginDetailData.path("status").asText()).isEqualTo("SUCCESS");
+        assertThat(loginDetailData.path("ipRegion").asText()).isNotBlank();
 
         String notificationResponse = mockMvc.perform(post("/api/v1/system/logs/notifications/page")
                         .header("Authorization", "Bearer " + token)

@@ -15,6 +15,7 @@ public record LoginLogDetailResponse(
         String userId,
         String resultMessage,
         String clientIp,
+        String ipRegion,
         String userAgent,
         long durationMs,
         Instant createdAt

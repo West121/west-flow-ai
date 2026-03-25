@@ -16,6 +16,7 @@ public record AuditLogDetailResponse(
         String loginId,
         String username,
         String clientIp,
+        String ipRegion,
         String userAgent,
         String errorMessage,
         long durationMs,

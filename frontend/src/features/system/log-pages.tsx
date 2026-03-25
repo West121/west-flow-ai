@@ -22,6 +22,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
+import { getApiErrorResponse } from '@/lib/api/client'
 import {
   getAuditLogDetail,
   getLoginLogDetail,
@@ -233,18 +234,22 @@ function LogPageErrorState({
   description,
   retry,
   listHref,
+  message,
 }: {
   title: string
   description: string
   retry?: () => void
   listHref: string
+  message?: string
 }) {
   return (
     <PageShell title={title} description={description}>
       <Alert variant='destructive'>
         <AlertCircle />
         <AlertTitle>页面加载失败</AlertTitle>
-        <AlertDescription>日志数据请求未成功，请重试或返回列表页。</AlertDescription>
+        <AlertDescription>
+          {message || '日志数据请求未成功，请重试或返回列表页。'}
+        </AlertDescription>
       </Alert>
       <div className='flex flex-wrap gap-2'>
         {retry ? <Button onClick={retry}>重新加载</Button> : null}
@@ -435,6 +440,7 @@ export function SystemAuditLogDetailPage() {
         description='查看单条请求链路的上下文、耗时与异常信息。'
         retry={query.refetch}
         listHref='/system/logs/audit/list'
+        message={getApiErrorResponse(query.error)?.message}
       />
     )
   }
@@ -481,6 +487,7 @@ export function SystemAuditLogDetailPage() {
             />
             <InfoCell label='状态码' value={detail.statusCode} />
             <InfoCell label='客户端 IP' value={detail.clientIp} />
+            <InfoCell label='IP 归属地' value={detail.ipRegion || '未知'} />
             <InfoCell label='耗时' value={`${detail.durationMs}ms`} />
             <InfoCell label='创建时间' value={formatDateTime(detail.createdAt)} />
             <InfoCell
@@ -534,6 +541,7 @@ export function SystemLoginLogDetailPage() {
         description='查看单次登录请求的账户、结果与耗时。'
         retry={query.refetch}
         listHref='/system/logs/login/list'
+        message={getApiErrorResponse(query.error)?.message}
       />
     )
   }
@@ -574,6 +582,7 @@ export function SystemLoginLogDetailPage() {
           />
           <InfoCell label='状态码' value={detail.statusCode} />
           <InfoCell label='客户端 IP' value={detail.clientIp} />
+          <InfoCell label='IP 归属地' value={detail.ipRegion || '未知'} />
           <InfoCell label='耗时' value={`${detail.durationMs}ms`} />
           <InfoCell label='创建时间' value={formatDateTime(detail.createdAt)} />
         </CardContent>
@@ -622,6 +631,7 @@ export function SystemNotificationLogDetailPage() {
         description='查看单条通知发送记录的内容、回执与载荷。'
         retry={query.refetch}
         listHref='/system/logs/notifications/list'
+        message={getApiErrorResponse(query.error)?.message}
       />
     )
   }

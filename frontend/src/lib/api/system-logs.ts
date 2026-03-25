@@ -38,6 +38,7 @@ export type AuditLogListRecord = {
 export type AuditLogListResponse = BasePageResponse<AuditLogListRecord>
 
 export type AuditLogDetail = AuditLogListRecord & {
+  ipRegion: string
   userAgent: string | null
   errorMessage: string | null
   durationMs: number
@@ -59,6 +60,7 @@ export type LoginLogDetail = LoginLogListRecord & {
   requestId: string
   path: string
   resultMessage: string | null
+  ipRegion: string
   userAgent: string | null
   durationMs: number
 }

@@ -152,7 +152,7 @@ function DictPageErrorState({ title, description, retry }: DictPageErrorProps) {
 function resolveTypeSearchRequest() {
   return {
     page: 1,
-    pageSize: 999,
+    pageSize: 100,
     keyword: '',
     filters: [],
     sorts: [{ field: 'typeCode', direction: 'asc' as const }],
