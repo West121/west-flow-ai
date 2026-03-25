@@ -35,7 +35,7 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
       <div className='p-1 md:hidden'>
         <Select value={val} onValueChange={handleSelect}>
           <SelectTrigger className='h-12 sm:w-48'>
-            <SelectValue placeholder='Theme' />
+            <SelectValue placeholder='请选择设置项' />
           </SelectTrigger>
           <SelectContent>
             {items.map((item) => (
@@ -63,7 +63,7 @@ export function SidebarNav({ className, items, ...props }: SidebarNavProps) {
           {...props}
         >
           {items.map((item) => (
-    <Link
+            <Link
               key={item.href}
               to={item.href}
               search={{}}

@@ -79,12 +79,6 @@ export function ProfileDropdown() {
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to='/settings'>
-                计费信息
-                <DropdownMenuShortcut>⌘B</DropdownMenuShortcut>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to='/settings'>
                 系统设置
                 <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
               </Link>

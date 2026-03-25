@@ -1,9 +1,9 @@
+import { useEffect } from 'react'
 import { z } from 'zod'
-import { useFieldArray, useForm } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link } from '@tanstack/react-router'
+import { useAuthStore } from '@/stores/auth-store'
 import { showSubmittedData } from '@/lib/show-submitted-data'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -15,58 +15,48 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 
 const profileFormSchema = z.object({
+  displayName: z
+    .string('请输入姓名。')
+    .min(2, '姓名至少需要 2 个字符。')
+    .max(30, '姓名不能超过 30 个字符。'),
   username: z
-    .string('Please enter your username.')
-    .min(2, 'Username must be at least 2 characters.')
-    .max(30, 'Username must not be longer than 30 characters.'),
-  email: z.email({
-    error: (iss) =>
-      iss.input === undefined
-        ? 'Please select an email to display.'
-        : undefined,
-  }),
-  bio: z.string().max(160).min(4),
-  urls: z
-    .array(
-      z.object({
-        value: z.url('Please enter a valid URL.'),
-      })
-    )
-    .optional(),
+    .string('请输入账号。')
+    .min(2, '账号至少需要 2 个字符。')
+    .max(30, '账号不能超过 30 个字符。'),
+  mobile: z.string().regex(/^1\d{10}$/, '请输入 11 位手机号。'),
+  email: z.email('请输入正确的邮箱地址。'),
 })
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>
 
-// 默认值通常来自数据库或接口。
-const defaultValues: Partial<ProfileFormValues> = {
-  bio: 'I own a computer.',
-  urls: [
-    { value: 'https://shadcn.com' },
-    { value: 'http://twitter.com/shadcn' },
-  ],
-}
-
 export function ProfileForm() {
+  const currentUser = useAuthStore((state) => state.currentUser)
+
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
-    defaultValues,
+    defaultValues: {
+      displayName: currentUser?.displayName ?? '',
+      username: currentUser?.username ?? '',
+      mobile: currentUser?.mobile ?? '',
+      email: currentUser?.email ?? '',
+    },
     mode: 'onChange',
   })
 
-  const { fields, append } = useFieldArray({
-    name: 'urls',
-    control: form.control,
-  })
+  useEffect(() => {
+    if (!currentUser) {
+      return
+    }
+
+    form.reset({
+      displayName: currentUser.displayName ?? '',
+      username: currentUser.username ?? '',
+      mobile: currentUser.mobile ?? '',
+      email: currentUser.email ?? '',
+    })
+  }, [currentUser, form])
 
   return (
     <Form {...form}>
@@ -74,19 +64,47 @@ export function ProfileForm() {
         onSubmit={form.handleSubmit((data) => showSubmittedData(data))}
         className='space-y-8'
       >
+        <div className='rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground'>
+          当前页面展示的是登录用户的真实基础资料。
+        </div>
+        <FormField
+          control={form.control}
+          name='displayName'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>姓名</FormLabel>
+              <FormControl>
+                <Input placeholder='请输入姓名' {...field} />
+              </FormControl>
+              <FormDescription>对外展示的中文姓名。</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={form.control}
           name='username'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Username</FormLabel>
+              <FormLabel>账号</FormLabel>
               <FormControl>
-                <Input placeholder='shadcn' {...field} />
+                <Input placeholder='请输入账号' {...field} />
               </FormControl>
-              <FormDescription>
-                This is your public display name. It can be your real name or a
-                pseudonym. You can only change this once every 30 days.
-              </FormDescription>
+              <FormDescription>登录系统时使用的账号标识。</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='mobile'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>手机号</FormLabel>
+              <FormControl>
+                <Input placeholder='请输入手机号' {...field} />
+              </FormControl>
+              <FormDescription>用于消息通知与身份校验。</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -96,82 +114,16 @@ export function ProfileForm() {
           name='email'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder='Select a verified email to display' />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value='m@example.com'>m@example.com</SelectItem>
-                  <SelectItem value='m@google.com'>m@google.com</SelectItem>
-                  <SelectItem value='m@support.com'>m@support.com</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormDescription>
-                You can manage verified email addresses in your{' '}
-                <Link to='/'>email settings</Link>.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='bio'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Bio</FormLabel>
+              <FormLabel>邮箱</FormLabel>
               <FormControl>
-                <Textarea
-                  placeholder='Tell us a little bit about yourself'
-                  className='resize-none'
-                  {...field}
-                />
+                <Input placeholder='请输入邮箱' {...field} />
               </FormControl>
-              <FormDescription>
-                You can <span>@mention</span> other users and organizations to
-                link to them.
-              </FormDescription>
+              <FormDescription>用于接收系统通知与登录提醒。</FormDescription>
               <FormMessage />
             </FormItem>
           )}
         />
-        <div>
-          {/* 动态 URL 列表。 */}
-          {fields.map((field, index) => (
-            <FormField
-              control={form.control}
-              key={field.id}
-              name={`urls.${index}.value`}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className={cn(index !== 0 && 'sr-only')}>
-                    URLs
-                  </FormLabel>
-                  <FormDescription className={cn(index !== 0 && 'sr-only')}>
-                    Add links to your website, blog, or social media profiles.
-                  </FormDescription>
-                  <FormControl className={cn(index !== 0 && 'mt-1.5')}>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          ))}
-          <Button
-            type='button'
-            variant='outline'
-            size='sm'
-            className='mt-2'
-            onClick={() => append({ value: '' })}
-          >
-            Add URL
-          </Button>
-        </div>
-        <Button type='submit'>Update profile</Button>
+        <Button type='submit'>保存资料</Button>
       </form>
     </Form>
   )

@@ -17,39 +17,39 @@ import {
 const items = [
   {
     id: 'recents',
-    label: 'Recents',
+    label: '最近使用',
   },
   {
     id: 'home',
-    label: 'Home',
+    label: '首页',
   },
   {
     id: 'applications',
-    label: 'Applications',
+    label: '应用',
   },
   {
     id: 'desktop',
-    label: 'Desktop',
+    label: '桌面',
   },
   {
     id: 'downloads',
-    label: 'Downloads',
+    label: '下载',
   },
   {
     id: 'documents',
-    label: 'Documents',
+    label: '文档',
   },
 ] as const
 
 const displayFormSchema = z.object({
   items: z.array(z.string()).refine((value) => value.some((item) => item), {
-    message: 'You have to select at least one item.',
+    message: '至少选择一个项目。',
   }),
 })
 
 type DisplayFormValues = z.infer<typeof displayFormSchema>
 
-// This can come from your database or API.
+// 默认值通常来自数据库或接口。
 const defaultValues: Partial<DisplayFormValues> = {
   items: ['recents', 'home'],
 }
@@ -72,9 +72,9 @@ export function DisplayForm() {
           render={() => (
             <FormItem>
               <div className='mb-4'>
-                <FormLabel className='text-base'>Sidebar</FormLabel>
+                <FormLabel className='text-base'>侧边栏</FormLabel>
                 <FormDescription>
-                  Select the items you want to display in the sidebar.
+                  选择你希望在侧边栏中显示的项目。
                 </FormDescription>
               </div>
               {items.map((item) => (
@@ -115,7 +115,7 @@ export function DisplayForm() {
             </FormItem>
           )}
         />
-        <Button type='submit'>Update display</Button>
+        <Button type='submit'>保存显示设置</Button>
       </form>
     </Form>
   )

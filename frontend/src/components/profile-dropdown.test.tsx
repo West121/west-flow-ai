@@ -57,5 +57,6 @@ describe('ProfileDropdown', () => {
     expect(screen.getAllByText('李四')).toHaveLength(2)
     expect(screen.getByText('lisi@westflow.ai')).toBeInTheDocument()
     expect(screen.queryByText('SN')).not.toBeInTheDocument()
+    expect(screen.queryByText('计费信息')).not.toBeInTheDocument()
   })
 })
