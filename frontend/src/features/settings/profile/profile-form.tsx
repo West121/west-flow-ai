@@ -21,10 +21,6 @@ const profileFormSchema = z.object({
     .string('请输入姓名。')
     .min(2, '姓名至少需要 2 个字符。')
     .max(30, '姓名不能超过 30 个字符。'),
-  username: z
-    .string('请输入账号。')
-    .min(2, '账号至少需要 2 个字符。')
-    .max(30, '账号不能超过 30 个字符。'),
   mobile: z.string().regex(/^1\d{10}$/, '请输入 11 位手机号。'),
   email: z.email('请输入正确的邮箱地址。'),
 })
@@ -38,7 +34,6 @@ export function ProfileForm() {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       displayName: currentUser?.displayName ?? '',
-      username: currentUser?.username ?? '',
       mobile: currentUser?.mobile ?? '',
       email: currentUser?.email ?? '',
     },
@@ -52,7 +47,6 @@ export function ProfileForm() {
 
     form.reset({
       displayName: currentUser.displayName ?? '',
-      username: currentUser.username ?? '',
       mobile: currentUser.mobile ?? '',
       email: currentUser.email ?? '',
     })
@@ -67,6 +61,13 @@ export function ProfileForm() {
         <div className='rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground'>
           当前页面展示的是登录用户的真实基础资料。
         </div>
+        <div className='rounded-lg border bg-muted/20 p-4'>
+          <p className='text-xs text-muted-foreground'>账号</p>
+          <p className='mt-1 text-sm font-medium'>
+            {currentUser?.username ?? '暂无'}
+          </p>
+          <p className='mt-1 text-xs text-muted-foreground'>账号不可修改。</p>
+        </div>
         <FormField
           control={form.control}
           name='displayName'
@@ -77,20 +78,6 @@ export function ProfileForm() {
                 <Input placeholder='请输入姓名' {...field} />
               </FormControl>
               <FormDescription>对外展示的中文姓名。</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name='username'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>账号</FormLabel>
-              <FormControl>
-                <Input placeholder='请输入账号' {...field} />
-              </FormControl>
-              <FormDescription>登录系统时使用的账号标识。</FormDescription>
               <FormMessage />
             </FormItem>
           )}
