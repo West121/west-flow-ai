@@ -179,7 +179,7 @@ class SystemOrgControllerTest {
                                 {
                                   "companyId": "cmp_001",
                                   "parentDepartmentId": "",
-                                  "departmentName": "运营中心",
+                                  "departmentName": "客户成功中心",
                                   "enabled": true
                                 }
                                 """))
@@ -196,7 +196,7 @@ class SystemOrgControllerTest {
                                 {
                                   "companyId": "cmp_001",
                                   "parentDepartmentId": "",
-                                  "departmentName": "运营中心",
+                                  "departmentName": "客户成功中心",
                                   "enabled": true
                                 }
                                 """))
@@ -243,7 +243,7 @@ class SystemOrgControllerTest {
                                 {
                                   "companyId": "cmp_001",
                                   "parentDepartmentId": "%s",
-                                  "departmentName": "运营中心（已更新）",
+                                  "departmentName": "客户成功中心（已更新）",
                                   "enabled": false
                                 }
                                 """.formatted(supportDepartmentId)))
@@ -256,7 +256,7 @@ class SystemOrgControllerTest {
                 .getResponse()
                 .getContentAsString();
         JsonNode updatedData = objectMapper.readTree(updatedResponse).path("data");
-        assertThat(updatedData.path("departmentName").asText()).isEqualTo("运营中心（已更新）");
+        assertThat(updatedData.path("departmentName").asText()).isEqualTo("客户成功中心（已更新）");
         assertThat(updatedData.path("parentDepartmentId").asText()).isEqualTo(supportDepartmentId);
         assertThat(updatedData.path("rootDepartmentId").asText()).isEqualTo("dept_001");
         assertThat(updatedData.path("treeLevel").asInt()).isEqualTo(3);
@@ -548,15 +548,42 @@ class SystemOrgControllerTest {
         assertThat(objectMapper.readTree(optionsResponse).path("data").path("departments").isArray()).isTrue();
     }
 
+    @Test
+    void shouldExposeExpandedSeededDepartmentHierarchyForAdmin() throws Exception {
+        String token = login("admin", "admin123");
+
+        String treeResponse = mockMvc.perform(get("/api/v1/system/departments/tree")
+                        .header("Authorization", "Bearer " + token)
+                        .param("companyId", "cmp_001"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode tree = objectMapper.readTree(treeResponse).path("data");
+        assertThat(tree.isArray()).isTrue();
+        assertThat(tree.findValuesAsText("departmentId")).contains(
+                "dept_021",
+                "dept_0221",
+                "dept_0311",
+                "dept_0411",
+                "dept_0511"
+        );
+    }
+
     private String login() throws Exception {
+        return login("zhangsan", "password123");
+    }
+
+    private String login(String username, String password) throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "username": "zhangsan",
-                                  "password": "password123"
+                                  "username": "%s",
+                                  "password": "%s"
                                 }
-                                """))
+                                """.formatted(username, password)))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
