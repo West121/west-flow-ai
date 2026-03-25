@@ -2,9 +2,9 @@ package com.westflow.identity.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.common.error.ContractException;
-import com.westflow.identity.dto.CurrentUserResponse;
-import com.westflow.identity.dto.LoginRequest;
-import com.westflow.identity.dto.LoginResponse;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.identity.request.LoginRequest;
+import com.westflow.identity.response.LoginResponse;
 import com.westflow.identity.mapper.AuthUserMapper;
 import com.westflow.identity.mapper.AuthUserMapper.AuthUserRecord;
 import com.westflow.identity.mapper.AuthUserMapper.UserPostContextRecord;

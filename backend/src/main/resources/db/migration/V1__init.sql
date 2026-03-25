@@ -1270,7 +1270,7 @@ SELECT
     'workflow:designer:view',
     'FolderKanban',
     20,
-    TRUE,
+    FALSE,
     TRUE,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
@@ -2942,19 +2942,19 @@ WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_workflow_binding');
 INSERT INTO wf_menu (
     id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
 )
-SELECT 'menu_oa_leave', 'menu_oa', '请假申请', 'MENU', '/oa/leave/create', 'oa/leave/create', 'oa:leave:create', 'FileText', 10, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+SELECT 'menu_oa_leave', 'menu_oa', '请假申请', 'MENU', '/oa/leave/list', 'oa/leave/list', 'oa:leave:list', 'FileText', 10, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_leave');
 
 INSERT INTO wf_menu (
     id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
 )
-SELECT 'menu_oa_expense', 'menu_oa', '报销申请', 'MENU', '/oa/expense/create', 'oa/expense/create', 'oa:expense:create', 'ReceiptText', 20, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+SELECT 'menu_oa_expense', 'menu_oa', '报销申请', 'MENU', '/oa/expense/list', 'oa/expense/list', 'oa:expense:list', 'ReceiptText', 20, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_expense');
 
 INSERT INTO wf_menu (
     id, parent_menu_id, menu_name, menu_type, route_path, component_path, permission_code, icon_name, sort_order, visible, enabled, created_at, updated_at
 )
-SELECT 'menu_oa_common', 'menu_oa', '通用申请', 'MENU', '/oa/common/create', 'oa/common/create', 'oa:common:create', 'NotebookText', 30, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+SELECT 'menu_oa_common', 'menu_oa', '通用申请', 'MENU', '/oa/common/list', 'oa/common/list', 'oa:common:list', 'NotebookText', 30, TRUE, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 WHERE NOT EXISTS (SELECT 1 FROM wf_menu WHERE id = 'menu_oa_common');
 
 INSERT INTO wf_menu (

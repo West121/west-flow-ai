@@ -1,4 +1,4 @@
-package com.westflow.notification.api;
+package com.westflow.notification.response;
 
 import java.util.List;
 

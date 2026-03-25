@@ -8,12 +8,15 @@ import com.westflow.common.query.SortItem;
 import com.westflow.identity.service.CurrentUserAccessService;
 import com.westflow.identity.service.CurrentUserAccessService.AccessPolicy;
 import com.westflow.system.org.company.mapper.SystemCompanyMapper;
-import com.westflow.system.org.department.api.SaveSystemDepartmentRequest;
-import com.westflow.system.org.department.api.SystemDepartmentDetailResponse;
-import com.westflow.system.org.department.api.SystemDepartmentFormOptionsResponse;
-import com.westflow.system.org.department.api.SystemDepartmentListItemResponse;
-import com.westflow.system.org.department.api.SystemDepartmentMutationResponse;
+import com.westflow.system.org.department.request.SaveSystemDepartmentRequest;
+import com.westflow.system.org.department.response.SystemDepartmentDetailResponse;
+import com.westflow.system.org.department.response.SystemDepartmentFormOptionsResponse;
+import com.westflow.system.org.department.response.SystemDepartmentListItemResponse;
+import com.westflow.system.org.department.response.SystemDepartmentMutationResponse;
 import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
+import com.westflow.system.org.department.model.SystemDepartmentRecord;
+import com.westflow.system.user.response.SystemAssociatedUserResponse;
+import com.westflow.system.user.service.SystemUserService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +38,7 @@ public class SystemDepartmentService {
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final SystemCompanyMapper systemCompanyMapper;
     private final CurrentUserAccessService currentUserAccessService;
+    private final SystemUserService systemUserService;
 
     /**
      * 分页查询部门。
@@ -99,6 +103,15 @@ public class SystemDepartmentService {
     }
 
     /**
+     * 查询部门关联用户。
+     */
+    public List<SystemAssociatedUserResponse> relatedUsers(String departmentId) {
+        SystemDepartmentDetailResponse detail = detail(departmentId);
+        assertAccessible(detail.companyId(), detail.departmentId());
+        return systemUserService.listAssociatedUsersByDepartmentId(departmentId);
+    }
+
+    /**
      * 获取部门表单选项。
      */
     public SystemDepartmentFormOptionsResponse formOptions(String companyId) {
@@ -118,7 +131,7 @@ public class SystemDepartmentService {
         validateDepartmentName(request.companyId(), request.parentDepartmentId(), request.departmentName(), null);
 
         String departmentId = buildId("dept");
-        systemDepartmentMapper.insertDepartment(new SystemDepartmentEntity(
+        systemDepartmentMapper.insertDepartment(new SystemDepartmentRecord(
                 departmentId,
                 request.companyId(),
                 normalizeParentId(request.parentDepartmentId()),
@@ -138,7 +151,7 @@ public class SystemDepartmentService {
         validateParentDepartment(request.companyId(), request.parentDepartmentId(), departmentId);
         validateDepartmentName(request.companyId(), request.parentDepartmentId(), request.departmentName(), departmentId);
 
-        systemDepartmentMapper.updateDepartment(new SystemDepartmentEntity(
+        systemDepartmentMapper.updateDepartment(new SystemDepartmentRecord(
                 departmentId,
                 request.companyId(),
                 normalizeParentId(request.parentDepartmentId()),
@@ -316,12 +329,4 @@ public class SystemDepartmentService {
     ) {
     }
 
-    public record SystemDepartmentEntity(
-            String id,
-            String companyId,
-            String parentDepartmentId,
-            String departmentName,
-            Boolean enabled
-    ) {
-    }
 }

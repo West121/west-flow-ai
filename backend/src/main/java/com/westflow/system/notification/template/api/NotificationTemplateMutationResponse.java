@@ -1,4 +1,4 @@
-package com.westflow.system.notification.template.api;
+package com.westflow.system.notification.template.response;
 
 /**
  * 通知模板新增/更新返回值。

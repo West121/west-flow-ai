@@ -1,9 +1,9 @@
 package com.westflow.processruntime.timetravel.service;
 
 import com.westflow.common.query.PageResponse;
-import com.westflow.processruntime.api.ExecuteProcessTimeTravelRequest;
-import com.westflow.processruntime.api.ProcessTimeTravelExecutionResponse;
-import com.westflow.processruntime.api.ProcessTimeTravelQueryRequest;
+import com.westflow.processruntime.api.request.ExecuteProcessTimeTravelRequest;
+import com.westflow.processruntime.api.response.ProcessTimeTravelExecutionResponse;
+import com.westflow.processruntime.api.request.ProcessTimeTravelQueryRequest;
 import java.util.List;
 
 /**

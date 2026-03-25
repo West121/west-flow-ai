@@ -5,13 +5,16 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.system.role.api.SaveSystemRoleRequest;
-import com.westflow.system.role.api.SystemRoleDetailResponse;
-import com.westflow.system.role.api.SystemRoleFormOptionsResponse;
-import com.westflow.system.role.api.SystemRoleListItemResponse;
-import com.westflow.system.role.api.SystemRoleMutationResponse;
+import com.westflow.system.role.request.SaveSystemRoleRequest;
+import com.westflow.system.role.response.SystemRoleDetailResponse;
+import com.westflow.system.role.response.SystemRoleFormOptionsResponse;
+import com.westflow.system.role.response.SystemRoleListItemResponse;
+import com.westflow.system.role.response.SystemRoleMutationResponse;
 import com.westflow.system.role.mapper.SystemRoleMapper;
 import com.westflow.system.role.mapper.SystemRoleMapper.SystemRoleBaseDetailRecord;
+import com.westflow.system.role.model.SystemRoleRecord;
+import com.westflow.system.user.response.SystemAssociatedUserResponse;
+import com.westflow.system.user.service.SystemUserService;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +43,7 @@ public class SystemRoleService {
     );
 
     private final SystemRoleMapper systemRoleMapper;
+    private final SystemUserService systemUserService;
 
     /**
      * 分页查询角色。
@@ -96,6 +100,14 @@ public class SystemRoleService {
     }
 
     /**
+     * 查询角色关联用户。
+     */
+    public List<SystemAssociatedUserResponse> relatedUsers(String roleId) {
+        detail(roleId);
+        return systemUserService.listAssociatedUsersByRoleId(roleId);
+    }
+
+    /**
      * 获取角色表单选项。
      */
     public SystemRoleFormOptionsResponse formOptions() {
@@ -127,7 +139,7 @@ public class SystemRoleService {
         List<RoleDataScopeEntity> dataScopes = normalizeDataScopes(null, request.dataScopes());
 
         String roleId = buildId("role");
-        systemRoleMapper.insertRole(new SystemRoleEntity(
+        systemRoleMapper.insertRole(new SystemRoleRecord(
                 roleId,
                 request.roleCode().trim(),
                 request.roleName().trim(),
@@ -151,7 +163,7 @@ public class SystemRoleService {
         validateMenus(menuIds);
         List<RoleDataScopeEntity> dataScopes = normalizeDataScopes(roleId, request.dataScopes());
 
-        systemRoleMapper.updateRole(new SystemRoleEntity(
+        systemRoleMapper.updateRole(new SystemRoleRecord(
                 roleId,
                 request.roleCode().trim(),
                 request.roleName().trim(),
@@ -402,16 +414,6 @@ public class SystemRoleService {
     private record Filters(
             Boolean enabled,
             String roleCategory
-    ) {
-    }
-
-    public record SystemRoleEntity(
-            String id,
-            String roleCode,
-            String roleName,
-            String roleCategory,
-            String description,
-            Boolean enabled
     ) {
     }
 

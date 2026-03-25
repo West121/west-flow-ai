@@ -6,17 +6,19 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.identity.dto.CurrentUserResponse;
+import com.westflow.identity.response.CurrentUserResponse;
 import com.westflow.identity.mapper.IdentityAccessMapper;
-import com.westflow.system.user.api.SaveSystemUserRequest;
-import com.westflow.system.user.api.SystemUserDetailResponse;
-import com.westflow.system.user.api.SystemUserFormOptionsResponse;
-import com.westflow.system.user.api.SystemUserListItemResponse;
-import com.westflow.system.user.api.SystemUserMutationResponse;
+import com.westflow.system.user.request.SaveSystemUserRequest;
+import com.westflow.system.user.response.SystemAssociatedUserResponse;
+import com.westflow.system.user.response.SystemUserDetailResponse;
+import com.westflow.system.user.response.SystemUserFormOptionsResponse;
+import com.westflow.system.user.response.SystemUserListItemResponse;
+import com.westflow.system.user.response.SystemUserMutationResponse;
 import com.westflow.system.user.mapper.SystemUserMapper;
 import com.westflow.system.user.mapper.SystemUserMapper.SystemUserBaseDetailRecord;
 import com.westflow.system.user.mapper.SystemUserMapper.PostContext;
 import com.westflow.system.user.mapper.SystemUserMapper.SystemUserRoleBinding;
+import com.westflow.system.user.model.SystemUserRecord;
 import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -139,6 +141,48 @@ public class SystemUserService {
     }
 
     /**
+     * 查询部门关联用户。
+     */
+    public List<SystemAssociatedUserResponse> listAssociatedUsersByDepartmentId(String departmentId) {
+        AccessPolicy accessPolicy = resolveAccessPolicy();
+        return systemUserMapper.selectAssociatedUsersByDepartmentId(
+                departmentId,
+                accessPolicy.allAccess(),
+                accessPolicy.userIds(),
+                accessPolicy.departmentIds(),
+                accessPolicy.companyIds()
+        );
+    }
+
+    /**
+     * 查询岗位关联用户。
+     */
+    public List<SystemAssociatedUserResponse> listAssociatedUsersByPostId(String postId) {
+        AccessPolicy accessPolicy = resolveAccessPolicy();
+        return systemUserMapper.selectAssociatedUsersByPostId(
+                postId,
+                accessPolicy.allAccess(),
+                accessPolicy.userIds(),
+                accessPolicy.departmentIds(),
+                accessPolicy.companyIds()
+        );
+    }
+
+    /**
+     * 查询角色关联用户。
+     */
+    public List<SystemAssociatedUserResponse> listAssociatedUsersByRoleId(String roleId) {
+        AccessPolicy accessPolicy = resolveAccessPolicy();
+        return systemUserMapper.selectAssociatedUsersByRoleId(
+                roleId,
+                accessPolicy.allAccess(),
+                accessPolicy.userIds(),
+                accessPolicy.departmentIds(),
+                accessPolicy.companyIds()
+        );
+    }
+
+    /**
      * 新建用户。
      */
     @Transactional
@@ -150,16 +194,16 @@ public class SystemUserService {
         validateUsername(request.username(), null);
         String userId = buildId("usr");
 
-        systemUserMapper.insertUser(new SystemUserEntity(
+        systemUserMapper.insertUser(new SystemUserRecord(
                 userId,
-                request.username(),
-                request.displayName(),
-                request.mobile(),
-                request.email(),
-                "",
                 request.companyId(),
                 postContext.departmentId(),
                 request.primaryPostId(),
+                request.displayName(),
+                request.username(),
+                request.mobile(),
+                request.email(),
+                "",
                 request.enabled()
         ));
         systemUserMapper.insertUserPost(new SystemUserPostBinding(
@@ -185,16 +229,16 @@ public class SystemUserService {
         assertAccessible(postContext.companyId(), postContext.departmentId(), userId);
         validateUsername(request.username(), userId);
 
-        systemUserMapper.updateUser(new SystemUserEntity(
+        systemUserMapper.updateUser(new SystemUserRecord(
                 userId,
-                request.username(),
-                request.displayName(),
-                request.mobile(),
-                request.email(),
-                "",
                 request.companyId(),
                 postContext.departmentId(),
                 request.primaryPostId(),
+                request.displayName(),
+                request.username(),
+                request.mobile(),
+                request.email(),
+                "",
                 request.enabled()
         ));
         systemUserMapper.deleteUserPosts(userId);
@@ -456,20 +500,6 @@ public class SystemUserService {
         boolean isEmpty() {
             return userIds.isEmpty() && departmentIds.isEmpty() && companyIds.isEmpty();
         }
-    }
-
-    public record SystemUserEntity(
-            String id,
-            String username,
-            String displayName,
-            String mobile,
-            String email,
-            String avatar,
-            String companyId,
-            String activeDepartmentId,
-            String activePostId,
-            Boolean enabled
-    ) {
     }
 
     public record SystemUserPostBinding(

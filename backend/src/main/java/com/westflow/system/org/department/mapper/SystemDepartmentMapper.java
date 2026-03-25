@@ -1,9 +1,9 @@
 package com.westflow.system.org.department.mapper;
 
-import com.westflow.system.org.department.api.SystemDepartmentDetailResponse;
-import com.westflow.system.org.department.api.SystemDepartmentFormOptionsResponse;
-import com.westflow.system.org.department.api.SystemDepartmentListItemResponse;
-import com.westflow.system.org.department.service.SystemDepartmentService.SystemDepartmentEntity;
+import com.westflow.system.org.department.response.SystemDepartmentDetailResponse;
+import com.westflow.system.org.department.response.SystemDepartmentFormOptionsResponse;
+import com.westflow.system.org.department.response.SystemDepartmentListItemResponse;
+import com.westflow.system.org.department.model.SystemDepartmentRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -242,7 +242,7 @@ public interface SystemDepartmentMapper {
               CURRENT_TIMESTAMP
             )
             """)
-    int insertDepartment(SystemDepartmentEntity entity);
+    int insertDepartment(SystemDepartmentRecord entity);
 
     @Update("""
             UPDATE wf_department
@@ -253,5 +253,5 @@ public interface SystemDepartmentMapper {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
-    int updateDepartment(SystemDepartmentEntity entity);
+    int updateDepartment(SystemDepartmentRecord entity);
 }

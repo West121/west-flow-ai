@@ -84,7 +84,7 @@ public class ApiRequestAuditAspect {
                 statusCode,
                 loginId,
                 loginId,
-                request == null ? "" : request.getRemoteAddr(),
+                RequestContext.clientIp(request),
                 request == null ? "" : request.getHeader("User-Agent"),
                 errorMessage,
                 Instant.now().truncatedTo(ChronoUnit.MILLIS),

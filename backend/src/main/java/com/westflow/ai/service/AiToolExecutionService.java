@@ -179,7 +179,12 @@ public class AiToolExecutionService {
             return registeredDefinition;
         }
         AiRegistryCatalogService.AiToolCatalogItem catalogItem = aiRegistryCatalogService.findTool(userId, request.toolKey())
-                .orElseThrow(() -> new ContractException("VALIDATION.FIELD_INVALID", HttpStatus.BAD_REQUEST, "工具未注册"));
+                .orElseThrow(() -> new ContractException(
+                        "VALIDATION.FIELD_INVALID",
+                        HttpStatus.BAD_REQUEST,
+                        "工具未授权或未注册",
+                        Map.of("toolKey", request.toolKey(), "userId", userId == null ? "" : userId)
+                ));
         return new AiToolDefinition(
                 catalogItem.toolCode(),
                 catalogItem.toolSource(),

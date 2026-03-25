@@ -1,6 +1,6 @@
 package com.westflow.plm.api;
 
-import com.westflow.processruntime.api.ProcessTaskSnapshot;
+import com.westflow.processruntime.api.response.ProcessTaskSnapshot;
 import java.util.List;
 
 /**

@@ -8,7 +8,7 @@ import com.westflow.plm.service.PlmLaunchService;
 import com.westflow.plm.api.PlmEcrBillListItemResponse;
 import com.westflow.plm.api.PlmEcoBillListItemResponse;
 import com.westflow.plm.api.PlmMaterialChangeBillListItemResponse;
-import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
+import com.westflow.processruntime.api.response.ApprovalSheetListItemResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;

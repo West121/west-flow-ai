@@ -5,9 +5,9 @@ import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
-import com.westflow.processruntime.api.ProcessTaskSnapshot;
-import com.westflow.processruntime.api.StartProcessRequest;
-import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.api.response.ProcessTaskSnapshot;
+import com.westflow.processruntime.api.request.StartProcessRequest;
+import com.westflow.processruntime.api.response.StartProcessResponse;
 import com.westflow.processruntime.model.ProcessLinkRecord;
 import java.util.ArrayList;
 import java.time.Instant;
@@ -269,9 +269,21 @@ public class FlowableRuntimeStartService {
                 .filter(userId -> userId != null && !userId.isBlank())
                 .distinct()
                 .toList();
+        List<String> candidateGroupIds = flowableEngineFacade.taskService()
+                .getIdentityLinksForTask(task.getId())
+                .stream()
+                .filter(link -> IdentityLinkType.CANDIDATE.equals(link.getType()))
+                .map(IdentityLink::getGroupId)
+                .filter(groupId -> groupId != null && !groupId.isBlank())
+                .distinct()
+                .toList();
         String taskKind = resolveTaskKind(task);
-        String assignmentMode = task.getAssignee() != null || !candidateUserIds.isEmpty() ? "USER" : null;
-        String status = task.getAssignee() == null && !candidateUserIds.isEmpty() ? "PENDING_CLAIM" : "PENDING";
+        String assignmentMode = !candidateGroupIds.isEmpty()
+                ? "DEPARTMENT"
+                : task.getAssignee() != null || !candidateUserIds.isEmpty() ? "USER" : null;
+        String status = task.getAssignee() == null && (!candidateUserIds.isEmpty() || !candidateGroupIds.isEmpty())
+                ? "PENDING_CLAIM"
+                : "PENDING";
         return new ProcessTaskSnapshot(
                 task.getId(),
                 task.getTaskDefinitionKey(),
@@ -280,6 +292,7 @@ public class FlowableRuntimeStartService {
                 status,
                 assignmentMode,
                 candidateUserIds,
+                candidateGroupIds,
                 task.getAssignee(),
                 null,
                 null,

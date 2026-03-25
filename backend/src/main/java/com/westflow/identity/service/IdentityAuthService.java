@@ -1,8 +1,8 @@
 package com.westflow.identity.service;
 
-import com.westflow.identity.dto.CurrentUserResponse;
-import com.westflow.identity.dto.LoginRequest;
-import com.westflow.identity.dto.LoginResponse;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.identity.request.LoginRequest;
+import com.westflow.identity.response.LoginResponse;
 import java.util.List;
 
 /**

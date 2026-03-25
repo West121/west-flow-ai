@@ -1,6 +1,6 @@
 package com.westflow.identity.mapper;
 
-import com.westflow.identity.dto.CurrentUserResponse;
+import com.westflow.identity.response.CurrentUserResponse;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

@@ -1,11 +1,11 @@
 package com.westflow.system.role.mapper;
 
-import com.westflow.system.role.api.SystemRoleDetailResponse;
-import com.westflow.system.role.api.SystemRoleFormOptionsResponse;
-import com.westflow.system.role.api.SystemRoleListItemResponse;
+import com.westflow.system.role.response.SystemRoleDetailResponse;
+import com.westflow.system.role.response.SystemRoleFormOptionsResponse;
+import com.westflow.system.role.response.SystemRoleListItemResponse;
+import com.westflow.system.role.model.SystemRoleRecord;
 import com.westflow.system.role.service.SystemRoleService.RoleDataScopeEntity;
 import com.westflow.system.role.service.SystemRoleService.RoleMenuBinding;
-import com.westflow.system.role.service.SystemRoleService.SystemRoleEntity;
 import java.util.List;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
@@ -223,7 +223,7 @@ public interface SystemRoleMapper {
               CURRENT_TIMESTAMP
             )
             """)
-    int insertRole(SystemRoleEntity entity);
+    int insertRole(SystemRoleRecord entity);
 
     @Update("""
             UPDATE wf_role
@@ -235,7 +235,7 @@ public interface SystemRoleMapper {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
-    int updateRole(SystemRoleEntity entity);
+    int updateRole(SystemRoleRecord entity);
 
     @Delete("DELETE FROM wf_role_menu WHERE role_id = #{roleId}")
     int deleteRoleMenus(@Param("roleId") String roleId);

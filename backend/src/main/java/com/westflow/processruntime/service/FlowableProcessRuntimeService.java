@@ -6,50 +6,52 @@ import com.westflow.common.error.ContractException;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
-import com.westflow.processruntime.api.ApprovalSheetListItemResponse;
-import com.westflow.processruntime.api.ApprovalSheetListView;
-import com.westflow.processruntime.api.ApprovalSheetPageRequest;
-import com.westflow.processruntime.api.AddSignTaskRequest;
-import com.westflow.processruntime.api.AppendTaskRequest;
-import com.westflow.processruntime.api.AppendTaskResponse;
-import com.westflow.processruntime.api.ClaimTaskRequest;
-import com.westflow.processruntime.api.ClaimTaskResponse;
-import com.westflow.processruntime.api.CompleteTaskRequest;
-import com.westflow.processruntime.api.CompleteTaskResponse;
-import com.westflow.processruntime.api.CountersignTaskGroupResponse;
-import com.westflow.processruntime.api.DelegateTaskRequest;
-import com.westflow.processruntime.api.HandoverExecutionResponse;
-import com.westflow.processruntime.api.HandoverExecutionTaskItemResponse;
-import com.westflow.processruntime.api.HandoverPreviewResponse;
-import com.westflow.processruntime.api.HandoverPreviewTaskItemResponse;
-import com.westflow.processruntime.api.InclusiveGatewayHitResponse;
-import com.westflow.processruntime.api.HandoverTaskRequest;
-import com.westflow.processruntime.api.JumpTaskRequest;
-import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
-import com.westflow.processruntime.api.ProcessInstanceEventResponse;
-import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
-import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
-import com.westflow.processruntime.api.ProcessTaskSnapshot;
-import com.westflow.processruntime.api.ProcessTaskDetailResponse;
-import com.westflow.processruntime.api.ProcessTaskListItemResponse;
-import com.westflow.processruntime.api.ProcessTaskTraceItemResponse;
-import com.westflow.processruntime.api.RuntimeAppendLinkResponse;
-import com.westflow.processruntime.api.RejectTaskRequest;
-import com.westflow.processruntime.api.RevokeTaskRequest;
-import com.westflow.processruntime.api.RemoveSignTaskRequest;
-import com.westflow.processruntime.api.ReturnTaskRequest;
-import com.westflow.processruntime.api.StartProcessRequest;
-import com.westflow.processruntime.api.StartProcessResponse;
-import com.westflow.processruntime.api.TakeBackTaskRequest;
-import com.westflow.processruntime.api.TaskActionAvailabilityResponse;
-import com.westflow.processruntime.api.TerminateProcessInstanceRequest;
-import com.westflow.processruntime.api.UrgeTaskRequest;
-import com.westflow.processruntime.api.TransferTaskRequest;
-import com.westflow.processruntime.api.WakeUpInstanceRequest;
-import com.westflow.processruntime.api.WorkflowFieldBinding;
+import com.westflow.processruntime.api.response.ApprovalSheetListItemResponse;
+import com.westflow.processruntime.api.request.ApprovalSheetListView;
+import com.westflow.processruntime.api.request.ApprovalSheetPageRequest;
+import com.westflow.processruntime.api.request.AddSignTaskRequest;
+import com.westflow.processruntime.api.request.AppendTaskRequest;
+import com.westflow.processruntime.api.response.AppendTaskResponse;
+import com.westflow.processruntime.api.request.ClaimTaskRequest;
+import com.westflow.processruntime.api.response.ClaimTaskResponse;
+import com.westflow.processruntime.api.request.CompleteTaskRequest;
+import com.westflow.processruntime.api.response.CompleteTaskResponse;
+import com.westflow.processruntime.api.response.CountersignTaskGroupResponse;
+import com.westflow.processruntime.api.request.DelegateTaskRequest;
+import com.westflow.processruntime.api.response.HandoverExecutionResponse;
+import com.westflow.processruntime.api.response.HandoverExecutionTaskItemResponse;
+import com.westflow.processruntime.api.response.HandoverPreviewResponse;
+import com.westflow.processruntime.api.response.HandoverPreviewTaskItemResponse;
+import com.westflow.processruntime.api.response.InclusiveGatewayHitResponse;
+import com.westflow.processruntime.api.request.HandoverTaskRequest;
+import com.westflow.processruntime.api.request.JumpTaskRequest;
+import com.westflow.processruntime.api.response.ProcessAutomationTraceItemResponse;
+import com.westflow.processruntime.api.response.ProcessInstanceEventResponse;
+import com.westflow.processruntime.api.response.ProcessInstanceLinkResponse;
+import com.westflow.processruntime.api.response.ProcessNotificationSendRecordResponse;
+import com.westflow.processruntime.api.response.ProcessTaskSnapshot;
+import com.westflow.processruntime.api.response.ProcessTaskDetailResponse;
+import com.westflow.processruntime.api.response.ProcessTaskListItemResponse;
+import com.westflow.processruntime.api.response.ProcessTaskTraceItemResponse;
+import com.westflow.processruntime.api.response.RuntimeAppendLinkResponse;
+import com.westflow.processruntime.api.request.RejectTaskRequest;
+import com.westflow.processruntime.api.request.RevokeTaskRequest;
+import com.westflow.processruntime.api.request.RemoveSignTaskRequest;
+import com.westflow.processruntime.api.request.ReturnTaskRequest;
+import com.westflow.processruntime.api.request.StartProcessRequest;
+import com.westflow.processruntime.api.response.StartProcessResponse;
+import com.westflow.processruntime.api.request.TakeBackTaskRequest;
+import com.westflow.processruntime.api.response.TaskActionAvailabilityResponse;
+import com.westflow.processruntime.api.request.TerminateProcessInstanceRequest;
+import com.westflow.processruntime.api.request.UrgeTaskRequest;
+import com.westflow.processruntime.api.request.TransferTaskRequest;
+import com.westflow.processruntime.api.request.WakeUpInstanceRequest;
+import com.westflow.processruntime.api.response.WorkflowFieldBinding;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
 import com.westflow.processruntime.service.append.DynamicBuildAppendRuntimeService;
 import com.westflow.workflowadmin.service.WorkflowOperationLogService;
@@ -60,6 +62,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -77,6 +80,7 @@ import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricActivityInstance;
 import org.flowable.engine.runtime.ProcessInstance;
+import org.flowable.identitylink.api.IdentityLink;
 import org.flowable.task.api.Task;
 import org.flowable.task.api.history.HistoricTaskInstance;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -142,6 +146,7 @@ public class FlowableProcessRuntimeService {
     private final JdbcTemplate jdbcTemplate;
     private final WorkflowOperationLogService workflowOperationLogService;
     private final DynamicBuildAppendRuntimeService dynamicBuildAppendRuntimeService;
+    private final IdentityAuthService identityAuthService;
 
     /**
      * 发起真实 Flowable 流程实例。
@@ -155,11 +160,25 @@ public class FlowableProcessRuntimeService {
      */
     public PageResponse<ProcessTaskListItemResponse> page(PageRequest request) {
         String currentUserId = currentUserId();
-        List<ProcessTaskListItemResponse> allRecords = flowableEngineFacade.taskService()
+        List<Task> candidateOrAssignedTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .taskCandidateOrAssigned(currentUserId)
                 .active()
-                .list()
+                .list();
+        List<String> currentCandidateGroupIds = currentCandidateGroupIds();
+        List<Task> departmentCandidateTasks = currentCandidateGroupIds.isEmpty()
+                ? List.of()
+                : flowableEngineFacade.taskService()
+                        .createTaskQuery()
+                        .taskCandidateGroupIn(currentCandidateGroupIds)
+                        .active()
+                        .list();
+        List<ProcessTaskListItemResponse> allRecords = java.util.stream.Stream.concat(
+                        candidateOrAssignedTasks.stream(),
+                        departmentCandidateTasks.stream()
+                )
+                .collect(Collectors.toMap(Task::getId, task -> task, (left, right) -> left, LinkedHashMap::new))
+                .values()
                 .stream()
                 .filter(task -> !"CC".equals(resolveTaskKind(task)))
                 .map(this::toTaskListItem)
@@ -697,7 +716,8 @@ public class FlowableProcessRuntimeService {
         boolean isAppendTask = "APPEND".equals(taskKind);
         boolean isFlowHandleTask = isNormalTask || isAppendTask;
         List<String> candidateUserIds = candidateUsers(task.getId());
-        boolean isCandidate = task.getAssignee() == null && candidateUserIds.contains(currentUserId());
+        List<String> candidateGroupIds = candidateGroups(task.getId());
+        boolean isCandidate = isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
         boolean isAssignee = currentUserId().equals(task.getAssignee());
         boolean canHandle = isAssignee || isCandidate;
         boolean blockedByAddSign = isNormalTask && hasActiveAddSignChild(task.getId());
@@ -1065,8 +1085,9 @@ public class FlowableProcessRuntimeService {
             throw actionNotAllowed("当前任务不支持已阅", Map.of("taskId", taskId));
         }
         List<String> candidateUserIds = candidateUsers(taskId);
+        List<String> candidateGroupIds = candidateGroups(taskId);
         boolean canRead = currentUserId().equals(task.getAssignee())
-                || (task.getAssignee() == null && candidateUserIds.contains(currentUserId()));
+                || isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
         if (!canRead) {
             throw actionNotAllowed("当前用户不能操作该抄送任务", Map.of("taskId", taskId, "userId", currentUserId()));
         }
@@ -1107,14 +1128,22 @@ public class FlowableProcessRuntimeService {
      * 认领 Flowable 待办。
      */
     public ClaimTaskResponse claim(String taskId, ClaimTaskRequest request) {
+        Task task = requireActiveTask(taskId);
+        List<String> candidateUserIds = candidateUsers(taskId);
+        List<String> candidateGroupIds = candidateGroups(taskId);
+        if (task.getAssignee() != null && !currentUserId().equals(task.getAssignee())) {
+            throw actionNotAllowed("当前任务已被他人认领", eventDetails("taskId", taskId, "assigneeUserId", task.getAssignee()));
+        }
+        if (task.getAssignee() == null && !isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds)) {
+            throw actionNotAllowed("当前任务不允许认领", eventDetails("taskId", taskId, "userId", currentUserId()));
+        }
         String assigneeUserId = currentUserId();
         if (request != null && request.comment() != null && !request.comment().isBlank()) {
-            Task task = requireActiveTask(taskId);
             flowableEngineFacade.taskService().addComment(taskId, task.getProcessInstanceId(), request.comment().trim());
         }
         flowableTaskActionService.claim(taskId, assigneeUserId);
-        Task task = requireActiveTask(taskId);
-        return new ClaimTaskResponse(task.getId(), task.getProcessInstanceId(), "PENDING", task.getAssignee());
+        Task claimedTask = requireActiveTask(taskId);
+        return new ClaimTaskResponse(claimedTask.getId(), claimedTask.getProcessInstanceId(), "PENDING", claimedTask.getAssignee());
     }
 
     /**
@@ -1905,6 +1934,21 @@ public class FlowableProcessRuntimeService {
         List<CountersignTaskGroupResponse> countersignGroups = flowableCountersignService.queryTaskGroups(processInstanceId);
         List<ProcessInstanceLinkResponse> processLinks = subprocessLinks(processInstanceId);
         List<RuntimeAppendLinkResponse> runtimeAppendLinks = appendLinks(processInstanceId);
+        String applicantUserId = stringValue(variables.get("westflowInitiatorUserId"));
+        Map<String, String> userDisplayNames = buildUserDisplayNameMap(
+                applicantUserId,
+                referenceActiveTask,
+                referenceHistoricTask,
+                taskTrace,
+                instanceEvents,
+                processLinks,
+                runtimeAppendLinks,
+                countersignGroups
+        );
+        Map<String, String> groupDisplayNames = buildGroupDisplayNameMap(
+                referenceActiveTask != null ? candidateGroups(referenceActiveTask.getId()) : List.of(),
+                taskTrace
+        );
         OffsetDateTime createdAt = referenceActiveTask != null
                 ? toOffsetDateTime(referenceActiveTask.getCreateTime())
                 : referenceHistoricTask == null ? toOffsetDateTime(historicProcessInstance.getStartTime()) : toOffsetDateTime(referenceHistoricTask.getCreateTime());
@@ -1919,7 +1963,7 @@ public class FlowableProcessRuntimeService {
                 definition.processName(),
                 businessKey,
                 businessType,
-                stringValue(variables.get("westflowInitiatorUserId")),
+                applicantUserId,
                 businessData,
                 blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
                 payload.nodes(),
@@ -1932,8 +1976,13 @@ public class FlowableProcessRuntimeService {
                 nodeName,
                 resolveTaskKind(referenceActiveTask != null ? referenceActiveTask.getProcessDefinitionId() : historicProcessInstance.getProcessDefinitionId(), nodeId),
                 activeTasks.isEmpty() ? resolveHistoricTaskStatus(referenceHistoricTask, historicProcessInstance) : resolveTaskStatus(referenceActiveTask),
-                "USER",
+                resolveAssignmentMode(
+                        referenceActiveTask == null ? List.of() : candidateUsers(referenceActiveTask.getId()),
+                        referenceActiveTask == null ? List.of() : candidateGroups(referenceActiveTask.getId()),
+                        referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee()
+                ),
                 referenceActiveTask != null ? candidateUsers(referenceActiveTask.getId()) : List.of(),
+                referenceActiveTask != null ? candidateGroups(referenceActiveTask.getId()) : List.of(),
                 referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee(),
                 stringValue(variables.get("westflowLastAction")),
                 stringValue(variables.get("westflowLastOperatorUserId")),
@@ -1968,14 +2017,89 @@ public class FlowableProcessRuntimeService {
                 inclusiveGatewayHits,
                 processLinks,
                 runtimeAppendLinks,
-                blockingActiveTasks.stream().map(Task::getId).toList()
+                blockingActiveTasks.stream().map(Task::getId).toList(),
+                userDisplayNames,
+                groupDisplayNames
         );
+    }
+
+    private Map<String, String> buildUserDisplayNameMap(
+            String applicantUserId,
+            Task referenceActiveTask,
+            HistoricTaskInstance referenceHistoricTask,
+            List<ProcessTaskTraceItemResponse> taskTrace,
+            List<ProcessInstanceEventResponse> instanceEvents,
+            List<ProcessInstanceLinkResponse> processLinks,
+            List<RuntimeAppendLinkResponse> runtimeAppendLinks,
+            List<CountersignTaskGroupResponse> countersignGroups
+    ) {
+        Set<String> userIds = new LinkedHashSet<>();
+        addIfPresent(userIds, applicantUserId);
+        addIfPresent(userIds, referenceActiveTask == null ? null : referenceActiveTask.getAssignee());
+        addIfPresent(userIds, referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee());
+        for (ProcessTaskTraceItemResponse item : taskTrace) {
+            addIfPresent(userIds, item.assigneeUserId());
+            addIfPresent(userIds, item.operatorUserId());
+            addIfPresent(userIds, item.targetUserId());
+            addIfPresent(userIds, item.actingForUserId());
+            addIfPresent(userIds, item.delegatedByUserId());
+            addIfPresent(userIds, item.handoverFromUserId());
+            item.candidateUserIds().forEach(candidateUserId -> addIfPresent(userIds, candidateUserId));
+        }
+        for (ProcessInstanceEventResponse event : instanceEvents) {
+            addIfPresent(userIds, event.operatorUserId());
+            addIfPresent(userIds, event.targetUserId());
+            addIfPresent(userIds, event.actingForUserId());
+            addIfPresent(userIds, event.delegatedByUserId());
+            addIfPresent(userIds, event.handoverFromUserId());
+        }
+        for (RuntimeAppendLinkResponse link : runtimeAppendLinks) {
+            addIfPresent(userIds, link.targetUserId());
+            addIfPresent(userIds, link.operatorUserId());
+        }
+        for (CountersignTaskGroupResponse group : countersignGroups) {
+            group.members().forEach(member -> addIfPresent(userIds, member.assigneeUserId()));
+        }
+        Map<String, String> displayNames = new LinkedHashMap<>();
+        for (String userId : userIds) {
+            displayNames.put(userId, resolveUserDisplayName(userId));
+        }
+        return Collections.unmodifiableMap(displayNames);
+    }
+
+    private Map<String, String> buildGroupDisplayNameMap(
+            List<String> currentCandidateGroupIds,
+            List<ProcessTaskTraceItemResponse> taskTrace
+    ) {
+        Set<String> groupIds = new LinkedHashSet<>();
+        currentCandidateGroupIds.forEach(groupId -> addIfPresent(groupIds, groupId));
+        for (ProcessTaskTraceItemResponse item : taskTrace) {
+            item.candidateGroupIds().forEach(groupId -> addIfPresent(groupIds, groupId));
+        }
+        Map<String, String> displayNames = new LinkedHashMap<>();
+        for (String groupId : groupIds) {
+            displayNames.put(groupId, resolveGroupDisplayName(groupId));
+        }
+        return Collections.unmodifiableMap(displayNames);
+    }
+
+    private void addIfPresent(Set<String> values, String value) {
+        if (value != null && !value.isBlank()) {
+            values.add(value.trim());
+        }
     }
 
     private List<ProcessTaskTraceItemResponse> buildTaskTrace(List<HistoricTaskInstance> historicTasks, List<Task> activeTasks) {
         List<ProcessTaskTraceItemResponse> items = new ArrayList<>();
         Set<String> knownTaskIds = new LinkedHashSet<>();
+        Map<String, Task> activeTaskById = activeTasks.stream()
+                .collect(Collectors.toMap(Task::getId, task -> task, (left, right) -> left, LinkedHashMap::new));
         for (HistoricTaskInstance task : historicTasks) {
+            if (task.getEndTime() == null
+                    && activeTaskById.containsKey(task.getId())
+                    && !isHistoricTaskRevoked(task)) {
+                continue;
+            }
             knownTaskIds.add(task.getId());
             OffsetDateTime createdAt = toOffsetDateTime(task.getCreateTime());
             OffsetDateTime endedAt = toOffsetDateTime(task.getEndTime());
@@ -1988,6 +2112,7 @@ public class FlowableProcessRuntimeService {
                     taskKind,
                     resolveHistoricTaskStatus(task, null),
                     task.getAssignee(),
+                    List.of(),
                     List.of(),
                     stringValue(localVariables.get("westflowAction")),
                     null,
@@ -2030,6 +2155,7 @@ public class FlowableProcessRuntimeService {
                     resolveTraceTaskStatus(task, localVariables),
                     task.getAssignee(),
                     candidateUsers(task.getId()),
+                    candidateGroups(task.getId()),
                     null,
                     null,
                     null,
@@ -2056,6 +2182,10 @@ public class FlowableProcessRuntimeService {
                     stringValue(localVariables.get("westflowHandoverFromUserId"))
             ));
         }
+        items.sort(Comparator
+                .comparing(ProcessTaskTraceItemResponse::receiveTime, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(ProcessTaskTraceItemResponse::handleStartTime, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(ProcessTaskTraceItemResponse::taskId, Comparator.nullsLast(String::compareTo)));
         return items;
     }
 
@@ -2823,8 +2953,9 @@ public class FlowableProcessRuntimeService {
     private Task requireTaskForAction(String taskId, String actionLabel) {
         Task task = requireActiveTask(taskId);
         List<String> candidateUserIds = candidateUsers(taskId);
+        List<String> candidateGroupIds = candidateGroups(taskId);
         boolean canHandle = currentUserId().equals(task.getAssignee())
-                || (task.getAssignee() == null && candidateUserIds.contains(currentUserId()));
+                || isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
         if (!canHandle) {
             throw actionNotAllowed(
                     "当前任务不允许执行" + actionLabel,
@@ -2837,9 +2968,10 @@ public class FlowableProcessRuntimeService {
     private Task requireTaskForAppend(String taskId) {
         Task task = requireActiveTask(taskId);
         List<String> candidateUserIds = candidateUsers(taskId);
+        List<String> candidateGroupIds = candidateGroups(taskId);
         String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
         boolean canAppend = currentUserId().equals(task.getAssignee())
-                || (task.getAssignee() == null && candidateUserIds.contains(currentUserId()))
+                || isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds)
                 || currentUserId().equals(initiatorUserId);
         if (!canAppend) {
             throw actionNotAllowed(
@@ -4330,8 +4462,9 @@ public class FlowableProcessRuntimeService {
                 task.getName(),
                 resolveTaskKind(task),
                 resolveTaskStatus(task),
-                "USER",
+                resolveAssignmentMode(candidateUsers(task.getId()), candidateGroups(task.getId()), task.getAssignee()),
                 candidateUsers(task.getId()),
+                candidateGroups(task.getId()),
                 task.getAssignee(),
                 toOffsetDateTime(task.getCreateTime()),
                 toOffsetDateTime(task.getCreateTime()),
@@ -4346,8 +4479,9 @@ public class FlowableProcessRuntimeService {
                 task.getName(),
                 resolveTaskKind(task),
                 resolveTaskStatus(task),
-                "USER",
+                resolveAssignmentMode(candidateUsers(task.getId()), candidateGroups(task.getId()), task.getAssignee()),
                 candidateUsers(task.getId()),
+                candidateGroups(task.getId()),
                 task.getAssignee(),
                 resolveActingMode(task, null),
                 resolveActingForUserId(task, null),
@@ -4577,14 +4711,58 @@ public class FlowableProcessRuntimeService {
     }
 
     private List<String> candidateUsers(String taskId) {
-        return flowableEngineFacade.taskService()
-                .getIdentityLinksForTask(taskId)
-                .stream()
+        return identityLinksForTask(taskId).stream()
                 .filter(link -> "candidate".equals(link.getType()))
                 .map(link -> link.getUserId())
                 .filter(userId -> userId != null && !userId.isBlank())
                 .distinct()
                 .toList();
+    }
+
+    private List<String> candidateGroups(String taskId) {
+        return identityLinksForTask(taskId).stream()
+                .filter(link -> "candidate".equals(link.getType()))
+                .map(IdentityLink::getGroupId)
+                .filter(groupId -> groupId != null && !groupId.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private List<IdentityLink> identityLinksForTask(String taskId) {
+        return flowableEngineFacade.taskService().getIdentityLinksForTask(taskId);
+    }
+
+    private List<String> currentCandidateGroupIds() {
+        CurrentUserResponse currentUser = identityAuthService.currentUser();
+        LinkedHashSet<String> groupIds = new LinkedHashSet<>();
+        if (currentUser.activeDepartmentId() != null && !currentUser.activeDepartmentId().isBlank()) {
+            groupIds.add(currentUser.activeDepartmentId());
+        }
+        currentUser.partTimePosts().stream()
+                .map(CurrentUserResponse.PartTimePost::departmentId)
+                .filter(departmentId -> departmentId != null && !departmentId.isBlank())
+                .forEach(groupIds::add);
+        return List.copyOf(groupIds);
+    }
+
+    private boolean isCurrentUserCandidate(Task task, List<String> candidateUserIds, List<String> candidateGroupIds) {
+        if (task.getAssignee() != null) {
+            return false;
+        }
+        if (candidateUserIds.contains(currentUserId())) {
+            return true;
+        }
+        return !Collections.disjoint(candidateGroupIds, currentCandidateGroupIds());
+    }
+
+    private String resolveAssignmentMode(List<String> candidateUserIds, List<String> candidateGroupIds, String assigneeUserId) {
+        if (!candidateGroupIds.isEmpty()) {
+            return "DEPARTMENT";
+        }
+        if (assigneeUserId != null || !candidateUserIds.isEmpty()) {
+            return "USER";
+        }
+        return null;
     }
 
     private Map<String, Object> taskLocalVariables(String taskId) {
@@ -4694,7 +4872,10 @@ public class FlowableProcessRuntimeService {
         if (task.getOwner() != null && task.getAssignee() != null && !task.getOwner().equals(task.getAssignee())) {
             return "DELEGATED";
         }
-        return task.getAssignee() == null && !candidateUsers(task.getId()).isEmpty() ? "PENDING_CLAIM" : "PENDING";
+        return task.getAssignee() == null
+                && (!candidateUsers(task.getId()).isEmpty() || !candidateGroups(task.getId()).isEmpty())
+                ? "PENDING_CLAIM"
+                : "PENDING";
     }
 
     private String resolveTraceTaskStatus(Task task, Map<String, Object> localVariables) {
@@ -4961,7 +5142,7 @@ public class FlowableProcessRuntimeService {
 
     private Map<String, Object> runtimeVariables(String processInstanceId) {
         Map<String, Object> variables = flowableEngineFacade.runtimeService().getVariables(processInstanceId);
-        return variables == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(variables));
+        return variables == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(variables));
     }
 
     /**
@@ -5311,6 +5492,18 @@ public class FlowableProcessRuntimeService {
                 userId
         );
         return results.isEmpty() || results.get(0) == null || results.get(0).isBlank() ? userId : results.get(0);
+    }
+
+    private String resolveGroupDisplayName(String groupId) {
+        if (groupId == null || groupId.isBlank()) {
+            return groupId;
+        }
+        List<String> results = jdbcTemplate.query(
+                "SELECT department_name FROM wf_department WHERE id = ?",
+                (rs, rowNum) -> rs.getString("department_name"),
+                groupId
+        );
+        return results.isEmpty() || results.get(0) == null || results.get(0).isBlank() ? groupId : results.get(0);
     }
 
     private void insertBusinessLink(

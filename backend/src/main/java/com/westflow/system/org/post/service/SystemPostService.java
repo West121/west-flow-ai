@@ -7,14 +7,17 @@ import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
 import com.westflow.identity.service.CurrentUserAccessService;
 import com.westflow.identity.service.CurrentUserAccessService.AccessPolicy;
-import com.westflow.system.org.department.api.SystemDepartmentDetailResponse;
+import com.westflow.system.org.department.response.SystemDepartmentDetailResponse;
 import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
-import com.westflow.system.org.post.api.SaveSystemPostRequest;
-import com.westflow.system.org.post.api.SystemPostDetailResponse;
-import com.westflow.system.org.post.api.SystemPostFormOptionsResponse;
-import com.westflow.system.org.post.api.SystemPostListItemResponse;
-import com.westflow.system.org.post.api.SystemPostMutationResponse;
+import com.westflow.system.org.post.request.SaveSystemPostRequest;
+import com.westflow.system.org.post.response.SystemPostDetailResponse;
+import com.westflow.system.org.post.response.SystemPostFormOptionsResponse;
+import com.westflow.system.org.post.response.SystemPostListItemResponse;
+import com.westflow.system.org.post.response.SystemPostMutationResponse;
 import com.westflow.system.org.post.mapper.SystemPostMapper;
+import com.westflow.system.org.post.model.SystemPostRecord;
+import com.westflow.system.user.response.SystemAssociatedUserResponse;
+import com.westflow.system.user.service.SystemUserService;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,6 +39,7 @@ public class SystemPostService {
     private final SystemPostMapper systemPostMapper;
     private final SystemDepartmentMapper systemDepartmentMapper;
     private final CurrentUserAccessService currentUserAccessService;
+    private final SystemUserService systemUserService;
 
     /**
      * 分页查询岗位。
@@ -100,6 +104,15 @@ public class SystemPostService {
     }
 
     /**
+     * 查询岗位关联用户。
+     */
+    public List<SystemAssociatedUserResponse> relatedUsers(String postId) {
+        SystemPostDetailResponse detail = detail(postId);
+        assertAccessible(detail.companyId(), detail.departmentId());
+        return systemUserService.listAssociatedUsersByPostId(postId);
+    }
+
+    /**
      * 获取岗位表单选项。
      */
     public SystemPostFormOptionsResponse formOptions(String companyId) {
@@ -114,7 +127,7 @@ public class SystemPostService {
         SystemDepartmentDetailResponse department = validateDepartmentExists(request.departmentId());
         validatePostName(request.departmentId(), request.postName(), null);
         String postId = buildId("post");
-        systemPostMapper.insertPost(new SystemPostEntity(
+        systemPostMapper.insertPost(new SystemPostRecord(
                 postId,
                 request.departmentId(),
                 request.postName(),
@@ -131,7 +144,7 @@ public class SystemPostService {
         ensureExists(postId);
         validateDepartmentExists(request.departmentId());
         validatePostName(request.departmentId(), request.postName(), postId);
-        systemPostMapper.updatePost(new SystemPostEntity(
+        systemPostMapper.updatePost(new SystemPostRecord(
                 postId,
                 request.departmentId(),
                 request.postName(),
@@ -271,11 +284,4 @@ public class SystemPostService {
     ) {
     }
 
-    public record SystemPostEntity(
-            String id,
-            String departmentId,
-            String postName,
-            Boolean enabled
-    ) {
-    }
 }

@@ -1,4 +1,4 @@
-package com.westflow.identity.dto;
+package com.westflow.identity.response;
 
 /**
  * 登录响应。

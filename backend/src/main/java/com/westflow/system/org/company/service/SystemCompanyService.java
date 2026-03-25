@@ -7,12 +7,13 @@ import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
 import com.westflow.identity.service.CurrentUserAccessService;
 import com.westflow.identity.service.CurrentUserAccessService.AccessPolicy;
-import com.westflow.system.org.company.api.SaveSystemCompanyRequest;
-import com.westflow.system.org.company.api.SystemCompanyDetailResponse;
-import com.westflow.system.org.company.api.SystemCompanyFormOptionsResponse;
-import com.westflow.system.org.company.api.SystemCompanyListItemResponse;
-import com.westflow.system.org.company.api.SystemCompanyMutationResponse;
+import com.westflow.system.org.company.request.SaveSystemCompanyRequest;
+import com.westflow.system.org.company.response.SystemCompanyDetailResponse;
+import com.westflow.system.org.company.response.SystemCompanyFormOptionsResponse;
+import com.westflow.system.org.company.response.SystemCompanyListItemResponse;
+import com.westflow.system.org.company.response.SystemCompanyMutationResponse;
 import com.westflow.system.org.company.mapper.SystemCompanyMapper;
+import com.westflow.system.org.company.model.SystemCompanyRecord;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -104,7 +105,7 @@ public class SystemCompanyService {
     public SystemCompanyMutationResponse create(SaveSystemCompanyRequest request) {
         validateCompanyName(request.companyName(), null);
         String companyId = buildId("cmp");
-        systemCompanyMapper.insertCompany(new SystemCompanyEntity(companyId, request.companyName(), request.enabled()));
+        systemCompanyMapper.insertCompany(new SystemCompanyRecord(companyId, request.companyName(), request.enabled()));
         return new SystemCompanyMutationResponse(companyId);
     }
 
@@ -115,7 +116,7 @@ public class SystemCompanyService {
     public SystemCompanyMutationResponse update(String companyId, SaveSystemCompanyRequest request) {
         ensureExists(companyId);
         validateCompanyName(request.companyName(), companyId);
-        systemCompanyMapper.updateCompany(new SystemCompanyEntity(companyId, request.companyName(), request.enabled()));
+        systemCompanyMapper.updateCompany(new SystemCompanyRecord(companyId, request.companyName(), request.enabled()));
         return new SystemCompanyMutationResponse(companyId);
     }
 
@@ -214,12 +215,5 @@ public class SystemCompanyService {
                     Map.of("companyId", companyId)
             );
         }
-    }
-
-    public record SystemCompanyEntity(
-            String id,
-            String companyName,
-            Boolean enabled
-    ) {
     }
 }

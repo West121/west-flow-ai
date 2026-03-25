@@ -1,9 +1,9 @@
 package com.westflow.processruntime.service;
 
 import com.westflow.processdef.model.ProcessDslPayload;
-import com.westflow.processruntime.api.ProcessAutomationTraceItemResponse;
-import com.westflow.processruntime.api.ProcessInstanceEventResponse;
-import com.westflow.processruntime.api.ProcessNotificationSendRecordResponse;
+import com.westflow.processruntime.api.response.ProcessAutomationTraceItemResponse;
+import com.westflow.processruntime.api.response.ProcessInstanceEventResponse;
+import com.westflow.processruntime.api.response.ProcessNotificationSendRecordResponse;
 import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;

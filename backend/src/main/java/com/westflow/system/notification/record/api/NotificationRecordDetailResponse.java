@@ -1,4 +1,4 @@
-package com.westflow.system.notification.record.api;
+package com.westflow.system.notification.record.response;
 
 import java.time.Instant;
 import java.util.Map;

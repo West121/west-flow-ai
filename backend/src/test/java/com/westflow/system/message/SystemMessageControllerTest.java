@@ -2,8 +2,8 @@ package com.westflow.system.message;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.westflow.notification.api.NotificationChannelMutationResponse;
-import com.westflow.notification.api.SaveNotificationChannelRequest;
+import com.westflow.notification.response.NotificationChannelMutationResponse;
+import com.westflow.notification.request.SaveNotificationChannelRequest;
 import com.westflow.notification.service.NotificationChannelService;
 import com.westflow.notification.service.NotificationDispatchService;
 import com.westflow.notification.model.NotificationDispatchRequest;

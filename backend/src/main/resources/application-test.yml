@@ -30,6 +30,8 @@ spring:
       port: 6379
   flyway:
     enabled: true
+  liquibase:
+    enabled: false
 
 flowable:
   database-schema-update: true
@@ -45,16 +47,23 @@ liteflow:
   enabled: false
 
 spring.ai:
+  model:
+    chat: dashscope
   mcp:
     server:
       enabled: false
       annotation-scanner:
         enabled: false
-  openai:
+  dashscope:
     api-key: test-key
+    chat:
+      options:
+        model: qwen-plus
 
 logging:
   level:
     # 测试环境只保留 MCP 错误级日志，避免 provider/握手预探测刷屏。
     org.springaicommunity.mcp.provider: error
     io.modelcontextprotocol.client.LifecycleInitializer: error
+    org.flowable.spring.boot.env.FlowableLiquibaseEnvironmentPostProcessor: error
+    org.mybatis.spring.mapper.ClassPathMapperScanner: error

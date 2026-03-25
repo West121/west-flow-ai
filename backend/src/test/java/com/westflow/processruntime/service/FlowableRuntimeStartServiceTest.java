@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.service.ProcessDefinitionService;
-import com.westflow.processruntime.api.CompleteTaskRequest;
-import com.westflow.processruntime.api.StartProcessRequest;
-import com.westflow.processruntime.api.StartProcessResponse;
-import com.westflow.processruntime.api.ProcessInstanceLinkResponse;
-import com.westflow.processruntime.api.RuntimeAppendLinkResponse;
+import com.westflow.processruntime.api.request.CompleteTaskRequest;
+import com.westflow.processruntime.api.request.StartProcessRequest;
+import com.westflow.processruntime.api.response.StartProcessResponse;
+import com.westflow.processruntime.api.response.ProcessInstanceLinkResponse;
+import com.westflow.processruntime.api.response.RuntimeAppendLinkResponse;
 import java.util.List;
 import java.util.Map;
 import org.flowable.engine.HistoryService;
@@ -371,7 +371,7 @@ class FlowableRuntimeStartServiceTest {
         assertThat(activeTasks).hasSize(2);
         assertThat(activeTasks.stream().map(Task::getAssignee)).containsExactlyInAnyOrder("usr_002", "usr_003");
         assertThat(response.activeTasks()).hasSize(2);
-        assertThat(response.activeTasks().stream().map(com.westflow.processruntime.api.ProcessTaskSnapshot::assigneeUserId))
+        assertThat(response.activeTasks().stream().map(com.westflow.processruntime.api.response.ProcessTaskSnapshot::assigneeUserId))
                 .containsExactlyInAnyOrder("usr_002", "usr_003");
     }
 

@@ -2,8 +2,8 @@ package com.westflow.system.handover.api;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
-import com.westflow.processruntime.api.HandoverExecutionResponse;
-import com.westflow.processruntime.api.HandoverPreviewResponse;
+import com.westflow.processruntime.api.response.HandoverExecutionResponse;
+import com.westflow.processruntime.api.response.HandoverPreviewResponse;
 import com.westflow.system.handover.service.SystemHandoverService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

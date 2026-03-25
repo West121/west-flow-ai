@@ -1,4 +1,4 @@
-package com.westflow.system.notification.api;
+package com.westflow.system.notification.response;
 
 import java.time.Instant;
 

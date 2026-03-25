@@ -2,10 +2,10 @@ package com.westflow.identity.api;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
-import com.westflow.identity.dto.CurrentUserResponse;
-import com.westflow.identity.dto.LoginRequest;
-import com.westflow.identity.dto.LoginResponse;
-import com.westflow.identity.dto.SwitchContextRequest;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.identity.request.LoginRequest;
+import com.westflow.identity.response.LoginResponse;
+import com.westflow.identity.request.SwitchContextRequest;
 import com.westflow.identity.service.IdentityAuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

@@ -1,4 +1,4 @@
-package com.westflow.identity.dto;
+package com.westflow.identity.request;
 
 import jakarta.validation.constraints.NotBlank;
 

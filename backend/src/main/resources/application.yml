@@ -17,10 +17,10 @@ spring:
     default-property-inclusion: non_null
     time-zone: Asia/Shanghai
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/west_flow_ai}
+    url: ${DB_URL:jdbc:p6spy:postgresql://localhost:5432/west_flow_ai}
     username: ${DB_USERNAME:westflow}
     password: ${DB_PASSWORD:westflow}
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: com.p6spy.engine.spy.P6SpyDriver
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -68,12 +68,16 @@ liteflow:
   enabled: false
 
 spring.ai:
+  model:
+    chat: dashscope
   mcp:
     server:
       enabled: false
-  openai:
-    base-url: ${OPENAI_BASE_URL:https://api.openai.com}
-    api-key: ${OPENAI_API_KEY:dummy-key}
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:dummy-key}
+    chat:
+      options:
+        model: ${DASHSCOPE_CHAT_MODEL:qwen-plus}
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
@@ -82,6 +86,9 @@ minio:
   bucket: ${MINIO_BUCKET:west-flow-ai}
 
 westflow:
+  logging:
+    slow-sql-threshold-ms: 500
+    ip-region-resource: classpath:ip2region/ip2region_v4.xdb
   ai:
     mcp-demo:
       enabled: false

@@ -18,11 +18,12 @@ import com.westflow.oa.model.OALeaveBillRecord;
 import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processbinding.model.BusinessProcessLinkRecord;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
-import com.westflow.processruntime.api.StartProcessRequest;
-import com.westflow.processruntime.api.StartProcessResponse;
+import com.westflow.processruntime.api.request.StartProcessRequest;
+import com.westflow.processruntime.api.response.StartProcessResponse;
 import com.westflow.processruntime.service.FlowableRuntimeStartService;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -56,12 +57,13 @@ public class OALaunchService {
         String billNo = buildBillNo("LEAVE");
         String sceneCode = normalizeSceneCode(request.sceneCode());
         String userId = currentUserId();
+        String reason = request.reason().trim();
         oaLeaveBillMapper.insert(new OALeaveBillRecord(
                 billId,
                 billNo,
                 sceneCode,
                 request.days(),
-                request.reason().trim(),
+                reason,
                 null,
                 "DRAFT",
                 userId
@@ -70,7 +72,7 @@ public class OALaunchService {
                 "OA_LEAVE",
                 sceneCode,
                 billId,
-                Map.of("days", request.days(), "reason", request.reason().trim())
+                buildLeaveFormData(request.days(), reason)
         );
         oaLeaveBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
         insertLink("OA_LEAVE", billId, startResponse, userId);
@@ -207,6 +209,16 @@ public class OALaunchService {
                 startResponse.activeTasks().isEmpty() ? null : startResponse.activeTasks().get(0),
                 startResponse.activeTasks()
         );
+    }
+
+    private Map<String, Object> buildLeaveFormData(Integer days, String reason) {
+        Map<String, Object> formData = new LinkedHashMap<>();
+        formData.put("days", days);
+        formData.put("leaveDays", days);
+        formData.put("reason", reason);
+        formData.put("urgent", false);
+        formData.put("managerUserId", null);
+        return formData;
     }
 
     private String normalizeSceneCode(String sceneCode) {

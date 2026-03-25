@@ -1,9 +1,9 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/west_flow_ai}
+    url: ${DB_URL:jdbc:p6spy:postgresql://localhost:5432/west_flow_ai}
     username: ${DB_USERNAME:westflow}
     password: ${DB_PASSWORD:westflow}
-    driver-class-name: org.postgresql.Driver
+    driver-class-name: com.p6spy.engine.spy.P6SpyDriver
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -27,6 +27,15 @@ flowable:
   eventregistry:
     enabled: false
 
+spring.ai:
+  model:
+    chat: dashscope
+  dashscope:
+    api-key: ${DASHSCOPE_API_KEY:sk-aa16b77c731c4eac96f01847f3f2c42b}
+    chat:
+      options:
+        model: ${DASHSCOPE_CHAT_MODEL:qwen3.5-plus}
+
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
@@ -34,6 +43,9 @@ minio:
   bucket: ${MINIO_BUCKET:west-flow-ai}
 
 westflow:
+  logging:
+    slow-sql-threshold-ms: 500
+    ip-region-resource: classpath:ip2region/ip2region_v4.xdb
   ai:
     mcp-demo:
       enabled: true

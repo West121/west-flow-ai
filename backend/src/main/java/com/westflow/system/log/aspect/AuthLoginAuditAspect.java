@@ -1,7 +1,7 @@
 package com.westflow.system.log.aspect;
 
 import com.westflow.common.api.RequestContext;
-import com.westflow.identity.dto.LoginRequest;
+import com.westflow.identity.request.LoginRequest;
 import com.westflow.system.log.mapper.LoginLogMapper;
 import com.westflow.system.log.model.LoginLogRecord;
 import com.westflow.system.log.service.SystemLogService;
@@ -121,7 +121,7 @@ public class AuthLoginAuditAspect {
                 statusCode,
                 userId,
                 normalize(resultMessage),
-                request == null ? "" : request.getRemoteAddr(),
+                RequestContext.clientIp(request),
                 request == null ? "" : request.getHeader("User-Agent"),
                 path,
                 Instant.now().truncatedTo(ChronoUnit.MILLIS),

@@ -1,4 +1,4 @@
-package com.westflow.notification.api;
+package com.westflow.notification.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

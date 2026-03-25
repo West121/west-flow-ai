@@ -1,8 +1,8 @@
 package com.westflow.processruntime.service;
 
 import com.westflow.flowable.FlowableEngineFacade;
-import com.westflow.processruntime.api.CountersignTaskGroupMemberResponse;
-import com.westflow.processruntime.api.CountersignTaskGroupResponse;
+import com.westflow.processruntime.api.response.CountersignTaskGroupMemberResponse;
+import com.westflow.processruntime.api.response.CountersignTaskGroupResponse;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;

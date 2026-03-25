@@ -1,8 +1,9 @@
 package com.westflow.system.user.mapper;
 
-import com.westflow.system.user.api.SystemUserFormOptionsResponse;
-import com.westflow.system.user.api.SystemUserListItemResponse;
-import com.westflow.system.user.service.SystemUserService.SystemUserEntity;
+import com.westflow.system.user.response.SystemAssociatedUserResponse;
+import com.westflow.system.user.response.SystemUserFormOptionsResponse;
+import com.westflow.system.user.response.SystemUserListItemResponse;
+import com.westflow.system.user.model.SystemUserRecord;
 import com.westflow.system.user.service.SystemUserService.SystemUserPostBinding;
 import java.util.List;
 import org.apache.ibatis.annotations.Delete;
@@ -275,6 +276,152 @@ public interface SystemUserMapper {
 
     @Select({
             "<script>",
+            "SELECT DISTINCT",
+            "  u.id AS user_id,",
+            "  u.display_name,",
+            "  u.username,",
+            "  d.department_name,",
+            "  p.post_name,",
+            "  CASE WHEN u.enabled THEN 'ENABLED' ELSE 'DISABLED' END AS status",
+            "FROM wf_user u",
+            "LEFT JOIN wf_department d ON d.id = u.active_department_id",
+            "LEFT JOIN wf_post p ON p.id = u.active_post_id",
+            "<where>",
+            "  u.active_department_id = #{departmentId}",
+            "  <if test='!allAccess'>",
+            "    <trim prefix='AND (' suffix=')' prefixOverrides='OR'>",
+            "      <if test='allowedUserIds != null and allowedUserIds.size() > 0'>",
+            "        OR u.id IN",
+            "        <foreach collection='allowedUserIds' item='userId' open='(' separator=',' close=')'>",
+            "          #{userId}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedDepartmentIds != null and allowedDepartmentIds.size() > 0'>",
+            "        OR u.active_department_id IN",
+            "        <foreach collection='allowedDepartmentIds' item='departmentIdItem' open='(' separator=',' close=')'>",
+            "          #{departmentIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedCompanyIds != null and allowedCompanyIds.size() > 0'>",
+            "        OR u.company_id IN",
+            "        <foreach collection='allowedCompanyIds' item='companyIdItem' open='(' separator=',' close=')'>",
+            "          #{companyIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "    </trim>",
+            "  </if>",
+            "</where>",
+            "ORDER BY u.display_name ASC, u.id ASC",
+            "</script>"
+    })
+    List<SystemAssociatedUserResponse> selectAssociatedUsersByDepartmentId(
+            @Param("departmentId") String departmentId,
+            @Param("allAccess") boolean allAccess,
+            @Param("allowedUserIds") List<String> allowedUserIds,
+            @Param("allowedDepartmentIds") List<String> allowedDepartmentIds,
+            @Param("allowedCompanyIds") List<String> allowedCompanyIds
+    );
+
+    @Select({
+            "<script>",
+            "SELECT DISTINCT",
+            "  u.id AS user_id,",
+            "  u.display_name,",
+            "  u.username,",
+            "  d.department_name,",
+            "  p.post_name,",
+            "  CASE WHEN u.enabled THEN 'ENABLED' ELSE 'DISABLED' END AS status",
+            "FROM wf_user_post up",
+            "INNER JOIN wf_user u ON u.id = up.user_id",
+            "LEFT JOIN wf_department d ON d.id = u.active_department_id",
+            "LEFT JOIN wf_post p ON p.id = u.active_post_id",
+            "<where>",
+            "  up.post_id = #{postId}",
+            "  <if test='!allAccess'>",
+            "    <trim prefix='AND (' suffix=')' prefixOverrides='OR'>",
+            "      <if test='allowedUserIds != null and allowedUserIds.size() > 0'>",
+            "        OR u.id IN",
+            "        <foreach collection='allowedUserIds' item='userId' open='(' separator=',' close=')'>",
+            "          #{userId}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedDepartmentIds != null and allowedDepartmentIds.size() > 0'>",
+            "        OR u.active_department_id IN",
+            "        <foreach collection='allowedDepartmentIds' item='departmentIdItem' open='(' separator=',' close=')'>",
+            "          #{departmentIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedCompanyIds != null and allowedCompanyIds.size() > 0'>",
+            "        OR u.company_id IN",
+            "        <foreach collection='allowedCompanyIds' item='companyIdItem' open='(' separator=',' close=')'>",
+            "          #{companyIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "    </trim>",
+            "  </if>",
+            "</where>",
+            "ORDER BY u.display_name ASC, u.id ASC",
+            "</script>"
+    })
+    List<SystemAssociatedUserResponse> selectAssociatedUsersByPostId(
+            @Param("postId") String postId,
+            @Param("allAccess") boolean allAccess,
+            @Param("allowedUserIds") List<String> allowedUserIds,
+            @Param("allowedDepartmentIds") List<String> allowedDepartmentIds,
+            @Param("allowedCompanyIds") List<String> allowedCompanyIds
+    );
+
+    @Select({
+            "<script>",
+            "SELECT DISTINCT",
+            "  u.id AS user_id,",
+            "  u.display_name,",
+            "  u.username,",
+            "  d.department_name,",
+            "  p.post_name,",
+            "  CASE WHEN u.enabled THEN 'ENABLED' ELSE 'DISABLED' END AS status",
+            "FROM wf_user_role ur",
+            "INNER JOIN wf_user u ON u.id = ur.user_id",
+            "LEFT JOIN wf_department d ON d.id = u.active_department_id",
+            "LEFT JOIN wf_post p ON p.id = u.active_post_id",
+            "<where>",
+            "  ur.role_id = #{roleId}",
+            "  <if test='!allAccess'>",
+            "    <trim prefix='AND (' suffix=')' prefixOverrides='OR'>",
+            "      <if test='allowedUserIds != null and allowedUserIds.size() > 0'>",
+            "        OR u.id IN",
+            "        <foreach collection='allowedUserIds' item='userId' open='(' separator=',' close=')'>",
+            "          #{userId}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedDepartmentIds != null and allowedDepartmentIds.size() > 0'>",
+            "        OR u.active_department_id IN",
+            "        <foreach collection='allowedDepartmentIds' item='departmentIdItem' open='(' separator=',' close=')'>",
+            "          #{departmentIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "      <if test='allowedCompanyIds != null and allowedCompanyIds.size() > 0'>",
+            "        OR u.company_id IN",
+            "        <foreach collection='allowedCompanyIds' item='companyIdItem' open='(' separator=',' close=')'>",
+            "          #{companyIdItem}",
+            "        </foreach>",
+            "      </if>",
+            "    </trim>",
+            "  </if>",
+            "</where>",
+            "ORDER BY u.display_name ASC, u.id ASC",
+            "</script>"
+    })
+    List<SystemAssociatedUserResponse> selectAssociatedUsersByRoleId(
+            @Param("roleId") String roleId,
+            @Param("allAccess") boolean allAccess,
+            @Param("allowedUserIds") List<String> allowedUserIds,
+            @Param("allowedDepartmentIds") List<String> allowedDepartmentIds,
+            @Param("allowedCompanyIds") List<String> allowedCompanyIds
+    );
+
+    @Select({
+            "<script>",
             "SELECT COUNT(1)",
             "FROM wf_user",
             "WHERE username = #{username}",
@@ -327,7 +474,7 @@ public interface SystemUserMapper {
               CURRENT_TIMESTAMP
             )
             """)
-    int insertUser(SystemUserEntity entity);
+    int insertUser(SystemUserRecord entity);
 
     @Update("""
             UPDATE wf_user
@@ -342,7 +489,7 @@ public interface SystemUserMapper {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
-    int updateUser(SystemUserEntity entity);
+    int updateUser(SystemUserRecord entity);
 
     @Delete("DELETE FROM wf_user_post WHERE user_id = #{userId}")
     int deleteUserPosts(@Param("userId") String userId);

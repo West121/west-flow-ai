@@ -1,8 +1,8 @@
 package com.westflow.system.handover.service;
 
-import com.westflow.processruntime.api.HandoverExecutionResponse;
-import com.westflow.processruntime.api.HandoverPreviewResponse;
-import com.westflow.processruntime.api.HandoverTaskRequest;
+import com.westflow.processruntime.api.response.HandoverExecutionResponse;
+import com.westflow.processruntime.api.response.HandoverPreviewResponse;
+import com.westflow.processruntime.api.request.HandoverTaskRequest;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.system.handover.api.SystemHandoverRequest;
 import lombok.RequiredArgsConstructor;

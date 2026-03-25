@@ -1,6 +1,6 @@
 package com.westflow.identity.service;
 
-import com.westflow.identity.dto.CurrentUserResponse;
+import com.westflow.identity.response.CurrentUserResponse;
 import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
 import java.util.ArrayDeque;
 import java.util.LinkedHashSet;

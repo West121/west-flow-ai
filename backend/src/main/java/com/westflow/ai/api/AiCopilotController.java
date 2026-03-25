@@ -1,5 +1,6 @@
 package com.westflow.ai.api;
 
+import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.ai.model.AiConfirmToolCallRequest;
 import com.westflow.ai.model.AiConversationCreateRequest;
 import com.westflow.ai.model.AiMessageAppendRequest;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/v1/ai/copilot")
+@SaCheckLogin
 public class AiCopilotController {
 
     private final AiCopilotService aiCopilotService;

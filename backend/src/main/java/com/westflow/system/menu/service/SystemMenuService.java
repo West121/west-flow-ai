@@ -5,16 +5,17 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
-import com.westflow.system.menu.api.SaveSystemMenuRequest;
-import com.westflow.system.menu.api.SidebarMenuFlatNode;
-import com.westflow.system.menu.api.SidebarMenuNodeResponse;
-import com.westflow.system.menu.api.SystemMenuDetailResponse;
-import com.westflow.system.menu.api.SystemMenuFormOptionsResponse;
-import com.westflow.system.menu.api.SystemMenuListItemResponse;
-import com.westflow.system.menu.api.SystemMenuMutationResponse;
-import com.westflow.system.menu.api.SystemMenuTreeFlatNode;
-import com.westflow.system.menu.api.SystemMenuTreeNodeResponse;
+import com.westflow.system.menu.request.SaveSystemMenuRequest;
+import com.westflow.system.menu.response.SidebarMenuFlatNode;
+import com.westflow.system.menu.response.SidebarMenuNodeResponse;
+import com.westflow.system.menu.response.SystemMenuDetailResponse;
+import com.westflow.system.menu.response.SystemMenuFormOptionsResponse;
+import com.westflow.system.menu.response.SystemMenuListItemResponse;
+import com.westflow.system.menu.response.SystemMenuMutationResponse;
+import com.westflow.system.menu.response.SystemMenuTreeFlatNode;
+import com.westflow.system.menu.response.SystemMenuTreeNodeResponse;
 import com.westflow.system.menu.mapper.SystemMenuMapper;
+import com.westflow.system.menu.model.SystemMenuRecord;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -184,7 +185,7 @@ public class SystemMenuService {
         String menuType = resolveMenuType(request.menuType());
         validateMenuName(request.menuName(), parentMenuId, null);
         validateParentMenu(parentMenuId, null);
-        SystemMenuEntity entity = new SystemMenuEntity(
+        SystemMenuRecord entity = new SystemMenuRecord(
                 buildId("menu"),
                 parentMenuId,
                 request.menuName().trim(),
@@ -211,7 +212,7 @@ public class SystemMenuService {
         String menuType = resolveMenuType(request.menuType());
         validateMenuName(request.menuName(), parentMenuId, menuId);
         validateParentMenu(parentMenuId, menuId);
-        systemMenuMapper.updateMenu(new SystemMenuEntity(
+        systemMenuMapper.updateMenu(new SystemMenuRecord(
                 menuId,
                 parentMenuId,
                 request.menuName().trim(),
@@ -402,21 +403,6 @@ public class SystemMenuService {
 
     private String buildId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-    }
-
-    public record SystemMenuEntity(
-            String id,
-            String parentMenuId,
-            String menuName,
-            String menuType,
-            String routePath,
-            String componentPath,
-            String permissionCode,
-            String iconName,
-            Integer sortOrder,
-            Boolean visible,
-            Boolean enabled
-    ) {
     }
 
     private static final class MutableTreeNode {

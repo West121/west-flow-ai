@@ -1,9 +1,9 @@
 package com.westflow.system.org.company.mapper;
 
-import com.westflow.system.org.company.api.SystemCompanyDetailResponse;
-import com.westflow.system.org.company.api.SystemCompanyFormOptionsResponse;
-import com.westflow.system.org.company.api.SystemCompanyListItemResponse;
-import com.westflow.system.org.company.service.SystemCompanyService.SystemCompanyEntity;
+import com.westflow.system.org.company.response.SystemCompanyDetailResponse;
+import com.westflow.system.org.company.response.SystemCompanyFormOptionsResponse;
+import com.westflow.system.org.company.response.SystemCompanyListItemResponse;
+import com.westflow.system.org.company.model.SystemCompanyRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -142,7 +142,7 @@ public interface SystemCompanyMapper {
               CURRENT_TIMESTAMP
             )
             """)
-    int insertCompany(SystemCompanyEntity entity);
+    int insertCompany(SystemCompanyRecord entity);
 
     @Update("""
             UPDATE wf_company
@@ -151,5 +151,5 @@ public interface SystemCompanyMapper {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
-    int updateCompany(SystemCompanyEntity entity);
+    int updateCompany(SystemCompanyRecord entity);
 }

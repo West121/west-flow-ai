@@ -1,9 +1,9 @@
 package com.westflow.system.org.post.mapper;
 
-import com.westflow.system.org.post.api.SystemPostDetailResponse;
-import com.westflow.system.org.post.api.SystemPostFormOptionsResponse;
-import com.westflow.system.org.post.api.SystemPostListItemResponse;
-import com.westflow.system.org.post.service.SystemPostService.SystemPostEntity;
+import com.westflow.system.org.post.response.SystemPostDetailResponse;
+import com.westflow.system.org.post.response.SystemPostFormOptionsResponse;
+import com.westflow.system.org.post.response.SystemPostListItemResponse;
+import com.westflow.system.org.post.model.SystemPostRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -245,7 +245,7 @@ public interface SystemPostMapper {
             FROM wf_post p
             WHERE p.id = #{postId}
             """)
-    SystemPostEntity selectPostEntity(@Param("postId") String postId);
+    SystemPostRecord selectPostEntity(@Param("postId") String postId);
 
     @Insert("""
             INSERT INTO wf_post (
@@ -264,7 +264,7 @@ public interface SystemPostMapper {
               CURRENT_TIMESTAMP
             )
             """)
-    int insertPost(SystemPostEntity entity);
+    int insertPost(SystemPostRecord entity);
 
     @Update("""
             UPDATE wf_post
@@ -274,5 +274,5 @@ public interface SystemPostMapper {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
-    int updatePost(SystemPostEntity entity);
+    int updatePost(SystemPostRecord entity);
 }

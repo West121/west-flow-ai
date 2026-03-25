@@ -1,11 +1,11 @@
 package com.westflow.system.menu.mapper;
 
-import com.westflow.system.menu.api.SystemMenuDetailResponse;
-import com.westflow.system.menu.api.SystemMenuFormOptionsResponse;
-import com.westflow.system.menu.api.SystemMenuListItemResponse;
-import com.westflow.system.menu.api.SystemMenuTreeFlatNode;
-import com.westflow.system.menu.api.SidebarMenuFlatNode;
-import com.westflow.system.menu.service.SystemMenuService.SystemMenuEntity;
+import com.westflow.system.menu.response.SidebarMenuFlatNode;
+import com.westflow.system.menu.response.SystemMenuDetailResponse;
+import com.westflow.system.menu.response.SystemMenuFormOptionsResponse;
+import com.westflow.system.menu.response.SystemMenuListItemResponse;
+import com.westflow.system.menu.response.SystemMenuTreeFlatNode;
+import com.westflow.system.menu.model.SystemMenuRecord;
 import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -259,7 +259,7 @@ public interface SystemMenuMapper {
               CURRENT_TIMESTAMP
             )
             """)
-    int insertMenu(SystemMenuEntity entity);
+    int insertMenu(SystemMenuRecord entity);
 
     @Update("""
             UPDATE wf_menu
@@ -276,5 +276,5 @@ public interface SystemMenuMapper {
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = #{id}
             """)
-    int updateMenu(SystemMenuEntity entity);
+    int updateMenu(SystemMenuRecord entity);
 }
