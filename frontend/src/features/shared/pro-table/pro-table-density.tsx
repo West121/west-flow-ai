@@ -11,17 +11,6 @@ import { Button } from '@/components/ui/button'
 
 export type ProTableDensityMode = 'compact' | 'default' | 'comfortable'
 
-export function resolveDensityClassName(mode: ProTableDensityMode) {
-  switch (mode) {
-    case 'compact':
-      return 'text-sm [&_[data-slot=table-row]]:h-10 [&_[data-slot=table-cell]]:py-2'
-    case 'comfortable':
-      return '[&_[data-slot=table-row]]:h-14 [&_[data-slot=table-cell]]:py-4'
-    default:
-      return '[&_[data-slot=table-row]]:h-12 [&_[data-slot=table-cell]]:py-3'
-  }
-}
-
 export function ProTableDensity({
   value,
   onValueChange,

@@ -1,8 +1,8 @@
 export { ProTable } from './pro-table'
 export { ProTableBoard, type ProTableBoardColumn } from './pro-table-board'
+export { resolveDensityClassName } from './pro-table-density-utils'
 export {
   ProTableDensity,
-  resolveDensityClassName,
   type ProTableDensityMode,
 } from './pro-table-density'
 export { ProTableExport, type ProTableExportScope } from './pro-table-export'

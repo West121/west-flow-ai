@@ -21,7 +21,8 @@ import { PageShell } from '@/features/shared/page-shell'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import { DataTablePagination } from '@/components/data-table'
 import { ProTableBoard, type ProTableBoardColumn } from './pro-table-board'
-import { resolveDensityClassName, type ProTableDensityMode } from './pro-table-density'
+import { type ProTableDensityMode } from './pro-table-density'
+import { resolveDensityClassName } from './pro-table-density-utils'
 import { ProTableToolbar } from './pro-table-toolbar'
 import { type ProTableExportScope } from './pro-table-export'
 
@@ -99,6 +100,8 @@ export function ProTable<TData>({
   resolveBoardColumns?: (rows: TData[]) => ProTableBoardColumn<TData>[]
   getSubRows?: (row: TData) => TData[] | undefined
 }) {
+  'use no memo'
+
   const [rowSelection, setRowSelection] = useState({})
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [sorting, setSorting] = useState<SortingState>(() => toSortingState(search))
@@ -157,6 +160,8 @@ export function ProTable<TData>({
     })
   }
 
+  // TanStack Table 当前会触发 React Compiler 的兼容性告警，这里显式保留非 memo 边界。
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,

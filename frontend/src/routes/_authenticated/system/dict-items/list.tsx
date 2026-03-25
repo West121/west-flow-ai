@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { DictItemsListPage } from '@/features/system/dict-pages'
-import { listQuerySearchSchema } from '@/features/shared/table/query-contract'
+import {
+  DictManagementPage,
+  dictManagementSearchSchema,
+} from '@/features/system/dict-management-page'
 
-// 字典项列表路由仅负责校验查询参数并挂载列表页。
+// 字典项列表路由也复用统一的字典管理页面。
 export const Route = createFileRoute('/_authenticated/system/dict-items/list')({
-  validateSearch: listQuerySearchSchema,
+  validateSearch: dictManagementSearchSchema,
   component: DictItemsListRoute,
 })
 
@@ -12,5 +14,5 @@ function DictItemsListRoute() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
 
-  return <DictItemsListPage search={search} navigate={navigate} />
+  return <DictManagementPage search={search} navigate={navigate} />
 }

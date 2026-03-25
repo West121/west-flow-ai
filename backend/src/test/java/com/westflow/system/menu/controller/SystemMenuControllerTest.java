@@ -77,7 +77,7 @@ class SystemMenuControllerTest {
                         .content("""
                                 {
                                   "parentMenuId": "menu_system",
-                                  "menuName": "字典管理",
+                                  "menuName": "字典中心",
                                   "menuType": "MENU",
                                   "routePath": "/system/dicts/list",
                                   "componentPath": "system/dicts/list",
@@ -101,7 +101,7 @@ class SystemMenuControllerTest {
                         .content("""
                                 {
                                   "parentMenuId": "menu_system",
-                                  "menuName": "字典管理",
+                                  "menuName": "字典中心",
                                   "menuType": "MENU",
                                   "routePath": "/system/dicts/list",
                                   "componentPath": "system/dicts/list",
