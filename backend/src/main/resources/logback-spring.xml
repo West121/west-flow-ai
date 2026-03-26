@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration scan="false">
-    <property name="LOG_PATH" value="${LOG_PATH:-${java.io.tmpdir}}"/>
+    <springProperty scope="context" name="LOG_PATH" source="logging.file.path" defaultValue="./logs"/>
     <property name="APP_LOG_FILE" value="${LOG_PATH}/west-flow-ai.log"/>
     <property name="SQL_LOG_FILE" value="${LOG_PATH}/west-flow-ai-sql.log"/>
     <property name="SLOW_SQL_LOG_FILE" value="${LOG_PATH}/west-flow-ai-slow-sql.log"/>

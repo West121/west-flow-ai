@@ -41,6 +41,10 @@ server:
   servlet:
     context-path: /
 
+logging:
+  file:
+    path: ${LOG_PATH:./logs}
+
 mybatis-plus:
   global-config:
     banner: false
