@@ -24,13 +24,12 @@ import {
   RefreshCw,
   Save,
   ShieldCheck,
-  Trash2,
   UserRound,
+  Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Card,
   CardContent,
@@ -60,6 +59,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { MultiSelectDropdown } from '@/components/multi-select-dropdown'
 import { getApiErrorResponse } from '@/lib/api/client'
 import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 import {
@@ -143,16 +143,35 @@ function resolveRoleCategoryLabel(roleCategory: 'SYSTEM' | 'BUSINESS') {
   return roleCategory === 'SYSTEM' ? '系统角色' : '业务角色'
 }
 
+function resolvePrimaryAssignmentValues(detail?: SystemUserDetail) {
+  const primaryAssignment = detail?.primaryAssignment
+  return {
+    companyId: detail?.companyId || primaryAssignment?.companyId || '',
+    companyName: detail?.companyName || primaryAssignment?.companyName || '',
+    departmentId: detail?.departmentId || primaryAssignment?.departmentId || '',
+    departmentName:
+      detail?.departmentName || primaryAssignment?.departmentName || '',
+    postId: detail?.postId || primaryAssignment?.postId || '',
+    postName: detail?.postName || primaryAssignment?.postName || '',
+    roleIds:
+      detail?.roleIds?.length > 0
+        ? detail.roleIds
+        : primaryAssignment?.roleIds ?? [],
+  }
+}
+
 // 编辑场景下把详情数据转换成表单默认值。
-function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
+// eslint-disable-next-line react-refresh/only-export-components
+export function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
+  const primaryAssignment = resolvePrimaryAssignmentValues(detail)
   return {
     displayName: detail?.displayName ?? '',
     username: detail?.username ?? '',
     mobile: detail?.mobile ?? '',
     email: detail?.email ?? '',
-    companyId: detail?.companyId ?? '',
-    primaryPostId: detail?.postId ?? '',
-    roleIds: detail?.roleIds ?? [],
+    companyId: primaryAssignment.companyId,
+    primaryPostId: primaryAssignment.postId,
+    roleIds: primaryAssignment.roleIds,
     enabled: detail?.enabled ?? true,
     partTimeAssignments:
       detail?.partTimeAssignments.map((assignment) => ({
@@ -453,10 +472,6 @@ function SystemUserFormPage({
   const enabled = useWatch({
     control: form.control,
     name: 'enabled',
-  })
-  const partTimeAssignments = useWatch({
-    control: form.control,
-    name: 'partTimeAssignments',
   })
   const displayName = useWatch({
     control: form.control,
@@ -761,54 +776,32 @@ function SystemUserFormPage({
                 <FormField
                   control={form.control}
                   name='roleIds'
-                  render={() => (
+                  render={({ field }) => (
                     <FormItem className='md:col-span-2'>
                       <FormLabel>角色分配</FormLabel>
                       <FormDescription>
-                        用户可同时分配多个角色，后端会据此聚合菜单权限和数据权限。
+                        用户可同时分配多个角色，使用下拉多选统一维护主职角色。
                       </FormDescription>
-                      <div className='grid gap-3 md:grid-cols-2'>
-                        {optionsQuery.data?.roles.map((role) => {
-                          const checked = selectedRoleIdList.includes(role.id)
-                          return (
-                            <label
-                              key={role.id}
-                              className='flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-muted/50'
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(value) => {
-                                  form.setValue(
-                                    'roleIds',
-                                    value
-                                      ? [...selectedRoleIdList, role.id]
-                                      : selectedRoleIdList.filter((id) => id !== role.id),
-                                    { shouldValidate: true }
-                                  )
-                                }}
-                              />
-                              <div className='grid gap-1'>
-                                <div className='flex flex-wrap items-center gap-2'>
-                                  <span className='text-sm font-medium'>
-                                    {role.name}
-                                  </span>
-                                  <Badge variant='secondary'>
-                                    {resolveRoleCategoryLabel(role.roleCategory)}
-                                  </Badge>
-                                </div>
-                                <p className='text-xs text-muted-foreground'>
-                                  {role.roleCode}
-                                </p>
-                              </div>
-                            </label>
-                          )
-                        })}
-                      </div>
-                      {optionsQuery.data?.roles.length ? null : (
-                        <p className='text-sm text-muted-foreground'>
-                          当前没有可分配的角色。
-                        </p>
-                      )}
+                      <FormControl>
+                        <MultiSelectDropdown
+                          value={field.value ?? []}
+                          onChange={(nextValue) => {
+                            field.onChange(nextValue)
+                          }}
+                          options={
+                            optionsQuery.data?.roles.map((role) => ({
+                              value: role.id,
+                              label: role.name,
+                              description: `${role.roleCode} · ${resolveRoleCategoryLabel(role.roleCategory)}`,
+                            })) ?? []
+                          }
+                          placeholder='请选择角色'
+                          searchPlaceholder='搜索角色'
+                          emptyText='当前没有可分配的角色'
+                          disabled={isSubmitting}
+                          className='w-full'
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -872,7 +865,6 @@ function SystemUserFormPage({
                   ) : (
                     <div className='space-y-4'>
                       {partTimeFieldArray.fields.map((field, index) => {
-                        const assignmentRoleIds = partTimeAssignments?.[index]?.roleIds ?? []
                         return (
                           <div key={field.id} className='space-y-4 rounded-lg border p-4'>
                             <div className='flex items-center justify-between gap-3'>
@@ -945,42 +937,29 @@ function SystemUserFormPage({
                               <FormField
                                 control={form.control}
                                 name={`partTimeAssignments.${index}.roleIds`}
-                                render={() => (
+                                render={({ field }) => (
                                   <FormItem className='md:col-span-2'>
                                     <FormLabel>角色分配</FormLabel>
-                                    <div className='grid gap-3 md:grid-cols-2'>
-                                      {optionsQuery.data?.roles.map((role) => {
-                                        const checked = assignmentRoleIds.includes(role.id)
-                                        return (
-                                          <label
-                                            key={role.id}
-                                            className='flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50'
-                                          >
-                                            <Checkbox
-                                              checked={checked}
-                                              onCheckedChange={(value) => {
-                                                form.setValue(
-                                                  `partTimeAssignments.${index}.roleIds`,
-                                                  value
-                                                    ? [...assignmentRoleIds, role.id]
-                                                    : assignmentRoleIds.filter((id) => id !== role.id),
-                                                  { shouldValidate: true }
-                                                )
-                                              }}
-                                            />
-                                            <div className='grid gap-1'>
-                                              <div className='flex flex-wrap items-center gap-2'>
-                                                <span className='text-sm font-medium'>{role.name}</span>
-                                                <Badge variant='secondary'>
-                                                  {resolveRoleCategoryLabel(role.roleCategory)}
-                                                </Badge>
-                                              </div>
-                                              <p className='text-xs text-muted-foreground'>{role.roleCode}</p>
-                                            </div>
-                                          </label>
-                                        )
-                                      })}
-                                    </div>
+                                    <FormControl>
+                                      <MultiSelectDropdown
+                                        value={field.value ?? []}
+                                        onChange={(nextValue) => {
+                                          field.onChange(nextValue)
+                                        }}
+                                        options={
+                                          optionsQuery.data?.roles.map((role) => ({
+                                            value: role.id,
+                                            label: role.name,
+                                            description: `${role.roleCode} · ${resolveRoleCategoryLabel(role.roleCategory)}`,
+                                          })) ?? []
+                                        }
+                                        placeholder='请选择角色'
+                                        searchPlaceholder='搜索角色'
+                                        emptyText='当前没有可分配的角色'
+                                        disabled={isSubmitting}
+                                        className='w-full'
+                                      />
+                                    </FormControl>
                                     <FormMessage />
                                   </FormItem>
                                 )}
@@ -1215,9 +1194,12 @@ export function UserDetailPage({ userId }: { userId: string }) {
   }
 
   const detail = query.data
+  const primarySnapshot = resolvePrimaryAssignmentValues(detail)
   const roleNameById = new Map(
     (optionsQuery.data?.roles ?? []).map((role) => [role.id, role.name] as const)
   )
+  const effectiveRoleIds =
+    detail.roleIds.length > 0 ? detail.roleIds : primarySnapshot.roleIds
 
   return (
     <PageShell
@@ -1244,11 +1226,17 @@ export function UserDetailPage({ userId }: { userId: string }) {
         <Badge variant='secondary'>
           {detail.enabled ? '启用中' : '已停用'}
         </Badge>
-        <Badge variant='secondary'>{detail.companyName}</Badge>
-        <Badge variant='secondary'>{detail.departmentName}</Badge>
-        <Badge variant='secondary'>{detail.postName}</Badge>
-        {detail.roleIds.length > 0 ? (
-          detail.roleIds.map((roleId) => (
+        <Badge variant='secondary'>
+          {detail.companyName || primarySnapshot.companyName}
+        </Badge>
+        <Badge variant='secondary'>
+          {detail.departmentName || primarySnapshot.departmentName}
+        </Badge>
+        <Badge variant='secondary'>
+          {detail.postName || primarySnapshot.postName}
+        </Badge>
+        {effectiveRoleIds.length > 0 ? (
+          effectiveRoleIds.map((roleId) => (
             <Badge key={roleId} variant='outline'>
               {roleNameById.get(roleId) ?? roleId}
             </Badge>
@@ -1300,17 +1288,17 @@ export function UserDetailPage({ userId }: { userId: string }) {
               <UserDetailMetric
                 icon={Building2}
                 label='所属公司'
-                value={detail.companyName}
+                value={detail.companyName || primarySnapshot.companyName}
               />
               <UserDetailMetric
                 icon={Building2}
                 label='主部门'
-                value={detail.departmentName}
+                value={detail.departmentName || primarySnapshot.departmentName}
               />
               <UserDetailMetric
                 icon={BriefcaseBusiness}
                 label='主岗位'
-                value={detail.postName}
+                value={detail.postName || primarySnapshot.postName}
               />
               <UserDetailMetric
                 icon={ShieldCheck}
@@ -1331,9 +1319,11 @@ export function UserDetailPage({ userId }: { userId: string }) {
             </CardHeader>
             <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
               <p>用户 ID：{detail.userId}</p>
-              <p>公司 ID：{detail.companyId}</p>
-              <p>部门 ID：{detail.departmentId}</p>
-              <p>岗位 ID：{detail.postId}</p>
+              <p>公司 ID：{detail.companyId || primarySnapshot.companyId}</p>
+              <p>
+                部门 ID：{detail.departmentId || primarySnapshot.departmentId}
+              </p>
+              <p>岗位 ID：{detail.postId || primarySnapshot.postId}</p>
             </CardContent>
           </Card>
 
