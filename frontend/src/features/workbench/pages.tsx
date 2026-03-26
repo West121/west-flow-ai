@@ -163,10 +163,15 @@ async function loadCandidateHandlerUsers(detail: {
     return []
   }
 
-  const groups = await Promise.all(requests)
+  const settledGroups = await Promise.allSettled(requests)
   const merged = new Map<string, SystemAssociatedUser>()
 
-  for (const users of groups) {
+  for (const result of settledGroups) {
+    if (result.status !== 'fulfilled') {
+      continue
+    }
+
+    const users = result.value
     for (const user of users) {
       merged.set(user.userId, user)
     }
