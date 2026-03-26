@@ -261,12 +261,16 @@ public class FlowableProcessRuntimeService {
                 .list();
         Task activeTask = activeTasks.stream()
                 .filter(this::isBlockingTask)
+                .filter(task -> "ADD_SIGN".equals(resolveTaskKind(task)))
+                .findFirst()
+                .orElse(activeTasks.stream()
+                .filter(this::isBlockingTask)
                 .filter(task -> !"APPEND".equals(resolveTaskKind(task)))
                 .findFirst()
                 .orElse(activeTasks.stream()
                         .filter(this::isBlockingTask)
                         .findFirst()
-                        .orElse(null));
+                        .orElse(null)));
         HistoricTaskInstance latestHistoricTask = flowableEngineFacade.historyService()
                 .createHistoricTaskInstanceQuery()
                 .processInstanceId(processInstanceId)
@@ -1916,9 +1920,12 @@ public class FlowableProcessRuntimeService {
         Task referenceActiveTask = activeTask != null
                 ? activeTask
                 : blockingActiveTasks.stream()
-                        .filter(task -> !"APPEND".equals(resolveTaskKind(task)))
+                        .filter(task -> "ADD_SIGN".equals(resolveTaskKind(task)))
                         .findFirst()
-                        .orElse(blockingActiveTasks.stream().findFirst().orElse(activeTasks.stream().findFirst().orElse(null)));
+                        .orElse(blockingActiveTasks.stream()
+                                .filter(task -> !"APPEND".equals(resolveTaskKind(task)))
+                                .findFirst()
+                                .orElse(blockingActiveTasks.stream().findFirst().orElse(activeTasks.stream().findFirst().orElse(null))));
         HistoricTaskInstance referenceHistoricTask = fallbackHistoricTask != null
                 ? fallbackHistoricTask
                 : historicTasks.stream().max(Comparator.comparing(HistoricTaskInstance::getCreateTime, Comparator.nullsLast(Comparator.naturalOrder()))).orElse(null);
@@ -1993,6 +2000,11 @@ public class FlowableProcessRuntimeService {
         OffsetDateTime completedAt = referenceHistoricTask == null ? null : toOffsetDateTime(referenceHistoricTask.getEndTime());
         Long handleDurationSeconds = durationSeconds(createdAt, completedAt);
         String instanceStatus = resolveInstanceStatus(historicProcessInstance, activeTasks);
+        String detailTaskKind = referenceActiveTask != null
+                ? resolveTaskKind(referenceActiveTask)
+                : referenceHistoricTask != null
+                        ? resolveHistoricTaskKind(referenceHistoricTask)
+                        : resolveTaskKind(historicProcessInstance.getProcessDefinitionId(), nodeId);
         return new ProcessTaskDetailResponse(
                 referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),
                 processInstanceId,
@@ -2016,7 +2028,7 @@ public class FlowableProcessRuntimeService {
                 notificationRecords,
                 nodeId,
                 nodeName,
-                resolveTaskKind(referenceActiveTask != null ? referenceActiveTask.getProcessDefinitionId() : historicProcessInstance.getProcessDefinitionId(), nodeId),
+                detailTaskKind,
                 activeTasks.isEmpty() ? resolveHistoricTaskStatus(referenceHistoricTask, historicProcessInstance) : resolveTaskStatus(referenceActiveTask),
                 resolveAssignmentMode(
                         referenceActiveTask == null ? List.of() : candidateUsers(referenceActiveTask.getId()),
@@ -2188,12 +2200,13 @@ public class FlowableProcessRuntimeService {
             OffsetDateTime endedAt = toOffsetDateTime(task.getEndTime());
             String taskKind = resolveHistoricTaskKind(task);
             Map<String, Object> localVariables = historicTaskLocalVariables(task.getId());
+            String historicStatus = resolveHistoricTaskStatus(task, null);
             items.add(new ProcessTaskTraceItemResponse(
                     task.getId(),
                     task.getTaskDefinitionKey(),
                     task.getName(),
                     taskKind,
-                    resolveHistoricTaskStatus(task, null),
+                    historicStatus,
                     task.getAssignee(),
                     List.of(),
                     List.of(),
@@ -2213,7 +2226,7 @@ public class FlowableProcessRuntimeService {
                     isHistoricTaskRevoked(task),
                     false,
                     false,
-                    "WESTFLOW_TAKEN_BACK".equals(task.getDeleteReason()),
+                    "TAKEN_BACK".equals(historicStatus),
                     null,
                     null,
                     null,

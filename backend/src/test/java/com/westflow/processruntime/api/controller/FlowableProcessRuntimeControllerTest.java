@@ -2035,6 +2035,11 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBeforeRemove.path("taskTrace").size()).isEqualTo(2);
         assertThat(detailBeforeRemove.path("taskTrace").get(1).path("taskKind").asText()).isEqualTo("ADD_SIGN");
 
+        JsonNode detailByBusinessBeforeRemove = approvalDetailByBusiness(managerToken, "leave_011");
+        assertThat(detailByBusinessBeforeRemove.path("taskId").asText()).isEqualTo(addSignTaskId);
+        assertThat(detailByBusinessBeforeRemove.path("assigneeUserId").asText()).isEqualTo("usr_003");
+        assertThat(detailByBusinessBeforeRemove.path("taskKind").asText()).isEqualTo("ADD_SIGN");
+
         mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/remove-sign", taskId)
                         .header("Authorization", "Bearer " + managerToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -2104,6 +2109,14 @@ class FlowableProcessRuntimeControllerTest {
 
         JsonNode takeBackDetail = approvalDetailByBusiness(applicantToken, "leave_012");
         assertThat(takeBackDetail.path("taskTrace").toString()).contains("TAKEN_BACK");
+        JsonNode takenBackTrace = takeBackDetail.path("taskTrace").findValuesAsText("status").contains("TAKEN_BACK")
+                ? takeBackDetail.path("taskTrace").findParents("status").stream()
+                        .filter(node -> "TAKEN_BACK".equals(node.path("status").asText()))
+                        .findFirst()
+                        .orElseThrow()
+                : null;
+        assertThat(takenBackTrace).isNotNull();
+        assertThat(takenBackTrace.path("isTakenBack").asBoolean()).isTrue();
 
         seedLeaveBill("leave_013");
         String jumpFirstTaskId = startRejectRouteProcess(applicantToken, "leave_013").path("activeTasks").get(0).path("taskId").asText();
