@@ -537,7 +537,7 @@ describe('oa pages', () => {
     await waitFor(() => {
       expect(oaApiMocks.listApprovalSheets).toHaveBeenCalledWith({
         page: 1,
-        pageSize: 200,
+        pageSize: 100,
         keyword: '',
         filters: [],
         sorts: [],
@@ -614,7 +614,7 @@ describe('oa pages', () => {
       await waitFor(() => {
         expect(oaApiMocks.listApprovalSheets).toHaveBeenCalledWith({
           page: 1,
-          pageSize: 200,
+          pageSize: 100,
           keyword: '',
           filters: [],
           sorts: [],

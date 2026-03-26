@@ -49,6 +49,7 @@ export function ApprovalSheetBusinessSection({
             value={formSnapshot}
             onChange={() => {}}
             disabled
+            userDisplayNames={detail.userDisplayNames}
           />
         </div>
         {children}

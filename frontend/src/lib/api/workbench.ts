@@ -41,6 +41,11 @@ export type WorkbenchTaskRuntimeSummary = {
   completedAt: string | null
 }
 
+export type WorkbenchDashboardSummary = {
+  todoTodayCount: number
+  doneApprovalCount: number
+}
+
 export type WorkbenchHistoryItem = WorkbenchTaskTraceItem
 
 export type WorkbenchTaskListItem = {
@@ -504,6 +509,7 @@ export function resolveWorkbenchRuntimePath(...segments: RuntimePathPart[]) {
 export const WORKBENCH_RUNTIME_ENDPOINTS = {
   tasksPage: resolveWorkbenchRuntimePath('tasks', 'page'),
   approvalSheetsPage: resolveWorkbenchRuntimePath('approval-sheets', 'page'),
+  dashboardSummary: resolveWorkbenchRuntimePath('dashboard', 'summary'),
   tasksCreate: resolveWorkbenchRuntimePath('start'),
 } as const
 
@@ -540,6 +546,15 @@ export async function listApprovalSheets(
     view: search.view,
     businessTypes: search.businessTypes ?? [],
   })
+
+  return unwrapResponse(response)
+}
+
+// 工作台首页概览统计，聚合当前登录人的真实待办和已办数据。
+export async function getWorkbenchDashboardSummary(): Promise<WorkbenchDashboardSummary> {
+  const response = await apiClient.get<
+    WorkbenchApiSuccess<WorkbenchDashboardSummary>
+  >(WORKBENCH_RUNTIME_ENDPOINTS.dashboardSummary)
 
   return unwrapResponse(response)
 }

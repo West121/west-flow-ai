@@ -47,9 +47,17 @@ type ApprovalSheetGraphProps = {
 type PlaybackEvent = {
   id: string
   nodeId: string
+  taskId: string | null
   label: string
+  eventType: string
   occurredAt: string | null
   operatorUserId: string | null
+}
+
+type TimelineEntry = {
+  id: string
+  event: PlaybackEvent
+  traceItem: WorkbenchTaskTraceItem | null
 }
 
 type TraversalState = {
@@ -68,10 +76,9 @@ function buildPlaybackEvents(
 ): PlaybackEvent[] {
   const startNodeId = findStartNodeId(flowNodes)
   const endNodeId = flowNodes.find((node) => node.type === 'end')?.id ?? null
-  const directEvents = instanceEvents
+  const directEvents: PlaybackEvent[] = instanceEvents
     .filter(
       (event) =>
-        Boolean(event.nodeId) ||
         event.eventType === 'START_PROCESS' ||
         event.eventType === 'INSTANCE_STARTED' ||
         event.eventType === 'INSTANCE_COMPLETED' ||
@@ -94,15 +101,26 @@ function buildPlaybackEvents(
         }
         return event.nodeId ?? ''
       })(),
+      taskId:
+        event.eventType === 'START_PROCESS' ||
+        event.eventType === 'INSTANCE_STARTED' ||
+        event.eventType === 'INSTANCE_COMPLETED' ||
+        event.eventType === 'INSTANCE_REVOKED' ||
+        event.eventType === 'INSTANCE_TERMINATED'
+          ? null
+          : event.taskId ?? null,
       label: event.eventName,
+      eventType: event.eventType,
       occurredAt: event.occurredAt,
       operatorUserId: event.operatorUserId ?? null,
     }))
 
-  const traceEvents = taskTrace.map((item) => ({
+  const traceEvents: PlaybackEvent[] = taskTrace.map((item) => ({
     id: `task:${item.taskId}`,
     nodeId: item.nodeId,
+    taskId: item.taskId,
     label: item.nodeName,
+    eventType: 'TASK_TRACE',
     occurredAt: item.handleEndTime ?? item.handleStartTime ?? item.receiveTime ?? null,
     operatorUserId: item.operatorUserId ?? item.assigneeUserId ?? null,
   }))
@@ -121,29 +139,119 @@ function buildPlaybackEvents(
     merged.push({
       id: 'instance:end',
       nodeId: endNodeId,
+      taskId: null,
       label: '流程结束',
+      eventType: 'INSTANCE_COMPLETED',
       occurredAt: endOccurredAt,
       operatorUserId: null,
     })
   }
 
+  const eventPriority = (event: PlaybackEvent) => {
+    if (event.eventType === 'START_PROCESS' || event.eventType === 'INSTANCE_STARTED') {
+      return 0
+    }
+    if (
+      event.eventType === 'INSTANCE_COMPLETED' ||
+      event.eventType === 'INSTANCE_REVOKED' ||
+      event.eventType === 'INSTANCE_TERMINATED'
+    ) {
+      return 2
+    }
+    return 1
+  }
+
   const sorted = merged
     .filter((event) => Boolean(event.nodeId))
     .sort((left, right) => {
+      const leftPriority = eventPriority(left)
+      const rightPriority = eventPriority(right)
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority
+      }
       const leftTime = left.occurredAt ? new Date(left.occurredAt).getTime() : Number.MAX_SAFE_INTEGER
       const rightTime = right.occurredAt ? new Date(right.occurredAt).getTime() : Number.MAX_SAFE_INTEGER
-      return leftTime - rightTime
+      if (leftTime !== rightTime) {
+        return leftTime - rightTime
+      }
+      return left.label.localeCompare(right.label, 'zh-CN')
     })
 
   const deduped = new Map<string, PlaybackEvent>()
   for (const event of sorted) {
-    const key = `${event.nodeId}:${event.occurredAt ?? ''}:${event.label}`
+    const key = `${event.nodeId}:${event.occurredAt ?? ''}:${event.eventType}:${event.label}`
     if (!deduped.has(key)) {
       deduped.set(key, event)
     }
   }
 
   return Array.from(deduped.values())
+}
+
+function eventOccurredAt(event: PlaybackEvent, traceItem: WorkbenchTaskTraceItem | null) {
+  return (
+    traceItem?.handleEndTime
+    ?? traceItem?.handleStartTime
+    ?? traceItem?.receiveTime
+    ?? event.occurredAt
+  )
+}
+
+function buildTimelineEntries(
+  playbackEvents: PlaybackEvent[],
+  taskTrace: WorkbenchTaskTraceItem[]
+): TimelineEntry[] {
+  const startEvent = playbackEvents.find(
+    (event) => event.eventType === 'START_PROCESS' || event.eventType === 'INSTANCE_STARTED'
+  ) ?? null
+  const terminalEvent = [...playbackEvents].reverse().find(
+    (event) =>
+      event.eventType === 'INSTANCE_COMPLETED'
+      || event.eventType === 'INSTANCE_REVOKED'
+      || event.eventType === 'INSTANCE_TERMINATED'
+  ) ?? null
+
+  const taskEntries = [...taskTrace]
+    .sort((left, right) => {
+      const leftTime = new Date(
+        left.receiveTime ?? left.handleStartTime ?? left.readTime ?? 0
+      ).getTime()
+      const rightTime = new Date(
+        right.receiveTime ?? right.handleStartTime ?? right.readTime ?? 0
+      ).getTime()
+      return leftTime - rightTime
+    })
+    .map<TimelineEntry>((item) => ({
+      id: `timeline-task:${item.taskId}`,
+      event: {
+        id: `task:${item.taskId}`,
+        nodeId: item.nodeId,
+        taskId: item.taskId,
+        label: item.nodeName,
+        eventType: 'TASK_TRACE',
+        occurredAt: item.handleEndTime ?? item.handleStartTime ?? item.receiveTime ?? null,
+        operatorUserId: item.operatorUserId ?? item.assigneeUserId ?? null,
+      },
+      traceItem: item,
+    }))
+
+  const entries: TimelineEntry[] = []
+  if (startEvent) {
+    entries.push({
+      id: `timeline-event:${startEvent.id}`,
+      event: startEvent,
+      traceItem: null,
+    })
+  }
+  entries.push(...taskEntries)
+  if (terminalEvent) {
+    entries.push({
+      id: `timeline-event:${terminalEvent.id}`,
+      event: terminalEvent,
+      traceItem: null,
+    })
+  }
+  return entries
 }
 
 const previewNodeTypes = {
@@ -310,28 +418,65 @@ function ApprovalSheetGraphInner({
     return () => window.clearInterval(timer)
   }, [mode, playbackEvents.length])
 
-  const activePlaybackEvent = playbackEvents[activeIndex] ?? null
-  const taskTraceByNodeId = useMemo(
-    () =>
-      taskTrace.reduce<Map<string, WorkbenchTaskTraceItem>>((map, item) => {
-        if (!map.has(item.nodeId)) {
-          map.set(item.nodeId, item)
-        }
-        return map
-      }, new Map()),
-    [taskTrace]
-  )
+  const resolveCurrentTaskTraceItem = useMemo(() => {
+    const pendingItems = taskTrace.filter(
+      (item) => item.status === 'PENDING' || item.status === 'PENDING_CLAIM'
+    )
+
+    if (pendingItems.length === 0) {
+      return null
+    }
+
+    const pendingAddSignItems = pendingItems.filter((item) => item.isAddSignTask)
+    const focusItems = pendingAddSignItems.length > 0 ? pendingAddSignItems : pendingItems
+
+    return [...focusItems].sort((left, right) => {
+      const leftTime = new Date(
+        left.receiveTime ?? left.handleStartTime ?? left.readTime ?? 0
+      ).getTime()
+      const rightTime = new Date(
+        right.receiveTime ?? right.handleStartTime ?? right.readTime ?? 0
+      ).getTime()
+      return rightTime - leftTime
+    })[0] ?? null
+  }, [taskTrace])
+
   const timelineItems = useMemo(
-    () =>
-      playbackEvents.map((event) => {
-        const traceItem = taskTraceByNodeId.get(event.nodeId) ?? null
-        return {
-          event,
-          traceItem,
-        }
-      }),
-    [playbackEvents, taskTraceByNodeId]
+    () => buildTimelineEntries(playbackEvents, taskTrace),
+    [playbackEvents, taskTrace]
   )
+
+  const activePlaybackEvent = useMemo(() => {
+    if (mode === 'playing') {
+      return playbackEvents[activeIndex] ?? null
+    }
+
+    if (
+      instanceStatus === 'COMPLETED' ||
+      instanceStatus === 'REVOKED' ||
+      instanceStatus === 'TERMINATED'
+    ) {
+      return playbackEvents[activeIndex] ?? playbackEvents[playbackEvents.length - 1] ?? null
+    }
+
+    if (resolveCurrentTaskTraceItem) {
+      return (
+        playbackEvents.find((event) => event.taskId === resolveCurrentTaskTraceItem.taskId)
+        ?? playbackEvents.find((event) => event.nodeId === resolveCurrentTaskTraceItem.nodeId)
+        ?? null
+      )
+    }
+
+    return playbackEvents[activeIndex] ?? null
+  }, [activeIndex, instanceStatus, mode, playbackEvents, resolveCurrentTaskTraceItem])
+
+  const isStartPlaybackEvent = (event: PlaybackEvent) =>
+    event.eventType === 'START_PROCESS' || event.eventType === 'INSTANCE_STARTED'
+
+  const isTerminalPlaybackEvent = (event: PlaybackEvent) =>
+    event.eventType === 'INSTANCE_COMPLETED' ||
+    event.eventType === 'INSTANCE_REVOKED' ||
+    event.eventType === 'INSTANCE_TERMINATED'
   const playbackFocusNodeIds = useMemo(() => {
     const activePathNodeIds = playbackEvents
       .slice(0, activeIndex + 1)
@@ -365,11 +510,11 @@ function ApprovalSheetGraphInner({
     ) {
       return activePlaybackEvent?.nodeId ?? null
     }
-    return activePlaybackEvent?.nodeId
-      ?? taskTrace.find((item) => item.status === 'PENDING' || item.status === 'PENDING_CLAIM')?.nodeId
+      return activePlaybackEvent?.nodeId
+      ?? resolveCurrentTaskTraceItem?.nodeId
       ?? taskTrace[taskTrace.length - 1]?.nodeId
       ?? null
-  }, [activePlaybackEvent?.nodeId, instanceStatus, taskTrace])
+  }, [activePlaybackEvent?.nodeId, instanceStatus, resolveCurrentTaskTraceItem?.nodeId, taskTrace])
 
   const traversalState = useMemo(
     () => buildTraversalState(flowNodes, flowEdges, playbackFocusNodeIds, activeIndex),
@@ -588,22 +733,19 @@ function ApprovalSheetGraphInner({
             <div className='max-h-[360px] min-w-0 overflow-auto pr-2'>
               {timelineItems.length ? (
                 <ol className='space-y-0'>
-                  {timelineItems.map(({ event, traceItem }, index) => {
-                    const active = event.id === activePlaybackEvent?.id
+                  {timelineItems.map(({ id, event, traceItem }, index) => {
+                    const active = traceItem?.taskId
+                      ? traceItem.taskId === activePlaybackEvent?.taskId
+                      : event.id === activePlaybackEvent?.id
 
                     return (
                       <li
-                        key={`${event.id}:${event.nodeId}:${index}`}
+                        key={`${id}:${event.nodeId}:${index}`}
                         className='grid grid-cols-[124px_24px_minmax(0,1fr)] gap-3 pb-5 last:pb-0'
                       >
                         <div className='pt-0.5 text-right text-xs text-muted-foreground'>
                           <div className='font-medium text-foreground'>
-                            {formatApprovalSheetDateTime(
-                              traceItem?.handleEndTime
-                                ?? traceItem?.handleStartTime
-                                ?? traceItem?.receiveTime
-                                ?? event.occurredAt
-                            )}
+                            {formatApprovalSheetDateTime(eventOccurredAt(event, traceItem))}
                           </div>
                           <div className='mt-1'>
                             {traceItem?.handleEndTime
@@ -612,11 +754,11 @@ function ApprovalSheetGraphInner({
                                 ? '处理中'
                                 : traceItem?.receiveTime
                                   ? '已接收'
-                                  : event.label === '流程结束'
+                                  : isTerminalPlaybackEvent(event)
                                     ? '结束'
-                                    : event.label.includes('发起')
+                                    : isStartPlaybackEvent(event)
                                       ? '发起'
-                                  : '待处理'}
+                                      : '待处理'}
                           </div>
                         </div>
                         <div className='flex flex-col items-center'>
@@ -643,9 +785,15 @@ function ApprovalSheetGraphInner({
                             <Badge variant={active ? 'default' : 'secondary'}>
                               {traceItem
                                 ? resolveApprovalSheetResultLabel(traceItem)
-                                : event.label === '流程结束'
-                                  ? '已完成'
-                                  : '发起'}
+                                : isTerminalPlaybackEvent(event)
+                                  ? event.eventType === 'INSTANCE_REVOKED'
+                                    ? '已撤销'
+                                    : event.eventType === 'INSTANCE_TERMINATED'
+                                      ? '已终止'
+                                      : '已完成'
+                                  : isStartPlaybackEvent(event)
+                                    ? '发起'
+                                    : '事件'}
                             </Badge>
                           </div>
 
@@ -659,7 +807,7 @@ function ApprovalSheetGraphInner({
                                   ?? event.operatorUserId
                                 }
                                 displayNames={userDisplayNames}
-                                fallback={event.label.includes('发起') ? '发起人' : '--'}
+                                fallback={isStartPlaybackEvent(event) ? '发起人' : '--'}
                               />
                             </span>
                             {traceItem?.candidateUserIds?.length ? (
@@ -671,12 +819,22 @@ function ApprovalSheetGraphInner({
                                 />
                               </span>
                             ) : null}
-                            <span>接收：{formatApprovalSheetDateTime(traceItem?.receiveTime)}</span>
-                            <span>读取：{formatApprovalSheetDateTime(traceItem?.readTime)}</span>
-                            <span>开始：{formatApprovalSheetDateTime(traceItem?.handleStartTime)}</span>
-                            <span>完成：{formatApprovalSheetDateTime(traceItem?.handleEndTime)}</span>
-                            <span>时长：{formatApprovalSheetDuration(traceItem?.handleDurationSeconds)}</span>
-                            <span>超时：{formatApprovalSheetBoolean(false)}</span>
+                            {traceItem ? (
+                              <>
+                                <span>接收：{formatApprovalSheetDateTime(traceItem.receiveTime)}</span>
+                                <span>读取：{formatApprovalSheetDateTime(traceItem.readTime)}</span>
+                                <span>开始：{formatApprovalSheetDateTime(traceItem.handleStartTime)}</span>
+                                <span>完成：{formatApprovalSheetDateTime(traceItem.handleEndTime)}</span>
+                                <span>时长：{formatApprovalSheetDuration(traceItem.handleDurationSeconds)}</span>
+                                <span>超时：{formatApprovalSheetBoolean(false)}</span>
+                              </>
+                            ) : isStartPlaybackEvent(event) ? (
+                              <span>发起时间：{formatApprovalSheetDateTime(event.occurredAt)}</span>
+                            ) : isTerminalPlaybackEvent(event) ? (
+                              <span>结束时间：{formatApprovalSheetDateTime(event.occurredAt)}</span>
+                            ) : (
+                              <span>发生时间：{formatApprovalSheetDateTime(event.occurredAt)}</span>
+                            )}
                           </div>
 
                           {(traceItem?.actingMode ||
@@ -716,7 +874,14 @@ function ApprovalSheetGraphInner({
                           ) : null}
 
                           <p className='text-sm text-foreground/90'>
-                            审批意见：{formatApprovalSheetText(traceItem?.comment)}
+                            审批意见：
+                            {traceItem
+                              ? formatApprovalSheetText(traceItem.comment)
+                              : isStartPlaybackEvent(event)
+                                ? '流程发起'
+                                : isTerminalPlaybackEvent(event)
+                                  ? '流程结束'
+                                  : '--'}
                           </p>
                         </div>
                       </li>

@@ -5,6 +5,7 @@ export type RuntimeFormComponentProps = {
   value: Record<string, unknown>
   onChange: (value: Record<string, unknown>) => void
   disabled?: boolean
+  userDisplayNames?: Record<string, string> | null
   processFormKey?: string
   processFormVersion?: string
   nodeFormKey?: string

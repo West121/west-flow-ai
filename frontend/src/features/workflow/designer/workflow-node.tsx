@@ -10,7 +10,11 @@ import {
 } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@/lib/utils'
-import { type WorkflowNode, type WorkflowNodeData } from './types'
+import {
+  type WorkflowApproverNodeConfig,
+  type WorkflowNode,
+  type WorkflowNodeData,
+} from './types'
 
 const toneClassNames = {
   brand: {
@@ -70,6 +74,25 @@ const kindBadgeLabels = {
   end: '结束',
 } satisfies Record<WorkflowNodeData['kind'], string>
 
+function resolveNodeMarker(data: WorkflowNodeData) {
+  if (data.kind === 'approver') {
+    const approverConfig = data.config as WorkflowApproverNodeConfig
+    switch (approverConfig.approvalMode) {
+      case 'PARALLEL':
+        return { label: '并签', tone: 'brand' as const }
+      case 'SEQUENTIAL':
+        return { label: '串签', tone: 'neutral' as const }
+      case 'OR_SIGN':
+        return { label: '或签', tone: 'warning' as const }
+      case 'VOTE':
+        return { label: '票签', tone: 'success' as const }
+      default:
+        return null
+    }
+  }
+  return null
+}
+
 // 不同节点种类用不同图标，帮助画布识别。
 function renderIcon(kind: WorkflowNodeData['kind']) {
   switch (kind) {
@@ -111,8 +134,14 @@ export function WorkflowNodeCard({
     previewStatus && previewStatus !== 'IDLE'
       ? previewStatusClassNames[previewStatus]
       : null
+  const marker = resolveNodeMarker(workflowData)
+  const markerClasses =
+    marker && !previewClasses ? toneClassNames[marker.tone] : null
   const showTarget = workflowData.kind !== 'start'
   const showSource = workflowData.kind !== 'end'
+  const collaboration = workflowData.collaboration
+  const editingPeer = collaboration?.editingBy[0] ?? null
+  const selectedPeers = collaboration?.selectedBy ?? []
 
   return (
     <div
@@ -123,6 +152,14 @@ export function WorkflowNodeCard({
         previewClasses?.card,
         previewStatus === 'ACTIVE' && ['shadow-lg ring-2', previewClasses?.ring ?? classes.ring]
       )}
+      style={
+        !selected && (editingPeer || selectedPeers[0])
+          ? {
+              borderColor: editingPeer?.color ?? selectedPeers[0]?.color,
+              boxShadow: `0 0 0 1px ${editingPeer?.color ?? selectedPeers[0]?.color} inset`,
+            }
+          : undefined
+      }
     >
       {showTarget ? (
         <Handle
@@ -146,15 +183,55 @@ export function WorkflowNodeCard({
             <span className='truncate text-sm font-semibold'>
               {workflowData.label}
             </span>
-            <span
-              className={cn(
-                'rounded-full px-2 py-0.5 text-[11px] font-medium',
-                previewClasses?.badge ?? classes.badge
-              )}
-            >
-              {kindBadgeLabels[workflowData.kind]}
-            </span>
+            <div className='flex items-center gap-1.5'>
+              {marker ? (
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                    previewClasses?.badge ?? markerClasses?.badge ?? classes.badge
+                  )}
+                >
+                  {marker.label}
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                  previewClasses?.badge ?? classes.badge
+                )}
+              >
+                {kindBadgeLabels[workflowData.kind]}
+              </span>
+            </div>
           </div>
+          {editingPeer ? (
+            <div className='flex items-center gap-2 text-[11px] font-medium'>
+              <span
+                className='inline-flex rounded-full px-2 py-0.5'
+                style={{
+                  backgroundColor: `${editingPeer.color}1a`,
+                  color: editingPeer.color,
+                }}
+              >
+                {editingPeer.displayName} 正在编辑
+              </span>
+            </div>
+          ) : selectedPeers.length > 0 ? (
+            <div className='flex flex-wrap items-center gap-2 text-[11px] font-medium'>
+              {selectedPeers.slice(0, 2).map((peer) => (
+                <span
+                  key={peer.userId}
+                  className='inline-flex rounded-full px-2 py-0.5'
+                  style={{
+                    backgroundColor: `${peer.color}1a`,
+                    color: peer.color,
+                  }}
+                >
+                  {peer.displayName} 已选中
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
 

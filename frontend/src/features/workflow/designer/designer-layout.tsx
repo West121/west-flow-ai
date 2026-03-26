@@ -8,6 +8,7 @@ type WorkflowDesignerLayoutProps = {
   canvas: ReactNode
   flowSettings: ReactNode
   nodeSettings: ReactNode
+  collaborationStatus?: ReactNode
   activeTab: 'flow' | 'node'
   onActiveTabChange: (value: 'flow' | 'node') => void
 }
@@ -18,6 +19,7 @@ export function WorkflowDesignerLayout({
   canvas,
   flowSettings,
   nodeSettings,
+  collaborationStatus,
   activeTab,
   onActiveTabChange,
 }: WorkflowDesignerLayoutProps) {
@@ -50,7 +52,10 @@ export function WorkflowDesignerLayout({
       >
         <Card className='flex h-full flex-col border-0 shadow-none'>
           <CardHeader className='space-y-2 border-b pb-4'>
-            <CardTitle>属性面板</CardTitle>
+            <div className='flex items-center justify-between gap-3'>
+              <CardTitle>属性面板</CardTitle>
+              {collaborationStatus}
+            </div>
           </CardHeader>
           <CardContent className='flex min-h-0 flex-1 flex-col gap-4 pt-4'>
             <Tabs

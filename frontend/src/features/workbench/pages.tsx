@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/dialog'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
+import { UserPickerField } from '@/features/shared/pro-form'
 import { ApprovalSheetBusinessSection } from '@/features/oa/detail-sections'
 import {
   ProcessCollaborationSection,
@@ -98,6 +99,7 @@ import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   WORKBENCH_RUNTIME_ENDPOINTS,
+  getWorkbenchDashboardSummary,
   addSignWorkbenchTask,
   getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
@@ -128,11 +130,13 @@ import { getRoleUsers } from '@/lib/api/system-roles'
 import { type SystemAssociatedUser } from '@/lib/api/system-users'
 import {
   confirmProcessLinkParentResume,
+  createProcessCollaborationEvent,
   getProcessTerminationSnapshot,
   listProcessCollaborationTrace,
   listProcessTerminationAuditTrail,
   listProcessTimeTravelTrace,
 } from '@/lib/api/process-runtime-advanced'
+import { useAuthStore } from '@/stores/auth-store'
 
 const workbenchTodoListRoute = getRouteApi('/_authenticated/workbench/todos/list')
 const workbenchDoneListRoute = getRouteApi('/_authenticated/workbench/done/list')
@@ -214,6 +218,38 @@ function resolveCurrentHandlerContent(detail: WorkbenchTaskDetail) {
   return '--'
 }
 
+function resolveDisplayName(
+  userId: string | null | undefined,
+  displayNames: Record<string, string> | null | undefined
+) {
+  if (!userId) {
+    return '--'
+  }
+  return displayNames?.[userId] ?? userId
+}
+
+function describePendingAddSignTask(
+  detail: WorkbenchTaskDetail
+): Array<{ taskId: string; label: string; hint: string }> {
+  const activeTaskIds = new Set(detail.activeTaskIds ?? [])
+
+  return (detail.taskTrace ?? [])
+    .filter(
+      (item) =>
+        item.isAddSignTask &&
+        Boolean(item.taskId) &&
+        activeTaskIds.has(item.taskId) &&
+        (item.status === 'PENDING' || item.status === 'PENDING_CLAIM')
+    )
+    .map((item) => ({
+      taskId: item.taskId,
+      label: item.nodeName || '加签任务',
+      hint:
+        resolveDisplayName(item.assigneeUserId, detail.userDisplayNames) +
+        (item.taskId ? ` · ${item.taskId}` : ''),
+    }))
+}
+
 // 待办状态在列表里只展示最直观的中文标签。
 function resolveTaskStatusLabel(status: string) {
   switch (status) {
@@ -276,6 +312,13 @@ const approvalSheetBusinessTypeOptions = [
   { label: '请假申请', value: 'OA_LEAVE' },
   { label: '报销申请', value: 'OA_EXPENSE' },
   { label: '通用申请', value: 'OA_COMMON' },
+] as const
+
+const WORKBENCH_START_ENTRIES = [
+  ['请假申请', '/oa/leave/create'],
+  ['报销申请', '/oa/expense/create'],
+  ['通用申请', '/oa/common/create'],
+  ['OA 流程查询', '/oa/query'],
 ] as const
 
 // 流程中心列表统一走结构化筛选，避免页面自己拼各种 query。
@@ -814,7 +857,7 @@ function WorkbenchTodoHandoverAction() {
         <DialogHeader>
           <DialogTitle>离职转办</DialogTitle>
           <DialogDescription>
-            输入来源用户和目标用户编码，系统会批量转移该来源用户的当前待办。
+            选择来源用户和目标用户，系统会批量转移该来源用户的当前待办。
           </DialogDescription>
         </DialogHeader>
         <Form {...handoverForm}>
@@ -824,9 +867,14 @@ function WorkbenchTodoHandoverAction() {
               name='sourceUserId'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>来源用户编码</FormLabel>
+                  <FormLabel>来源用户</FormLabel>
                   <FormControl>
-                    <Input placeholder='例如：usr_001' {...field} />
+                    <UserPickerField
+                      ariaLabel='来源用户'
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder='请选择来源用户'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -837,9 +885,14 @@ function WorkbenchTodoHandoverAction() {
               name='targetUserId'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>目标用户编码</FormLabel>
+                  <FormLabel>目标用户</FormLabel>
                   <FormControl>
-                    <Input placeholder='例如：usr_003' {...field} />
+                    <UserPickerField
+                      ariaLabel='目标用户'
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder='请选择目标用户'
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -1080,14 +1133,14 @@ const claimTaskSchema = z.object({
 type ClaimTaskFormValues = z.input<typeof claimTaskSchema>
 
 const transferTaskSchema = z.object({
-  targetUserId: z.string().trim().min(1, '请输入目标用户编码'),
+  targetUserId: z.string().trim().min(1, '请选择目标用户'),
   comment: z.string().max(500, '转办说明最多 500 个字符').default(''),
 })
 
 type TransferTaskFormValues = z.input<typeof transferTaskSchema>
 
 const delegateTaskSchema = z.object({
-  targetUserId: z.string().trim().min(1, '请输入委派用户编码'),
+  targetUserId: z.string().trim().min(1, '请选择委派用户'),
   comment: z.string().max(500, '委派说明最多 500 个字符').default(''),
 })
 
@@ -1137,14 +1190,14 @@ const wakeUpTaskSchema = z.object({
 type WakeUpTaskFormValues = z.input<typeof wakeUpTaskSchema>
 
 const addSignTaskSchema = z.object({
-  targetUserId: z.string().trim().min(1, '请输入加签用户编码'),
+  targetUserId: z.string().trim().min(1, '请选择加签用户'),
   comment: z.string().max(500, '加签说明最多 500 个字符').default(''),
 })
 
 type AddSignTaskFormValues = z.input<typeof addSignTaskSchema>
 
 const removeSignTaskSchema = z.object({
-  targetTaskId: z.string().trim().min(1, '请输入减签任务编号'),
+  targetTaskId: z.string().trim().min(1, '请选择待移除的加签任务'),
   comment: z.string().max(500, '减签说明最多 500 个字符').default(''),
 })
 
@@ -1156,9 +1209,17 @@ const simpleActionCommentSchema = z.object({
 
 type SimpleActionCommentFormValues = z.input<typeof simpleActionCommentSchema>
 
+const collaborationEventSchema = z.object({
+  subject: z.string().max(120, '协同标题最多 120 个字符').default(''),
+  content: z.string().trim().min(1, '请输入协同内容').max(500, '协同内容最多 500 个字符'),
+  mentionedUserId: z.string().default(''),
+})
+
+type CollaborationEventFormValues = z.input<typeof collaborationEventSchema>
+
 const handoverTaskSchema = z.object({
-  sourceUserId: z.string().trim().min(1, '请输入来源用户编码'),
-  targetUserId: z.string().trim().min(1, '请输入目标用户编码'),
+  sourceUserId: z.string().trim().min(1, '请选择来源用户'),
+  targetUserId: z.string().trim().min(1, '请选择目标用户'),
   comment: z.string().max(500, '说明最多 500 个字符').default(''),
 })
 
@@ -1166,10 +1227,19 @@ type HandoverTaskFormValues = z.input<typeof handoverTaskSchema>
 
 // 工作台首页只负责把待办、已办和统计卡片串起来。
 export function Dashboard() {
+  const currentUser = useAuthStore((state) => state.currentUser)
+  const summaryQuery = useQuery({
+    queryKey: ['workbench', 'dashboard-summary'],
+    queryFn: () => getWorkbenchDashboardSummary(),
+  })
+  const aiCapabilityCount = currentUser?.aiCapabilities?.length ?? 0
+  const renderSummaryValue = (value: number) =>
+    summaryQuery.isLoading ? '...' : summaryQuery.isError ? '--' : String(value)
+
   return (
     <PageShell
       title='平台总览'
-      description='工作台入口已经连接到真实的流程发起、待办列表和任务处理闭环。'
+      description='展示当前登录人的真实待办、已办和入口数量。'
       actions={
         <>
           <Button asChild>
@@ -1181,30 +1251,40 @@ export function Dashboard() {
         </>
       }
     >
+      {summaryQuery.isError ? (
+        <Alert variant='destructive' className='mb-4'>
+          <AlertTitle>平台总览加载失败</AlertTitle>
+          <AlertDescription>
+            {summaryQuery.error instanceof Error
+              ? summaryQuery.error.message
+              : '请稍后重试'}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <div className='grid gap-4 lg:grid-cols-4'>
         {[
           {
             title: '今日待办',
-            value: '实时',
-            description: '待办列表已经接入后端分页接口，支持关键词检索和跳转处理页。',
+            value: renderSummaryValue(summaryQuery.data?.todoTodayCount ?? 0),
+            description: '按今天 00:00 以来新增且当前仍处于待处理状态的任务统计。',
             icon: Clock3,
           },
           {
             title: '流程发起',
-            value: '闭环',
-            description: '提供独立发起页，提交后可直接进入首个待处理任务。',
+            value: String(WORKBENCH_START_ENTRIES.length),
+            description: `当前工作台可直达的发起入口 ${WORKBENCH_START_ENTRIES.length} 个。`,
             icon: Play,
           },
           {
             title: '已完成审批',
-            value: '可追踪',
-            description: '任务处理后可再次回查详情，保留完成状态和审批意见。',
+            value: renderSummaryValue(summaryQuery.data?.doneApprovalCount ?? 0),
+            description: '当前登录人已完成的审批单总数。',
             icon: CheckCircle2,
           },
           {
             title: 'AI 入口',
-            value: '1',
-            description: '后续统一从 Copilot 进入，不再拆散到多个入口。',
+            value: String(aiCapabilityCount),
+            description: '当前账号可用的 AI 能力数。',
             icon: Sparkles,
           },
         ].map((item) => (
@@ -1367,12 +1447,7 @@ export function WorkbenchStartPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className='grid gap-3 sm:grid-cols-2'>
-            {[
-              ['请假申请', '/oa/leave/create'],
-              ['报销申请', '/oa/expense/create'],
-              ['通用申请', '/oa/common/create'],
-              ['OA 流程查询', '/oa/query'],
-            ].map(([label, href]) => (
+            {WORKBENCH_START_ENTRIES.map(([label, href]) => (
               <Button key={href} asChild variant='outline' className='justify-start'>
                 <Link to={href as '/oa/leave/create' | '/oa/expense/create' | '/oa/common/create' | '/oa/query'} search={{}}>
                   {label}
@@ -1513,6 +1588,7 @@ export function WorkbenchTodoDetailPage({
 }: WorkbenchTodoDetailPageProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const currentUserId = useAuthStore((state) => state.currentUser?.userId ?? null)
   const [addSignDialogOpen, setAddSignDialogOpen] = useState(false)
   const [removeSignDialogOpen, setRemoveSignDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
@@ -1524,15 +1600,20 @@ export function WorkbenchTodoDetailPage({
   const [transferDialogOpen, setTransferDialogOpen] = useState(false)
   const [urgeDialogOpen, setUrgeDialogOpen] = useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
-  const locator = taskId
-    ? { mode: 'task' as const, taskId }
-    : businessType && businessId
-      ? {
-          mode: 'business' as const,
-          businessType,
-          businessId,
-        }
-      : null
+  const [collaborationDialogOpen, setCollaborationDialogOpen] = useState(false)
+  const locator = useMemo(
+    () =>
+      taskId
+        ? { mode: 'task' as const, taskId }
+        : businessType && businessId
+          ? {
+              mode: 'business' as const,
+              businessType,
+              businessId,
+            }
+          : null,
+    [businessId, businessType, taskId]
+  )
 
   if (!locator) {
     throw new Error('审批单详情页需要 taskId 或 business locator')
@@ -1562,8 +1643,20 @@ export function WorkbenchTodoDetailPage({
           }),
   })
   const detail = detailQuery.data
-  const resolvedTaskId =
-    detail?.activeTaskIds[0] ?? (locator.mode === 'task' ? locator.taskId : null)
+  const resolvedTaskId = useMemo(() => {
+    if (locator.mode === 'task') {
+      return locator.taskId
+    }
+    if (!detail?.activeTaskIds?.length) {
+      return null
+    }
+    const currentUserTask = (detail.taskTrace ?? []).find(
+      (item) =>
+        detail.activeTaskIds.includes(item.taskId)
+        && item.assigneeUserId === currentUserId
+    )
+    return currentUserTask?.taskId ?? detail.activeTaskIds[0]
+  }, [currentUserId, detail, locator])
   const rootInstanceId =
     detail?.processLinks?.[0]?.rootInstanceId ?? detail?.instanceId ?? null
   const candidateHandlerTaskId = detail?.taskId ?? null
@@ -1759,6 +1852,14 @@ export function WorkbenchTodoDetailPage({
       comment: '',
     },
   })
+  const collaborationForm = useForm<CollaborationEventFormValues>({
+    resolver: zodResolver(collaborationEventSchema),
+    defaultValues: {
+      subject: '',
+      content: '',
+      mentionedUserId: '',
+    },
+  })
 
   useEffect(() => {
     if (!detail) {
@@ -1811,6 +1912,11 @@ export function WorkbenchTodoDetailPage({
     urgeForm.reset({
       comment: '',
     })
+    collaborationForm.reset({
+      subject: '',
+      content: '',
+      mentionedUserId: '',
+    })
   }, [
     addSignForm,
     delegateForm,
@@ -1821,6 +1927,7 @@ export function WorkbenchTodoDetailPage({
     rejectForm,
     returnForm,
     revokeForm,
+    collaborationForm,
     takeBackForm,
     transferForm,
     urgeForm,
@@ -2084,6 +2191,29 @@ export function WorkbenchTodoDetailPage({
     },
     onError: handleServerError,
   })
+  const collaborationMutation = useMutation({
+    mutationFn: (payload: CollaborationEventFormValues) =>
+      createProcessCollaborationEvent({
+        instanceId: detail?.instanceId ?? null,
+        taskId: detail?.taskId ?? null,
+        eventType: 'COMMENT',
+        subject: payload.subject?.trim() || null,
+        content: payload.content.trim(),
+        mentionedUserIds: payload.mentionedUserId?.trim()
+          ? [payload.mentionedUserId.trim()]
+          : [],
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setCollaborationDialogOpen(false)
+      collaborationForm.reset({
+        subject: '',
+        content: '',
+        mentionedUserId: '',
+      })
+    },
+    onError: handleServerError,
+  })
 
   const actionLabel = useMemo(() => {
     if (!detail) {
@@ -2143,6 +2273,10 @@ export function WorkbenchTodoDetailPage({
       name: 'targetStrategy',
     }) ?? 'PREVIOUS_USER_TASK'
   const businessBillHref = detail ? resolveBusinessBillHref(detail) : null
+  const removableAddSignTasks = useMemo(
+    () => (detail ? describePendingAddSignTask(detail) : []),
+    [detail]
+  )
   const detailRoutePath =
     locator.mode === 'task'
       ? `/workbench/todos/${locator.taskId}`
@@ -2188,9 +2322,15 @@ export function WorkbenchTodoDetailPage({
                       name='targetUserId'
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>委派用户编码</FormLabel>
+                          <FormLabel>委派用户</FormLabel>
                           <FormControl>
-                            <Input placeholder='例如：usr_003' {...field} />
+                            <UserPickerField
+                              ariaLabel='委派用户'
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder='请选择委派用户'
+                              displayNames={detail?.userDisplayNames}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -2240,9 +2380,15 @@ export function WorkbenchTodoDetailPage({
                       name='targetUserId'
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>加签用户编码</FormLabel>
+                          <FormLabel>加签用户</FormLabel>
                           <FormControl>
-                            <Input placeholder='例如：usr_003' {...field} />
+                            <UserPickerField
+                              ariaLabel='加签用户'
+                              value={field.value}
+                              onChange={field.onChange}
+                              placeholder='请选择加签用户'
+                              displayNames={detail?.userDisplayNames}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -2283,7 +2429,7 @@ export function WorkbenchTodoDetailPage({
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>减签</DialogTitle>
-                  <DialogDescription>输入待减签的加签任务编号，系统会撤销该串行加签任务。</DialogDescription>
+                  <DialogDescription>选择待移除的加签任务，系统会撤销该串行加签任务。</DialogDescription>
                 </DialogHeader>
                 <Form {...removeSignForm}>
                   <form className='space-y-4' onSubmit={onRemoveSignSubmit}>
@@ -2292,10 +2438,24 @@ export function WorkbenchTodoDetailPage({
                       name='targetTaskId'
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>加签任务编号</FormLabel>
+                          <FormLabel>加签任务</FormLabel>
                           <FormControl>
-                            <Input placeholder='例如：task_xxx' {...field} />
+                            <select
+                              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                              value={field.value}
+                              onChange={field.onChange}
+                            >
+                              <option value=''>请选择待移除的加签任务</option>
+                              {removableAddSignTasks.map((task) => (
+                                <option key={task.taskId} value={task.taskId}>
+                                  {task.label} · {task.hint}
+                                </option>
+                              ))}
+                            </select>
                           </FormControl>
+                          {removableAddSignTasks.length === 0 ? (
+                            <FormDescription>当前没有可减签的未完成加签任务。</FormDescription>
+                          ) : null}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -2691,7 +2851,7 @@ export function WorkbenchTodoDetailPage({
           <DialogContent>
             <DialogHeader>
               <DialogTitle>转办任务</DialogTitle>
-              <DialogDescription>输入目标用户编码后，当前任务会转到对方待办中。</DialogDescription>
+              <DialogDescription>选择目标用户后，当前任务会转到对方待办中。</DialogDescription>
             </DialogHeader>
             <Form {...transferForm}>
               <form className='space-y-4' onSubmit={onTransferSubmit}>
@@ -2700,9 +2860,15 @@ export function WorkbenchTodoDetailPage({
                   name='targetUserId'
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>目标用户编码</FormLabel>
+                      <FormLabel>目标用户</FormLabel>
                       <FormControl>
-                        <Input placeholder='例如：usr_003' {...field} />
+                        <UserPickerField
+                          ariaLabel='目标用户'
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder='请选择目标用户'
+                          displayNames={detail?.userDisplayNames}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -3118,6 +3284,96 @@ export function WorkbenchTodoDetailPage({
                         />
                         <ProcessCollaborationSection
                           items={collaborationTraceQuery.data ?? []}
+                          actions={detail?.instanceId ? (
+                            <Dialog
+                              open={collaborationDialogOpen}
+                              onOpenChange={setCollaborationDialogOpen}
+                            >
+                              <DialogTrigger asChild>
+                                <Button type='button' size='sm' variant='outline'>
+                                  发起协同
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>发起协同</DialogTitle>
+                                  <DialogDescription>
+                                    发送一条协同知会、批注或提醒，记录会进入当前实例的协同轨迹。
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <Form {...collaborationForm}>
+                                  <form
+                                    className='space-y-4'
+                                    onSubmit={collaborationForm.handleSubmit((values) => {
+                                      collaborationMutation.mutate(values)
+                                    })}
+                                  >
+                                    <FormField
+                                      control={collaborationForm.control}
+                                      name='subject'
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>协同标题</FormLabel>
+                                          <FormControl>
+                                            <Input placeholder='例如：请协助补充背景说明' {...field} />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={collaborationForm.control}
+                                      name='mentionedUserId'
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>@提醒人员</FormLabel>
+                                          <FormControl>
+                                            <UserPickerField
+                                              value={field.value}
+                                              onChange={field.onChange}
+                                              placeholder='可选，选择需要提醒的人员'
+                                              ariaLabel='协同提醒人员'
+                                              displayNames={detail.userDisplayNames}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={collaborationForm.control}
+                                      name='content'
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>协同内容</FormLabel>
+                                          <FormControl>
+                                            <Textarea
+                                              className='min-h-28'
+                                              placeholder='请输入协同知会、备注或提醒内容'
+                                              {...field}
+                                            />
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <DialogFooter>
+                                      <Button
+                                        type='button'
+                                        variant='outline'
+                                        onClick={() => setCollaborationDialogOpen(false)}
+                                      >
+                                        取消
+                                      </Button>
+                                      <Button type='submit' disabled={collaborationMutation.isPending}>
+                                        {collaborationMutation.isPending ? '发送中' : '发送协同'}
+                                      </Button>
+                                    </DialogFooter>
+                                  </form>
+                                </Form>
+                              </DialogContent>
+                            </Dialog>
+                          ) : null}
                         />
                         <ProcessTimeTravelSection
                           items={timeTravelTraceQuery.data ?? []}

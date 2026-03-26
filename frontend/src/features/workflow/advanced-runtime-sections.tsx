@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type {
@@ -28,14 +29,21 @@ function formatDateTime(value: string | null | undefined) {
 
 export function ProcessCollaborationSection({
   items,
+  actions,
 }: {
   items: ProcessCollaborationEvent[]
+  actions?: ReactNode
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>协同轨迹</CardTitle>
-        <CardDescription>展示当前实例上的协同知会、批注和提醒事件。</CardDescription>
+        <div className='flex flex-wrap items-start justify-between gap-3'>
+          <div className='space-y-1'>
+            <CardTitle>协同轨迹</CardTitle>
+            <CardDescription>展示当前实例上的协同知会、批注和提醒事件。</CardDescription>
+          </div>
+          {actions ? <div className='flex items-center gap-2'>{actions}</div> : null}
+        </div>
       </CardHeader>
       <CardContent className='space-y-3'>
         {items.length === 0 ? (

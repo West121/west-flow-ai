@@ -71,6 +71,7 @@ export function UserPickerField({
   disabled,
   placeholder = '请选择负责人',
   ariaLabel,
+  displayNames,
 }: {
   id?: string
   value?: string
@@ -78,6 +79,7 @@ export function UserPickerField({
   disabled?: boolean
   placeholder?: string
   ariaLabel?: string
+  displayNames?: Record<string, string> | null
 }) {
   const [open, setOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
@@ -199,6 +201,8 @@ export function UserPickerField({
     () => options.find((option) => option.userId === value),
     [options, value]
   )
+  const selectedDisplayName =
+    selected?.displayName ?? (value ? displayNames?.[value] ?? value : null)
 
   return (
     <div className='relative'>
@@ -227,10 +231,19 @@ export function UserPickerField({
               {selected ? (
                 <span className='block min-w-0'>
                   <span className='block truncate text-sm font-medium text-foreground'>
-                    {selected.displayName}
+                    {selectedDisplayName}
                   </span>
                   <span className='block truncate text-xs text-muted-foreground'>
                     {describeUser(selected) || selected.userId}
+                  </span>
+                </span>
+              ) : selectedDisplayName ? (
+                <span className='block min-w-0'>
+                  <span className='block truncate text-sm font-medium text-foreground'>
+                    {selectedDisplayName}
+                  </span>
+                  <span className='block truncate text-xs text-muted-foreground'>
+                    {value}
                   </span>
                 </span>
               ) : (

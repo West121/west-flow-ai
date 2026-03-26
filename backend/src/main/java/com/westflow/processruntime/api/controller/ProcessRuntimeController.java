@@ -41,6 +41,13 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.page(request));
     }
 
+    @GetMapping("/dashboard/summary")
+    @SaCheckLogin
+    // 查询工作台首页概览统计。
+    public ApiResponse<WorkbenchDashboardSummaryResponse> dashboardSummary() {
+        return ApiResponse.success(flowableProcessRuntimeService.dashboardSummary());
+    }
+
     @PostMapping("/approval-sheets/page")
     @SaCheckLogin
     // 分页查询审批单列表。

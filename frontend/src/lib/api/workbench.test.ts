@@ -48,6 +48,27 @@ describe('workbench api', () => {
     expect(WORKBENCH_RUNTIME_ENDPOINTS.tasksPage).toBe('/process-runtime/tasks/page')
   })
 
+  it('loads the dashboard summary from the runtime summary endpoint', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        todoTodayCount: 7,
+        doneApprovalCount: 12,
+      })
+    )
+
+    const { getWorkbenchDashboardSummary, WORKBENCH_RUNTIME_ENDPOINTS } =
+      await import('./workbench')
+
+    await expect(getWorkbenchDashboardSummary()).resolves.toEqual({
+      todoTodayCount: 7,
+      doneApprovalCount: 12,
+    })
+
+    expect(getMock).toHaveBeenCalledWith(
+      WORKBENCH_RUNTIME_ENDPOINTS.dashboardSummary
+    )
+  })
+
   it('loads workbench tasks with pagination payload', async () => {
     const pageResponse = {
       page: 1,

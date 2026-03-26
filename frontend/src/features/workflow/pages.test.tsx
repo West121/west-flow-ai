@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { WorkflowDesignerPage } from './pages'
 import { useWorkflowDesignerStore } from './designer/store'
 
@@ -8,7 +8,7 @@ const { navigateMock, fitViewMock, setViewportMock, reactFlowMock, routeSearchMo
   navigateMock: vi.fn(),
   fitViewMock: vi.fn(),
   setViewportMock: vi.fn(),
-  routeSearchMock: {} as { processDefinitionId?: string },
+  routeSearchMock: {} as { processDefinitionId?: string; mode?: 'edit' | 'view' },
   reactFlowMock: {
     fitView: undefined as unknown,
     setViewport: undefined as unknown,
@@ -27,6 +27,9 @@ const {
   getProcessDefinitionDetailMock: vi.fn(),
   listProcessDefinitionsMock: vi.fn(),
 }))
+// eslint-disable-next-line no-console
+const originalConsoleError = console.error
+const consoleErrorSpy = vi.spyOn(console, 'error')
 
 reactFlowMock.fitView = fitViewMock
 reactFlowMock.setViewport = setViewportMock
@@ -84,6 +87,54 @@ vi.mock('./designer/node-config-panel', () => ({
   ),
 }))
 
+vi.mock('@/components/ui/scroll-area', () => ({
+  ScrollArea: ({
+    children,
+    className,
+  }: {
+    children?: React.ReactNode
+    className?: string
+  }) => <div className={className}>{children}</div>,
+  ScrollBar: () => null,
+}))
+
+vi.mock('./designer-collab/provider', () => ({
+  createWorkflowDesignerCollaborationProvider: () => {
+    const awareness = {
+      getStates: () => new Map(),
+      on: () => undefined,
+      off: () => undefined,
+    }
+
+    return {
+      awareness,
+      mode: 'broadcast',
+      status: 'local',
+      setLocalState: () => undefined,
+      onStatusChange: () => () => undefined,
+      destroy: () => undefined,
+    }
+  },
+}))
+
+vi.mock('./designer-collab/bindings', () => ({
+  createWorkflowDesignerCollaborationBinding: () => ({
+    syncLocalState: () => undefined,
+    destroy: () => undefined,
+  }),
+}))
+
+vi.mock('./designer-collab/awareness', () => ({
+  resolveWorkflowDesignerPeers: () => [],
+  resolveWorkflowDesignerPeerColor: () => '#3b82f6',
+}))
+
+vi.mock('./designer-collab/ydoc', () => ({
+  createWorkflowDesignerYDoc: () => ({
+    destroy: () => undefined,
+  }),
+}))
+
 vi.mock('@/lib/api/workflow', () => ({
   listProcessDefinitions: (...args: unknown[]) => listProcessDefinitionsMock(...args),
   getProcessDefinitionDetail: (...args: unknown[]) => getProcessDefinitionDetailMock(...args),
@@ -112,7 +163,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
   }
 })
 
-function renderWithQuery(ui: React.ReactNode) {
+async function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -124,13 +175,33 @@ function renderWithQuery(ui: React.ReactNode) {
     },
   })
 
-  return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
-  )
+  let renderResult: ReturnType<typeof render> | undefined
+
+  await act(async () => {
+    renderResult = render(
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    )
+    await Promise.resolve()
+  })
+
+  return renderResult!
 }
+
+beforeAll(() => {
+  consoleErrorSpy.mockImplementation((message?: unknown, ...rest: unknown[]) => {
+    if (
+      typeof message === 'string' &&
+      message.includes('not wrapped in act')
+    ) {
+      return
+    }
+    Reflect.apply(originalConsoleError, console, [message, ...rest])
+  })
+})
 
 afterEach(() => {
   routeSearchMock.processDefinitionId = undefined
+  routeSearchMock.mode = undefined
   navigateMock.mockClear()
   fitViewMock.mockClear()
   setViewportMock.mockClear()
@@ -144,9 +215,13 @@ afterEach(() => {
   listProcessDefinitionsMock.mockReset()
 })
 
+afterAll(() => {
+  consoleErrorSpy.mockRestore()
+})
+
 describe('workflow designer page', () => {
   it('renders three-column layout with tabs and builtin controls only', async () => {
-    renderWithQuery(<WorkflowDesignerPage />)
+    await renderWithQuery(<WorkflowDesignerPage />)
 
     expect(screen.getByTestId('workflow-designer-layout')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '返回流程定义' })).toBeInTheDocument()
@@ -189,7 +264,7 @@ describe('workflow designer page', () => {
       dsl: payload,
     }))
 
-    renderWithQuery(<WorkflowDesignerPage />)
+    await renderWithQuery(<WorkflowDesignerPage />)
 
     const beforeLayout = useWorkflowDesignerStore.getState().history.present.nodes.map((node) => ({
       id: node.id,
@@ -289,7 +364,7 @@ describe('workflow designer page', () => {
       },
     })
 
-    renderWithQuery(<WorkflowDesignerPage />)
+    await renderWithQuery(<WorkflowDesignerPage />)
 
     await waitFor(() => {
       expect(getProcessDefinitionDetailMock).toHaveBeenCalledWith('plm_ecr:draft')
@@ -304,5 +379,17 @@ describe('workflow designer page', () => {
     expect(screen.getByDisplayValue('plm_ecr')).toBeInTheDocument()
     expect(screen.getByDisplayValue('ECR 变更申请')).toBeInTheDocument()
     expect(screen.getByDisplayValue('PLM')).toBeInTheDocument()
+  })
+
+  it('hides editing actions in readonly spectator mode', async () => {
+    routeSearchMock.mode = 'view'
+
+    await renderWithQuery(<WorkflowDesignerPage />)
+
+    expect(screen.getByText('只读观摩')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存草稿' })).toHaveClass('hidden')
+    expect(screen.getByRole('button', { name: '发布流程' })).toHaveClass('hidden')
+    expect(screen.getByRole('button', { name: '自动整理' })).toHaveClass('hidden')
+    expect(screen.getByRole('button', { name: '撤销' })).toHaveClass('hidden')
   })
 })

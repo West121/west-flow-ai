@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  Dashboard,
   WorkbenchCopiedListPage,
   WorkbenchDoneListPage,
   WorkbenchInitiatedListPage,
@@ -20,16 +21,17 @@ const {
   navigateMock: vi.fn(),
   useSearchMock: vi.fn(),
   routeNavigateMock: vi.fn(),
-  workbenchApiMocks: {
-    addSignWorkbenchTask: vi.fn(),
-    claimWorkbenchTask: vi.fn(),
-    completeWorkbenchTask: vi.fn(),
-    delegateWorkbenchTask: vi.fn(),
-    getApprovalSheetDetailByBusiness: vi.fn(),
-    getWorkbenchTaskActions: vi.fn(),
-    getWorkbenchTaskDetail: vi.fn(),
-    handoverWorkbenchTasks: vi.fn(),
-    listWorkbenchTasks: vi.fn(),
+    workbenchApiMocks: {
+      addSignWorkbenchTask: vi.fn(),
+      claimWorkbenchTask: vi.fn(),
+      completeWorkbenchTask: vi.fn(),
+      delegateWorkbenchTask: vi.fn(),
+      getWorkbenchDashboardSummary: vi.fn(),
+      getApprovalSheetDetailByBusiness: vi.fn(),
+      getWorkbenchTaskActions: vi.fn(),
+      getWorkbenchTaskDetail: vi.fn(),
+      handoverWorkbenchTasks: vi.fn(),
+      listWorkbenchTasks: vi.fn(),
     listApprovalSheets: vi.fn(),
     readWorkbenchTask: vi.fn(),
     removeSignWorkbenchTask: vi.fn(),
@@ -138,12 +140,31 @@ vi.mock('@/lib/api/process-runtime-advanced', () => ({
   ...advancedRuntimeApiMocks,
 }))
 vi.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: { currentUser: { aiCapabilities: string[] } }) => unknown) =>
+  useAuthStore: (selector: (state: { currentUser: { userId: string; aiCapabilities: string[] } }) => unknown) =>
     selector({
       currentUser: {
+        userId: 'usr_001',
         aiCapabilities: ['ai:copilot:open'],
       },
     }),
+}))
+
+vi.mock('@/features/shared/pro-form', () => ({
+  UserPickerField: ({
+    value,
+    onChange,
+    ariaLabel,
+  }: {
+    value?: string
+    onChange: (value: string) => void
+    ariaLabel?: string
+  }) => (
+    <input
+      aria-label={ariaLabel}
+      value={value ?? ''}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
 }))
 
 function renderWithQuery(ui: React.ReactNode) {
@@ -447,6 +468,22 @@ describe('workbench pages', () => {
     ).toHaveAttribute('data-source-route', '/workbench/todos/list')
   })
 
+  it('renders real overview metrics on the dashboard', async () => {
+    workbenchApiMocks.getWorkbenchDashboardSummary.mockResolvedValue({
+      todoTodayCount: 7,
+      doneApprovalCount: 12,
+    })
+
+    renderWithQuery(<Dashboard />)
+
+    expect(await screen.findByText('平台总览')).toBeInTheDocument()
+    expect(await screen.findByText('7')).toBeInTheDocument()
+    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(workbenchApiMocks.getWorkbenchDashboardSummary).toHaveBeenCalled()
+  })
+
   it('shows the handover toolbar entry on the todo list', async () => {
     renderWithQuery(<WorkbenchTodoListPage />)
 
@@ -455,7 +492,7 @@ describe('workbench pages', () => {
     ).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: '离职转办' }))
     expect(
-      await screen.findByText('输入来源用户和目标用户编码，系统会批量转移该来源用户的当前待办。')
+      await screen.findByText('选择来源用户和目标用户，系统会批量转移该来源用户的当前待办。')
     ).toBeInTheDocument()
   })
 
@@ -1940,7 +1977,7 @@ describe('workbench pages', () => {
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_001' />)
 
     fireEvent.click(await screen.findByRole('button', { name: '转办' }))
-    fireEvent.change(screen.getByLabelText('目标用户编码'), {
+    fireEvent.change(screen.getByLabelText('目标用户'), {
       target: { value: 'usr_003' },
     })
     fireEvent.change(screen.getByLabelText('转办说明'), {

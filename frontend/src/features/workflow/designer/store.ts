@@ -328,6 +328,7 @@ type WorkflowDesignerState = {
   nextNodeSequence: number
   resetDesigner: () => void
   hydrateSnapshot: (snapshot: WorkflowSnapshot) => void
+  applyRemoteSnapshot: (snapshot: Pick<WorkflowSnapshot, 'nodes' | 'edges'>) => void
   setSelectedNodeId: (selectedNodeId: string | null) => void
   updateNodeData: (
     nodeId: string,
@@ -599,6 +600,23 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
         history: createWorkflowHistoryState(snapshot),
         helperLines: { vertical: null, horizontal: null },
         nextNodeSequence: resolveNextNodeSequence(snapshot.nodes),
+      }),
+    applyRemoteSnapshot: (snapshot) =>
+      set((state) => {
+        const nextSnapshot = {
+          ...state.history.present,
+          nodes: snapshot.nodes,
+          edges: snapshot.edges,
+          selectedNodeId: resolveSelectedNodeId(
+            state.history.present,
+            snapshot.nodes
+          ),
+        }
+
+        return {
+          history: replaceWorkflowSnapshot(state.history, nextSnapshot),
+          nextNodeSequence: resolveNextNodeSequence(snapshot.nodes),
+        }
       }),
     setSelectedNodeId: (selectedNodeId) =>
       set((state) => ({

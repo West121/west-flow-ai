@@ -1,4 +1,12 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  startTransition,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
@@ -17,8 +25,11 @@ import {
 import {
   Bot,
   CircleDotDashed,
+  Eye,
   LayoutGrid,
+  MousePointer2,
   MoveDiagonal2,
+  PlugZap,
   Redo2,
   Save,
   Sparkles,
@@ -28,6 +39,7 @@ import {
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Card,
   CardContent,
@@ -38,6 +50,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { useTheme } from '@/context/theme-provider'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   getProcessDefinitionDetail,
   listProcessDefinitions,
@@ -61,6 +74,15 @@ import {
   ProcessFormSelector,
 } from './designer/form-selection'
 import { WorkflowDesignerLayout } from './designer/designer-layout'
+import { resolveWorkflowDesignerPeers, resolveWorkflowDesignerPeerColor } from './designer-collab/awareness'
+import { createWorkflowDesignerCollaborationBinding } from './designer-collab/bindings'
+import { createWorkflowDesignerCollaborationProvider } from './designer-collab/provider'
+import {
+  type WorkflowDesignerCollaborationMode,
+  type WorkflowDesignerCollaborationPeer,
+  type WorkflowDesignerCollaborationStatus,
+} from './designer-collab/types'
+import { createWorkflowDesignerYDoc } from './designer-collab/ydoc'
 import {
   workflowNodeTemplates,
   type WorkflowNodeTemplate,
@@ -148,6 +170,23 @@ const helperLineThreshold = 16
 const defaultProcessForm = findProcessRuntimeFormByProcessKey('oa_leave')
 const defaultLeaveFormFields: ProcessDefinitionMeta['formFields'] =
   resolveRuntimeProcessFormFields('oa_leave')
+function resolveWorkflowDesignerCollaborationUrl() {
+  const explicitUrl = import.meta.env.VITE_WORKFLOW_COLLAB_URL?.trim()
+  if (explicitUrl) {
+    return explicitUrl
+  }
+
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    const { hostname, protocol } = window.location
+    if (hostname === '127.0.0.1' || hostname === 'localhost') {
+      return `${protocol === 'https:' ? 'wss' : 'ws'}://127.0.0.1:1235`
+    }
+  }
+
+  return ''
+}
+
+const workflowDesignerCollaborationUrl = resolveWorkflowDesignerCollaborationUrl()
 const defaultDefinitionMeta: ProcessDefinitionMeta = {
   processKey: 'oa_leave',
   processName: '请假审批',
@@ -394,6 +433,61 @@ function GuideLinesOverlay({ lines }: { lines: WorkflowHelperLines }) {
   )
 }
 
+function RemoteCursorOverlay({
+  peers,
+}: {
+  peers: WorkflowDesignerCollaborationPeer[]
+}) {
+  const viewport = useViewport()
+  const cursorPeers = peers.filter((peer) => peer.cursor)
+
+  return (
+    <div className='pointer-events-none absolute inset-0 z-30 overflow-hidden'>
+      {cursorPeers.map((peer) => {
+        const cursor = peer.cursor
+        if (!cursor) {
+          return null
+        }
+        const left = cursor.x * viewport.zoom + viewport.x
+        const top = cursor.y * viewport.zoom + viewport.y
+        return (
+          <div
+            key={`cursor-${peer.clientId}`}
+            className='absolute'
+            style={{
+              left,
+              top,
+              transform: 'translate(10px, -4px)',
+            }}
+          >
+            <div
+              className='flex items-start gap-2'
+              style={{ color: peer.color }}
+            >
+              <MousePointer2 className='size-4 fill-current' />
+              <span
+                className='rounded-full px-2 py-0.5 text-[11px] font-medium text-white shadow-sm'
+                style={{ backgroundColor: peer.color }}
+              >
+                {peer.displayName}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function buildAvatarFallback(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((segment) => segment[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
 // 左侧节点面板负责提供可拖拽的流程节点模板。
 function DesignerPalette({
   onAppendNode,
@@ -520,8 +614,10 @@ function DesignerPalette({
 // 设计器工作区把画布、右侧配置和保存发布动作串起来。
 function WorkflowDesignerWorkspace({
   processDefinitionId,
+  mode = 'edit',
 }: {
   processDefinitionId?: string
+  mode?: 'edit' | 'view'
 }) {
   const navigate = designerRoute.useNavigate()
   const nodes = useWorkflowDesignerStore((state) => state.history.present.nodes)
@@ -570,6 +666,9 @@ function WorkflowDesignerWorkspace({
   const { resolvedTheme } = useTheme()
   const queryClient = useQueryClient()
   const viewport = useViewport()
+  const accessToken = useAuthStore((state) => state.accessToken)
+  const currentUser = useAuthStore((state) => state.currentUser)
+  const isReadOnly = mode === 'view'
   const [activePropertyTab, setActivePropertyTab] = useState<'flow' | 'node'>(
     'flow'
   )
@@ -577,20 +676,66 @@ function WorkflowDesignerWorkspace({
     Partial<ProcessDefinitionMeta>
   >({})
   const designerHydratedRef = useRef(false)
+  const cursorRef = useRef<{ x: number; y: number } | null>(null)
+  const collaborationProviderRef = useRef<ReturnType<
+    typeof createWorkflowDesignerCollaborationProvider
+  > | null>(null)
+  const collaborationBindingRef = useRef<ReturnType<
+    typeof createWorkflowDesignerCollaborationBinding
+  > | null>(null)
+  const [collaborationStatus, setCollaborationStatus] =
+    useState<WorkflowDesignerCollaborationStatus>('local')
+  const [collaborationPeers, setCollaborationPeers] = useState<
+    WorkflowDesignerCollaborationPeer[]
+  >([])
+  const collaborationPeersRef = useRef<WorkflowDesignerCollaborationPeer[]>([])
   const draftKey = useMemo(
     () => buildDesignerDraftKey(processDefinitionId),
     [processDefinitionId]
   )
-  const canvasEdges = useMemo(
-    () => edges.map((edge) => ({ ...edge, type: 'quickInsert' })),
-    [edges]
+  const collaborationRoomId = useMemo(
+    () =>
+      processDefinitionId
+        ? `workflow-designer:${processDefinitionId}`
+        : `workflow-designer:draft:${draftKey}`,
+    [draftKey, processDefinitionId]
   )
+  const collaborationMode: WorkflowDesignerCollaborationMode =
+    workflowDesignerCollaborationUrl ? 'websocket' : 'broadcast'
 
   const detailQuery = useQuery({
     queryKey: ['process-definition-detail', processDefinitionId],
     queryFn: () => getProcessDefinitionDetail(processDefinitionId ?? ''),
     enabled: Boolean(processDefinitionId),
   })
+  const collaborationReady = !processDefinitionId || Boolean(detailQuery.data)
+  const canvasNodes = useMemo(
+    () =>
+      nodes.map((node) => {
+        const selectedBy = collaborationPeers.filter(
+          (peer) => peer.selectedNodeId === node.id
+        )
+        const editingBy = collaborationPeers.filter(
+          (peer) => peer.editingNodeId === node.id
+        )
+
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            collaboration: {
+              selectedBy,
+              editingBy,
+            },
+          },
+        }
+      }),
+    [collaborationPeers, nodes]
+  )
+  const canvasEdges = useMemo(
+    () => edges.map((edge) => ({ ...edge, type: 'quickInsert' })),
+    [edges]
+  )
 
   const definitionMeta = useMemo<ProcessDefinitionMeta>(() => {
     const baseMeta =
@@ -617,6 +762,172 @@ function WorkflowDesignerWorkspace({
   useEffect(() => {
     definitionMetaRef.current = definitionMeta
   }, [definitionMeta])
+
+  useEffect(() => {
+    collaborationPeersRef.current = collaborationPeers
+  }, [collaborationPeers])
+
+  useEffect(() => {
+    if (!collaborationReady) {
+      return
+    }
+
+    const doc = createWorkflowDesignerYDoc()
+    const provider = createWorkflowDesignerCollaborationProvider(
+      collaborationRoomId,
+      doc,
+      {
+        serverUrl: workflowDesignerCollaborationUrl,
+        authToken: accessToken,
+      }
+    )
+    const binding = createWorkflowDesignerCollaborationBinding({
+      doc,
+      getSnapshot: () => useWorkflowDesignerStore.getState().history.present,
+      getDefinitionMeta: () => definitionMetaRef.current,
+      applyRemoteSnapshot: (sharedSnapshot) => {
+        useWorkflowDesignerStore.getState().applyRemoteSnapshot(sharedSnapshot)
+      },
+      applyRemoteDefinitionMeta: (meta) => {
+        setDefinitionMetaOverrides(meta)
+      },
+    })
+    const removeStatusListener = provider.onStatusChange(setCollaborationStatus)
+    const updatePeers = () => {
+      const nextPeers = resolveWorkflowDesignerPeers(
+        provider.awareness,
+        currentUser?.userId ?? null
+      )
+      const previousPeers = collaborationPeersRef.current
+      const unchanged =
+        previousPeers.length === nextPeers.length &&
+        previousPeers.every(
+          (peer, index) =>
+            peer.userId === nextPeers[index]?.userId &&
+            peer.clientId === nextPeers[index]?.clientId &&
+            peer.selectedNodeId === nextPeers[index]?.selectedNodeId &&
+            peer.editingNodeId === nextPeers[index]?.editingNodeId &&
+            peer.color === nextPeers[index]?.color &&
+            peer.displayName === nextPeers[index]?.displayName &&
+            peer.cursor?.x === nextPeers[index]?.cursor?.x &&
+            peer.cursor?.y === nextPeers[index]?.cursor?.y
+        )
+
+      if (!unchanged) {
+        setCollaborationPeers(nextPeers)
+      }
+    }
+
+    provider.awareness.on('change', updatePeers)
+    updatePeers()
+
+    collaborationProviderRef.current = provider
+    collaborationBindingRef.current = binding
+
+    return () => {
+      provider.awareness.off('change', updatePeers)
+      removeStatusListener()
+      binding.destroy()
+      provider.destroy()
+      doc.destroy()
+      collaborationProviderRef.current = null
+      collaborationBindingRef.current = null
+      collaborationPeersRef.current = []
+    }
+  }, [accessToken, collaborationReady, collaborationRoomId, currentUser?.userId])
+
+  useEffect(() => {
+    collaborationBindingRef.current?.syncLocalState()
+  }, [snapshot, definitionMeta])
+
+  const pushLocalAwareness = useCallback(() => {
+    const provider = collaborationProviderRef.current
+    if (!provider || !currentUser?.userId) {
+      return
+    }
+
+    provider.setLocalState({
+      userId: currentUser.userId,
+      displayName: currentUser.displayName,
+      color: resolveWorkflowDesignerPeerColor(currentUser.userId),
+      selectedNodeId,
+      editingNodeId: !isReadOnly && activePropertyTab === 'node' ? selectedNodeId : null,
+      cursor: cursorRef.current,
+    })
+  }, [
+    activePropertyTab,
+    currentUser,
+    isReadOnly,
+    selectedNodeId,
+  ])
+
+  useEffect(() => {
+    pushLocalAwareness()
+  }, [pushLocalAwareness])
+
+  const collaborationStatusBadge = useMemo(() => {
+    const label = (() => {
+      if (collaborationMode === 'broadcast') {
+        return collaborationPeers.length > 0
+          ? `本地协同 ${collaborationPeers.length + 1}`
+          : '本地协同'
+      }
+      return collaborationStatus === 'connected'
+        ? `协同在线 ${collaborationPeers.length + 1}`
+        : collaborationStatus === 'connecting'
+          ? '协同连接中'
+          : collaborationStatus === 'disconnected'
+            ? '协同已断开'
+            : '本地协同'
+    })()
+    return <Badge variant='secondary'>{label}</Badge>
+  }, [collaborationMode, collaborationPeers.length, collaborationStatus])
+
+  const selectedNodeEditingPeers = useMemo(
+    () =>
+      selectedNodeId
+        ? collaborationPeers.filter((peer) => peer.editingNodeId === selectedNodeId)
+        : [],
+    [collaborationPeers, selectedNodeId]
+  )
+
+  const collaborationSummary = useMemo(() => {
+    const peers = collaborationPeers.slice(0, 4)
+
+    return (
+      <div className='flex flex-wrap items-center justify-end gap-2'>
+        {peers.length > 0 ? (
+          <div className='flex items-center -space-x-2'>
+            {peers.map((peer) => (
+              <Avatar
+                key={peer.userId}
+                className='size-7 border-2 border-background'
+                style={{
+                  boxShadow: `0 0 0 1px ${peer.color} inset`,
+                }}
+              >
+                <AvatarFallback
+                  style={{
+                    backgroundColor: `${peer.color}20`,
+                    color: peer.color,
+                  }}
+                >
+                  {buildAvatarFallback(peer.displayName)}
+                </AvatarFallback>
+              </Avatar>
+            ))}
+          </div>
+        ) : null}
+        {collaborationStatusBadge}
+        {isReadOnly ? (
+          <Badge variant='outline'>
+            <Eye />
+            只读观摩
+          </Badge>
+        ) : null}
+      </div>
+    )
+  }, [collaborationPeers, collaborationStatusBadge, isReadOnly])
 
   const saveMutation = useMutation({
     mutationFn: async () =>
@@ -679,7 +990,7 @@ function WorkflowDesignerWorkspace({
     [nodes, selectedNodeId]
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     designerHydratedRef.current = false
     const persistedDraft = readPersistedDesignerDraft(draftKey)
 
@@ -790,6 +1101,7 @@ function WorkflowDesignerWorkspace({
             variant='outline'
             disabled={!canUndo}
             onClick={() => undo()}
+            className={isReadOnly ? 'hidden' : undefined}
           >
             <Undo2 data-icon='inline-start' />
             撤销
@@ -798,6 +1110,7 @@ function WorkflowDesignerWorkspace({
             variant='outline'
             disabled={!canRedo}
             onClick={() => redo()}
+            className={isReadOnly ? 'hidden' : undefined}
           >
             <Redo2 data-icon='inline-start' />
             重做
@@ -812,6 +1125,7 @@ function WorkflowDesignerWorkspace({
                 }, 80)
               })
             }
+            className={isReadOnly ? 'hidden' : undefined}
           >
             <LayoutGrid data-icon='inline-start' />
             自动整理
@@ -821,6 +1135,7 @@ function WorkflowDesignerWorkspace({
             onClick={() => {
               saveMutation.mutate()
             }}
+            className={isReadOnly ? 'hidden' : undefined}
           >
             <Save data-icon='inline-start' />
             {saveMutation.isPending ? '保存中...' : '保存草稿'}
@@ -830,6 +1145,7 @@ function WorkflowDesignerWorkspace({
             onClick={() => {
               publishMutation.mutate()
             }}
+            className={isReadOnly ? 'hidden' : undefined}
           >
             <Sparkles data-icon='inline-start' />
             {publishMutation.isPending ? '发布中...' : '发布流程'}
@@ -839,10 +1155,15 @@ function WorkflowDesignerWorkspace({
     >
       <WorkflowDesignerLayout
         palette={
-          <DesignerPalette
-            onAppendNode={handleAppendNode}
-            onAppendPreset={addStructurePreset}
-          />
+          <div className={isReadOnly ? 'relative' : undefined}>
+            {isReadOnly ? (
+              <div className='absolute inset-0 z-10 rounded-2xl bg-background/40 backdrop-blur-[1px]' />
+            ) : null}
+            <DesignerPalette
+              onAppendNode={isReadOnly ? (_template) => undefined : handleAppendNode}
+              onAppendPreset={isReadOnly ? (_preset) => undefined : addStructurePreset}
+            />
+          </div>
         }
         canvas={
           <Card className='flex h-full min-h-0 flex-col border-primary/10 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.08),_transparent_46%)]'>
@@ -868,21 +1189,50 @@ function WorkflowDesignerWorkspace({
             <CardContent className='flex min-h-0 flex-1'>
               <div
                 className='relative h-full min-h-0 flex-1 overflow-hidden rounded-2xl border bg-background/85'
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
+                onDragOver={
+                  isReadOnly
+                    ? undefined
+                    : (event) => {
+                        event.preventDefault()
+                        event.dataTransfer.dropEffect = 'move'
+                      }
+                }
+                onDrop={isReadOnly ? undefined : handleDrop}
+                onMouseMove={(event) => {
+                  const position = reactFlow.screenToFlowPosition({
+                    x: event.clientX,
+                    y: event.clientY,
+                  })
+                  cursorRef.current = position
+                  pushLocalAwareness()
                 }}
-                onDrop={handleDrop}
+                onMouseLeave={() => {
+                  cursorRef.current = null
+                  pushLocalAwareness()
+                }}
               >
                 <GuideLinesOverlay lines={helperLines} />
+                <RemoteCursorOverlay peers={collaborationPeers} />
+                {collaborationMode === 'websocket' &&
+                collaborationStatus === 'disconnected' ? (
+                  <div className='absolute inset-x-4 top-4 z-40 rounded-2xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'>
+                    <div className='flex items-center gap-2 font-medium'>
+                      <PlugZap className='size-4' />
+                      协同连接已断开
+                    </div>
+                    <p className='mt-1 text-xs text-amber-800/80 dark:text-amber-200/80'>
+                      当前仍可继续本地编辑，连接恢复后会重新同步房间状态。
+                    </p>
+                  </div>
+                ) : null}
                 <ReactFlow
-                  nodes={nodes}
+                  nodes={canvasNodes}
                   edges={canvasEdges}
                   nodeTypes={workflowNodeTypes}
                   edgeTypes={workflowEdgeTypes}
-                  onNodesChange={applyNodeChanges}
-                  onEdgesChange={applyEdgeChanges}
-                  onConnect={handleConnect}
+                  onNodesChange={isReadOnly ? undefined : applyNodeChanges}
+                  onEdgesChange={isReadOnly ? undefined : applyEdgeChanges}
+                  onConnect={isReadOnly ? undefined : handleConnect}
                   onNodeClick={(_, node) => {
                     setSelectedNodeId(node.id)
                     setActivePropertyTab('node')
@@ -898,6 +1248,9 @@ function WorkflowDesignerWorkspace({
                   }
                   minZoom={0.45}
                   maxZoom={1.6}
+                  nodesDraggable={!isReadOnly}
+                  nodesConnectable={!isReadOnly}
+                  elementsSelectable
                   snapToGrid
                   snapGrid={[20, 20]}
                   colorMode={resolvedTheme}
@@ -925,83 +1278,98 @@ function WorkflowDesignerWorkspace({
           </Card>
         }
         flowSettings={
-          <Card className='bg-card/95'>
-            <CardHeader className='space-y-1'>
-              <CardTitle>流程配置</CardTitle>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-4'>
-              <div className='grid gap-3'>
-                <div className='grid gap-2'>
-                  <Label htmlFor='processKey'>流程编码</Label>
-                  <Input
-                    id='processKey'
-                    value={definitionMeta.processKey}
-                    onChange={(event) =>
-                      setDefinitionMetaOverrides((previous) => ({
-                        ...previous,
-                        processKey: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className='grid gap-2'>
-                  <Label htmlFor='processName'>流程名称</Label>
-                  <Input
-                    id='processName'
-                    value={definitionMeta.processName}
-                    onChange={(event) =>
-                      setDefinitionMetaOverrides((previous) => ({
-                        ...previous,
-                        processName: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className='grid gap-2'>
-                  <Label htmlFor='category'>业务域</Label>
-                  <Input
-                    id='category'
-                    value={definitionMeta.category}
-                    onChange={(event) =>
-                      setDefinitionMetaOverrides((previous) => ({
-                        ...previous,
-                        category: event.target.value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-              <ProcessFormSelector
-                label='流程默认表单'
-                value={
-                  definitionMeta.processFormKey && definitionMeta.processFormVersion
-                    ? {
-                        processFormKey: definitionMeta.processFormKey,
-                        processFormVersion: definitionMeta.processFormVersion,
+          <div className={isReadOnly ? 'relative' : undefined}>
+            {isReadOnly ? (
+              <div className='absolute inset-0 z-10 rounded-2xl bg-background/40 backdrop-blur-[1px]' />
+            ) : null}
+            <Card className='bg-card/95'>
+              <CardHeader className='space-y-1'>
+                <CardTitle>流程配置</CardTitle>
+              </CardHeader>
+              <CardContent className='flex flex-col gap-4'>
+                <div className='grid gap-3'>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='processKey'>流程编码</Label>
+                    <Input
+                      id='processKey'
+                      value={definitionMeta.processKey}
+                      onChange={(event) =>
+                        setDefinitionMetaOverrides((previous) => ({
+                          ...previous,
+                          processKey: event.target.value,
+                        }))
                       }
-                    : null
-                }
-                onChange={(selection) =>
-                  setDefinitionMetaOverrides((previous) => ({
-                    ...previous,
-                    processFormKey: selection?.processFormKey ?? '',
-                    processFormVersion: selection?.processFormVersion ?? '',
-                  }))
-                }
-              />
-            </CardContent>
-          </Card>
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='processName'>流程名称</Label>
+                    <Input
+                      id='processName'
+                      value={definitionMeta.processName}
+                      onChange={(event) =>
+                        setDefinitionMetaOverrides((previous) => ({
+                          ...previous,
+                          processName: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div className='grid gap-2'>
+                    <Label htmlFor='category'>业务域</Label>
+                    <Input
+                      id='category'
+                      value={definitionMeta.category}
+                      onChange={(event) =>
+                        setDefinitionMetaOverrides((previous) => ({
+                          ...previous,
+                          category: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <ProcessFormSelector
+                  label='流程默认表单'
+                  value={
+                    definitionMeta.processFormKey && definitionMeta.processFormVersion
+                      ? {
+                          processFormKey: definitionMeta.processFormKey,
+                          processFormVersion: definitionMeta.processFormVersion,
+                        }
+                      : null
+                  }
+                  onChange={(selection) =>
+                    setDefinitionMetaOverrides((previous) => ({
+                      ...previous,
+                      processFormKey: selection?.processFormKey ?? '',
+                      processFormVersion: selection?.processFormVersion ?? '',
+                    }))
+                  }
+                />
+              </CardContent>
+            </Card>
+          </div>
         }
         nodeSettings={
-          <div className='text-sm'>
+          <div className={cn('text-sm', isReadOnly ? 'relative' : undefined)}>
+            {selectedNodeEditingPeers.length > 0 ? (
+              <div className='mb-3 rounded-2xl border border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'>
+                {selectedNodeEditingPeers.map((peer) => peer.displayName).join('、')}
+                正在编辑当前节点，保存时可能覆盖对方改动。
+              </div>
+            ) : null}
+            {isReadOnly ? (
+              <div className='absolute inset-0 z-10 rounded-2xl bg-background/40 backdrop-blur-[1px]' />
+            ) : null}
             <NodeConfigPanel
               node={selectedNode}
               edges={edges}
               processFormFields={definitionMeta.formFields}
-              onApply={updateNodeDraft}
+              onApply={isReadOnly ? () => undefined : updateNodeDraft}
             />
           </div>
         }
+        collaborationStatus={collaborationSummary}
         activeTab={activePropertyTab}
         onActiveTabChange={setActivePropertyTab}
       />
@@ -1016,8 +1384,9 @@ export function WorkflowDesignerPage() {
   return (
     <ReactFlowProvider>
       <WorkflowDesignerWorkspace
-        key={search.processDefinitionId ?? 'new'}
+        key={`${search.processDefinitionId ?? 'new'}:${search.mode ?? 'edit'}`}
         processDefinitionId={search.processDefinitionId}
+        mode={search.mode}
       />
     </ReactFlowProvider>
   )

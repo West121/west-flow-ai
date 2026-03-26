@@ -12,6 +12,7 @@ export type ProcessFormRendererProps = {
   value: Record<string, unknown>
   onChange: (value: Record<string, unknown>) => void
   disabled?: boolean
+  userDisplayNames?: Record<string, string> | null
 }
 
 // 流程默认表单的运行态入口，缺少注册时直接提示配置问题。
@@ -21,6 +22,7 @@ export function ProcessFormRenderer({
   value,
   onChange,
   disabled,
+  userDisplayNames,
 }: ProcessFormRendererProps) {
   const registration = findRuntimeFormRegistration(
     processFormKey,
@@ -46,6 +48,7 @@ export function ProcessFormRenderer({
     value,
     onChange,
     disabled,
+    userDisplayNames,
     processFormKey,
     processFormVersion,
   }

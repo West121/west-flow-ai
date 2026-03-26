@@ -40,6 +40,7 @@ import com.westflow.processruntime.api.response.ProcessTaskDetailResponse;
 import com.westflow.processruntime.api.response.ProcessTaskListItemResponse;
 import com.westflow.processruntime.api.response.ProcessTaskTraceItemResponse;
 import com.westflow.processruntime.api.response.RuntimeAppendLinkResponse;
+import com.westflow.processruntime.api.response.WorkbenchDashboardSummaryResponse;
 import com.westflow.processruntime.api.request.RejectTaskRequest;
 import com.westflow.processruntime.api.request.RevokeTaskRequest;
 import com.westflow.processruntime.api.request.RemoveSignTaskRequest;
@@ -211,6 +212,19 @@ public class FlowableProcessRuntimeService {
                 .sorted(Comparator.comparing(ApprovalSheetListItemResponse::updatedAt).reversed())
                 .toList();
         return page(filtered, request.page(), request.pageSize());
+    }
+
+    /**
+     * 查询工作台首页概览统计。
+     */
+    public WorkbenchDashboardSummaryResponse dashboardSummary() {
+        String currentUserId = currentUserId();
+        java.time.LocalDate today = OffsetDateTime.now(TIME_ZONE).toLocalDate();
+        long todoTodayCount = page(new PageRequest(1, Integer.MAX_VALUE, null, List.of(), List.of(), List.of())).records().stream()
+                .filter(task -> task.createdAt() != null && task.createdAt().toLocalDate().equals(today))
+                .count();
+        long doneApprovalCount = buildDoneApprovalSheets(currentUserId, List.of()).size();
+        return new WorkbenchDashboardSummaryResponse(todoTodayCount, doneApprovalCount);
     }
 
     /**
@@ -720,7 +734,8 @@ public class FlowableProcessRuntimeService {
         String taskKind = resolveTaskKind(task);
         boolean isNormalTask = "NORMAL".equals(taskKind);
         boolean isAppendTask = "APPEND".equals(taskKind);
-        boolean isFlowHandleTask = isNormalTask || isAppendTask;
+        boolean isAddSignTask = "ADD_SIGN".equals(taskKind);
+        boolean isFlowHandleTask = isNormalTask || isAppendTask || isAddSignTask;
         List<String> candidateUserIds = candidateUsers(task.getId());
         List<String> candidateGroupIds = candidateGroups(task.getId());
         boolean isCandidate = isCurrentUserCandidate(task, candidateUserIds, candidateGroupIds);
@@ -732,13 +747,14 @@ public class FlowableProcessRuntimeService {
         boolean canTakeBack = isNormalTask && canTakeBack(task);
         boolean canAddSign = isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy;
         boolean canRemoveSign = isNormalTask && canHandle && blockedByAddSign && !blockedByAppendPolicy;
+        boolean canComplete = isFlowHandleTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy;
         boolean canRead = "CC".equals(taskKind)
                 && (isAssignee || isCandidate)
                 && "CC_PENDING".equals(resolveTaskStatus(task));
         return new TaskActionAvailabilityResponse(
                 isFlowHandleTask && canClaim,
-                isFlowHandleTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
-                isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
+                canComplete,
+                canComplete,
                 isFlowHandleTask && canHandle,
                 isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 canAddSign,
@@ -1951,6 +1967,8 @@ public class FlowableProcessRuntimeService {
         List<CountersignTaskGroupResponse> countersignGroups = flowableCountersignService.queryTaskGroups(processInstanceId);
         List<ProcessInstanceLinkResponse> processLinks = subprocessLinks(processInstanceId);
         List<RuntimeAppendLinkResponse> runtimeAppendLinks = appendLinks(processInstanceId);
+        Map<String, Object> processFormData = mapValue(variables.get("westflowFormData"));
+        Map<String, Object> taskFormData = mapValue(variables.get("westflowTaskFormData"));
         String applicantUserId = stringValue(variables.get("westflowInitiatorUserId"));
         Map<String, String> userDisplayNames = buildUserDisplayNameMap(
                 applicantUserId,
@@ -1960,7 +1978,10 @@ public class FlowableProcessRuntimeService {
                 instanceEvents,
                 processLinks,
                 runtimeAppendLinks,
-                countersignGroups
+                countersignGroups,
+                businessData,
+                processFormData,
+                taskFormData
         );
         Map<String, String> groupDisplayNames = buildGroupDisplayNameMap(
                 referenceActiveTask != null ? candidateGroups(referenceActiveTask.getId()) : List.of(),
@@ -2028,8 +2049,8 @@ public class FlowableProcessRuntimeService {
                 nodeFormKey != null ? nodeFormKey : payload.processFormKey(),
                 nodeFormVersion != null ? nodeFormVersion : payload.processFormVersion(),
                 fieldBindings,
-                mapValue(variables.get("westflowFormData")),
-                mapValue(variables.get("westflowTaskFormData")),
+                processFormData,
+                taskFormData,
                 countersignGroups,
                 inclusiveGatewayHits,
                 processLinks,
@@ -2048,7 +2069,10 @@ public class FlowableProcessRuntimeService {
             List<ProcessInstanceEventResponse> instanceEvents,
             List<ProcessInstanceLinkResponse> processLinks,
             List<RuntimeAppendLinkResponse> runtimeAppendLinks,
-            List<CountersignTaskGroupResponse> countersignGroups
+            List<CountersignTaskGroupResponse> countersignGroups,
+            Map<String, Object> businessData,
+            Map<String, Object> processFormData,
+            Map<String, Object> taskFormData
     ) {
         Set<String> userIds = new LinkedHashSet<>();
         addIfPresent(userIds, applicantUserId);
@@ -2077,11 +2101,49 @@ public class FlowableProcessRuntimeService {
         for (CountersignTaskGroupResponse group : countersignGroups) {
             group.members().forEach(member -> addIfPresent(userIds, member.assigneeUserId()));
         }
+        addUserReferencesFromMap(userIds, businessData);
+        addUserReferencesFromMap(userIds, processFormData);
+        addUserReferencesFromMap(userIds, taskFormData);
         Map<String, String> displayNames = new LinkedHashMap<>();
         for (String userId : userIds) {
             displayNames.put(userId, resolveUserDisplayName(userId));
         }
         return Collections.unmodifiableMap(displayNames);
+    }
+
+    private void addUserReferencesFromMap(Set<String> userIds, Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return;
+        }
+        values.forEach((key, value) -> {
+            if (key == null || value == null) {
+                return;
+            }
+            if (key.endsWith("UserId")) {
+                addIfPresent(userIds, stringValue(value));
+                return;
+            }
+            if (key.endsWith("UserIds")) {
+                if (value instanceof Iterable<?> iterable) {
+                    for (Object item : iterable) {
+                        addIfPresent(userIds, stringValue(item));
+                    }
+                    return;
+                }
+                if (value.getClass().isArray() && value instanceof Object[] array) {
+                    for (Object item : array) {
+                        addIfPresent(userIds, stringValue(item));
+                    }
+                    return;
+                }
+                String rawValue = stringValue(value);
+                if (rawValue != null) {
+                    for (String item : rawValue.split(",")) {
+                        addIfPresent(userIds, item);
+                    }
+                }
+            }
+        });
     }
 
     private Map<String, String> buildGroupDisplayNameMap(

@@ -21,7 +21,6 @@ import {
   FormDescription,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -35,7 +34,13 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
-import { ProFormActions, ProFormSection, ProFormShell, UserPickerField } from '@/features/shared/pro-form'
+import {
+  ProFormActions,
+  ProFormLabel,
+  ProFormSection,
+  ProFormShell,
+  UserPickerField,
+} from '@/features/shared/pro-form'
 import { PageShell } from '@/features/shared/page-shell'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
@@ -125,7 +130,7 @@ const expenseListRoute = getRouteApi('/_authenticated/oa/expense/list')
 const commonListRoute = getRouteApi('/_authenticated/oa/common/list')
 const oaQueryRoute = getRouteApi('/_authenticated/oa/query')
 
-const OA_DRAFT_FETCH_SIZE = 200
+const OA_DRAFT_FETCH_SIZE = 100
 const EMPTY_APPROVAL_SHEET_PAGE: ApprovalSheetPageResponse = {
   page: 1,
   pageSize: OA_DRAFT_FETCH_SIZE,
@@ -536,7 +541,7 @@ function LeaveCreateForm() {
               name='leaveType'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>请假类型</FormLabel>
+                  <ProFormLabel required>请假类型</ProFormLabel>
                   <Select value={field.value} onValueChange={field.onChange}>
                     <FormControl>
                       <SelectTrigger>
@@ -559,7 +564,7 @@ function LeaveCreateForm() {
               name='days'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>请假天数</FormLabel>
+                  <ProFormLabel required>请假天数</ProFormLabel>
                   <FormControl>
                     <Input type='number' min='1' placeholder='请输入请假天数' {...field} />
                   </FormControl>
@@ -574,7 +579,7 @@ function LeaveCreateForm() {
               render={({ field }) => (
                 <FormItem className='flex items-center justify-between rounded-xl border px-4 py-3'>
                   <div className='space-y-0.5'>
-                    <FormLabel>是否紧急</FormLabel>
+                    <ProFormLabel>是否紧急</ProFormLabel>
                     <FormDescription>紧急请假会触发 HR 备案分支</FormDescription>
                   </div>
                   <FormControl>
@@ -589,7 +594,7 @@ function LeaveCreateForm() {
               name='managerUserId'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>直属负责人</FormLabel>
+                  <ProFormLabel required>直属负责人</ProFormLabel>
                   <FormControl>
                     <UserPickerField
                       id='oa-leave-manager-user'
@@ -612,7 +617,7 @@ function LeaveCreateForm() {
               name='reason'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>请假原因</FormLabel>
+                  <ProFormLabel required>请假原因</ProFormLabel>
                   <FormControl>
                     <Textarea className='min-h-28' placeholder='请输入请假原因' {...field} />
                   </FormControl>
@@ -760,7 +765,7 @@ function ExpenseCreateForm() {
               name='amount'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>报销金额</FormLabel>
+                  <ProFormLabel required>报销金额</ProFormLabel>
                   <FormControl>
                     <Input type='number' min='0' step='0.01' placeholder='例如：128.5' {...field} />
                   </FormControl>
@@ -777,7 +782,7 @@ function ExpenseCreateForm() {
               name='reason'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>报销事由</FormLabel>
+                  <ProFormLabel required>报销事由</ProFormLabel>
                   <FormControl>
                     <Textarea className='min-h-28' placeholder='请输入报销事由' {...field} />
                   </FormControl>
@@ -923,7 +928,7 @@ function CommonCreateForm() {
               name='title'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>申请标题</FormLabel>
+                  <ProFormLabel required>申请标题</ProFormLabel>
                   <FormControl>
                     <Input placeholder='例如：资产借用' {...field} />
                   </FormControl>
@@ -939,7 +944,7 @@ function CommonCreateForm() {
               name='content'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>申请内容</FormLabel>
+                  <ProFormLabel required>申请内容</ProFormLabel>
                   <FormControl>
                     <Textarea className='min-h-28' placeholder='请输入申请内容' {...field} />
                   </FormControl>

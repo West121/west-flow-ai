@@ -221,6 +221,21 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeDashboardSummary() throws Exception {
+        String token = login("zhangsan");
+
+        JsonNode body = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/dashboard/summary")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(body.path("todoTodayCount").isNumber()).isTrue();
+        assertThat(body.path("doneApprovalCount").isNumber()).isTrue();
+    }
+
+    @Test
     void shouldExposeFormMetadataAndApprovalSheetViewsOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -917,7 +932,7 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString()).path("data");
         assertThat(appendActions.path("canApprove").asBoolean()).isTrue();
         assertThat(appendActions.path("canTransfer").asBoolean()).isTrue();
-        assertThat(appendActions.path("canReject").asBoolean()).isFalse();
+        assertThat(appendActions.path("canReject").asBoolean()).isTrue();
 
         mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", appendedTaskId)
                         .header("Authorization", "Bearer " + targetToken)

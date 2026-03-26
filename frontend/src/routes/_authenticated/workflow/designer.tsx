@@ -5,6 +5,7 @@ import { WorkflowDesignerPage } from '@/features/workflow/pages'
 export const Route = createFileRoute('/_authenticated/workflow/designer')({
   validateSearch: z.object({
     processDefinitionId: z.string().optional(),
+    mode: z.enum(['edit', 'view']).optional(),
   }),
   component: WorkflowDesignerPage,
 })

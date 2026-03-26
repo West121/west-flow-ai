@@ -62,6 +62,7 @@ export function OALeaveStartForm({
   value,
   onChange,
   disabled,
+  userDisplayNames,
   processFormKey,
   processFormVersion,
 }: RuntimeFormComponentProps) {
@@ -145,6 +146,7 @@ export function OALeaveStartForm({
           disabled={disabled}
           placeholder='请选择直属负责人'
           ariaLabel='直属负责人'
+          displayNames={userDisplayNames}
           onChange={(nextValue) => {
             onChange({
               ...value,

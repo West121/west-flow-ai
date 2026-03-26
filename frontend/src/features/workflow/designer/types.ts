@@ -293,6 +293,18 @@ export type WorkflowNodeData<K extends WorkflowNodeKind = WorkflowNodeKind> = {
   description: string
   tone: WorkflowNodeTone
   config: WorkflowNodeConfigMap[K]
+  collaboration?: {
+    selectedBy: Array<{
+      userId: string
+      displayName: string
+      color: string
+    }>
+    editingBy: Array<{
+      userId: string
+      displayName: string
+      color: string
+    }>
+  }
 }
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflow'>
