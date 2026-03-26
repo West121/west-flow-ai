@@ -236,6 +236,92 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldRespectActivePostContextForDepartmentCandidateTasks() throws Exception {
+        String applicantToken = login("wangwu");
+        String multiPostToken = login("zhangsan");
+        publishDepartmentCandidateLeaveProcess();
+        seedLeaveBill("leave_ctx_001");
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave_department_candidate",
+                                  "businessKey": "leave_ctx_001",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 1,
+                                    "reason": "任职上下文测试"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode beforeSwitchPage = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/page")
+                        .header("Authorization", "Bearer " + multiPostToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(beforeSwitchPage.path("total").asInt()).isZero();
+
+        mockMvc.perform(post("/api/v1/auth/switch-context")
+                        .header("Authorization", "Bearer " + multiPostToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "activePostId": "post_002"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode afterSwitchPage = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/page")
+                        .header("Authorization", "Bearer " + multiPostToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(afterSwitchPage.path("total").asInt()).isEqualTo(1);
+        assertThat(afterSwitchPage.path("records").get(0).path("taskId").asText()).isEqualTo(taskId);
+
+        JsonNode actionsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + multiPostToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(actionsBody.path("canClaim").asBoolean()).isTrue();
+    }
+
+    @Test
     void shouldExposeFormMetadataAndApprovalSheetViewsOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -2316,6 +2402,79 @@ class FlowableProcessRuntimeControllerTest {
                     {
                       "id": "edge_2",
                       "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishDepartmentCandidateLeaveProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave_department_candidate",
+                  "processName": "请假审批（部门候选）",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_hr_department",
+                      "type": "approver",
+                      "name": "人力资源部审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "DEPARTMENT",
+                          "userIds": [],
+                          "roleCodes": [],
+                          "departmentRef": "dept_002",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_hr_department",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_hr_department",
                       "target": "end_1",
                       "priority": 10,
                       "label": "通过"

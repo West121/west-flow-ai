@@ -4901,16 +4901,20 @@ public class FlowableProcessRuntimeService {
     private List<String> currentCandidateGroupIds() {
         CurrentUserResponse currentUser = identityAuthService.currentUser();
         LinkedHashSet<String> groupIds = new LinkedHashSet<>();
-        identityAccessMapper.selectRoleIdsByUserId(currentUser.userId()).stream()
-                .filter(roleId -> roleId != null && !roleId.isBlank())
-                .forEach(groupIds::add);
+        currentUser.postAssignments().stream()
+                .filter(assignment -> assignment.postId().equals(currentUser.activePostId()))
+                .findFirst()
+                .ifPresentOrElse(
+                        assignment -> assignment.roleIds().stream()
+                                .filter(roleId -> roleId != null && !roleId.isBlank())
+                                .forEach(groupIds::add),
+                        () -> identityAccessMapper.selectRoleIdsByUserId(currentUser.userId()).stream()
+                                .filter(roleId -> roleId != null && !roleId.isBlank())
+                                .forEach(groupIds::add)
+                );
         if (currentUser.activeDepartmentId() != null && !currentUser.activeDepartmentId().isBlank()) {
             groupIds.add(currentUser.activeDepartmentId());
         }
-        currentUser.partTimePosts().stream()
-                .map(CurrentUserResponse.PartTimePost::departmentId)
-                .filter(departmentId -> departmentId != null && !departmentId.isBlank())
-                .forEach(groupIds::add);
         return List.copyOf(groupIds);
     }
 
