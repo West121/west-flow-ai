@@ -3065,6 +3065,14 @@ export function WorkbenchTodoDetailPage({
                     </dd>
                   </div>
                   <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>发起部门</dt>
+                    <dd>{detail.initiatorDepartmentName ?? '--'}</dd>
+                  </div>
+                  <div className='flex justify-between gap-3'>
+                    <dt className='text-muted-foreground'>发起岗位</dt>
+                    <dd>{detail.initiatorPostName ?? '--'}</dd>
+                  </div>
+                  <div className='flex justify-between gap-3'>
                     <dt className='text-muted-foreground'>创建时间</dt>
                     <dd>{formatDateTime(detail.createdAt)}</dd>
                   </div>

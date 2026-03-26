@@ -198,6 +198,46 @@ class OAControllerTest {
         assertThat(billRow.path("process_instance_id").asText()).isEqualTo(submitData.path("processInstanceId").asText());
     }
 
+    @Test
+    void shouldStartLeaveWithActivePostContextVariables() throws Exception {
+        String token = login();
+        publishLeaveProcess();
+        seedLeaveBinding();
+
+        mockMvc.perform(post("/api/v1/auth/switch-context")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "activePostId": "post_002"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(post("/api/v1/oa/leaves")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sceneCode": "default",
+                                  "days": 1,
+                                  "reason": "任职上下文发起"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String instanceId = objectMapper.readTree(response).path("data").path("processInstanceId").asText();
+        assertThat(runtimeService.getVariable(instanceId, "westflowInitiatorUserId")).isEqualTo("usr_001");
+        assertThat(runtimeService.getVariable(instanceId, "westflowInitiatorPostId")).isEqualTo("post_002");
+        assertThat(runtimeService.getVariable(instanceId, "westflowInitiatorPostName")).isEqualTo("请假复核岗");
+        assertThat(runtimeService.getVariable(instanceId, "westflowInitiatorDepartmentId")).isEqualTo("dept_002");
+        assertThat(runtimeService.getVariable(instanceId, "westflowInitiatorDepartmentName")).isEqualTo("人力资源部");
+        assertThat(runtimeService.getVariable(instanceId, "westflowInitiatorCompanyName")).isEqualTo("西流科技");
+    }
+
     private String login() throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

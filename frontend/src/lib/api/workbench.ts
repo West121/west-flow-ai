@@ -234,6 +234,10 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   operatorUserId: string | null
   comment: string | null
   instanceStatus: string
+  initiatorPostId?: string | null
+  initiatorPostName?: string | null
+  initiatorDepartmentId?: string | null
+  initiatorDepartmentName?: string | null
   automationStatus?: string | null
   formData: Record<string, unknown>
   businessData?: Record<string, unknown> | null
@@ -309,6 +313,10 @@ export type ApprovalSheetListItem = {
   billNo: string | null
   businessTitle: string | null
   initiatorUserId: string
+  initiatorPostId?: string | null
+  initiatorPostName?: string | null
+  initiatorDepartmentId?: string | null
+  initiatorDepartmentName?: string | null
   currentNodeName: string | null
   currentTaskId: string | null
   currentTaskStatus: string | null

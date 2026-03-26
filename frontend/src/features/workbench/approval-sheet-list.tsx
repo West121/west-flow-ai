@@ -217,6 +217,18 @@ export function createApprovalSheetColumns(
     {
       accessorKey: 'initiatorUserId',
       header: '发起人',
+      cell: ({ row }) => (
+        <div className='flex flex-col gap-1'>
+          <span>{row.original.initiatorUserId}</span>
+          {row.original.initiatorDepartmentName || row.original.initiatorPostName ? (
+            <span className='text-xs text-muted-foreground'>
+              {[row.original.initiatorDepartmentName, row.original.initiatorPostName]
+                .filter(Boolean)
+                .join(' / ')}
+            </span>
+          ) : null}
+        </div>
+      ),
     },
     {
       accessorKey: 'currentNodeName',

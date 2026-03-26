@@ -2,6 +2,8 @@ package com.westflow.processruntime.service;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
@@ -44,6 +46,7 @@ public class FlowableRuntimeStartService {
     private final ProcessLinkService processLinkService;
     private final CountersignAssigneeResolver countersignAssigneeResolver;
     private final BusinessProcessBindingService businessProcessBindingService;
+    private final IdentityAuthService identityAuthService;
 
     /**
      * 启动指定流程定义的最新发布版本。
@@ -186,6 +189,7 @@ public class FlowableRuntimeStartService {
      */
     private Map<String, Object> buildStartVariables(PublishedProcessDefinition definition, StartProcessRequest request) {
         Map<String, Object> variables = new LinkedHashMap<>();
+        CurrentUserResponse currentUser = identityAuthService.currentUser();
         if (request.formData() != null && !request.formData().isEmpty()) {
             Map<String, Object> normalizedFormData = normalizeStartFormData(request.businessType(), request.formData());
             variables.putAll(normalizedFormData);
@@ -196,7 +200,13 @@ public class FlowableRuntimeStartService {
         variables.put("westflowProcessName", definition.processName());
         variables.put("westflowBusinessType", request.businessType());
         variables.put("westflowBusinessKey", request.businessKey());
-        variables.put("westflowInitiatorUserId", StpUtil.getLoginIdAsString());
+        variables.put("westflowInitiatorUserId", currentUser.userId());
+        variables.put("westflowInitiatorPostId", currentUser.activePostId());
+        variables.put("westflowInitiatorPostName", currentUser.activePostName());
+        variables.put("westflowInitiatorDepartmentId", currentUser.activeDepartmentId());
+        variables.put("westflowInitiatorDepartmentName", currentUser.activeDepartmentName());
+        variables.put("westflowInitiatorCompanyId", currentUser.companyId());
+        variables.put("westflowInitiatorCompanyName", currentUser.companyName());
         definition.dsl().nodes().stream()
                 .filter(node -> "subprocess".equals(node.type()))
                 .forEach(node -> appendSubprocessStartVariables(variables, request.businessType(), node));

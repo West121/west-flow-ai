@@ -395,6 +395,14 @@ function OABoardCard({ item }: { item: ApprovalSheetListItem }) {
       </div>
       <div className='mt-3 grid gap-2 text-xs text-muted-foreground'>
         <div>发起人：{item.initiatorUserId}</div>
+        {item.initiatorDepartmentName || item.initiatorPostName ? (
+          <div>
+            发起身份：
+            {[item.initiatorDepartmentName, item.initiatorPostName]
+              .filter(Boolean)
+              .join(' / ')}
+          </div>
+        ) : null}
         <div>当前节点：{item.currentNodeName ?? '--'}</div>
         <div>实例状态：{resolveApprovalSheetInstanceStatusLabel(item.instanceStatus)}</div>
         <div>自动化：{resolveApprovalSheetAutomationStatusLabel(item.automationStatus)}</div>
