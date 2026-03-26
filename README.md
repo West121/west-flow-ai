@@ -49,6 +49,14 @@ Monorepo for the AIBPMN approval platform.
    ```bash
    pnpm --dir frontend dev
    mvn -f backend/pom.xml spring-boot:run
+   ./scripts/start-workflow-collab.sh
+   ```
+
+6. Optional: run workflow designer collaboration E2E:
+
+   ```bash
+   pnpm -C frontend exec playwright install chromium
+   pnpm -C frontend test:e2e:collab
    ```
 
 ## Docs
@@ -63,3 +71,4 @@ Monorepo for the AIBPMN approval platform.
 - Task actions contract: [`docs/contracts/task-actions.md`](./docs/contracts/task-actions.md)
 - DSL to BPMN mapping: [`docs/contracts/dsl-bpmn-mapping.md`](./docs/contracts/dsl-bpmn-mapping.md)
 - AI tools contract: [`docs/contracts/ai-tools.md`](./docs/contracts/ai-tools.md)
+- Workflow collaboration operations: [`docs/runbooks/2026-03-26-workflow-collab-operations.md`](./docs/runbooks/2026-03-26-workflow-collab-operations.md)
