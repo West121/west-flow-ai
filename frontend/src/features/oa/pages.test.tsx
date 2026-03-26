@@ -64,6 +64,7 @@ const advancedRuntimeApiMocks = vi.hoisted(() => ({
 
 const systemUserApiMocks = vi.hoisted(() => ({
   listSystemUsers: vi.fn(),
+  getSystemUserDetail: vi.fn(),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -346,6 +347,35 @@ describe('oa pages', () => {
         },
       ],
     })
+    systemUserApiMocks.getSystemUserDetail.mockImplementation(async (userId: string) => ({
+      userId,
+      displayName: userId === 'usr_002' ? '李四' : '王主管',
+      username: userId === 'usr_002' ? 'lisi' : 'wangzhuguan',
+      mobile: '',
+      email: '',
+      companyId: 'comp_001',
+      companyName: '西流科技',
+      departmentId: userId === 'usr_002' ? 'dept_002' : 'dept_005',
+      departmentName: userId === 'usr_002' ? '人力资源部' : '运营中心',
+      postId: userId === 'usr_002' ? 'post_002' : 'post_005',
+      postName: userId === 'usr_002' ? '部门负责人' : '总监',
+      roleIds: [],
+      enabled: true,
+      primaryAssignment: {
+        userPostId: `up_${userId}`,
+        companyId: 'comp_001',
+        companyName: '西流科技',
+        departmentId: userId === 'usr_002' ? 'dept_002' : 'dept_005',
+        departmentName: userId === 'usr_002' ? '人力资源部' : '运营中心',
+        postId: userId === 'usr_002' ? 'post_002' : 'post_005',
+        postName: userId === 'usr_002' ? '部门负责人' : '总监',
+        roleIds: [],
+        roleNames: [],
+        primary: true,
+        enabled: true,
+      },
+      partTimeAssignments: [],
+    }))
   })
 
   afterEach(() => {
@@ -469,6 +499,38 @@ describe('oa pages', () => {
         managerUserId: 'usr_005',
       })
     })
+  })
+
+  it('shows manager display name for leave drafts even when user list does not contain the selected id', async () => {
+    routeSearchState.current = {
+      ...routeSearchState.current,
+      draftId: 'leave_draft_display',
+    }
+    oaApiMocks.getOALeaveBillDetail.mockResolvedValue({
+      billId: 'leave_draft_display',
+      billNo: 'LEAVE-DRAFT-DISPLAY',
+      sceneCode: 'default',
+      leaveType: 'ANNUAL',
+      days: 1,
+      reason: '草稿测试',
+      urgent: false,
+      managerUserId: 'usr_002',
+      managerDisplayName: '李四',
+      processInstanceId: null,
+      status: 'DRAFT',
+    })
+    systemUserApiMocks.listSystemUsers.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      pages: 0,
+      groups: [],
+      records: [],
+    })
+
+    renderWithQuery(<OALeaveCreatePage />)
+
+    expect(await screen.findByText('李四')).toBeInTheDocument()
   })
 
   it('submits 报销申请 to the expense launch endpoint', async () => {

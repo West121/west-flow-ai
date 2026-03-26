@@ -6,6 +6,7 @@ import { ProcessFormRenderer } from './process-form-renderer'
 
 const systemUserApiMocks = vi.hoisted(() => ({
   listSystemUsers: vi.fn(),
+  getSystemUserDetail: vi.fn(),
 }))
 
 vi.mock('@/lib/api/system-users', () => systemUserApiMocks)
@@ -43,6 +44,35 @@ describe('runtime form renderers', () => {
         },
       ],
     })
+    systemUserApiMocks.getSystemUserDetail.mockImplementation(async (userId: string) => ({
+      userId,
+      displayName: userId === 'usr_002' ? '李四' : '王主管',
+      username: userId === 'usr_002' ? 'lisi' : 'wangzhuguan',
+      mobile: '',
+      email: '',
+      companyId: 'comp_001',
+      companyName: '西流科技',
+      departmentId: userId === 'usr_002' ? 'dept_002' : 'dept_005',
+      departmentName: userId === 'usr_002' ? '人力资源部' : '运营中心',
+      postId: userId === 'usr_002' ? 'post_002' : 'post_005',
+      postName: userId === 'usr_002' ? '部门负责人' : '总监',
+      roleIds: [],
+      enabled: true,
+      primaryAssignment: {
+        userPostId: `up_${userId}`,
+        companyId: 'comp_001',
+        companyName: '西流科技',
+        departmentId: userId === 'usr_002' ? 'dept_002' : 'dept_005',
+        departmentName: userId === 'usr_002' ? '人力资源部' : '运营中心',
+        postId: userId === 'usr_002' ? 'post_002' : 'post_005',
+        postName: userId === 'usr_002' ? '部门负责人' : '总监',
+        roleIds: [],
+        roleNames: [],
+        primary: true,
+        enabled: true,
+      },
+      partTimeAssignments: [],
+    }))
   })
 
   it('renders the registered process form and propagates form data changes', async () => {

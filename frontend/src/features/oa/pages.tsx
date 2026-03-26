@@ -612,6 +612,11 @@ function LeaveCreateForm() {
                       onChange={field.onChange}
                       placeholder='请选择直属负责人'
                       ariaLabel='直属负责人'
+                      displayNames={
+                        field.value && draftDetailQuery.data?.managerDisplayName
+                          ? { [field.value]: draftDetailQuery.data.managerDisplayName }
+                          : undefined
+                      }
                     />
                   </FormControl>
                   <FormDescription>将作为负责人确认节点的默认办理人</FormDescription>

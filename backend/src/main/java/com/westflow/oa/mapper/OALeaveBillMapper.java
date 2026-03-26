@@ -77,18 +77,20 @@ public interface OALeaveBillMapper {
 
     @Select("""
             SELECT
-              id AS billId,
-              bill_no AS billNo,
-              scene_code AS sceneCode,
-              leave_type AS leaveType,
-              days,
-              reason,
-              urgent,
-              manager_user_id AS managerUserId,
-              process_instance_id AS processInstanceId,
-              status
-            FROM oa_leave_bill
-            WHERE id = #{billId}
+              bill.id AS billId,
+              bill.bill_no AS billNo,
+              bill.scene_code AS sceneCode,
+              bill.leave_type AS leaveType,
+              bill.days,
+              bill.reason,
+              bill.urgent,
+              bill.manager_user_id AS managerUserId,
+              manager.display_name AS managerDisplayName,
+              bill.process_instance_id AS processInstanceId,
+              bill.status
+            FROM oa_leave_bill bill
+            LEFT JOIN wf_user manager ON manager.id = bill.manager_user_id
+            WHERE bill.id = #{billId}
             """)
     OALeaveBillDetailResponse selectDetail(@Param("billId") String billId);
 

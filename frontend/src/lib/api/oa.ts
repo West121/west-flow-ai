@@ -63,6 +63,7 @@ export type OALeaveBillDetail = OABillDetail & {
   reason: string
   urgent: boolean
   managerUserId: string
+  managerDisplayName?: string | null
   processInstanceId: string | null
   status: string
 }

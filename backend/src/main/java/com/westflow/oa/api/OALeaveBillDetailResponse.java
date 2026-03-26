@@ -12,6 +12,7 @@ public record OALeaveBillDetailResponse(
         String reason,
         Boolean urgent,
         String managerUserId,
+        String managerDisplayName,
         String processInstanceId,
         String status
 ) {

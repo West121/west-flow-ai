@@ -10,7 +10,10 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
-import { listSystemUsers, type SystemUserRecord } from '@/lib/api/system-users'
+import {
+  listSystemUsers,
+  type SystemUserRecord,
+} from '@/lib/api/system-users'
 import { cn } from '@/lib/utils'
 
 type UserPickerOption = {
@@ -122,10 +125,7 @@ export function UserPickerField({
       }
     }
 
-    void Promise.all([
-      listSystemUsers(buildSearch('')),
-      listSystemUsers(buildSearch(value)),
-    ])
+    void Promise.all([listSystemUsers(buildSearch('')), listSystemUsers(buildSearch(value))])
       .then(([baseResponse, selectedResponse]) => {
         if (!cancelled) {
           setOptions((currentOptions) =>

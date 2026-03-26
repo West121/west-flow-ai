@@ -59,6 +59,28 @@ class SystemUserControllerTest {
         assertThat(pageBody.path("data").path("records").get(0).path("userId").asText()).isEqualTo("usr_001");
         assertThat(pageBody.path("data").path("records").get(0).path("displayName").asText()).contains("张");
 
+        String byIdPageResponse = mockMvc.perform(post("/api/v1/system/users/page")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "usr_002",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode byIdPageBody = objectMapper.readTree(byIdPageResponse);
+        assertThat(byIdPageBody.path("data").path("records").get(0).path("userId").asText()).isEqualTo("usr_002");
+        assertThat(byIdPageBody.path("data").path("records").get(0).path("displayName").asText()).isEqualTo("李四");
+
         String detailResponse = mockMvc.perform(get("/api/v1/system/users/usr_001")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
