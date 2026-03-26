@@ -431,6 +431,9 @@ function FormSectionTitle({
   )
 }
 
+const DEFAULT_LEAVE_MANAGER_ID = 'usr_002'
+const DEFAULT_LEAVE_MANAGER_DISPLAY_NAME = '李四'
+
 function LeaveCreateForm() {
   const search = leaveCreateRoute.useSearch()
   const navigate = useNavigate()
@@ -443,7 +446,7 @@ function LeaveCreateForm() {
       days: '1',
       reason: '',
       urgent: false,
-      managerUserId: 'usr_002',
+      managerUserId: DEFAULT_LEAVE_MANAGER_ID,
     },
   })
   const draftDetailQuery = useQuery({
@@ -461,7 +464,8 @@ function LeaveCreateForm() {
       days: String(draftDetailQuery.data.days ?? 1),
       reason: draftDetailQuery.data.reason ?? '',
       urgent: Boolean(draftDetailQuery.data.urgent),
-      managerUserId: draftDetailQuery.data.managerUserId ?? 'usr_002',
+      managerUserId:
+        draftDetailQuery.data.managerUserId ?? DEFAULT_LEAVE_MANAGER_ID,
     })
   }, [draftDetailQuery.data, form])
 
@@ -613,8 +617,14 @@ function LeaveCreateForm() {
                       placeholder='请选择直属负责人'
                       ariaLabel='直属负责人'
                       displayNames={
-                        field.value && draftDetailQuery.data?.managerDisplayName
-                          ? { [field.value]: draftDetailQuery.data.managerDisplayName }
+                        field.value
+                          ? {
+                              [field.value]:
+                                draftDetailQuery.data?.managerDisplayName ??
+                                (field.value === DEFAULT_LEAVE_MANAGER_ID
+                                  ? DEFAULT_LEAVE_MANAGER_DISPLAY_NAME
+                                  : field.value),
+                            }
                           : undefined
                       }
                     />
