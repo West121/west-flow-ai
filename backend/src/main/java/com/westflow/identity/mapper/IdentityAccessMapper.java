@@ -32,6 +32,20 @@ public interface IdentityAccessMapper {
             """)
     List<String> selectRoleIdsByUserId(@Param("userId") String userId);
 
+    @Select({
+            "<script>",
+            "SELECT DISTINCT role_code",
+            "FROM wf_role",
+            "WHERE id IN",
+            "<foreach collection='roleIds' item='roleId' open='(' separator=',' close=')'>",
+            "  #{roleId}",
+            "</foreach>",
+            "  AND enabled = TRUE",
+            "ORDER BY role_code ASC",
+            "</script>"
+    })
+    List<String> selectRoleCodesByRoleIds(@Param("roleIds") List<String> roleIds);
+
     @Select("""
             SELECT DISTINCT m.permission_code
             FROM wf_user_role ur
@@ -42,10 +56,29 @@ public interface IdentityAccessMapper {
               AND r.enabled = TRUE
               AND m.enabled = TRUE
               AND m.permission_code IS NOT NULL
-              AND m.permission_code <> ''
+              AND m.permission_code != ''
             ORDER BY m.permission_code ASC
             """)
     List<String> selectPermissionsByUserId(@Param("userId") String userId);
+
+    @Select({
+            "<script>",
+            "SELECT DISTINCT m.permission_code",
+            "FROM wf_role_menu rm",
+            "INNER JOIN wf_role r ON r.id = rm.role_id",
+            "INNER JOIN wf_menu m ON m.id = rm.menu_id",
+            "WHERE rm.role_id IN",
+            "<foreach collection='roleIds' item='roleId' open='(' separator=',' close=')'>",
+            "  #{roleId}",
+            "</foreach>",
+            "  AND r.enabled = TRUE",
+            "  AND m.enabled = TRUE",
+            "  AND m.permission_code IS NOT NULL",
+            "  AND m.permission_code != ''",
+            "ORDER BY m.permission_code ASC",
+            "</script>"
+    })
+    List<String> selectPermissionsByRoleIds(@Param("roleIds") List<String> roleIds);
 
     @Select("""
             SELECT DISTINCT
@@ -59,6 +92,21 @@ public interface IdentityAccessMapper {
             ORDER BY rds.scope_type ASC, rds.scope_value ASC
             """)
     List<CurrentUserResponse.DataScope> selectDataScopesByUserId(@Param("userId") String userId);
+
+    @Select({
+            "<script>",
+            "SELECT DISTINCT rds.scope_type, rds.scope_value",
+            "FROM wf_role_data_scope rds",
+            "INNER JOIN wf_role r ON r.id = rds.role_id",
+            "WHERE rds.role_id IN",
+            "<foreach collection='roleIds' item='roleId' open='(' separator=',' close=')'>",
+            "  #{roleId}",
+            "</foreach>",
+            "  AND r.enabled = TRUE",
+            "ORDER BY rds.scope_type ASC, rds.scope_value ASC",
+            "</script>"
+    })
+    List<CurrentUserResponse.DataScope> selectDataScopesByRoleIds(@Param("roleIds") List<String> roleIds);
 
     @Select("""
             SELECT DISTINCT
@@ -74,10 +122,30 @@ public interface IdentityAccessMapper {
               AND m.enabled = TRUE
               AND m.visible = TRUE
               AND m.route_path IS NOT NULL
-              AND m.route_path <> ''
+              AND m.route_path != ''
             ORDER BY path ASC, title ASC
             """)
     List<CurrentUserResponse.MenuItem> selectMenusByUserId(@Param("userId") String userId);
+
+    @Select({
+            "<script>",
+            "SELECT DISTINCT m.id, m.menu_name AS title, m.route_path AS path",
+            "FROM wf_role_menu rm",
+            "INNER JOIN wf_role r ON r.id = rm.role_id",
+            "INNER JOIN wf_menu m ON m.id = rm.menu_id",
+            "WHERE rm.role_id IN",
+            "<foreach collection='roleIds' item='roleId' open='(' separator=',' close=')'>",
+            "  #{roleId}",
+            "</foreach>",
+            "  AND r.enabled = TRUE",
+            "  AND m.enabled = TRUE",
+            "  AND m.visible = TRUE",
+            "  AND m.route_path IS NOT NULL",
+            "  AND m.route_path != ''",
+            "ORDER BY path ASC, title ASC",
+            "</script>"
+    })
+    List<CurrentUserResponse.MenuItem> selectMenusByRoleIds(@Param("roleIds") List<String> roleIds);
 
     @Select("""
             SELECT

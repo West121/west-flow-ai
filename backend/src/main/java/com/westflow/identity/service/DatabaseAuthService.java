@@ -7,9 +7,11 @@ import com.westflow.identity.request.LoginRequest;
 import com.westflow.identity.response.LoginResponse;
 import com.westflow.identity.mapper.AuthUserMapper;
 import com.westflow.identity.mapper.AuthUserMapper.AuthUserRecord;
+import com.westflow.identity.mapper.AuthUserMapper.UserPostRoleRecord;
 import com.westflow.identity.mapper.AuthUserMapper.UserPostContextRecord;
 import com.westflow.identity.mapper.IdentityAccessMapper;
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -76,7 +78,10 @@ public class DatabaseAuthService implements IdentityAuthService {
     public CurrentUserResponse currentUser() {
         AuthUserRecord user = requireLoginUser(StpUtil.getLoginIdAsString());
         String activePostId = resolveActivePostId(user);
-        UserPostContextRecord activePost = requireOwnedPost(user.userId(), activePostId);
+        List<UserPostContextRecord> postContexts = authUserMapper.selectPostContextsByUserId(user.userId());
+        UserPostContextRecord activePost = requireOwnedPost(postContexts, activePostId);
+        Map<String, AssignmentRoles> postRoles = resolvePostRoles(user.userId(), postContexts);
+        List<String> activeRoleIds = postRoles.getOrDefault(activePost.postId(), AssignmentRoles.empty()).roleIds();
         List<CurrentUserResponse.Delegation> delegations = identityAccessMapper.selectDelegationsByDelegateUserId(user.userId()).stream()
                 .filter(delegation -> "ACTIVE".equalsIgnoreCase(delegation.status()))
                 .toList();
@@ -88,15 +93,47 @@ public class DatabaseAuthService implements IdentityAuthService {
                 user.email(),
                 user.avatar(),
                 user.companyId(),
+                activePost.companyName(),
                 activePost.postId(),
+                activePost.postName(),
                 activePost.departmentId(),
-                rolesByUserId(user.userId()),
-                permissionsByUserId(user.userId()),
-                identityAccessMapper.selectDataScopesByUserId(user.userId()),
-                authUserMapper.selectPartTimePostsByUserId(user.userId()),
+                activePost.departmentName(),
+                activeRoleIds.isEmpty() ? rolesByUserId(user.userId()) : identityAccessMapper.selectRoleCodesByRoleIds(activeRoleIds),
+                activeRoleIds.isEmpty() ? permissionsByUserId(user.userId()) : identityAccessMapper.selectPermissionsByRoleIds(activeRoleIds),
+                activeRoleIds.isEmpty()
+                        ? identityAccessMapper.selectDataScopesByUserId(user.userId())
+                        : identityAccessMapper.selectDataScopesByRoleIds(activeRoleIds),
+                postContexts.stream()
+                        .filter(post -> !Boolean.TRUE.equals(post.primaryPost()))
+                        .map(post -> new CurrentUserResponse.PartTimePost(
+                                post.postId(),
+                                post.departmentId(),
+                                post.departmentName(),
+                                post.companyId(),
+                                post.companyName(),
+                                post.postName(),
+                                postRoles.getOrDefault(post.postId(), AssignmentRoles.empty()).roleIds(),
+                                postRoles.getOrDefault(post.postId(), AssignmentRoles.empty()).roleNames(),
+                                Boolean.TRUE.equals(post.enabled())
+                        ))
+                        .toList(),
+                postContexts.stream()
+                        .map(post -> new CurrentUserResponse.PostAssignment(
+                                post.postId(),
+                                post.departmentId(),
+                                post.departmentName(),
+                                post.companyId(),
+                                post.companyName(),
+                                post.postName(),
+                                postRoles.getOrDefault(post.postId(), AssignmentRoles.empty()).roleIds(),
+                                postRoles.getOrDefault(post.postId(), AssignmentRoles.empty()).roleNames(),
+                                Boolean.TRUE.equals(post.primaryPost()),
+                                Boolean.TRUE.equals(post.enabled())
+                        ))
+                        .toList(),
                 delegations,
                 authUserMapper.selectAiCapabilitiesByUserId(user.userId()),
-                identityAccessMapper.selectMenusByUserId(user.userId())
+                activeRoleIds.isEmpty() ? identityAccessMapper.selectMenusByUserId(user.userId()) : identityAccessMapper.selectMenusByRoleIds(activeRoleIds)
         );
     }
 
@@ -230,7 +267,11 @@ public class DatabaseAuthService implements IdentityAuthService {
     }
 
     private UserPostContextRecord requireOwnedPost(String userId, String postId) {
-        return authUserMapper.selectPostContextsByUserId(userId).stream()
+        return requireOwnedPost(authUserMapper.selectPostContextsByUserId(userId), postId);
+    }
+
+    private UserPostContextRecord requireOwnedPost(List<UserPostContextRecord> postContexts, String postId) {
+        return postContexts.stream()
                 .filter(post -> post.postId().equals(postId))
                 .findFirst()
                 .orElseThrow(() -> new ContractException(
@@ -239,6 +280,47 @@ public class DatabaseAuthService implements IdentityAuthService {
                         "岗位上下文不存在",
                         Map.of("activePostId", postId)
                 ));
+    }
+
+    private Map<String, AssignmentRoles> resolvePostRoles(String userId, List<UserPostContextRecord> postContexts) {
+        Map<String, String> postIdByUserPostId = new LinkedHashMap<>();
+        for (UserPostContextRecord postContext : postContexts) {
+            postIdByUserPostId.put(postContext.userPostId(), postContext.postId());
+        }
+        Map<String, AssignmentRoles> resolved = new LinkedHashMap<>();
+        for (UserPostContextRecord postContext : postContexts) {
+            resolved.put(postContext.postId(), AssignmentRoles.empty());
+        }
+        for (UserPostRoleRecord record : authUserMapper.selectPostRolesByUserId(userId)) {
+            String postId = postIdByUserPostId.get(record.userPostId());
+            if (postId == null) {
+                continue;
+            }
+            AssignmentRoles current = resolved.getOrDefault(postId, AssignmentRoles.empty());
+            resolved.put(postId, current.append(record.roleId(), record.roleName()));
+        }
+        return resolved;
+    }
+
+    private record AssignmentRoles(
+            List<String> roleIds,
+            List<String> roleNames
+    ) {
+        static AssignmentRoles empty() {
+            return new AssignmentRoles(List.of(), List.of());
+        }
+
+        AssignmentRoles append(String roleId, String roleName) {
+            List<String> nextRoleIds = new java.util.ArrayList<>(roleIds);
+            if (!nextRoleIds.contains(roleId)) {
+                nextRoleIds.add(roleId);
+            }
+            List<String> nextRoleNames = new java.util.ArrayList<>(roleNames);
+            if (!nextRoleNames.contains(roleName)) {
+                nextRoleNames.add(roleName);
+            }
+            return new AssignmentRoles(List.copyOf(nextRoleIds), List.copyOf(nextRoleNames));
+        }
     }
 
     private boolean hasRole(String userId, String roleCode) {

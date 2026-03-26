@@ -75,13 +75,27 @@ class SystemUserControllerTest {
                         .content("""
                                 {
                                   "displayName": "赵六",
-                                  "username": "zhaoliu",
+                                  "username": "user_assignment_case",
                                   "mobile": "13600000000",
-                                  "email": "zhaoliu@example.com",
+                                  "email": "user-assignment-case@example.com",
                                   "companyId": "cmp_001",
                                   "primaryPostId": "post_001",
                                   "roleIds": ["role_oa_user", "role_dept_manager"],
-                                  "enabled": true
+                                  "enabled": true,
+                                  "primaryAssignment": {
+                                    "companyId": "cmp_001",
+                                    "postId": "post_001",
+                                    "roleIds": ["role_oa_user", "role_dept_manager"],
+                                    "enabled": true
+                                  },
+                                  "partTimeAssignments": [
+                                    {
+                                      "companyId": "cmp_001",
+                                      "postId": "post_002",
+                                      "roleIds": ["role_hr"],
+                                      "enabled": true
+                                    }
+                                  ]
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -98,7 +112,11 @@ class SystemUserControllerTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
-        assertThat(objectMapper.readTree(createdDetail).path("data").path("roleIds").size()).isEqualTo(2);
+        JsonNode createdBody = objectMapper.readTree(createdDetail).path("data");
+        assertThat(createdBody.path("roleIds").size()).isEqualTo(3);
+        assertThat(createdBody.path("primaryAssignment").path("postId").asText()).isEqualTo("post_001");
+        assertThat(createdBody.path("partTimeAssignments").size()).isEqualTo(1);
+        assertThat(createdBody.path("partTimeAssignments").get(0).path("postId").asText()).isEqualTo("post_002");
 
         mockMvc.perform(put("/api/v1/system/users/" + userId)
                         .header("Authorization", "Bearer " + token)
@@ -106,13 +124,27 @@ class SystemUserControllerTest {
                         .content("""
                                 {
                                   "displayName": "赵六（已更新）",
-                                  "username": "zhaoliu",
+                                  "username": "user_assignment_case",
                                   "mobile": "13600000001",
-                                  "email": "zhaoliu-updated@example.com",
+                                  "email": "user-assignment-case-updated@example.com",
                                   "companyId": "cmp_001",
                                   "primaryPostId": "post_001",
                                   "roleIds": ["role_process_admin"],
-                                  "enabled": false
+                                  "enabled": false,
+                                  "primaryAssignment": {
+                                    "companyId": "cmp_001",
+                                    "postId": "post_002",
+                                    "roleIds": ["role_process_admin"],
+                                    "enabled": true
+                                  },
+                                  "partTimeAssignments": [
+                                    {
+                                      "companyId": "cmp_001",
+                                      "postId": "post_001",
+                                      "roleIds": ["role_oa_user"],
+                                      "enabled": true
+                                    }
+                                  ]
                                 }
                                 """))
                 .andExpect(status().isOk());
@@ -126,10 +158,13 @@ class SystemUserControllerTest {
 
         JsonNode updatedBody = objectMapper.readTree(updatedDetail).path("data");
         assertThat(updatedBody.path("displayName").asText()).isEqualTo("赵六（已更新）");
-        assertThat(updatedBody.path("postName").asText()).isEqualTo("报销审核岗");
+        assertThat(updatedBody.path("postName").asText()).isEqualTo("请假复核岗");
         assertThat(updatedBody.path("enabled").asBoolean()).isFalse();
-        assertThat(updatedBody.path("roleIds").size()).isEqualTo(1);
-        assertThat(updatedBody.path("roleIds").get(0).asText()).isEqualTo("role_process_admin");
+        assertThat(updatedBody.path("roleIds").size()).isEqualTo(2);
+        assertThat(updatedBody.path("roleIds").toString()).contains("role_process_admin");
+        assertThat(updatedBody.path("primaryAssignment").path("postId").asText()).isEqualTo("post_002");
+        assertThat(updatedBody.path("partTimeAssignments").size()).isEqualTo(1);
+        assertThat(updatedBody.path("partTimeAssignments").get(0).path("postId").asText()).isEqualTo("post_001");
     }
 
     @Test

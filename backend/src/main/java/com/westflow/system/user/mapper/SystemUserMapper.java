@@ -237,6 +237,40 @@ public interface SystemUserMapper {
             """)
     List<String> selectRoleIdsByUserId(@Param("userId") String userId);
 
+    @Select("""
+            SELECT
+              up.id AS userPostId,
+              c.id AS companyId,
+              c.company_name AS companyName,
+              d.id AS departmentId,
+              d.department_name AS departmentName,
+              p.id AS postId,
+              p.post_name AS postName,
+              up.is_primary AS primaryPost,
+              up.enabled AS enabled
+            FROM wf_user_post up
+            INNER JOIN wf_post p ON p.id = up.post_id
+            INNER JOIN wf_department d ON d.id = p.department_id
+            INNER JOIN wf_company c ON c.id = d.company_id
+            WHERE up.user_id = #{userId}
+            ORDER BY up.is_primary DESC, up.created_at ASC, up.id ASC
+            """)
+    List<UserPostAssignmentRecord> selectAssignmentsByUserId(@Param("userId") String userId);
+
+    @Select("""
+            SELECT
+              upr.user_post_id AS userPostId,
+              r.id AS roleId,
+              r.role_name AS roleName
+            FROM wf_user_post_role upr
+            INNER JOIN wf_role r ON r.id = upr.role_id
+            INNER JOIN wf_user_post up ON up.id = upr.user_post_id
+            WHERE up.user_id = #{userId}
+              AND r.enabled = TRUE
+            ORDER BY upr.created_at ASC, r.role_name ASC
+            """)
+    List<UserPostRoleRecord> selectAssignmentRolesByUserId(@Param("userId") String userId);
+
     @Select({
             "<script>",
             "SELECT DISTINCT u.id",
@@ -494,6 +528,16 @@ public interface SystemUserMapper {
     @Delete("DELETE FROM wf_user_post WHERE user_id = #{userId}")
     int deleteUserPosts(@Param("userId") String userId);
 
+    @Delete("""
+            DELETE FROM wf_user_post_role
+            WHERE user_post_id IN (
+              SELECT id
+              FROM wf_user_post
+              WHERE user_id = #{userId}
+            )
+            """)
+    int deleteUserPostRoles(@Param("userId") String userId);
+
     @Delete("DELETE FROM wf_user_role WHERE user_id = #{userId}")
     int deleteUserRoles(@Param("userId") String userId);
 
@@ -503,16 +547,33 @@ public interface SystemUserMapper {
               user_id,
               post_id,
               is_primary,
+              enabled,
               created_at
             ) VALUES (
               #{id},
               #{userId},
               #{postId},
               #{primary},
+              #{enabled},
               CURRENT_TIMESTAMP
             )
             """)
     int insertUserPost(SystemUserPostBinding binding);
+
+    @Insert("""
+            INSERT INTO wf_user_post_role (
+              id,
+              user_post_id,
+              role_id,
+              created_at
+            ) VALUES (
+              #{id},
+              #{userPostId},
+              #{roleId},
+              CURRENT_TIMESTAMP
+            )
+            """)
+    int insertUserPostRole(SystemUserPostRoleBinding binding);
 
     @Insert("""
             INSERT INTO wf_user_role (
@@ -555,6 +616,33 @@ public interface SystemUserMapper {
             String id,
             String userId,
             String roleId
+    ) {
+    }
+
+    record SystemUserPostRoleBinding(
+            String id,
+            String userPostId,
+            String roleId
+    ) {
+    }
+
+    record UserPostAssignmentRecord(
+            String userPostId,
+            String companyId,
+            String companyName,
+            String departmentId,
+            String departmentName,
+            String postId,
+            String postName,
+            Boolean primaryPost,
+            Boolean enabled
+    ) {
+    }
+
+    record UserPostRoleRecord(
+            String userPostId,
+            String roleId,
+            String roleName
     ) {
     }
 }

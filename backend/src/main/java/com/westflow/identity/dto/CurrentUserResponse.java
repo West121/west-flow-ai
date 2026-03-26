@@ -13,12 +13,16 @@ public record CurrentUserResponse(
         String email,
         String avatar,
         String companyId,
+        String companyName,
         String activePostId,
+        String activePostName,
         String activeDepartmentId,
+        String activeDepartmentName,
         List<String> roles,
         List<String> permissions,
         List<DataScope> dataScopes,
         List<PartTimePost> partTimePosts,
+        List<PostAssignment> postAssignments,
         List<Delegation> delegations,
         List<String> aiCapabilities,
         List<MenuItem> menus
@@ -38,7 +42,30 @@ public record CurrentUserResponse(
     public record PartTimePost(
             String postId,
             String departmentId,
-            String postName
+            String departmentName,
+            String companyId,
+            String companyName,
+            String postName,
+            List<String> roleIds,
+            List<String> roleNames,
+            boolean enabled
+    ) {
+    }
+
+    /**
+     * 当前用户全部任职信息。
+     */
+    public record PostAssignment(
+            String postId,
+            String departmentId,
+            String departmentName,
+            String companyId,
+            String companyName,
+            String postName,
+            List<String> roleIds,
+            List<String> roleNames,
+            boolean primary,
+            boolean enabled
     ) {
     }
 

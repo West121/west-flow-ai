@@ -155,6 +155,13 @@ describe('system users api', () => {
       companyId: 'cmp_001',
       primaryPostId: 'post_001',
       roleIds: ['role_oa_user'],
+      primaryAssignment: {
+        companyId: 'cmp_001',
+        postId: 'post_001',
+        roleIds: ['role_oa_user'],
+        enabled: true,
+      },
+      partTimeAssignments: [],
       enabled: true,
     }
 

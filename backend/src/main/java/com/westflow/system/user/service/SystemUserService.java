@@ -17,11 +17,16 @@ import com.westflow.system.user.response.SystemUserMutationResponse;
 import com.westflow.system.user.mapper.SystemUserMapper;
 import com.westflow.system.user.mapper.SystemUserMapper.SystemUserBaseDetailRecord;
 import com.westflow.system.user.mapper.SystemUserMapper.PostContext;
+import com.westflow.system.user.mapper.SystemUserMapper.UserPostAssignmentRecord;
+import com.westflow.system.user.mapper.SystemUserMapper.UserPostRoleRecord;
 import com.westflow.system.user.mapper.SystemUserMapper.SystemUserRoleBinding;
+import com.westflow.system.user.mapper.SystemUserMapper.SystemUserPostRoleBinding;
 import com.westflow.system.user.model.SystemUserRecord;
+import com.westflow.system.user.request.SaveSystemUserRequest.Assignment;
 import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Queue;
@@ -111,6 +116,23 @@ public class SystemUserService {
             );
         }
         assertAccessible(detail.companyId(), detail.departmentId(), userId);
+        List<SystemUserDetailResponse.Assignment> assignments = resolveAssignments(userId);
+        SystemUserDetailResponse.Assignment primaryAssignment = assignments.stream()
+                .filter(SystemUserDetailResponse.Assignment::primary)
+                .findFirst()
+                .orElseGet(() -> new SystemUserDetailResponse.Assignment(
+                        "primary-" + detail.userId(),
+                        detail.companyId(),
+                        detail.companyName(),
+                        detail.departmentId(),
+                        detail.departmentName(),
+                        detail.postId(),
+                        detail.postName(),
+                        systemUserMapper.selectRoleIdsByUserId(userId),
+                        List.of(),
+                        true,
+                        detail.enabled()
+                ));
         return new SystemUserDetailResponse(
                 detail.userId(),
                 detail.displayName(),
@@ -124,7 +146,9 @@ public class SystemUserService {
                 detail.postId(),
                 detail.postName(),
                 systemUserMapper.selectRoleIdsByUserId(userId),
-                detail.enabled()
+                detail.enabled(),
+                primaryAssignment,
+                assignments.stream().filter(assignment -> !assignment.primary()).toList()
         );
     }
 
@@ -188,17 +212,20 @@ public class SystemUserService {
     @Transactional
     public SystemUserMutationResponse create(SaveSystemUserRequest request) {
         // 创建前先校验主岗位、公司和角色关系是否完整。
-        PostContext postContext = resolvePostContext(request.primaryPostId());
-        validateCompanyConsistency(request.companyId(), postContext.companyId());
+        Assignment primaryAssignment = normalizeAssignment(request.resolvedPrimaryAssignment(), true);
+        List<Assignment> partTimeAssignments = normalizeAssignments(request.resolvedPartTimeAssignments(), primaryAssignment.postId());
+        PostContext postContext = resolvePostContext(primaryAssignment.postId());
+        validateCompanyConsistency(primaryAssignment.companyId(), postContext.companyId());
         assertAccessible(postContext.companyId(), postContext.departmentId(), null);
+        validateAssignmentsAccess(partTimeAssignments, null);
         validateUsername(request.username(), null);
         String userId = buildId("usr");
 
         systemUserMapper.insertUser(new SystemUserRecord(
                 userId,
-                request.companyId(),
+                primaryAssignment.companyId(),
                 postContext.departmentId(),
-                request.primaryPostId(),
+                primaryAssignment.postId(),
                 request.displayName(),
                 request.username(),
                 request.mobile(),
@@ -206,13 +233,8 @@ public class SystemUserService {
                 "",
                 request.enabled()
         ));
-        systemUserMapper.insertUserPost(new SystemUserPostBinding(
-                buildId("up"),
-                userId,
-                request.primaryPostId(),
-                true
-        ));
-        replaceUserRoles(userId, request.roleIds());
+        replaceUserAssignments(userId, primaryAssignment, partTimeAssignments);
+        replaceUserRoles(userId, aggregateRoleIds(primaryAssignment, partTimeAssignments));
 
         return new SystemUserMutationResponse(userId);
     }
@@ -224,16 +246,19 @@ public class SystemUserService {
     public SystemUserMutationResponse update(String userId, SaveSystemUserRequest request) {
         // 更新时先确认原用户存在，再重建主岗位和角色关系。
         detail(userId);
-        PostContext postContext = resolvePostContext(request.primaryPostId());
-        validateCompanyConsistency(request.companyId(), postContext.companyId());
+        Assignment primaryAssignment = normalizeAssignment(request.resolvedPrimaryAssignment(), true);
+        List<Assignment> partTimeAssignments = normalizeAssignments(request.resolvedPartTimeAssignments(), primaryAssignment.postId());
+        PostContext postContext = resolvePostContext(primaryAssignment.postId());
+        validateCompanyConsistency(primaryAssignment.companyId(), postContext.companyId());
         assertAccessible(postContext.companyId(), postContext.departmentId(), userId);
+        validateAssignmentsAccess(partTimeAssignments, userId);
         validateUsername(request.username(), userId);
 
         systemUserMapper.updateUser(new SystemUserRecord(
                 userId,
-                request.companyId(),
+                primaryAssignment.companyId(),
                 postContext.departmentId(),
-                request.primaryPostId(),
+                primaryAssignment.postId(),
                 request.displayName(),
                 request.username(),
                 request.mobile(),
@@ -241,16 +266,38 @@ public class SystemUserService {
                 "",
                 request.enabled()
         ));
-        systemUserMapper.deleteUserPosts(userId);
-        systemUserMapper.insertUserPost(new SystemUserPostBinding(
-                buildId("up"),
-                userId,
-                request.primaryPostId(),
-                true
-        ));
-        replaceUserRoles(userId, request.roleIds());
+        replaceUserAssignments(userId, primaryAssignment, partTimeAssignments);
+        replaceUserRoles(userId, aggregateRoleIds(primaryAssignment, partTimeAssignments));
 
         return new SystemUserMutationResponse(userId);
+    }
+
+    private List<SystemUserDetailResponse.Assignment> resolveAssignments(String userId) {
+        Map<String, List<UserPostRoleRecord>> roleRecordsByUserPostId = new LinkedHashMap<>();
+        for (UserPostRoleRecord roleRecord : systemUserMapper.selectAssignmentRolesByUserId(userId)) {
+            roleRecordsByUserPostId.computeIfAbsent(roleRecord.userPostId(), ignored -> new ArrayList<>()).add(roleRecord);
+        }
+        return systemUserMapper.selectAssignmentsByUserId(userId).stream()
+                .map(assignment -> {
+                    List<UserPostRoleRecord> roleRecords = roleRecordsByUserPostId.getOrDefault(
+                            assignment.userPostId(),
+                            List.of()
+                    );
+                    return new SystemUserDetailResponse.Assignment(
+                            assignment.userPostId(),
+                            assignment.companyId(),
+                            assignment.companyName(),
+                            assignment.departmentId(),
+                            assignment.departmentName(),
+                            assignment.postId(),
+                            assignment.postName(),
+                            roleRecords.stream().map(UserPostRoleRecord::roleId).distinct().toList(),
+                            roleRecords.stream().map(UserPostRoleRecord::roleName).distinct().toList(),
+                            Boolean.TRUE.equals(assignment.primaryPost()),
+                            Boolean.TRUE.equals(assignment.enabled())
+                    );
+                })
+                .toList();
     }
 
     private void validateUsername(String username, String excludeUserId) {
@@ -286,6 +333,77 @@ public class SystemUserService {
         systemUserMapper.deleteUserRoles(userId);
         for (String roleId : normalizedRoleIds) {
             systemUserMapper.insertUserRole(new SystemUserRoleBinding(buildId("ur"), userId, roleId));
+        }
+    }
+
+    private void replaceUserAssignments(String userId, Assignment primaryAssignment, List<Assignment> partTimeAssignments) {
+        systemUserMapper.deleteUserPostRoles(userId);
+        systemUserMapper.deleteUserPosts(userId);
+        persistAssignment(userId, primaryAssignment, true);
+        for (Assignment assignment : partTimeAssignments) {
+            persistAssignment(userId, assignment, false);
+        }
+    }
+
+    private void persistAssignment(String userId, Assignment assignment, boolean primary) {
+        String userPostId = buildId("up");
+        systemUserMapper.insertUserPost(new SystemUserPostBinding(
+                userPostId,
+                userId,
+                assignment.postId(),
+                primary,
+                assignment.enabled()
+        ));
+        for (String roleId : normalizeRoleIds(assignment.roleIds())) {
+            systemUserMapper.insertUserPostRole(new SystemUserPostRoleBinding(
+                    buildId("upr"),
+                    userPostId,
+                    roleId
+            ));
+        }
+    }
+
+    private List<String> aggregateRoleIds(Assignment primaryAssignment, List<Assignment> partTimeAssignments) {
+        LinkedHashSet<String> aggregated = new LinkedHashSet<>(normalizeRoleIds(primaryAssignment.roleIds()));
+        for (Assignment assignment : partTimeAssignments) {
+            aggregated.addAll(normalizeRoleIds(assignment.roleIds()));
+        }
+        return List.copyOf(aggregated);
+    }
+
+    private Assignment normalizeAssignment(Assignment assignment, boolean primary) {
+        if (assignment == null) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    primary ? "请配置主职任职" : "存在无效的兼职任职"
+            );
+        }
+        return new Assignment(
+                normalizeNullable(assignment.companyId()),
+                normalizeNullable(assignment.postId()),
+                normalizeRoleIds(assignment.roleIds()),
+                assignment.enabled()
+        );
+    }
+
+    private List<Assignment> normalizeAssignments(List<Assignment> assignments, String primaryPostId) {
+        LinkedHashMap<String, Assignment> normalized = new LinkedHashMap<>();
+        for (Assignment assignment : assignments) {
+            Assignment normalizedAssignment = normalizeAssignment(assignment, false);
+            if (primaryPostId.equals(normalizedAssignment.postId())) {
+                continue;
+            }
+            normalized.put(normalizedAssignment.postId(), normalizedAssignment);
+        }
+        return List.copyOf(normalized.values());
+    }
+
+    private void validateAssignmentsAccess(List<Assignment> assignments, String userId) {
+        for (Assignment assignment : assignments) {
+            PostContext postContext = resolvePostContext(assignment.postId());
+            validateCompanyConsistency(assignment.companyId(), postContext.companyId());
+            assertAccessible(postContext.companyId(), postContext.departmentId(), userId);
         }
     }
 
@@ -506,7 +624,8 @@ public class SystemUserService {
             String id,
             String userId,
             String postId,
-            Boolean primary
+            Boolean primary,
+            Boolean enabled
     ) {
     }
 }

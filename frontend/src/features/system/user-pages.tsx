@@ -10,7 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm, useWatch, type UseFormReturn } from 'react-hook-form'
+import { useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook-form'
 import {
   AlertCircle,
   ArrowLeft,
@@ -20,9 +20,11 @@ import {
   Loader2,
   Mail,
   Phone,
+  Plus,
   RefreshCw,
   Save,
   ShieldCheck,
+  Trash2,
   UserRound,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -87,6 +89,14 @@ const systemUserFormSchema = z.object({
   primaryPostId: z.string().min(1, '请选择主岗位'),
   roleIds: z.array(z.string()).min(1, '请至少选择一个角色'),
   enabled: z.boolean(),
+  partTimeAssignments: z.array(
+    z.object({
+      companyId: z.string().min(1, '请选择所属公司'),
+      postId: z.string().min(1, '请选择岗位'),
+      roleIds: z.array(z.string()).min(1, '请至少选择一个角色'),
+      enabled: z.boolean(),
+    })
+  ),
 })
 
 type SystemUserFormValues = z.infer<typeof systemUserFormSchema>
@@ -143,6 +153,13 @@ function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
     primaryPostId: detail?.postId ?? '',
     roleIds: detail?.roleIds ?? [],
     enabled: detail?.enabled ?? true,
+    partTimeAssignments:
+      detail?.partTimeAssignments.map((assignment) => ({
+        companyId: assignment.companyId,
+        postId: assignment.postId,
+        roleIds: assignment.roleIds,
+        enabled: assignment.enabled,
+      })) ?? [],
   }
 }
 
@@ -387,6 +404,10 @@ function SystemUserFormPage({
     defaultValues: toFormValues(),
     mode: 'onBlur',
   })
+  const partTimeFieldArray = useFieldArray({
+    control: form.control,
+    name: 'partTimeAssignments',
+  })
 
   const optionsQuery = useQuery({
     queryKey: ['system-user-form-options'],
@@ -432,6 +453,10 @@ function SystemUserFormPage({
     control: form.control,
     name: 'enabled',
   })
+  const partTimeAssignments = useWatch({
+    control: form.control,
+    name: 'partTimeAssignments',
+  })
   const displayName = useWatch({
     control: form.control,
     name: 'displayName',
@@ -454,7 +479,16 @@ function SystemUserFormPage({
     form.clearErrors()
 
     try {
-      const payload: SaveSystemUserPayload = values
+      const payload: SaveSystemUserPayload = {
+        ...values,
+        primaryAssignment: {
+          companyId: values.companyId,
+          postId: values.primaryPostId,
+          roleIds: values.roleIds,
+          enabled: values.enabled,
+        },
+        partTimeAssignments: values.partTimeAssignments,
+      }
       const result = isEdit
         ? await updateMutation.mutateAsync({ id: userId!, payload })
         : await createMutation.mutateAsync(payload)
@@ -650,10 +684,11 @@ function SystemUserFormPage({
               <CardHeader>
                 <CardTitle>组织身份</CardTitle>
                 <CardDescription>
-                  当前先维护公司与主岗位。主部门由所选岗位自动回填，后续可继续扩展兼任岗位与角色授权。
+                  主职与兼职都按任职记录维护，每条任职都对应公司、岗位和角色。
                 </CardDescription>
               </CardHeader>
-              <CardContent className='grid gap-4 md:grid-cols-2'>
+              <CardContent className='space-y-6'>
+                <div className='grid gap-4 md:grid-cols-2'>
                 <FormField
                   control={form.control}
                   name='companyId'
@@ -801,6 +836,181 @@ function SystemUserFormPage({
                     </FormItem>
                   )}
                 />
+                </div>
+
+                <div className='space-y-4 rounded-lg border border-dashed p-4'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='space-y-1'>
+                      <h3 className='text-sm font-semibold'>兼职任职</h3>
+                      <p className='text-xs text-muted-foreground'>
+                        兼职任职会作为可切换上下文存在，每条记录单独绑定岗位与角色。
+                      </p>
+                    </div>
+                    <Button
+                      type='button'
+                      variant='outline'
+                      size='sm'
+                      onClick={() =>
+                        partTimeFieldArray.append({
+                          companyId: selectedCompanyId || '',
+                          postId: '',
+                          roleIds: [],
+                          enabled: true,
+                        })
+                      }
+                    >
+                      <Plus className='size-4' />
+                      新增兼职
+                    </Button>
+                  </div>
+
+                  {partTimeFieldArray.fields.length === 0 ? (
+                    <div className='rounded-lg bg-muted/40 px-3 py-4 text-sm text-muted-foreground'>
+                      当前没有兼职任职，保存后用户只保留主职上下文。
+                    </div>
+                  ) : (
+                    <div className='space-y-4'>
+                      {partTimeFieldArray.fields.map((field, index) => {
+                        const assignmentRoleIds = partTimeAssignments?.[index]?.roleIds ?? []
+                        return (
+                          <div key={field.id} className='space-y-4 rounded-lg border p-4'>
+                            <div className='flex items-center justify-between gap-3'>
+                              <div>
+                                <p className='text-sm font-medium'>兼职任职 {index + 1}</p>
+                                <p className='text-xs text-muted-foreground'>
+                                  指定该任职对应的公司、岗位和角色。
+                                </p>
+                              </div>
+                              <Button
+                                type='button'
+                                variant='ghost'
+                                size='sm'
+                                onClick={() => partTimeFieldArray.remove(index)}
+                              >
+                                <Trash2 className='size-4' />
+                                删除
+                              </Button>
+                            </div>
+
+                            <div className='grid gap-4 md:grid-cols-2'>
+                              <FormField
+                                control={form.control}
+                                name={`partTimeAssignments.${index}.companyId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>所属公司</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger className='w-full'>
+                                          <SelectValue placeholder='请选择所属公司' />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {optionsQuery.data?.companies.map((company) => (
+                                          <SelectItem key={company.id} value={company.id}>
+                                            {company.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`partTimeAssignments.${index}.postId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>岗位</FormLabel>
+                                    <Select value={field.value} onValueChange={field.onChange}>
+                                      <FormControl>
+                                        <SelectTrigger className='w-full'>
+                                          <SelectValue placeholder='请选择岗位' />
+                                        </SelectTrigger>
+                                      </FormControl>
+                                      <SelectContent>
+                                        {optionsQuery.data?.posts.map((post) => (
+                                          <SelectItem key={post.id} value={post.id}>
+                                            {post.name} / {post.departmentName}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`partTimeAssignments.${index}.roleIds`}
+                                render={() => (
+                                  <FormItem className='md:col-span-2'>
+                                    <FormLabel>角色分配</FormLabel>
+                                    <div className='grid gap-3 md:grid-cols-2'>
+                                      {optionsQuery.data?.roles.map((role) => {
+                                        const checked = assignmentRoleIds.includes(role.id)
+                                        return (
+                                          <label
+                                            key={role.id}
+                                            className='flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50'
+                                          >
+                                            <Checkbox
+                                              checked={checked}
+                                              onCheckedChange={(value) => {
+                                                form.setValue(
+                                                  `partTimeAssignments.${index}.roleIds`,
+                                                  value
+                                                    ? [...assignmentRoleIds, role.id]
+                                                    : assignmentRoleIds.filter((id) => id !== role.id),
+                                                  { shouldValidate: true }
+                                                )
+                                              }}
+                                            />
+                                            <div className='grid gap-1'>
+                                              <div className='flex flex-wrap items-center gap-2'>
+                                                <span className='text-sm font-medium'>{role.name}</span>
+                                                <Badge variant='secondary'>
+                                                  {resolveRoleCategoryLabel(role.roleCategory)}
+                                                </Badge>
+                                              </div>
+                                              <p className='text-xs text-muted-foreground'>{role.roleCode}</p>
+                                            </div>
+                                          </label>
+                                        )
+                                      })}
+                                    </div>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
+                                name={`partTimeAssignments.${index}.enabled`}
+                                render={({ field }) => (
+                                  <FormItem className='rounded-lg border p-4 md:col-span-2'>
+                                    <div className='flex items-center justify-between gap-4'>
+                                      <div className='grid gap-1'>
+                                        <FormLabel>任职状态</FormLabel>
+                                        <FormDescription>
+                                          停用后该兼职任职不会出现在上下文切换器里。
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                                      </FormControl>
+                                    </div>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </form>
@@ -848,6 +1058,11 @@ function SystemUserFormPage({
                 label='状态'
                 value={enabled ? '启用' : '停用'}
               />
+              <UserDetailMetric
+                icon={BriefcaseBusiness}
+                label='兼职任职数'
+                value={`${partTimeFieldArray.fields.length} 条`}
+              />
             </CardContent>
           </Card>
 
@@ -863,13 +1078,13 @@ function SystemUserFormPage({
             <CardHeader>
               <CardTitle>后续扩展</CardTitle>
               <CardDescription>
-                下一阶段会继续把兼任岗位、角色绑定、代理关系和数据权限加进这个表单页面。
+                下一阶段会继续把代理关系、数据权限和任职审批策略加进这个页面。
               </CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
-              <p>1. 兼任岗位与切换上下文</p>
-              <p>2. 角色与菜单权限矩阵</p>
-              <p>3. 代理、委派、离职转办设置</p>
+              <p>1. 任职级菜单与数据权限矩阵</p>
+              <p>2. 代理、委派、离职转办设置</p>
+              <p>3. 任职审批职责和负责人策略</p>
             </CardContent>
           </Card>
         </div>

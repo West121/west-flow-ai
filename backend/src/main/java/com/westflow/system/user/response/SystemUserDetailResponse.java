@@ -18,6 +18,23 @@ public record SystemUserDetailResponse(
         String postId,
         String postName,
         List<String> roleIds,
-        boolean enabled
+        boolean enabled,
+        Assignment primaryAssignment,
+        List<Assignment> partTimeAssignments
 ) {
+
+    public record Assignment(
+            String userPostId,
+            String companyId,
+            String companyName,
+            String departmentId,
+            String departmentName,
+            String postId,
+            String postName,
+            List<String> roleIds,
+            List<String> roleNames,
+            boolean primary,
+            boolean enabled
+    ) {
+    }
 }

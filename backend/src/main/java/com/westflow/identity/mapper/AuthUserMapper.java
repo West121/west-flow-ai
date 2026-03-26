@@ -67,12 +67,19 @@ public interface AuthUserMapper {
      */
     @Select("""
             SELECT
+              up.id AS userPostId,
               up.post_id AS postId,
               p.department_id AS departmentId,
+              d.department_name AS departmentName,
+              c.id AS companyId,
+              c.company_name AS companyName,
               p.post_name AS postName,
-              up.is_primary AS primaryPost
+              up.is_primary AS primaryPost,
+              up.enabled AS enabled
             FROM wf_user_post up
             INNER JOIN wf_post p ON p.id = up.post_id
+            INNER JOIN wf_department d ON d.id = p.department_id
+            INNER JOIN wf_company c ON c.id = d.company_id
             WHERE up.user_id = #{userId}
             ORDER BY up.is_primary DESC, up.created_at ASC
             """)
@@ -85,14 +92,36 @@ public interface AuthUserMapper {
             SELECT
               up.post_id AS postId,
               p.department_id AS departmentId,
-              p.post_name AS postName
+              d.department_name AS departmentName,
+              c.id AS companyId,
+              c.company_name AS companyName,
+              p.post_name AS postName,
+              up.enabled AS enabled
             FROM wf_user_post up
             INNER JOIN wf_post p ON p.id = up.post_id
+            INNER JOIN wf_department d ON d.id = p.department_id
+            INNER JOIN wf_company c ON c.id = d.company_id
             WHERE up.user_id = #{userId}
               AND up.is_primary = FALSE
             ORDER BY up.created_at ASC
             """)
     List<CurrentUserResponse.PartTimePost> selectPartTimePostsByUserId(@Param("userId") String userId);
+
+    @Select("""
+            SELECT
+              upr.user_post_id AS userPostId,
+              r.id AS roleId,
+              r.role_name AS roleName,
+              r.role_code AS roleCode
+            FROM wf_user_post_role upr
+            INNER JOIN wf_role r ON r.id = upr.role_id
+            WHERE upr.user_post_id IN (
+              SELECT id FROM wf_user_post WHERE user_id = #{userId}
+            )
+              AND r.enabled = TRUE
+            ORDER BY upr.created_at ASC, r.role_name ASC
+            """)
+    List<UserPostRoleRecord> selectPostRolesByUserId(@Param("userId") String userId);
 
     /**
      * 查询用户 AI 能力编码。
@@ -157,10 +186,26 @@ public interface AuthUserMapper {
      * 用户岗位上下文。
      */
     record UserPostContextRecord(
+            String userPostId,
             String postId,
             String departmentId,
+            String departmentName,
+            String companyId,
+            String companyName,
             String postName,
-            Boolean primaryPost
+            Boolean primaryPost,
+            Boolean enabled
+    ) {
+    }
+
+    /**
+     * 岗位任职角色。
+     */
+    record UserPostRoleRecord(
+            String userPostId,
+            String roleId,
+            String roleName,
+            String roleCode
     ) {
     }
 }

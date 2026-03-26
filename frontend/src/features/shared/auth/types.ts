@@ -11,7 +11,26 @@ export type DataScope = {
 export type PartTimePost = {
   postId: string
   departmentId: string
+  departmentName: string
+  companyId: string
+  companyName: string
   postName: string
+  roleIds: string[]
+  roleNames: string[]
+  enabled: boolean
+}
+
+export type PostAssignment = {
+  postId: string
+  departmentId: string
+  departmentName: string
+  companyId: string
+  companyName: string
+  postName: string
+  roleIds: string[]
+  roleNames: string[]
+  primary: boolean
+  enabled: boolean
 }
 
 // 代理关系，描述当前用户把什么角色委托给谁处理。
@@ -37,12 +56,16 @@ export type CurrentUser = {
   email: string
   avatar: string
   companyId: string
+  companyName: string
   activePostId: string
+  activePostName: string
   activeDepartmentId: string
+  activeDepartmentName: string
   roles: string[]
   permissions: string[]
   dataScopes: DataScope[]
   partTimePosts: PartTimePost[]
+  postAssignments: PostAssignment[]
   delegations: Delegation[]
   aiCapabilities: string[]
   menus: MenuItem[]

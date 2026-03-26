@@ -53,6 +53,22 @@ export type SystemUserDetail = {
   postName: string
   roleIds: string[]
   enabled: boolean
+  primaryAssignment: SystemUserAssignment
+  partTimeAssignments: SystemUserAssignment[]
+}
+
+export type SystemUserAssignment = {
+  userPostId: string
+  companyId: string
+  companyName: string
+  departmentId: string
+  departmentName: string
+  postId: string
+  postName: string
+  roleIds: string[]
+  roleNames: string[]
+  primary: boolean
+  enabled: boolean
 }
 
 export type SystemUserFormOptions = {
@@ -81,6 +97,15 @@ export type SaveSystemUserPayload = {
   email: string
   companyId: string
   primaryPostId: string
+  roleIds: string[]
+  primaryAssignment: SaveSystemUserAssignmentPayload
+  partTimeAssignments: SaveSystemUserAssignmentPayload[]
+  enabled: boolean
+}
+
+export type SaveSystemUserAssignmentPayload = {
+  companyId: string
+  postId: string
   roleIds: string[]
   enabled: boolean
 }
