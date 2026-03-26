@@ -313,6 +313,7 @@ export type ApprovalSheetListItem = {
   billNo: string | null
   businessTitle: string | null
   initiatorUserId: string
+  initiatorDisplayName?: string | null
   initiatorPostId?: string | null
   initiatorPostName?: string | null
   initiatorDepartmentId?: string | null

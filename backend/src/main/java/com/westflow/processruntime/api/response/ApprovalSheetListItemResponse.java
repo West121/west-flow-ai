@@ -13,6 +13,7 @@ public record ApprovalSheetListItemResponse(
         String billNo,
         String businessTitle,
         String initiatorUserId,
+        String initiatorDisplayName,
         String initiatorPostId,
         String initiatorPostName,
         String initiatorDepartmentId,
