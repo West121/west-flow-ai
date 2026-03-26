@@ -31,7 +31,27 @@ const quickInsertKinds = [
 
 export function WorkflowQuickInsertEdge(props: EdgeProps) {
   const insertNodeOnEdge = useWorkflowDesignerStore((state) => state.insertNodeOnEdge)
-  const [edgePath, labelX, labelY] = getSmoothStepPath(props)
+  const {
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    markerEnd,
+    markerStart,
+    style,
+    interactionWidth,
+  } = props
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  })
   const quickInsertTemplates = useMemo(
     () =>
       workflowNodeTemplates.filter((template) =>
@@ -44,7 +64,14 @@ export function WorkflowQuickInsertEdge(props: EdgeProps) {
 
   return (
     <>
-      <BaseEdge {...props} path={edgePath} />
+      <BaseEdge
+        id={id}
+        path={edgePath}
+        markerEnd={markerEnd}
+        markerStart={markerStart}
+        style={style}
+        interactionWidth={interactionWidth}
+      />
       <EdgeLabelRenderer>
         <div
           className='pointer-events-auto absolute z-30'
@@ -76,7 +103,7 @@ export function WorkflowQuickInsertEdge(props: EdgeProps) {
                         'rounded-xl border bg-background px-3 py-2 text-left transition',
                         'hover:border-primary/40 hover:bg-primary/[0.04]'
                       )}
-                      onClick={() => insertNodeOnEdge(props.id, template)}
+                      onClick={() => insertNodeOnEdge(id, template)}
                     >
                       <div className='mb-1 flex items-center gap-2'>
                         <div className='flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary'>
