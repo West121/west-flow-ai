@@ -103,7 +103,7 @@ export function TeamSwitcher({ teams = [] }: TeamSwitcherProps) {
                 </span>
                 <span className='truncate text-xs'>
                   {activeAssignment
-                    ? `${activeAssignment.departmentName} · ${activeAssignment.primary ? '主职' : '兼职'}`
+                    ? `${activeAssignment.companyName} / ${activeAssignment.departmentName} · ${activeAssignment.primary ? '主职' : '兼职'}`
                     : currentUser.activeDepartmentName || '当前任职'}
                 </span>
               </div>
@@ -148,7 +148,7 @@ export function TeamSwitcher({ teams = [] }: TeamSwitcherProps) {
                     </p>
                     <p className='text-xs text-muted-foreground'>
                       {assignment.roleNames.length > 0
-                        ? assignment.roleNames.join('、')
+                        ? `角色：${assignment.roleNames.join('、')}`
                         : '未配置角色'}
                     </p>
                   </div>
