@@ -98,4 +98,28 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         assertThat(result).isEqualTo("chat-client-result");
         verify(aiRuntimeToolCallbackProvider).createProvider("usr_001", "OA");
     }
+
+    @Test
+    void shouldIgnoreOpaqueAgentIdsAndFallbackToChatClient() throws Exception {
+        when(routingAgent.invoke(anyString()))
+                .thenReturn(Optional.of(new OverAllState(java.util.Map.of(
+                        "messageId", "9e9e1966-b0c2-495a-bbb2-61f162f34351"
+                ))));
+        ChatClientRequestSpec requestSpec = mock(ChatClientRequestSpec.class);
+        CallResponseSpec callResponseSpec = mock(CallResponseSpec.class);
+        when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.system(anyString())).thenReturn(requestSpec);
+        when(requestSpec.user(anyString())).thenReturn(requestSpec);
+        when(requestSpec.toolCallbacks(any(ToolCallbackProvider.class))).thenReturn(requestSpec);
+        when(requestSpec.toolContext(any())).thenReturn(requestSpec);
+        when(requestSpec.call()).thenReturn(callResponseSpec);
+        when(callResponseSpec.content()).thenReturn("当前没有待办。");
+
+        String result = runtimeService.generateReply(
+                new AiGatewayRequest("conv_004", "usr_001", "帮我看看当前待办", "OA", false, List.of(), List.of("OA")),
+                new AiGatewayResponse("ROUTING", "routing", false, List.of(), null, null, List.of(), null)
+        );
+
+        assertThat(result).isEqualTo("当前没有待办。");
+    }
 }

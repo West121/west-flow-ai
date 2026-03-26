@@ -34,7 +34,7 @@ spring.ai:
     api-key: ${DASHSCOPE_API_KEY:sk-aa16b77c731c4eac96f01847f3f2c42b}
     chat:
       options:
-        model: ${DASHSCOPE_CHAT_MODEL:qwen3.5-plus}
+        model: ${DASHSCOPE_CHAT_MODEL:qwen-plus}
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}

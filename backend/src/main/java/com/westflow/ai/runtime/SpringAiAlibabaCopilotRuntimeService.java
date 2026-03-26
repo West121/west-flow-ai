@@ -7,8 +7,10 @@ import com.westflow.ai.gateway.AiGatewayRequest;
 import com.westflow.ai.gateway.AiGatewayResponse;
 import com.westflow.ai.service.AiRegistryCatalogService;
 import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -17,6 +19,13 @@ import org.springframework.ai.tool.ToolCallbackProvider;
  * 基于 Spring AI Alibaba 多智能体和 Spring AI ChatClient 的运行时编排服务。
  */
 public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeService {
+
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    );
+    private static final Pattern INTERNAL_ID_PATTERN = Pattern.compile(
+            "^[a-z]+_[0-9a-fA-F]{12,}$"
+    );
 
     private final ChatClient chatClient;
     private final SupervisorAgent supervisorAgent;
@@ -99,18 +108,54 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
 
     private String extractReply(OverAllState state) {
         return state.value("output", String.class)
+                .filter(this::isMeaningfulReply)
                 .or(() -> state.value("result", String.class))
+                .filter(this::isMeaningfulReply)
                 .or(() -> state.value("response", String.class))
+                .filter(this::isMeaningfulReply)
                 .or(() -> findFirstString(state.data()))
                 .orElse("");
     }
 
     private Optional<String> findFirstString(Map<String, Object> stateData) {
-        return stateData.values().stream()
-                .filter(value -> value instanceof String || value instanceof AssistantMessage)
-                .map(value -> value instanceof AssistantMessage assistantMessage ? assistantMessage.getText() : value.toString())
-                .filter(text -> !text.isBlank())
+        return stateData.entrySet().stream()
+                .filter(entry -> entry.getValue() instanceof AssistantMessage
+                        || (entry.getValue() instanceof String && isReplyLikeKey(entry.getKey())))
+                .map(entry -> entry.getValue() instanceof AssistantMessage assistantMessage
+                        ? assistantMessage.getText()
+                        : entry.getValue().toString())
+                .filter(this::isMeaningfulReply)
                 .findFirst();
+    }
+
+    private boolean isMeaningfulReply(String text) {
+        if (text == null) {
+            return false;
+        }
+        String normalized = text.trim();
+        if (normalized.isBlank()) {
+            return false;
+        }
+        if (UUID_PATTERN.matcher(normalized).matches()) {
+            return false;
+        }
+        if (INTERNAL_ID_PATTERN.matcher(normalized).matches()) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isReplyLikeKey(String key) {
+        if (key == null) {
+            return false;
+        }
+        String normalized = key.trim().toLowerCase(Locale.ROOT);
+        return normalized.contains("output")
+                || normalized.contains("result")
+                || normalized.contains("response")
+                || normalized.contains("reply")
+                || normalized.contains("answer")
+                || normalized.contains("assistant");
     }
 
     private String fallbackByChatClient(AiGatewayRequest request, AiGatewayResponse response) {

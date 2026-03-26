@@ -275,7 +275,12 @@ class AiCopilotServiceTest {
                 new AiToolExecutionService(aiToolRegistry),
                 runtimeService,
                 aiRegistryCatalogService
-        );
+        ) {
+            @Override
+            protected String currentUserId() {
+                return "usr_001";
+            }
+        };
     }
 
     @Test
@@ -390,7 +395,7 @@ class AiCopilotServiceTest {
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
-                .contains("trace", "result", "form-preview", "confirm");
+                .containsExactly("form-preview", "confirm");
         AiMessageBlockResponse confirmBlock = blocks.stream()
                 .filter(block -> "confirm".equals(block.type()))
                 .findFirst()
@@ -407,12 +412,9 @@ class AiCopilotServiceTest {
         assertThat(confirmBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
                 .contains("业务域", "来源页面", "工具名称", "工具类型", "确认单编号");
-        assertThat(previewBlock.fields())
-                .extracting(AiMessageBlockResponse.Field::label)
-                .contains("业务域", "来源页面", "流程编码", "业务类型", "场景编码", "业务摘要", "发起后动作", "工具调用编号", "确认单编号", "状态", "用户指令");
-        assertThat(previewBlock.metrics())
-                .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("业务域", "表单字段数", "确认状态");
+        assertThat(previewBlock.fields()).isEmpty();
+        assertThat(previewBlock.metrics()).isEmpty();
+        assertThat(previewBlock.trace()).isNullOrEmpty();
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -484,6 +486,37 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldInferLeaveProcessStartFromListRoute() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/oa/leave/list"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我发起一个5天的请假，原因是家里有事，直属负责人选李四")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.role()).isEqualTo("assistant");
+        assertThat(assistantMessage.content()).isEqualTo("我已经整理出建议动作，确认后才会真正执行写操作。");
+        AiMessageBlockResponse previewBlock = assistantMessage.blocks().stream()
+                .filter(block -> "form-preview".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(previewBlock.result())
+                .containsEntry("processKey", "oa_leave")
+                .containsEntry("businessType", "OA_LEAVE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> formData = (Map<String, Object>) previewBlock.result().get("formData");
+        assertThat(formData)
+                .containsEntry("days", 5)
+                .containsEntry("reason", "家里有事")
+                .containsEntry("managerUserId", "usr_002");
+    }
+
+    @Test
     void shouldAppendReadIntentMessageThroughSkillRouting() {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
         List<AiMessageRecord> storedMessages = mockStoredMessages(
@@ -509,11 +542,33 @@ class AiCopilotServiceTest {
 
         assertThat(detail.conversationId()).isEqualTo("conv_001");
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).isEqualTo("当前共有 1 条待办，重点包括：task_001。");
         assertThat(assistantMessage.blocks())
                 .extracting(AiMessageBlockResponse::type)
                 .contains("trace", "result");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiConfirmationMapper, never()).insertConfirmation(any());
+    }
+
+    @Test
+    void shouldFallbackToTodoQueryForGeneralRouteSummaryRequests() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("GENERAL", "route:/"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("梳理当前待办")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).isEqualTo("当前共有 1 条待办，重点包括：task_001。");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "result");
+        verify(aiToolCallMapper).insertToolCall(any());
     }
 
     @Test
@@ -529,6 +584,7 @@ class AiCopilotServiceTest {
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).isEqualTo("待办 task_001 已命中当前上下文，Copilot 会优先围绕该事项解释处理路径。");
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
@@ -568,6 +624,7 @@ class AiCopilotServiceTest {
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).isEqualTo("当前统计：总量 12，已完成 9，待处理 3，完成率 75%。");
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
@@ -598,6 +655,9 @@ class AiCopilotServiceTest {
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).isEqualTo(
+                "当前命中 2 条 PLM 单据，重点包括：PLM_ECR · ECR-20260323-001 · 电机外壳 BOM 变更；PLM_MATERIAL · MAT-20260323-003 · 主数据属性调整。"
+        );
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
@@ -833,6 +893,52 @@ class AiCopilotServiceTest {
                 .containsEntry("taskId", "task_001")
                 .containsEntry("action", "COMPLETE")
                 .containsEntry("comment", "AI 改写后的审批意见");
+    }
+
+    @Test
+    void shouldAllowConfirmWriteToolCallWithoutComment() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+
+        AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
+                "conv_001",
+                new AiToolCallRequest(
+                        "process.start",
+                        AiToolType.WRITE,
+                        AiToolSource.PLATFORM,
+                        Map.of(
+                                "processKey", "oa_leave",
+                                "businessType", "OA_LEAVE",
+                                "sceneCode", "default",
+                                "routePath", "/oa/leave/list",
+                                "domain", "OA",
+                                "formData", Map.of("days", "5", "reason", "家里有事")
+                        )
+                )
+        );
+
+        when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
+                pending.toolCallId(),
+                "conv_001",
+                "process.start",
+                AiToolType.WRITE,
+                AiToolSource.PLATFORM,
+                "PENDING_CONFIRMATION",
+                true,
+                "{\"processKey\":\"oa_leave\",\"businessType\":\"OA_LEAVE\",\"sceneCode\":\"default\",\"routePath\":\"/oa/leave/list\",\"domain\":\"OA\",\"formData\":{\"days\":\"5\",\"reason\":\"家里有事\"}}",
+                "{}",
+                "请确认是否发起流程",
+                pending.confirmationId(),
+                "usr_001",
+                LocalDateTime.of(2026, 3, 23, 10, 10),
+                LocalDateTime.of(2026, 3, 23, 10, 10)
+        ));
+
+        AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
+                pending.toolCallId(),
+                new AiConfirmToolCallRequest(true, null, Map.of())
+        );
+
+        assertThat(confirmed.status()).isEqualTo("CONFIRMED");
     }
 
     private AiConversationRecord conversation() {

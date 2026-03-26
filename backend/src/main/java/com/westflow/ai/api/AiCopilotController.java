@@ -36,6 +36,7 @@ public class AiCopilotController {
      * 分页查询会话列表。
      */
     @PostMapping("/conversations/page")
+    @SaCheckLogin
     public ApiResponse<PageResponse<com.westflow.ai.model.AiConversationSummaryResponse>> pageConversations(
             @Valid @RequestBody PageRequest request
     ) {
@@ -46,6 +47,7 @@ public class AiCopilotController {
      * 新建会话。
      */
     @PostMapping("/conversations")
+    @SaCheckLogin
     public ApiResponse<com.westflow.ai.model.AiConversationDetailResponse> createConversation(
             @Valid @RequestBody AiConversationCreateRequest request
     ) {
@@ -56,6 +58,7 @@ public class AiCopilotController {
      * 查询会话详情。
      */
     @GetMapping("/conversations/{conversationId}")
+    @SaCheckLogin
     public ApiResponse<com.westflow.ai.model.AiConversationDetailResponse> getConversation(
             @PathVariable String conversationId
     ) {
@@ -66,6 +69,7 @@ public class AiCopilotController {
      * 追加会话消息。
      */
     @PostMapping("/conversations/{conversationId}/messages")
+    @SaCheckLogin
     public ApiResponse<com.westflow.ai.model.AiConversationDetailResponse> appendMessage(
             @PathVariable String conversationId,
             @Valid @RequestBody AiMessageAppendRequest request
@@ -77,6 +81,7 @@ public class AiCopilotController {
      * 执行工具调用。
      */
     @PostMapping("/conversations/{conversationId}/tool-calls")
+    @SaCheckLogin
     public ApiResponse<AiToolCallResultResponse> executeToolCall(
             @PathVariable String conversationId,
             @Valid @RequestBody AiToolCallRequest request
@@ -88,6 +93,7 @@ public class AiCopilotController {
      * 确认写操作工具调用。
      */
     @PostMapping("/tool-calls/{toolCallId}/confirm")
+    @SaCheckLogin
     public ApiResponse<AiToolCallResultResponse> confirmToolCall(
             @PathVariable String toolCallId,
             @Valid @RequestBody AiConfirmToolCallRequest request

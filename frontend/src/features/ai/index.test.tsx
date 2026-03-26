@@ -183,11 +183,11 @@ describe('AICopilotPage', () => {
         'session_001'
       )
     )
-    expect(screen.getByText('上下文摘要')).toBeInTheDocument()
-    expect(screen.getByText('工具命中')).toBeInTheDocument()
-    expect(screen.getByText('审计轨迹')).toBeInTheDocument()
-    expect(screen.getByText('workflow.todo.list')).toBeInTheDocument()
-    expect(screen.getByText('已完成执行')).toBeInTheDocument()
+    expect(screen.queryByText('上下文摘要')).not.toBeInTheDocument()
+    expect(screen.queryByText('工具命中')).not.toBeInTheDocument()
+    expect(screen.queryByText('审计轨迹')).not.toBeInTheDocument()
+    expect(screen.queryByText('workflow.todo.list')).not.toBeInTheDocument()
+    expect(screen.queryByText('已完成执行')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /流程解释草稿/ }))
 
@@ -249,8 +249,11 @@ describe('AICopilotPage', () => {
     )
 
     await waitFor(() =>
-      expect(screen.getAllByText('已确认').length).toBeGreaterThan(0)
+      expect(
+        screen.queryByRole('button', { name: '确认处理' })
+      ).not.toBeInTheDocument()
     )
+    expect(screen.queryByText('已确认')).not.toBeInTheDocument()
   })
 
   it('creates a contextual session when opened from a business route', async () => {
@@ -494,17 +497,16 @@ describe('AICopilotPage', () => {
         'session_rich_001'
       )
     )
-    expect(screen.getAllByText('命中轨迹').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('命中：PLM 助手').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('执行结果').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('变更单号').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('ECR-20260323-001').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('影响对象数').length).toBeGreaterThan(0)
+    expect(screen.queryByText('命中轨迹')).not.toBeInTheDocument()
+    expect(screen.queryByText('命中：PLM 助手')).not.toBeInTheDocument()
+    expect(screen.queryByText('执行结果')).not.toBeInTheDocument()
     expect(screen.getAllByText('执行失败').length).toBeGreaterThan(0)
     expect(screen.getAllByText('MCP 请求超时').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('命中：外部知识库检索').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('来源：SKILL').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('来源：MCP').length).toBeGreaterThan(0)
+    expect(screen.queryByText('命中：外部知识库检索')).not.toBeInTheDocument()
+    expect(screen.queryByText('来源：SKILL')).not.toBeInTheDocument()
+    expect(screen.queryByText('来源：MCP')).not.toBeInTheDocument()
+    expect(screen.queryByText('工具命中')).not.toBeInTheDocument()
+    expect(screen.queryByText('审计轨迹')).not.toBeInTheDocument()
   })
 
   it('submits editable form preview arguments and retries failure blocks', async () => {
@@ -717,8 +719,8 @@ describe('AICopilotPage', () => {
     const retryButtons = await screen.findAllByRole('button', {
       name: '重试处理待办',
     })
-    expect(screen.getAllByText('调用：session_retry_001_tool_001').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('确认单：session_retry_001_confirm_001').length).toBeGreaterThan(0)
+    expect(screen.queryByText('调用：session_retry_001_tool_001')).not.toBeInTheDocument()
+    expect(screen.queryByText('确认单：session_retry_001_confirm_001')).not.toBeInTheDocument()
 
     fireEvent.click(retryButtons[0])
 
@@ -856,10 +858,13 @@ describe('AICopilotPage', () => {
     renderWithQuery(<AICopilotPage />)
 
     expect(await screen.findByText('待办处理闭环')).toBeInTheDocument()
-    expect(await screen.findAllByText('待办动作')).not.toHaveLength(0)
-    expect(screen.getAllByText('完成待办').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('下一步建议').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('返回工作台刷新状态或继续追问流程轨迹').length).toBeGreaterThan(0)
+    expect(screen.queryByText('待办动作')).not.toBeInTheDocument()
+    expect(screen.queryByText('完成待办')).not.toBeInTheDocument()
+    expect(screen.queryByText('下一步建议')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('返回工作台刷新状态或继续追问流程轨迹')
+    ).not.toBeInTheDocument()
+    expect((await screen.findAllByText('执行失败')).length).toBeGreaterThan(0)
 
     const retryButtons = await screen.findAllByRole('button', {
       name: '重试驳回待办',

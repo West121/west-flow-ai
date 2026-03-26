@@ -29,7 +29,6 @@ import { getApiErrorMessage } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 import {
   confirmAICopilotConfirmation,
-  type AICopilotAuditEntry,
   createAICopilotSession,
   getAICopilotSession,
   listAICopilotSessions,
@@ -40,7 +39,6 @@ import {
   type AICopilotSession,
   type AICopilotSessionSummary,
   type AICopilotTraceStep,
-  type AICopilotToolCall,
 } from '@/lib/api/ai-copilot'
 
 const aiCopilotSessionsKey = ['ai-copilot', 'sessions'] as const
@@ -571,151 +569,6 @@ export function AICopilotWorkspace({
               </div>
             </div>
 
-            {mode === 'page' ? (
-              <div className='flex min-h-0 min-w-0 flex-col bg-white/[0.03]'>
-                <div className='border-b border-white/10 px-4 py-4'>
-                  <div className='flex items-center justify-between gap-3'>
-                    <div>
-                      <p className='text-xs uppercase tracking-[0.24em] text-slate-400'>
-                        结构化插槽
-                      </p>
-                      <h3 className='mt-2 text-sm font-semibold text-white'>
-                        富消息块
-                      </h3>
-                    </div>
-                    <BadgePill tone='subtle'>
-                      text / confirm / form / stats / result / failure / trace
-                    </BadgePill>
-                  </div>
-                </div>
-
-                <ScrollArea className='min-h-0 flex-1'>
-                  <div className='space-y-3 p-4'>
-                    <InfoPanel
-                      title='上下文摘要'
-                      description='当前会话沿用页面、菜单和业务标签，帮助 Copilot 保持连续上下文。'
-                      badge={`${activeSession?.contextTags.length ?? 0} 个标签`}
-                    >
-                      {activeSession?.contextTags.length ? (
-                        <div className='flex flex-wrap gap-2'>
-                          {activeSession.contextTags.map((tag) => (
-                            <span
-                              key={tag}
-                              className='rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-slate-200'
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyInfoHint text='当前会话还没有上下文标签。' />
-                      )}
-                    </InfoPanel>
-
-                    <InfoPanel
-                      title='工具命中'
-                      description='这里展示当前会话已经实际命中的 tool、skill 或 mcp 调用结果。'
-                      badge={`${activeSession?.toolCalls.length ?? 0} 次调用`}
-                    >
-                      {activeSession?.toolCalls.length ? (
-                        <div className='space-y-2'>
-                          {activeSession.toolCalls.map((toolCall) => (
-                            <ToolCallRow
-                              key={toolCall.toolCallId}
-                              toolCall={toolCall}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyInfoHint text='当前会话还没有命中任何工具调用。' />
-                      )}
-                    </InfoPanel>
-
-                    <InfoPanel
-                      title='审计轨迹'
-                      description='所有确认、执行和结果回写都会沉淀到审计流，方便排查和回放。'
-                      badge={`${activeSession?.audit.length ?? 0} 条记录`}
-                    >
-                      {activeSession?.audit.length ? (
-                        <div className='space-y-2'>
-                          {activeSession.audit.map((auditEntry) => (
-                            <AuditRow
-                              key={auditEntry.auditId}
-                              auditEntry={auditEntry}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <EmptyInfoHint text='当前会话还没有新增审计轨迹。' />
-                      )}
-                    </InfoPanel>
-
-                    {activeSession?.history.flatMap((message) =>
-                      (message.blocks ?? []).map((block, index) => {
-                        const confirmBlock = block.type === 'confirm' ? block : null
-                        const blockConfirmationId =
-                          block.type === 'form-preview' ||
-                          block.type === 'failure' ||
-                          block.type === 'retry'
-                            ? typeof block.result?.confirmationId === 'string'
-                              ? block.result.confirmationId
-                              : null
-                            : null
-
-                        return (
-                          <BlockCard
-                            key={`${message.messageId}-${index}`}
-                            block={block}
-                            isPending={
-                              confirmBlock
-                                ? pendingConfirmationId === confirmBlock.confirmationId
-                                : blockConfirmationId
-                                  ? pendingConfirmationId === blockConfirmationId
-                                  : false
-                            }
-                            onConfirm={
-                              confirmBlock
-                                ? () =>
-                                    handleResolveConfirmation(
-                                      confirmBlock.confirmationId,
-                                      'confirm'
-                                    )
-                                : block.type === 'form-preview' && blockConfirmationId
-                                  ? (argumentsOverride) =>
-                                      handleResolveConfirmation(
-                                        blockConfirmationId,
-                                        'confirm',
-                                        argumentsOverride
-                                      )
-                                  : undefined
-                            }
-                            onCancel={
-                              confirmBlock && confirmBlock.cancelLabel
-                                ? () =>
-                                    handleResolveConfirmation(
-                                      confirmBlock.confirmationId,
-                                      'cancel'
-                                    )
-                                : undefined
-                            }
-                            onRetry={
-                              (block.type === 'failure' || block.type === 'retry') &&
-                                  blockConfirmationId
-                                ? () =>
-                                    handleResolveConfirmation(
-                                      blockConfirmationId,
-                                      'confirm'
-                                    )
-                                : undefined
-                            }
-                          />
-                        )
-                      })
-                    ) ?? null}
-                  </div>
-                </ScrollArea>
-              </div>
-            ) : null}
           </div>
         </section>
       </div>
@@ -811,39 +664,6 @@ function SectionLabel({
   )
 }
 
-function InfoPanel({
-  title,
-  description,
-  badge,
-  children,
-}: {
-  title: string
-  description: string
-  badge: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className='rounded-[1.25rem] border border-white/10 bg-white/5 p-4'>
-      <div className='flex items-start justify-between gap-3'>
-        <div>
-          <p className='text-sm font-semibold text-white'>{title}</p>
-          <p className='mt-1 text-xs leading-5 text-slate-400'>{description}</p>
-        </div>
-        <BadgePill tone='subtle'>{badge}</BadgePill>
-      </div>
-      <div className='mt-3'>{children}</div>
-    </div>
-  )
-}
-
-function EmptyInfoHint({ text }: { text: string }) {
-  return (
-    <div className='rounded-2xl border border-dashed border-white/10 bg-slate-950/20 px-3 py-4 text-xs leading-5 text-slate-400'>
-      {text}
-    </div>
-  )
-}
-
 function BadgePill({
   children,
   icon,
@@ -905,55 +725,6 @@ function HistoryRow({ message }: { message: AICopilotMessage }) {
   )
 }
 
-function ToolCallRow({ toolCall }: { toolCall: AICopilotToolCall }) {
-  return (
-    <div className='rounded-2xl border border-white/10 bg-slate-950/25 px-3 py-3'>
-      <div className='flex items-start justify-between gap-3'>
-        <div>
-          <p className='text-sm font-medium text-white'>{toolCall.toolKey}</p>
-          <p className='mt-1 text-xs leading-5 text-slate-300'>
-            {toolCall.summary}
-          </p>
-        </div>
-        <BadgePill tone='subtle'>{formatToolCallStatus(toolCall.status)}</BadgePill>
-      </div>
-      <div className='mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400'>
-        <span>类型：{toolCall.toolType}</span>
-        <span>来源：{toolCall.toolSource}</span>
-        {toolCall.confirmationId ? <span>确认单：{toolCall.confirmationId}</span> : null}
-        {toolCall.requiresConfirmation ? <span>写操作确认</span> : <span>读操作直执</span>}
-      </div>
-      <div className='mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500'>
-        {toolCall.createdAt ? <span>发起：{formatDate(toolCall.createdAt)}</span> : null}
-        {toolCall.completedAt ? (
-          <span>完成：{formatDate(toolCall.completedAt)}</span>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
-function AuditRow({ auditEntry }: { auditEntry: AICopilotAuditEntry }) {
-  return (
-    <div className='rounded-2xl border border-white/10 bg-slate-950/25 px-3 py-3'>
-      <div className='flex items-center justify-between gap-3'>
-        <p className='text-sm font-medium text-white'>
-          {formatAuditAction(auditEntry.actionType)}
-        </p>
-        <span className='text-[11px] text-slate-400'>
-          {formatDate(auditEntry.occurredAt)}
-        </span>
-      </div>
-      <p className='mt-1 text-xs leading-5 text-slate-300'>{auditEntry.summary}</p>
-      {auditEntry.toolCallId ? (
-        <p className='mt-2 text-[11px] text-slate-500'>
-          关联调用：{auditEntry.toolCallId}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
 function MessageBubble({
   message,
   pendingConfirmationId,
@@ -966,6 +737,16 @@ function MessageBubble({
   onCancel: (confirmationId: string) => void
 }) {
   const isUser = message.role === 'user'
+  const visibleBlocks = useMemo(() => {
+    const blocks = message.blocks?.filter(shouldRenderConversationBlock) ?? []
+    const hasFormPreview = blocks.some((block) => block.type === 'form-preview')
+
+    if (!hasFormPreview) {
+      return blocks
+    }
+
+    return blocks.filter((block) => block.type !== 'confirm')
+  }, [message.blocks])
   const confirmBlock = message.blocks?.find(
     (block): block is Extract<AICopilotMessageBlock, { type: 'confirm' }> =>
       block.type === 'confirm'
@@ -997,9 +778,9 @@ function MessageBubble({
         <p className='mt-2 text-sm leading-6 text-slate-100'>
           {message.content}
         </p>
-        {message.blocks?.length ? (
+        {visibleBlocks.length ? (
           <div className='mt-4 space-y-3'>
-            {message.blocks.map((block, index) => (
+            {visibleBlocks.map((block, index) => (
               <BlockCard
                 key={`${message.messageId}-${index}`}
                 block={block}
@@ -1092,24 +873,8 @@ function EditableFormPreviewCard({
         {block.description ? (
           <p className='text-sm leading-6 text-cyan-50/80'>{block.description}</p>
         ) : null}
-        <TraceMeta block={block} />
       </CardHeader>
       <CardContent className='space-y-3 pt-0'>
-        {block.fields.map((field) => (
-          <div
-            key={field.label}
-            className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2'
-          >
-            <div className='flex items-center justify-between gap-3'>
-              <span className='text-xs text-slate-300'>{field.label}</span>
-              <span className='text-sm font-medium text-white'>{field.value}</span>
-            </div>
-            {field.hint ? (
-              <p className='mt-1 text-[11px] text-slate-400'>{field.hint}</p>
-            ) : null}
-          </div>
-        ))}
-
         {editable ? (
           <div
             data-testid='ai-form-preview-editor'
@@ -1195,8 +960,6 @@ function EditableFormPreviewCard({
             </div>
           </div>
         ) : null}
-
-        {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
       </CardContent>
     </Card>
   )
@@ -1416,14 +1179,8 @@ function BlockCard({
             {block.detail ? (
               <p className='text-xs leading-5 text-rose-50/70'>{block.detail}</p>
             ) : null}
-            <TraceMeta block={block} />
           </CardHeader>
           <CardContent className='space-y-3 pt-0'>
-            <ExecutionSummaryBanner
-              tone='danger'
-              block={block}
-              defaultLabel='失败原因'
-            />
             {block.failure ? (
               <div className='rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-3'>
                 <div className='flex items-center justify-between gap-3'>
@@ -1455,7 +1212,6 @@ function BlockCard({
                 </Button>
               </div>
             ) : null}
-            {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
           </CardContent>
         </Card>
       )
@@ -1473,16 +1229,8 @@ function BlockCard({
             {block.detail ? (
               <p className='text-xs leading-5 text-amber-50/70'>{block.detail}</p>
             ) : null}
-            <TraceMeta block={block} />
           </CardHeader>
           <CardContent className='space-y-3 pt-0'>
-            <ExecutionSummaryBanner
-              tone='warning'
-              block={block}
-              defaultLabel='重试信息'
-            />
-            <FieldList fields={block.fields} />
-            <MetricGrid metrics={block.metrics} />
             <div className='flex gap-2'>
               <Button
                 type='button'
@@ -1496,7 +1244,6 @@ function BlockCard({
                   : resolveRetryButtonLabel(block, '按当前参数重试')}
               </Button>
             </div>
-            {block.trace?.length ? <TraceTimeline trace={block.trace} /> : null}
           </CardContent>
         </Card>
       )
@@ -1701,6 +1448,16 @@ function resolveDisplaySourceLabel(
   return sourceName
 }
 
+function shouldRenderConversationBlock(block: AICopilotMessageBlock) {
+  return (
+    (block.type === 'confirm' &&
+      ((block.status ?? 'pending') === 'pending')) ||
+    block.type === 'form-preview' ||
+    block.type === 'failure' ||
+    block.type === 'retry'
+  )
+}
+
 function TraceTimeline({ trace }: { trace: AICopilotTraceStep[] }) {
   if (!trace.length) {
     return null
@@ -1765,39 +1522,6 @@ function formatConfirmationStatus(status: string) {
     case 'pending':
     default:
       return '待确认'
-  }
-}
-
-function formatToolCallStatus(status: string) {
-  switch (status) {
-    case 'SUCCEEDED':
-      return '执行成功'
-    case 'PENDING_CONFIRMATION':
-      return '待确认'
-    case 'FAILED':
-      return '执行失败'
-    case 'CANCELLED':
-      return '已取消'
-    case 'PENDING':
-    default:
-      return '执行中'
-  }
-}
-
-function formatAuditAction(actionType: string) {
-  switch (actionType) {
-    case 'TOOL_CALL_CREATED':
-      return '已创建调用'
-    case 'TOOL_CALL_CONFIRMED':
-      return '已确认执行'
-    case 'TOOL_CALL_CANCELLED':
-      return '已取消执行'
-    case 'TOOL_CALL_COMPLETED':
-      return '已完成执行'
-    case 'TOOL_CALL_FAILED':
-      return '执行失败'
-    default:
-      return actionType
   }
 }
 
@@ -1939,7 +1663,9 @@ function resolveBusinessFormSchema(result: Record<string, unknown> | null | unde
         title: '请假信息',
         description: '先确认请假时长和请假原因。',
         fields: [
+          { key: 'leaveType', label: '请假类型', hint: '默认按年假发起，可按实际情况调整。' },
           { key: 'days', label: '请假天数', inputType: 'number', hint: '支持半天或多天场景时可再扩展。' },
+          { key: 'managerUserId', label: '直属负责人', hint: '确认审批负责人是否正确。' },
           { key: 'reason', label: '请假原因', multiline: true, hint: '建议写清具体事项和时间安排。' },
         ],
       },
@@ -2009,32 +1735,16 @@ function groupEditableFields(
   formData: Record<string, string>,
   schemaGroups: FormFieldGroup[]
 ) {
-  const remainingKeys = new Set(Object.keys(formData))
   const groups = schemaGroups.map((group) => {
     const fields = group.fields
       .filter((field) => field.key in formData)
-      .map((field) => {
-        remainingKeys.delete(field.key)
-        return field
-      })
+      .map((field) => field)
 
     return {
       ...group,
       fields,
     }
   }).filter((group) => group.fields.length > 0)
-
-  if (remainingKeys.size > 0) {
-    groups.push({
-      title: '扩展参数',
-      description: '这些字段暂未映射到业务卡片，仍然可以直接编辑。',
-      fields: Array.from(remainingKeys).map((key) => ({
-        key,
-        label: key,
-        multiline: (formData[key] ?? '').length > 40,
-      })),
-    })
-  }
 
   if (!groups.length) {
     groups.push({
