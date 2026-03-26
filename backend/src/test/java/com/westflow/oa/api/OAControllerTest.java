@@ -143,9 +143,16 @@ class OAControllerTest {
                 billId
         )).isEqualTo("DRAFT");
 
-        mockMvc.perform(get("/api/v1/oa/leaves/drafts")
+        String draftsResponse = mockMvc.perform(get("/api/v1/oa/leaves/drafts")
                         .header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        JsonNode drafts = objectMapper.readTree(draftsResponse).path("data");
+        assertThat(drafts).hasSize(1);
+        assertThat(drafts.get(0).path("creatorUserId").asText()).isEqualTo("usr_001");
+        assertThat(drafts.get(0).path("creatorDisplayName").asText()).isEqualTo("张三");
 
         mockMvc.perform(put("/api/v1/oa/leaves/{billId}/draft", billId)
                         .header("Authorization", "Bearer " + token)

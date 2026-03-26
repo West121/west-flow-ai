@@ -14,6 +14,7 @@ public record OABillDraftListItemResponse(
         String processInstanceId,
         String status,
         String creatorUserId,
+        String creatorDisplayName,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

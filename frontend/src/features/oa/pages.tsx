@@ -238,6 +238,7 @@ function matchesDraftKeyword(draft: OADraftListItem, keyword: string) {
   return [
     draft.billNo,
     draft.businessTitle,
+    draft.creatorDisplayName ?? '',
     draft.creatorUserId,
     draft.sceneCode ?? '',
   ]
@@ -269,6 +270,7 @@ function mapDraftToApprovalSheetItem(draft: OADraftListItem): ApprovalSheetListI
     billNo: draft.billNo,
     businessTitle: draft.businessTitle,
     initiatorUserId: draft.creatorUserId,
+    initiatorDisplayName: draft.creatorDisplayName,
     currentNodeName: '草稿',
     currentTaskId: null,
     currentTaskStatus: null,

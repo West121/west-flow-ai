@@ -94,20 +94,22 @@ public interface OALeaveBillMapper {
 
     @Select("""
             SELECT
-              id AS billId,
-              bill_no AS billNo,
+              bill.id AS billId,
+              bill.bill_no AS billNo,
               'OA_LEAVE' AS businessType,
-              CONCAT('请假申请 · ', COALESCE(reason, '未命名草稿')) AS businessTitle,
-              scene_code AS sceneCode,
-              process_instance_id AS processInstanceId,
-              status,
-              creator_user_id AS creatorUserId,
-              created_at AS createdAt,
-              updated_at AS updatedAt
-            FROM oa_leave_bill
-            WHERE creator_user_id = #{creatorUserId}
-              AND status = 'DRAFT'
-            ORDER BY updated_at DESC
+              CONCAT('请假申请 · ', COALESCE(bill.reason, '未命名草稿')) AS businessTitle,
+              bill.scene_code AS sceneCode,
+              bill.process_instance_id AS processInstanceId,
+              bill.status,
+              bill.creator_user_id AS creatorUserId,
+              u.display_name AS creatorDisplayName,
+              bill.created_at AS createdAt,
+              bill.updated_at AS updatedAt
+            FROM oa_leave_bill bill
+            LEFT JOIN wf_user u ON u.id = bill.creator_user_id
+            WHERE bill.creator_user_id = #{creatorUserId}
+              AND bill.status = 'DRAFT'
+            ORDER BY bill.updated_at DESC
             """)
     List<OABillDraftListItemResponse> selectDraftsByCreatorUserId(@Param("creatorUserId") String creatorUserId);
 }

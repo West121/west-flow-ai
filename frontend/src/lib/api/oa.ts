@@ -27,6 +27,7 @@ export type OADraftListItem = {
   processInstanceId?: string | null
   status: 'DRAFT'
   creatorUserId: string
+  creatorDisplayName?: string | null
   createdAt: string
   updatedAt: string
 }
