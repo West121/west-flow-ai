@@ -149,6 +149,40 @@ describe('runtime form renderers', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders the registered expense process form', () => {
+    render(
+      <ProcessFormRenderer
+        processFormKey='oa-expense-start-form'
+        processFormVersion='1.0.0'
+        value={{
+          amount: '128.5',
+          reason: '客户招待',
+        }}
+        onChange={() => {}}
+      />
+    )
+
+    expect(screen.getByLabelText('报销金额')).toBeInTheDocument()
+    expect(screen.getByLabelText('报销事由')).toBeInTheDocument()
+  })
+
+  it('renders the registered common process form', () => {
+    render(
+      <ProcessFormRenderer
+        processFormKey='oa-common-start-form'
+        processFormVersion='1.0.0'
+        value={{
+          title: '资产借用',
+          content: '申请借用投影设备',
+        }}
+        onChange={() => {}}
+      />
+    )
+
+    expect(screen.getByLabelText('申请标题')).toBeInTheDocument()
+    expect(screen.getByLabelText('申请内容')).toBeInTheDocument()
+  })
+
   it('renders the registered node form and propagates task form data changes', () => {
     const onChange = vi.fn()
 

@@ -6,6 +6,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -117,4 +118,13 @@ public interface AiConversationMapper {
             @Param("messageCount") int messageCount,
             @Param("updatedAt") LocalDateTime updatedAt
     );
+
+    /**
+     * 删除会话记录。
+     */
+    @Delete("""
+            DELETE FROM wf_ai_conversation
+            WHERE id = #{conversationId}
+            """)
+    int deleteConversation(@Param("conversationId") String conversationId);
 }

@@ -6,10 +6,14 @@ import { toFormValues, UserEditPage } from './user-pages'
 const {
   navigateMock,
   useSearchMock,
+  systemOrgApiMocks,
   systemUserApiMocks,
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   useSearchMock: vi.fn(),
+  systemOrgApiMocks: {
+    getDepartmentTree: vi.fn(),
+  },
   systemUserApiMocks: {
     createSystemUser: vi.fn(),
     getSystemUserDetail: vi.fn(),
@@ -58,6 +62,7 @@ vi.mock('@/features/shared/page-shell', () => ({
 }))
 
 vi.mock('@/lib/api/system-users', () => systemUserApiMocks)
+vi.mock('@/lib/api/system-org', () => systemOrgApiMocks)
 
 function renderWithQuery(ui: React.ReactNode) {
   const queryClient = new QueryClient({
@@ -80,6 +85,7 @@ describe('system user pages', () => {
   beforeEach(() => {
     navigateMock.mockReset()
     useSearchMock.mockReset()
+    Object.values(systemOrgApiMocks).forEach((mock) => mock.mockReset())
     Object.values(systemUserApiMocks).forEach((mock) => mock.mockReset())
     useSearchMock.mockReturnValue({
       page: 1,
@@ -120,6 +126,22 @@ describe('system user pages', () => {
         },
       ],
     })
+
+    systemOrgApiMocks.getDepartmentTree.mockResolvedValue([
+      {
+        departmentId: 'dept_001',
+        companyId: 'cmp_001',
+        companyName: '西流科技',
+        parentDepartmentId: null,
+        parentDepartmentName: null,
+        departmentName: '财务部',
+        departmentCode: 'FIN',
+        leaderName: '李四',
+        status: 'ENABLED',
+        createdAt: '2026-03-01T00:00:00Z',
+        children: [],
+      },
+    ])
 
     systemUserApiMocks.getSystemUserDetail.mockResolvedValue({
       userId: 'usr_001',
@@ -184,13 +206,15 @@ describe('system user pages', () => {
     })
 
     expect(values.companyId).toBe('cmp_001')
+    expect(values.departmentId).toBe('dept_001')
     expect(values.primaryPostId).toBe('post_001')
     expect(values.roleIds).toEqual(['role_oa_user', 'role_dept_manager'])
   })
 
-  it('shows role selection as a multi-select dropdown', async () => {
+  it('shows department tree selection and role multi-select when editing', async () => {
     renderWithQuery(<UserEditPage userId='usr_001' />)
 
+    expect(await screen.findByText('所属部门')).toBeInTheDocument()
     const roleTrigger = await screen.findByRole('button', { name: '角色分配' })
     expect(roleTrigger).toHaveTextContent('已选 2 项')
   })

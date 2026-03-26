@@ -6,11 +6,18 @@ const aiCopilotApiMocks = vi.hoisted(() => ({
   listAICopilotSessions: vi.fn(),
   getAICopilotSession: vi.fn(),
   createAICopilotSession: vi.fn(),
+  deleteAICopilotSession: vi.fn(),
   sendAICopilotMessage: vi.fn(),
   confirmAICopilotConfirmation: vi.fn(),
 }))
 
+const systemUserApiMocks = vi.hoisted(() => ({
+  listSystemUsers: vi.fn(),
+  getSystemUserDetail: vi.fn(),
+}))
+
 vi.mock('@/lib/api/ai-copilot', () => aiCopilotApiMocks)
+vi.mock('@/lib/api/system-users', () => systemUserApiMocks)
 
 vi.mock('@/components/layout/main', () => ({
   Main: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
@@ -110,6 +117,66 @@ function buildSession(overrides: Record<string, unknown> = {}) {
 
 describe('AICopilotPage', () => {
   beforeEach(() => {
+    systemUserApiMocks.listSystemUsers.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 2,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          userId: 'usr_002',
+          displayName: '李四',
+          username: 'lisi',
+          mobile: '13800000002',
+          email: 'lisi@westflow.cn',
+          departmentName: '人力资源部',
+          postName: '部门负责人',
+          status: 'ENABLED',
+          createdAt: '2026-03-22T09:00:00+08:00',
+        },
+        {
+          userId: 'usr_005',
+          displayName: '王主管',
+          username: 'wangzhuguan',
+          mobile: '13800000005',
+          email: 'wangzhuguan@westflow.cn',
+          departmentName: '运营中心',
+          postName: '总监',
+          status: 'ENABLED',
+          createdAt: '2026-03-22T09:00:00+08:00',
+        },
+      ],
+    })
+    systemUserApiMocks.getSystemUserDetail.mockResolvedValue({
+      userId: 'usr_002',
+      displayName: '李四',
+      username: 'lisi',
+      mobile: '13800000002',
+      email: 'lisi@westflow.cn',
+      companyId: 'comp_001',
+      companyName: '西流科技',
+      departmentId: 'dept_002',
+      departmentName: '人力资源部',
+      postId: 'post_002',
+      postName: '部门负责人',
+      roleIds: [],
+      enabled: true,
+      primaryAssignment: {
+        userPostId: 'up_usr_002',
+        companyId: 'comp_001',
+        companyName: '西流科技',
+        departmentId: 'dept_002',
+        departmentName: '人力资源部',
+        postId: 'post_002',
+        postName: '部门负责人',
+        roleIds: [],
+        roleNames: [],
+        primary: true,
+        enabled: true,
+      },
+      partTimeAssignments: [],
+    })
     aiCopilotApiMocks.listAICopilotSessions.mockResolvedValue([
       {
         sessionId: 'session_001',
@@ -149,6 +216,7 @@ describe('AICopilotPage', () => {
         contextTags: ['AI Copilot'],
       })
     )
+    aiCopilotApiMocks.deleteAICopilotSession.mockResolvedValue(undefined)
     aiCopilotApiMocks.sendAICopilotMessage.mockResolvedValue(
       buildSession({
         sessionId: 'session_001',
@@ -177,6 +245,9 @@ describe('AICopilotPage', () => {
     renderWithQuery(<AICopilotPage />)
 
     expect(await screen.findByText('待办分流建议')).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/).length
+    ).toBeGreaterThan(0)
     expect(screen.getByText('会话')).toBeInTheDocument()
     await waitFor(() =>
       expect(aiCopilotApiMocks.getAICopilotSession).toHaveBeenCalledWith(
@@ -199,6 +270,29 @@ describe('AICopilotPage', () => {
     expect(screen.getByText('流程解释草稿')).toBeInTheDocument()
   })
 
+  it('supports deleting a session from the context menu', async () => {
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    const sessionTitle = await screen.findByText('待办分流建议')
+    const sessionCard = sessionTitle.closest('button')
+    expect(sessionCard).not.toBeNull()
+    fireEvent.contextMenu(sessionCard as HTMLButtonElement)
+
+    expect(await screen.findByText('删除会话')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('删除会话'))
+
+    expect(await screen.findByText('确认删除')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.deleteAICopilotSession.mock.calls[0]?.[0]).toBe(
+        'session_001'
+      )
+    )
+  })
+
   it('sends a message and resolves a confirmation card state flow', async () => {
     const { AICopilotPage } = await import('./index')
 
@@ -206,7 +300,7 @@ describe('AICopilotPage', () => {
 
     await screen.findByText('待办分流建议')
 
-    fireEvent.change(screen.getByPlaceholderText(/输入一条 Copilot 指令/), {
+    fireEvent.change(screen.getByPlaceholderText(/输入你的问题或指令/), {
       target: { value: '请生成一个确认卡和统计卡' },
     })
     await waitFor(() =>
@@ -215,9 +309,9 @@ describe('AICopilotPage', () => {
       ).toBeInTheDocument()
     )
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: '发送消息' })).toBeEnabled()
     )
-    fireEvent.click(screen.getByRole('button', { name: '发送' }))
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
 
     await waitFor(() =>
       expect(aiCopilotApiMocks.sendAICopilotMessage).toHaveBeenCalledWith(
@@ -320,22 +414,21 @@ describe('AICopilotPage', () => {
     }
   )
 
-  it('shows contextual route hints and supports Ctrl+Enter to send quickly', async () => {
+  it('shows contextual route hints and supports Enter to send quickly', async () => {
     const { AICopilotPage } = await import('./index')
 
     renderWithQuery(<AICopilotPage sourceRoute='/plm/ecr/create' />)
 
     expect(await screen.findByText('待办分流建议')).toBeInTheDocument()
     expect(screen.getByText('上下文：PLM / ECR 新建')).toBeInTheDocument()
-    expect(screen.getByText('Ctrl/Cmd + Enter 快速发送')).toBeInTheDocument()
+    expect(screen.getByText('Enter 发送，Shift+Enter 换行')).toBeInTheDocument()
 
-    const composer = screen.getByPlaceholderText(/输入一条 Copilot 指令/)
+    const composer = screen.getByPlaceholderText(/输入你的问题或指令/)
     fireEvent.change(composer, {
       target: { value: '请快速整理当前 ECR 的摘要' },
     })
     fireEvent.keyDown(composer, {
       key: 'Enter',
-      ctrlKey: true,
     })
 
     await waitFor(() =>
@@ -346,6 +439,27 @@ describe('AICopilotPage', () => {
         },
         expect.any(Object)
       )
+    )
+  })
+
+  it('keeps Shift+Enter as a newline without sending', async () => {
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage sourceRoute='/plm/ecr/create' />)
+
+    await screen.findByText('待办分流建议')
+
+    const composer = screen.getByPlaceholderText(/输入你的问题或指令/)
+    fireEvent.change(composer, {
+      target: { value: '第一行' },
+    })
+    fireEvent.keyDown(composer, {
+      key: 'Enter',
+      shiftKey: true,
+    })
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.sendAICopilotMessage).not.toHaveBeenCalled()
     )
   })
 
@@ -546,11 +660,18 @@ describe('AICopilotPage', () => {
                   editable: true,
                   confirmationId: 'session_form_001_confirm_001',
                   processKey: 'oa_leave',
+                  processDefinitionId: 'oa_leave:1',
+                  processName: '请假审批',
+                  processFormKey: 'oa-leave-start-form',
+                  processFormVersion: '1.1.0',
                   businessType: 'OA_LEAVE',
                   sceneCode: 'default',
                   formData: {
+                    leaveType: 'ANNUAL',
                     days: '1',
+                    managerUserId: 'usr_002',
                     reason: '默认原因',
+                    urgent: false,
                   },
                 },
                 fields: [
@@ -610,6 +731,7 @@ describe('AICopilotPage', () => {
     )
     expect(screen.getAllByText('请假天数').length).toBeGreaterThan(0)
     expect(screen.getAllByText('请假原因').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('直属负责人').length).toBeGreaterThan(0)
     const editableFormSection = screen
       .queryAllByTestId('ai-form-preview-editor')
       .find((section) => !within(section).getByTestId('ai-form-preview-submit').hasAttribute('disabled'))!
@@ -641,6 +763,79 @@ describe('AICopilotPage', () => {
         expect.any(Object)
       )
     )
+  })
+
+  it('blocks AI process preview confirmation when runtime form is not registered', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_form_unsupported_001',
+        title: 'AI 发起 PLM 流程',
+        preview: '未找到运行时表单组件。',
+        status: 'active',
+        updatedAt: '2026-03-23T09:10:00.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot', 'route:/plm/ecr/create'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(async () =>
+      buildSession({
+        sessionId: 'session_form_unsupported_001',
+        title: 'AI 发起 PLM 流程',
+        contextTags: ['AI Copilot', 'route:/plm/ecr/create'],
+        history: [
+          {
+            messageId: 'session_form_unsupported_001_msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-23T09:10:10.000Z',
+            content: '我已经整理好发起参数，请确认。',
+            blocks: [
+              {
+                type: 'form-preview',
+                title: '拟发起流程预览',
+                description: '确认前可直接修改表单字段。',
+                sourceType: 'PLATFORM',
+                sourceKey: 'process.start',
+                sourceName: 'process.start',
+                toolType: 'WRITE',
+                result: {
+                  editable: true,
+                  confirmationId: 'session_form_unsupported_001_confirm_001',
+                  processKey: 'plm_ecr',
+                  processDefinitionId: 'plm_ecr:1',
+                  processName: 'ECR 变更申请',
+                  processFormKey: 'plm-ecr-start-form',
+                  processFormVersion: '1.0.0',
+                  businessType: 'PLM_ECR',
+                  sceneCode: 'default',
+                  formData: {
+                    changeTitle: '测试变更',
+                  },
+                },
+                fields: [],
+                trace: [],
+              },
+              {
+                type: 'confirm',
+                confirmationId: 'session_form_unsupported_001_confirm_001',
+                title: '请确认是否继续执行',
+                summary: '确认后将发起真实业务流程。',
+                confirmLabel: '确认处理',
+                cancelLabel: '暂不执行',
+                status: 'pending',
+              },
+            ],
+          },
+        ],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('AI 发起 PLM 流程')).toBeInTheDocument()
+    expect(await screen.findByTestId('ai-form-preview-submit')).toBeDisabled()
   })
 
   it('renders retry blocks with confirmation and tool call context', async () => {

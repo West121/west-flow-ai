@@ -46,6 +46,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -342,14 +343,16 @@ public class AiCopilotConfiguration {
             SupervisorAgent supervisorAgent,
             LlmRoutingAgent routingAgent,
             AiRegistryCatalogService aiRegistryCatalogService,
-            AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider
+            AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider,
+            @Value("${spring.ai.openai.chat.options.model:${spring.ai.dashscope.chat.options.model:unknown}}") String aiCopilotModelName
     ) {
         return new SpringAiAlibabaCopilotRuntimeService(
                 aiCopilotChatClient,
                 supervisorAgent,
                 routingAgent,
                 aiRegistryCatalogService,
-                aiRuntimeToolCallbackProvider
+                aiRuntimeToolCallbackProvider,
+                aiCopilotModelName
         );
     }
 

@@ -28,7 +28,12 @@ import com.westflow.ai.skill.AiSkillDescriptor;
 import com.westflow.ai.skill.AiSkillRegistry;
 import com.westflow.ai.tool.AiToolDefinition;
 import com.westflow.ai.tool.AiToolRegistry;
+import com.westflow.common.error.ContractException;
+import com.westflow.processdef.model.ProcessDslPayload;
+import com.westflow.processdef.model.PublishedProcessDefinition;
+import com.westflow.processdef.service.ProcessDefinitionService;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -72,6 +77,9 @@ class AiCopilotServiceTest {
     @Mock
     private AiAuditMapper aiAuditMapper;
 
+    @Mock
+    private ProcessDefinitionService processDefinitionService;
+
     private AiCopilotService aiCopilotService;
     private AtomicBoolean confirmedWriteExecuted;
 
@@ -91,7 +99,35 @@ class AiCopilotServiceTest {
                         "task.query",
                         AiToolSource.PLATFORM,
                         "已返回待办列表",
-                        context -> Map.of("count", 1, "items", List.of("task_001"))
+                        context -> {
+                            String view = String.valueOf(context.request().arguments().getOrDefault("view", "TODO"));
+                            if ("INITIATED".equalsIgnoreCase(view)) {
+                                return Map.of(
+                                        "count", 2,
+                                        "items", List.of(
+                                                Map.of(
+                                                        "instanceId", "proc_001",
+                                                        "businessTitle", "请假申请A",
+                                                        "billNo", "LEAVE-001",
+                                                        "currentNodeName", "部门经理审批",
+                                                        "currentTaskId", "task_init_001",
+                                                        "instanceStatus", "RUNNING",
+                                                        "createdAt", "2026-03-26T09:00:00+08:00"
+                                                ),
+                                                Map.of(
+                                                        "instanceId", "proc_002",
+                                                        "businessTitle", "请假申请B",
+                                                        "billNo", "LEAVE-002",
+                                                        "currentNodeName", "负责人确认",
+                                                        "currentTaskId", "task_init_002",
+                                                        "instanceStatus", "RUNNING",
+                                                        "createdAt", "2026-03-26T11:30:00+08:00"
+                                                )
+                                        )
+                                );
+                            }
+                            return Map.of("count", 1, "items", List.of("task_001"));
+                        }
                 ),
                 AiToolDefinition.read(
                         "workflow.todo.list",
@@ -264,6 +300,8 @@ class AiCopilotServiceTest {
                     }
                     return java.util.Optional.empty();
                 });
+        lenient().when(processDefinitionService.getLatestByProcessKey(anyString()))
+                .thenAnswer(invocation -> publishedProcessDefinition(invocation.getArgument(0, String.class)));
         aiCopilotService = new DbAiCopilotService(
                 aiConversationMapper,
                 aiMessageMapper,
@@ -274,7 +312,8 @@ class AiCopilotServiceTest {
                 new AiGatewayService(new AiOrchestrationPlanner(aiAgentRegistry, aiSkillRegistry)),
                 new AiToolExecutionService(aiToolRegistry),
                 runtimeService,
-                aiRegistryCatalogService
+                aiRegistryCatalogService,
+                processDefinitionService
         ) {
             @Override
             protected String currentUserId() {
@@ -380,14 +419,15 @@ class AiCopilotServiceTest {
 
     @Test
     void shouldAppendWriteIntentMessageAndStageConfirmationCard() {
-        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "发起", "route:/oa/leave/create"));
         List<AiMessageRecord> storedMessages = mockStoredMessages();
         when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
         when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
 
         AiConversationDetailResponse detail = aiCopilotService.appendMessage(
                 "conv_001",
-                new AiMessageAppendRequest("请直接发起这个流程")
+                new AiMessageAppendRequest("请直接发起一个5天的请假")
         );
 
         assertThat(detail.conversationId()).isEqualTo("conv_001");
@@ -514,6 +554,84 @@ class AiCopilotServiceTest {
                 .containsEntry("days", 5)
                 .containsEntry("reason", "家里有事")
                 .containsEntry("managerUserId", "usr_002");
+    }
+
+    @Test
+    void shouldInferLeaveProcessStartFromLeaveAliasKeywords() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我发起一个5天的事假")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        AiMessageBlockResponse previewBlock = assistantMessage.blocks().stream()
+                .filter(block -> "form-preview".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(previewBlock.result())
+                .containsEntry("processKey", "oa_leave")
+                .containsEntry("businessType", "OA_LEAVE")
+                .containsEntry("processFormKey", "oa-leave-start-form")
+                .containsEntry("processFormVersion", "1.1.0");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> formData = (Map<String, Object>) previewBlock.result().get("formData");
+        assertThat(formData)
+                .containsEntry("days", 5)
+                .containsEntry("leaveType", "PERSONAL")
+                .containsEntry("managerUserId", "usr_002");
+    }
+
+    @Test
+    void shouldRejectProcessStartPreviewWhenPublishedProcessOrFormIsMissing() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(processDefinitionService.getLatestByProcessKey("oa_leave"))
+                .thenThrow(new ContractException("PROCESS_DEFINITION.NOT_FOUND", org.springframework.http.HttpStatus.NOT_FOUND, "missing"));
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我发起一个5天的请假")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("系统中未找到可直接发起的已发布流程");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .doesNotContain("form-preview", "confirm");
+        verify(aiToolCallMapper, never()).insertToolCall(any());
+    }
+
+    @Test
+    void shouldPreferReadAnalysisOverProcessStartWhenAskingAboutProgress() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我看看今天我发起了几个请假申请，目前进度都怎么样的")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .doesNotContain("form-preview", "confirm");
+        assertThat(assistantMessage.content()).doesNotContain("确认后才会真正执行写操作");
+        assertThat(assistantMessage.content()).contains("今天你共发起 2 条申请");
+        assertThat(assistantMessage.content()).contains("其中进行中 2 条");
+        verify(aiToolCallMapper).insertToolCall(any());
+        verify(aiConfirmationMapper, never()).insertConfirmation(any());
     }
 
     @Test
@@ -965,6 +1083,71 @@ class AiCopilotServiceTest {
         } catch (Exception exception) {
             throw new RuntimeException(exception);
         }
+    }
+
+    private PublishedProcessDefinition publishedProcessDefinition(String processKey) {
+        return switch (processKey) {
+            case "oa_leave" -> new PublishedProcessDefinition(
+                    "oa_leave:1",
+                    "oa_leave",
+                    "请假审批",
+                    "OA",
+                    1,
+                    "PUBLISHED",
+                    LocalDateTime.of(2026, 3, 23, 9, 0).atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime(),
+                    new ProcessDslPayload(
+                            "1.0.0",
+                            "oa_leave",
+                            "请假审批",
+                            "OA",
+                            "oa-leave-start-form",
+                            "1.1.0",
+                            List.of(),
+                            Map.of(),
+                            List.of(
+                                    new ProcessDslPayload.Node("start_1", "start", "开始", null, Map.of(), Map.of(), Map.of()),
+                                    new ProcessDslPayload.Node("end_1", "end", "结束", null, Map.of(), Map.of(), Map.of())
+                            ),
+                            List.of(new ProcessDslPayload.Edge("edge_1", "start_1", "end_1", 10, "提交", Map.of()))
+                    ),
+                    ""
+            );
+            case "oa_expense" -> simplePublishedProcessDefinition("oa_expense", "报销审批", "oa-expense-start-form");
+            case "oa_common" -> simplePublishedProcessDefinition("oa_common", "通用申请审批", "oa-common-start-form");
+            default -> throw new ContractException("PROCESS_DEFINITION.NOT_FOUND", org.springframework.http.HttpStatus.NOT_FOUND, "missing");
+        };
+    }
+
+    private PublishedProcessDefinition simplePublishedProcessDefinition(
+            String processKey,
+            String processName,
+            String processFormKey
+    ) {
+        return new PublishedProcessDefinition(
+                processKey + ":1",
+                processKey,
+                processName,
+                "OA",
+                1,
+                "PUBLISHED",
+                LocalDateTime.of(2026, 3, 23, 9, 0).atZone(ZoneId.of("Asia/Shanghai")).toOffsetDateTime(),
+                new ProcessDslPayload(
+                        "1.0.0",
+                        processKey,
+                        processName,
+                        "OA",
+                        processFormKey,
+                        "1.0.0",
+                        List.of(),
+                        Map.of(),
+                        List.of(
+                                new ProcessDslPayload.Node("start_1", "start", "开始", null, Map.of(), Map.of(), Map.of()),
+                                new ProcessDslPayload.Node("end_1", "end", "结束", null, Map.of(), Map.of(), Map.of())
+                        ),
+                        List.of(new ProcessDslPayload.Edge("edge_1", "start_1", "end_1", 10, "提交", Map.of()))
+                ),
+                ""
+        );
     }
 
     private List<AiMessageRecord> mockStoredMessages(AiMessageRecord... initialMessages) {

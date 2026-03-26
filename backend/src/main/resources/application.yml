@@ -69,15 +69,22 @@ liteflow:
 
 spring.ai:
   model:
-    chat: dashscope
+    chat: openai
   mcp:
     server:
       enabled: false
+  openai:
+    api-key: ${DASHSCOPE_API_KEY:dummy-key}
+    base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    chat:
+      options:
+        model: ${DASHSCOPE_CHAT_MODEL:qwen3.5-plus}
   dashscope:
+    enabled: false
     api-key: ${DASHSCOPE_API_KEY:dummy-key}
     chat:
       options:
-        model: ${DASHSCOPE_CHAT_MODEL:qwen-plus}
+        model: ${DASHSCOPE_CHAT_MODEL:qwen3.5-plus}
 
 minio:
   endpoint: ${MINIO_ENDPOINT:http://localhost:9000}

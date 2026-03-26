@@ -7,10 +7,14 @@ import com.westflow.ai.gateway.AiGatewayRequest;
 import com.westflow.ai.gateway.AiGatewayResponse;
 import com.westflow.ai.service.AiRegistryCatalogService;
 import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -20,6 +24,8 @@ import org.springframework.ai.tool.ToolCallbackProvider;
  */
 public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeService {
 
+    private static final Logger log = LoggerFactory.getLogger(SpringAiAlibabaCopilotRuntimeService.class);
+    private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
     private static final Pattern UUID_PATTERN = Pattern.compile(
             "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
     );
@@ -32,13 +38,14 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
     private final LlmRoutingAgent routingAgent;
     private final AiRegistryCatalogService aiRegistryCatalogService;
     private final AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider;
+    private final String modelName;
 
     public SpringAiAlibabaCopilotRuntimeService(
             ChatClient chatClient,
             SupervisorAgent supervisorAgent,
             LlmRoutingAgent routingAgent
     ) {
-        this(chatClient, supervisorAgent, routingAgent, null, null);
+        this(chatClient, supervisorAgent, routingAgent, null, null, "unknown");
     }
 
     public SpringAiAlibabaCopilotRuntimeService(
@@ -47,7 +54,7 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             LlmRoutingAgent routingAgent,
             AiRegistryCatalogService aiRegistryCatalogService
     ) {
-        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, null);
+        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, null, "unknown");
     }
 
     public SpringAiAlibabaCopilotRuntimeService(
@@ -57,11 +64,23 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             AiRegistryCatalogService aiRegistryCatalogService,
             AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider
     ) {
+        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, aiRuntimeToolCallbackProvider, "unknown");
+    }
+
+    public SpringAiAlibabaCopilotRuntimeService(
+            ChatClient chatClient,
+            SupervisorAgent supervisorAgent,
+            LlmRoutingAgent routingAgent,
+            AiRegistryCatalogService aiRegistryCatalogService,
+            AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider,
+            String modelName
+    ) {
         this.chatClient = chatClient;
         this.supervisorAgent = supervisorAgent;
         this.routingAgent = routingAgent;
         this.aiRegistryCatalogService = aiRegistryCatalogService;
         this.aiRuntimeToolCallbackProvider = aiRuntimeToolCallbackProvider;
+        this.modelName = modelName == null || modelName.isBlank() ? "unknown" : modelName;
     }
 
     /**
@@ -69,15 +88,99 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
      */
     @Override
     public String generateReply(AiGatewayRequest request, AiGatewayResponse response) {
+        long start = System.currentTimeMillis();
         try {
             Optional<OverAllState> state = "SUPERVISOR".equals(response.routeMode())
                     ? supervisorAgent.invoke(buildPrompt(request, response))
                     : routingAgent.invoke(buildPrompt(request, response));
-            return state.map(this::extractReply)
-                    .filter(reply -> !reply.isBlank())
+            String runtimeReply = state.map(this::extractReply)
+                    .filter(candidate -> !candidate.isBlank())
                     .orElseGet(() -> fallbackByChatClient(request, response));
+            log.info(
+                    "AI runtime reply generated model={} mode={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=false",
+                    modelName,
+                    response.routeMode(),
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start
+            );
+            return runtimeReply;
         } catch (Exception exception) {
+            log.warn(
+                    "AI runtime reply failed, falling back model={} mode={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason={}",
+                    modelName,
+                    response.routeMode(),
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start,
+                    exception.getMessage()
+            );
             return fallbackByChatClient(request, response);
+        }
+    }
+
+    @Override
+    public String generateReadReply(
+            AiGatewayRequest request,
+            AiGatewayResponse response,
+            String toolKey,
+            String toolResultJson,
+            String fallbackReply
+    ) {
+        long start = System.currentTimeMillis();
+        try {
+            String reply = chatClient.prompt()
+                    .system("""
+                            你是 West Flow AI Copilot。
+                            当前时间：%s（Asia/Shanghai）
+                            你正在处理只读分析请求。
+                            必须基于工具返回结果给出简洁中文结论。
+                            不要编造不存在的数据，不要暴露内部推理，不要输出 JSON。
+                            如果工具结果已经明确，就直接给最终结论。
+                            """.formatted(OffsetDateTime.now(TIME_ZONE)))
+                    .user("""
+                            用户问题：%s
+                            当前路由模式：%s
+                            当前业务域：%s
+                            当前页面：%s
+                            命中工具：%s
+                            工具返回结果：
+                            %s
+
+                            请输出 1 到 3 句简洁中文，优先回答用户真正的问题。
+                            如果问题涉及“今天/今日”，请严格以当前时间判断。
+                            """.formatted(
+                            request.content(),
+                            response.routeMode(),
+                            request.domain(),
+                            request.pageRoute() == null ? "" : request.pageRoute(),
+                            toolKey,
+                            toolResultJson
+                    ))
+                    .call()
+                    .content();
+            log.info(
+                    "AI read summary generated model={} mode={} toolKey={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=false",
+                    modelName,
+                    response.routeMode(),
+                    toolKey,
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start
+            );
+            return reply;
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "AI read summary failed, falling back model={} mode={} toolKey={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason={}",
+                    modelName,
+                    response.routeMode(),
+                    toolKey,
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start,
+                    exception.getMessage()
+            );
+            return fallbackReply;
         }
     }
 
@@ -86,6 +189,7 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
         String skillPrompt = resolveSkillPrompt(request, response);
         return """
                 你是 West Flow AI Copilot。
+                当前时间：%s（Asia/Shanghai）
                 当前路由模式：%s
                 当前业务域：%s
                 当前用户问题：%s
@@ -96,6 +200,7 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
                 %s
                 请直接输出简洁中文回答，不要暴露内部推理。
                 """.formatted(
+                OffsetDateTime.now(TIME_ZONE),
                 response.routeMode(),
                 request.domain(),
                 request.content(),

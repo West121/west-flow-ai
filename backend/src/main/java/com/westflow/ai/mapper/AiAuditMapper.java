@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Select;
 
 /**
@@ -54,4 +55,13 @@ public interface AiAuditMapper {
             )
             """)
     int insertAudit(AiAuditRecord record);
+
+    /**
+     * 删除会话下的全部审计轨迹。
+     */
+    @Delete("""
+            DELETE FROM wf_ai_audit
+            WHERE conversation_id = #{conversationId}
+            """)
+    int deleteByConversationId(@Param("conversationId") String conversationId);
 }

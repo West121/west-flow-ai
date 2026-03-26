@@ -48,17 +48,24 @@ liteflow:
 
 spring.ai:
   model:
-    chat: dashscope
+    chat: openai
   mcp:
     server:
       enabled: false
       annotation-scanner:
         enabled: false
+  openai:
+    api-key: test-key
+    base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    chat:
+      options:
+        model: qwen3.5-plus
   dashscope:
+    enabled: false
     api-key: test-key
     chat:
       options:
-        model: qwen-plus
+        model: qwen3.5-plus
 
 logging:
   level:

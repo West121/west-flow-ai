@@ -37,6 +37,10 @@ import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
+import com.westflow.processdef.model.ProcessDslPayload;
+import com.westflow.processdef.model.PublishedProcessDefinition;
+import com.westflow.processdef.service.ProcessDefinitionService;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -72,6 +76,7 @@ public class DbAiCopilotService implements AiCopilotService {
     private final AiToolExecutionService aiToolExecutionService;
     private final AiCopilotRuntimeService aiCopilotRuntimeService;
     private final AiRegistryCatalogService aiRegistryCatalogService;
+    private final ProcessDefinitionService processDefinitionService;
 
     public DbAiCopilotService(
             AiConversationMapper aiConversationMapper,
@@ -83,7 +88,8 @@ public class DbAiCopilotService implements AiCopilotService {
             AiGatewayService aiGatewayService,
             AiToolExecutionService aiToolExecutionService,
             AiCopilotRuntimeService aiCopilotRuntimeService,
-            AiRegistryCatalogService aiRegistryCatalogService
+            AiRegistryCatalogService aiRegistryCatalogService,
+            ProcessDefinitionService processDefinitionService
     ) {
         this.aiConversationMapper = aiConversationMapper;
         this.aiMessageMapper = aiMessageMapper;
@@ -95,6 +101,7 @@ public class DbAiCopilotService implements AiCopilotService {
         this.aiToolExecutionService = aiToolExecutionService;
         this.aiCopilotRuntimeService = aiCopilotRuntimeService;
         this.aiRegistryCatalogService = aiRegistryCatalogService;
+        this.processDefinitionService = processDefinitionService;
     }
 
     /**
@@ -153,6 +160,24 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     /**
+     * 删除会话及其关联记录。
+     */
+    @Override
+    @Transactional
+    public void deleteConversation(String conversationId) {
+        AiConversationRecord conversation = requireConversation(conversationId);
+        String userId = currentUserId();
+        if (!userId.equals(conversation.operatorUserId())) {
+            throw new ContractException("AI.CONVERSATION_FORBIDDEN", HttpStatus.FORBIDDEN, "无权删除该会话");
+        }
+        aiAuditMapper.deleteByConversationId(conversationId);
+        aiConfirmationMapper.deleteByConversationId(conversationId);
+        aiMessageMapper.deleteByConversationId(conversationId);
+        aiToolCallMapper.deleteByConversationId(conversationId);
+        aiConversationMapper.deleteConversation(conversationId);
+    }
+
+    /**
      * 追加会话消息。
      */
     @Override
@@ -160,7 +185,7 @@ public class DbAiCopilotService implements AiCopilotService {
     public AiConversationDetailResponse appendMessage(String conversationId, AiMessageAppendRequest request) {
         AiConversationRecord conversation = requireConversation(conversationId);
         LocalDateTime now = now();
-        LocalDateTime assistantTime = now.plusNanos(1);
+        LocalDateTime assistantTime = now.plusSeconds(1);
         String normalizedContent = request.content() == null ? "" : request.content().trim();
         AiMessageRecord message = new AiMessageRecord(
                 newId("msg"),
@@ -334,21 +359,38 @@ public class DbAiCopilotService implements AiCopilotService {
                 routePath
         ));
 
-        if (gatewayResponse.requiresConfirmation()) {
-            AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(
-                    conversation.conversationId(),
-                    buildWriteToolCall(content, domain, routePath),
-                    currentUserId()
-            );
-            persistToolCall(toolResult);
-            insertAudit(conversation.conversationId(), toolResult.toolCallId(), "WRITE", toolResult.summary());
-            return new AssistantReply(
-                    "我已经整理出建议动作，确认后才会真正执行写操作。",
-                    List.of(
-                            buildWritePreviewBlock(content, domain, routePath, toolResult),
-                            confirmationBlock(toolResult, gatewayResponse, domain, routePath)
-                    )
-            );
+        boolean readOnlyIntent = isReadOnlyIntent(content, routePath);
+
+        if (gatewayResponse.requiresConfirmation() && !readOnlyIntent) {
+            AiToolCallRequest writeToolCall;
+            try {
+                writeToolCall = buildWriteToolCall(content, domain, routePath);
+            } catch (ContractException exception) {
+                if ("AI.UNSUPPORTED_WRITE_INTENT".equals(exception.getCode())) {
+                    writeToolCall = null;
+                } else if ("AI.PROCESS_START_UNAVAILABLE".equals(exception.getCode())) {
+                    String message = exception.getMessage();
+                    return new AssistantReply(message, List.of(defaultTextBlock(message)));
+                } else {
+                    throw exception;
+                }
+            }
+            if (writeToolCall != null) {
+                AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(
+                        conversation.conversationId(),
+                        writeToolCall,
+                        currentUserId()
+                );
+                persistToolCall(toolResult);
+                insertAudit(conversation.conversationId(), toolResult.toolCallId(), "WRITE", toolResult.summary());
+                return new AssistantReply(
+                        "我已经整理出建议动作，确认后才会真正执行写操作。",
+                        List.of(
+                                buildWritePreviewBlock(content, domain, routePath, toolResult),
+                                confirmationBlock(toolResult, gatewayResponse, domain, routePath)
+                        )
+                );
+            }
         }
 
         AiToolCallRequest readToolCall = buildReadToolCall(content, domain, gatewayResponse.skillIds(), routePath);
@@ -361,8 +403,9 @@ public class DbAiCopilotService implements AiCopilotService {
             persistToolCall(toolResult);
             insertAudit(conversation.conversationId(), toolResult.toolCallId(), "READ", toolResult.summary());
             List<TraceStep> trace = buildToolResultTrace(gatewayResponse, toolResult, "executed");
+            String fallbackReply = buildReadFinalAnswer(content, routePath, toolResult);
             return new AssistantReply(
-                    buildReadFinalAnswer(content, routePath, toolResult),
+                    resolveReadRuntimeReply(content, domain, routePath, gatewayResponse, toolResult, fallbackReply),
                     buildReadBlocks(content, routePath, toolResult, gatewayResponse, trace)
             );
         }
@@ -876,7 +919,7 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     private AiToolCallRequest buildWriteToolCall(String content, String domain, String routePath) {
-        if (content.contains("发起") || content.contains("提交")) {
+        if (isExplicitProcessStartIntent(content, routePath)) {
             Map<String, Object> startDraft = buildProcessStartDraft(content, domain, routePath);
             return new AiToolCallRequest(
                     "process.start",
@@ -908,6 +951,9 @@ public class DbAiCopilotService implements AiCopilotService {
                     AiToolSource.PLATFORM,
                     buildTaskHandleDraft(content, domain, routePath, "READ")
             );
+        }
+        if (!hasExplicitTaskHandleIntent(content)) {
+            throw new ContractException("AI.UNSUPPORTED_WRITE_INTENT", HttpStatus.BAD_REQUEST, "当前请求更适合走分析或查询链路");
         }
         return new AiToolCallRequest(
                 "task.handle",
@@ -989,8 +1035,44 @@ public class DbAiCopilotService implements AiCopilotService {
             }
         }
 
+        enrichValidatedProcessStartDefinition(draft);
         draft.put("formData", Map.copyOf(formData));
         return Map.copyOf(draft);
+    }
+
+    private void enrichValidatedProcessStartDefinition(Map<String, Object> draft) {
+        String processKey = stringValue(draft.get("processKey"));
+        if (processKey.isBlank()) {
+            throw new ContractException(
+                    "AI.PROCESS_START_UNAVAILABLE",
+                    HttpStatus.BAD_REQUEST,
+                    "当前未识别到可直接发起的系统流程，请明确业务类型后再试。"
+            );
+        }
+        PublishedProcessDefinition definition;
+        try {
+            definition = processDefinitionService.getLatestByProcessKey(processKey);
+        } catch (ContractException exception) {
+            throw new ContractException(
+                    "AI.PROCESS_START_UNAVAILABLE",
+                    HttpStatus.BAD_REQUEST,
+                    "系统中未找到可直接发起的已发布流程，请先确认流程已发布并对当前账号开放。"
+            );
+        }
+        ProcessDslPayload payload = definition.dsl();
+        String processFormKey = payload == null ? "" : stringValue(payload.processFormKey());
+        String processFormVersion = payload == null ? "" : stringValue(payload.processFormVersion());
+        if (processFormKey.isBlank() || processFormVersion.isBlank()) {
+            throw new ContractException(
+                    "AI.PROCESS_START_UNAVAILABLE",
+                    HttpStatus.BAD_REQUEST,
+                    "当前流程未绑定可直接发起的流程表单，暂时不能通过 AI 发起。"
+            );
+        }
+        draft.put("processDefinitionId", definition.processDefinitionId());
+        draft.put("processName", definition.processName());
+        draft.put("processFormKey", processFormKey);
+        draft.put("processFormVersion", processFormVersion);
     }
 
     private String resolveProcessStartRouteHint(String content, String routePath) {
@@ -1008,7 +1090,15 @@ public class DbAiCopilotService implements AiCopilotService {
 
     private String inferBusinessTypeFromContent(String content) {
         String normalized = content == null ? "" : content;
-        if (normalized.contains("请假")) {
+        if (normalized.contains("请假")
+                || normalized.contains("事假")
+                || normalized.contains("年假")
+                || normalized.contains("病假")
+                || normalized.contains("调休")
+                || normalized.contains("婚假")
+                || normalized.contains("产假")
+                || normalized.contains("陪产假")
+                || normalized.contains("丧假")) {
             return "OA_LEAVE";
         }
         if (normalized.contains("报销")) {
@@ -1029,6 +1119,88 @@ public class DbAiCopilotService implements AiCopilotService {
         return "";
     }
 
+    private boolean isReadOnlyIntent(String content, String routePath) {
+        String normalized = content == null ? "" : content.trim();
+        if (normalized.isBlank()) {
+            return true;
+        }
+        if (isExplicitProcessStartIntent(normalized, routePath) || hasExplicitTaskHandleIntent(normalized)) {
+            return false;
+        }
+        return normalized.contains("看看")
+                || normalized.contains("分析")
+                || normalized.contains("解读")
+                || normalized.contains("解释")
+                || normalized.contains("进度")
+                || normalized.contains("状态")
+                || normalized.contains("怎么样")
+                || normalized.contains("几个")
+                || normalized.contains("多少")
+                || normalized.contains("汇总")
+                || normalized.contains("总结")
+                || normalized.contains("查询")
+                || normalized.contains("查看");
+    }
+
+    private boolean isExplicitProcessStartIntent(String content, String routePath) {
+        String normalized = content == null ? "" : content.trim();
+        if (normalized.isBlank()) {
+            return false;
+        }
+        boolean startVerb = normalized.contains("帮我发起")
+                || normalized.contains("请帮我发起")
+                || normalized.contains("直接发起")
+                || normalized.contains("发起一个")
+                || normalized.contains("提交一个")
+                || normalized.contains("新建")
+                || normalized.contains("创建")
+                || normalized.contains("提交申请")
+                || normalized.contains("发起申请");
+        boolean readQualifier = normalized.contains("发起了几个")
+                || normalized.contains("我发起了")
+                || normalized.contains("目前进度")
+                || normalized.contains("进度都怎么样")
+                || normalized.contains("怎么样");
+        return startVerb && !readQualifier;
+    }
+
+    private boolean hasExplicitTaskHandleIntent(String content) {
+        String normalized = content == null ? "" : content.trim();
+        return normalized.contains("认领")
+                || normalized.contains("驳回")
+                || normalized.contains("退回")
+                || normalized.contains("已读")
+                || normalized.contains("已阅")
+                || normalized.contains("同意")
+                || normalized.contains("通过")
+                || normalized.contains("办理")
+                || normalized.contains("处理这个")
+                || normalized.contains("处理当前");
+    }
+
+    private String resolveApprovalSheetView(String content, String routePath) {
+        String normalized = content == null ? "" : content.trim();
+        if (!extractTaskId(routePath).isBlank()) {
+            return "TODO";
+        }
+        boolean initiatedIntent = normalized.contains("我发起")
+                || normalized.contains("我提交")
+                || normalized.contains("发起了几个")
+                || normalized.contains("提交了几个")
+                || ((normalized.contains("发起") || normalized.contains("申请"))
+                && (normalized.contains("进度")
+                || normalized.contains("状态")
+                || normalized.contains("几个")
+                || normalized.contains("多少")
+                || normalized.contains("怎么样")
+                || normalized.contains("汇总")
+                || normalized.contains("总结")
+                || normalized.contains("查询")
+                || normalized.contains("查看")
+                || normalized.contains("看看")));
+        return initiatedIntent ? "INITIATED" : "TODO";
+    }
+
     private AiToolCallRequest buildReadToolCall(String content, String domain, List<String> skillIds, String routePath) {
         return aiRegistryCatalogService.matchReadTool(
                         currentUserId(),
@@ -1047,6 +1219,7 @@ public class DbAiCopilotService implements AiCopilotService {
             String domain,
             String routePath
     ) {
+        String approvalSheetView = resolveApprovalSheetView(content, routePath);
         return switch (tool.toolCode()) {
             case "workflow.definition.list" -> new AiToolCallRequest(
                     tool.toolCode(),
@@ -1070,24 +1243,39 @@ public class DbAiCopilotService implements AiCopilotService {
                     tool.toolCode(),
                     tool.toolType(),
                     tool.toolSource(),
-                    Map.of("keyword", extractTaskKeyword(routePath, content == null ? "" : content), "domain", domain, "view", "TODO")
+                    Map.of(
+                            "keyword", extractApprovalSheetKeyword(routePath, content == null ? "" : content, approvalSheetView),
+                            "domain", domain,
+                            "view", approvalSheetView,
+                            "pageSize", 100
+                    )
             );
         };
     }
 
     private AiToolCallRequest buildFallbackReadToolCall(String content, String domain, String routePath) {
         String normalized = content == null ? "" : content;
+        String approvalSheetView = resolveApprovalSheetView(normalized, routePath);
         if (normalized.contains("待办")
                 || normalized.contains("审批")
                 || normalized.contains("认领")
                 || normalized.contains("轨迹")
                 || normalized.contains("路径")
-                || normalized.contains("流程图")) {
+                || normalized.contains("流程图")
+                || normalized.contains("进度")
+                || normalized.contains("申请")
+                || normalized.contains("几个")
+                || normalized.contains("怎么样")) {
             return new AiToolCallRequest(
                     "task.query",
                     AiToolType.READ,
                     AiToolSource.PLATFORM,
-                    Map.of("keyword", extractTaskKeyword(routePath, normalized), "domain", domain, "view", "TODO")
+                    Map.of(
+                            "keyword", extractApprovalSheetKeyword(routePath, normalized, approvalSheetView),
+                            "domain", domain,
+                            "view", approvalSheetView,
+                            "pageSize", 100
+                    )
             );
         }
         if (normalized.contains("统计")
@@ -1418,14 +1606,16 @@ public class DbAiCopilotService implements AiCopilotService {
             );
         }
         if ("task.query".equals(result.toolKey()) || "workflow.todo.list".equals(result.toolKey())) {
-            Object count = result.result().getOrDefault("count", 0);
+            String approvalSheetView = resolveApprovalSheetViewFromArguments(result.arguments());
+            Map<String, Object> normalizedApprovalResult = normalizeApprovalSheetResult(result.result());
+            Object count = normalizedApprovalResult.getOrDefault("count", 0);
             java.util.ArrayList<AiMessageBlockResponse> blocks = new java.util.ArrayList<>(List.of(
-                    defaultTextBlock("已通过平台内置工具读取待办数据。"),
+                    defaultTextBlock("已通过平台内置工具读取" + ("INITIATED".equals(approvalSheetView) ? "我发起的申请数据。" : "待办数据。")),
                     traceBlock(
                             gatewayResponse.routeMode(),
                             gatewayResponse.agentId(),
                             gatewayResponse.agentKey(),
-                            "已命中待办查询链路。",
+                            "已命中" + ("INITIATED".equals(approvalSheetView) ? "我发起审批单" : "待办") + "查询链路。",
                             "executed",
                             trace
                     ),
@@ -1433,17 +1623,17 @@ public class DbAiCopilotService implements AiCopilotService {
                             result.toolSource().name(),
                             result.toolKey(),
                             result.toolKey(),
-                            result.toolType().name(),
-                            result.summary(),
-                            result.result(),
-                            trace,
-                            buildTodoResultFields(routePath, result.result()),
-                            buildTodoResultMetrics(routePath, count, content)
+                        result.toolType().name(),
+                        result.summary(),
+                        result.result(),
+                        trace,
+                        buildTodoResultFields(routePath, normalizedApprovalResult, approvalSheetView),
+                        buildTodoResultMetrics(routePath, count, content, approvalSheetView)
                     ),
-                    buildTodoStatsBlock(routePath, count)
+                    buildTodoStatsBlock(routePath, count, approvalSheetView)
             ));
             if (content != null && (content.contains("解释") || content.contains("路径") || content.contains("为什么"))) {
-                blocks.add(defaultTextBlock(buildTodoExplanation(routePath, result.result())));
+                blocks.add(defaultTextBlock(buildTodoExplanation(routePath, normalizedApprovalResult, approvalSheetView)));
             }
             return List.copyOf(blocks);
         }
@@ -1554,7 +1744,9 @@ public class DbAiCopilotService implements AiCopilotService {
             return "我已经读取流程定义列表，可继续按流程名或流程键深入查看。";
         }
         if ("task.query".equals(result.toolKey()) || "workflow.trace.summary".equals(result.toolKey())) {
-            return "我已经汇总当前审批轨迹，可继续追问节点处理路径。";
+            return "INITIATED".equals(resolveApprovalSheetViewFromArguments(result.arguments()))
+                    ? "我已经汇总你发起的申请进度，可继续追问某条申请当前卡在哪个节点。"
+                    : "我已经汇总当前审批轨迹，可继续追问节点处理路径。";
         }
         if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
             return "我已经生成当前 PLM 变更摘要，可继续追问 ECR/ECO 影响范围。";
@@ -1574,10 +1766,10 @@ public class DbAiCopilotService implements AiCopilotService {
             return "当前没有命中的流程定义。";
         }
         if ("task.query".equals(result.toolKey()) || "workflow.todo.list".equals(result.toolKey())) {
-            return buildTodoFinalAnswer(content, routePath, result.result());
+            return buildTodoFinalAnswer(content, routePath, normalizeApprovalSheetResult(result.result()), resolveApprovalSheetViewFromArguments(result.arguments()));
         }
         if ("workflow.trace.summary".equals(result.toolKey())) {
-            return buildTodoExplanation(routePath, result.result());
+            return buildTodoExplanation(routePath, normalizeApprovalSheetResult(result.result()), resolveApprovalSheetViewFromArguments(result.arguments()));
         }
         if ("stats.query".equals(result.toolKey())) {
             return buildStatsFinalAnswer(result.result());
@@ -1893,8 +2085,16 @@ public class DbAiCopilotService implements AiCopilotService {
             return List.of();
         }
         return items.stream()
-                .filter(Map.class::isInstance)
-                .map(item -> (Map<String, Object>) item)
+                .map(item -> {
+                    if (item instanceof Map<?, ?> map) {
+                        return (Map<String, Object>) map;
+                    }
+                    if (item == null || item instanceof CharSequence || item instanceof Number || item instanceof Boolean) {
+                        return null;
+                    }
+                    return objectMapper.convertValue(item, new TypeReference<Map<String, Object>>() { });
+                })
+                .filter(map -> map != null && !map.isEmpty())
                 .toList();
     }
 
@@ -1961,6 +2161,40 @@ public class DbAiCopilotService implements AiCopilotService {
         }
     }
 
+    private String resolveReadRuntimeReply(
+            String content,
+            String domain,
+            String routePath,
+            AiGatewayResponse gatewayResponse,
+            AiToolCallResultResponse toolResult,
+            String fallback
+    ) {
+        try {
+            String runtimeReply = aiCopilotRuntimeService.generateReadReply(
+                    new AiGatewayRequest(
+                            null,
+                            currentUserId(),
+                            content,
+                            domain,
+                            false,
+                            gatewayResponse.skillIds(),
+                            routePath == null || routePath.isBlank() ? List.of() : List.of("route:" + routePath),
+                            routePath
+                    ),
+                    gatewayResponse,
+                    toolResult.toolKey(),
+                    toJson(toolResult.result()),
+                    fallback
+            );
+            if (runtimeReply == null || runtimeReply.isBlank()) {
+                return fallback;
+            }
+            return runtimeReply;
+        } catch (RuntimeException exception) {
+            return fallback;
+        }
+    }
+
     private String newId(String prefix) {
         return prefix + "_" + UUID.randomUUID().toString().replace("-", "");
     }
@@ -2005,6 +2239,53 @@ public class DbAiCopilotService implements AiCopilotService {
     private String extractTaskKeyword(String routePath, String fallbackKeyword) {
         String taskId = extractTaskId(routePath);
         return taskId.isBlank() ? fallbackKeyword : taskId;
+    }
+
+    private String extractApprovalSheetKeyword(String routePath, String content, String view) {
+        if ("TODO".equalsIgnoreCase(view)) {
+            return extractTaskKeyword(routePath, content);
+        }
+        String routeKeyword = extractInitiatedRouteKeyword(routePath);
+        if (!routeKeyword.isBlank()) {
+            return routeKeyword;
+        }
+        return extractInitiatedContentKeyword(content);
+    }
+
+    private String extractInitiatedRouteKeyword(String routePath) {
+        if (routePath == null || routePath.isBlank()) {
+            return "";
+        }
+        if (routePath.startsWith("/oa/leave")) {
+            return "请假";
+        }
+        if (routePath.startsWith("/oa/expense")) {
+            return "报销";
+        }
+        if (routePath.startsWith("/oa/common")) {
+            return "通用申请";
+        }
+        return "";
+    }
+
+    private String extractInitiatedContentKeyword(String content) {
+        String normalized = content == null ? "" : content;
+        if (normalized.contains("请假")) {
+            return "请假";
+        }
+        if (normalized.contains("报销")) {
+            return "报销";
+        }
+        if (normalized.contains("通用")) {
+            return "通用申请";
+        }
+        if (normalized.contains("ECR")) {
+            return "ECR";
+        }
+        if (normalized.contains("ECO")) {
+            return "ECO";
+        }
+        return "";
     }
 
     private String extractBillKeyword(String routePath, String fallbackKeyword) {
@@ -2110,6 +2391,20 @@ public class DbAiCopilotService implements AiCopilotService {
     ) {
         Map<String, Object> arguments = toolResult.arguments();
         Map<String, Object> formData = mapValue(arguments.get("formData"));
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("toolCallId", toolResult.toolCallId());
+        result.put("confirmationId", toolResult.confirmationId());
+        result.put("toolKey", toolResult.toolKey());
+        result.put("toolType", toolResult.toolType().name());
+        result.put("businessType", stringValue(arguments.get("businessType")));
+        result.put("processKey", stringValue(arguments.get("processKey")));
+        result.put("processDefinitionId", stringValue(arguments.get("processDefinitionId")));
+        result.put("processName", stringValue(arguments.get("processName")));
+        result.put("processFormKey", stringValue(arguments.get("processFormKey")));
+        result.put("processFormVersion", stringValue(arguments.get("processFormVersion")));
+        result.put("sceneCode", stringValue(arguments.getOrDefault("sceneCode", "default")));
+        result.put("formData", formData);
+        result.put("editable", true);
         return new AiMessageBlockResponse(
                 "form-preview",
                 "拟发起流程预览",
@@ -2127,17 +2422,7 @@ public class DbAiCopilotService implements AiCopilotService {
                 toolResult.toolKey(),
                 toolResult.toolKey(),
                 toolResult.toolType().name(),
-                Map.of(
-                        "toolCallId", toolResult.toolCallId(),
-                        "confirmationId", toolResult.confirmationId(),
-                        "toolKey", toolResult.toolKey(),
-                        "toolType", toolResult.toolType().name(),
-                        "businessType", stringValue(arguments.get("businessType")),
-                        "processKey", stringValue(arguments.get("processKey")),
-                        "sceneCode", stringValue(arguments.getOrDefault("sceneCode", "default")),
-                        "formData", formData,
-                        "editable", true
-                ),
+                Map.copyOf(result),
                 null,
                 null,
                 List.of(),
@@ -2251,15 +2536,41 @@ public class DbAiCopilotService implements AiCopilotService {
         );
     }
 
-    private AiMessageBlockResponse buildTodoStatsBlock(String routePath, Object count) {
+    private String resolveApprovalSheetViewFromArguments(Map<String, Object> arguments) {
+        String view = stringValue(arguments.get("view")).toUpperCase();
+        return view.isBlank() ? "TODO" : view;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> normalizeApprovalSheetResult(Map<String, Object> result) {
+        if (result == null || result.isEmpty()) {
+            return Map.of("count", 0, "items", List.of());
+        }
+        if (result.containsKey("count") || result.containsKey("items")) {
+            return result;
+        }
+        Object pageValue = result.get("page");
+        if (pageValue instanceof PageResponse<?> page) {
+            return Map.of("count", page.total(), "items", page.records());
+        }
+        if (pageValue instanceof Map<?, ?> pageMap) {
+            Object total = pageMap.containsKey("total") ? pageMap.get("total") : 0;
+            Object records = pageMap.containsKey("records") ? pageMap.get("records") : List.of();
+            return Map.of("count", total, "items", records);
+        }
+        return result;
+    }
+
+    private AiMessageBlockResponse buildTodoStatsBlock(String routePath, Object count, String view) {
         String taskId = extractTaskId(routePath);
+        boolean initiatedView = "INITIATED".equals(view);
         return new AiMessageBlockResponse(
                 "stats",
-                "待办摘要",
+                initiatedView ? "我发起的申请摘要" : "待办摘要",
                 null,
                 null,
                 null,
-                "当前待办和路由上下文已经同步到 Copilot。",
+                initiatedView ? "当前你发起的审批单和路由上下文已经同步到 Copilot。" : "当前待办和路由上下文已经同步到 Copilot。",
                 null,
                 null,
                 null,
@@ -2267,40 +2578,79 @@ public class DbAiCopilotService implements AiCopilotService {
                 null,
                 null,
                 List.of(
-                        new Field("待办编号", taskId.isBlank() ? "未定位" : taskId, null),
+                        new Field(initiatedView ? "上下文任务" : "待办编号", taskId.isBlank() ? "未定位" : taskId, null),
                         new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
-                        new Field("视图", "TODO", "来自平台待办查询")
+                        new Field("视图", view, initiatedView ? "来自平台我发起审批单查询" : "来自平台待办查询")
                 ),
                 List.of(
-                        new Metric("当前待办数", String.valueOf(count), null, "neutral"),
-                        new Metric("待办编号", taskId.isBlank() ? "未定位" : taskId, null, "warning"),
-                        new Metric("视图", "TODO", "来自平台待办查询", "positive")
+                        new Metric(initiatedView ? "当前发起数" : "当前待办数", String.valueOf(count), null, "neutral"),
+                        new Metric(initiatedView ? "上下文任务" : "待办编号", taskId.isBlank() ? "未定位" : taskId, null, "warning"),
+                        new Metric("视图", view, initiatedView ? "来自平台我发起审批单查询" : "来自平台待办查询", "positive")
                 )
         );
     }
 
-    private List<Field> buildTodoResultFields(String routePath, Map<String, Object> result) {
+    private List<Field> buildTodoResultFields(String routePath, Map<String, Object> result, String view) {
         String taskId = extractTaskId(routePath);
+        boolean initiatedView = "INITIATED".equals(view);
         return List.of(
-                new Field("上下文命中", taskId.isBlank() ? "列表模式" : "当前待办", null),
-                new Field("当前待办", taskId.isBlank() ? "未绑定单条待办" : taskId, null),
-                new Field("待办摘要", summarizeTodoItems(result.get("items")), null),
-                new Field("处理路径建议", taskId.isBlank() ? "先打开待办详情，再让 Copilot 给出处理建议。" : "继续追问该待办的处理路径、退回节点或审批原因。", null),
-                new Field("下一步建议", taskId.isBlank() ? "可以继续追问审批中心统计、流程轨迹或某条待办。" : "可以继续让 Copilot 解释该待办为何到你、下一步去哪。", null)
+                new Field("上下文命中", taskId.isBlank() ? "列表模式" : (initiatedView ? "当前申请" : "当前待办"), null),
+                new Field(initiatedView ? "当前申请" : "当前待办", taskId.isBlank() ? (initiatedView ? "未绑定单条申请" : "未绑定单条待办") : taskId, null),
+                new Field(initiatedView ? "申请摘要" : "待办摘要", summarizeTodoItems(result.get("items"), view), null),
+                new Field(initiatedView ? "进度建议" : "处理路径建议", taskId.isBlank()
+                        ? (initiatedView ? "可以继续追问某条申请卡在哪个节点、谁可以处理。" : "先打开待办详情，再让 Copilot 给出处理建议。")
+                        : (initiatedView ? "继续追问该申请当前节点、处理人和下一步去向。" : "继续追问该待办的处理路径、退回节点或审批原因。"), null),
+                new Field("下一步建议", taskId.isBlank()
+                        ? (initiatedView ? "可以继续追问我今天发起了几条、哪些已完成或已撤销。" : "可以继续追问审批中心统计、流程轨迹或某条待办。")
+                        : (initiatedView ? "可以继续让 Copilot 解释这条申请为什么卡在当前节点。" : "可以继续让 Copilot 解释该待办为何到你、下一步去哪。"), null)
         );
     }
 
-    private List<Metric> buildTodoResultMetrics(String routePath, Object count, String content) {
+    private List<Metric> buildTodoResultMetrics(String routePath, Object count, String content, String view) {
         String taskId = extractTaskId(routePath);
         boolean explainMode = content != null && (content.contains("解释") || content.contains("路径") || content.contains("为什么"));
+        boolean initiatedView = "INITIATED".equals(view);
         return List.of(
-                new Metric("当前待办数", String.valueOf(count), null, "neutral"),
-                new Metric("上下文命中", taskId.isBlank() ? "列表模式" : "单待办", null, taskId.isBlank() ? "neutral" : "positive"),
+                new Metric(initiatedView ? "当前发起数" : "当前待办数", String.valueOf(count), null, "neutral"),
+                new Metric("上下文命中", taskId.isBlank() ? "列表模式" : (initiatedView ? "单申请" : "单待办"), null, taskId.isBlank() ? "neutral" : "positive"),
                 new Metric("解释模式", explainMode ? "是" : "否", null, explainMode ? "positive" : "neutral")
         );
     }
 
-    private String summarizeTodoItems(Object items) {
+    private String summarizeTodoItems(Object items, String view) {
+        boolean initiatedView = "INITIATED".equals(view);
+        List<Map<String, Object>> entries = listOfMaps(items);
+        if (!entries.isEmpty()) {
+            return entries.stream()
+                    .map(item -> {
+                        String taskId = stringValue(item.get("taskId"));
+                        String title = stringValue(item.get("title"));
+                        String nodeName = stringValue(item.get("nodeName"));
+                        String currentNodeName = stringValue(item.get("currentNodeName"));
+                        String businessTitle = stringValue(item.get("businessTitle"));
+                        String billNo = stringValue(item.get("billNo"));
+                        String instanceStatus = stringValue(item.get("instanceStatus"));
+                        if (initiatedView) {
+                            String summaryTitle = !businessTitle.isBlank() ? businessTitle : (!title.isBlank() ? title : billNo);
+                            String statusText = instanceStatus.isBlank() ? "进行中" : instanceStatus;
+                            String progressNode = !currentNodeName.isBlank() ? currentNodeName : nodeName;
+                            if (!summaryTitle.isBlank()) {
+                                return summaryTitle + "（" + statusText + (progressNode.isBlank() ? "" : " · " + progressNode) + "）";
+                            }
+                        }
+                        if (!title.isBlank()) {
+                            return title;
+                        }
+                        if (!nodeName.isBlank()) {
+                            return nodeName + (taskId.isBlank() ? "" : "（" + taskId + "）");
+                        }
+                        return taskId.isBlank() ? "待办项" : taskId;
+                    })
+                    .distinct()
+                    .limit(2)
+                    .reduce((left, right) -> left + "；" + right)
+                    .orElse(initiatedView ? "当前没有命中的申请摘要。" : "当前没有命中的待办摘要。");
+        }
         if (items instanceof List<?> rawItems && !rawItems.isEmpty()) {
             List<String> plainItems = rawItems.stream()
                     .filter(item -> !(item instanceof Map<?, ?>))
@@ -2312,43 +2662,90 @@ public class DbAiCopilotService implements AiCopilotService {
                 return String.join("；", plainItems);
             }
         }
-        List<Map<String, Object>> entries = listOfMaps(items);
-        if (entries.isEmpty()) {
-            return "当前没有命中的待办摘要。";
-        }
-        return entries.stream()
-                .limit(2)
-                .map(item -> {
-                    String taskId = stringValue(item.get("taskId"));
-                    String title = stringValue(item.get("title"));
-                    String nodeName = stringValue(item.get("nodeName"));
-                    if (!title.isBlank()) {
-                        return title;
-                    }
-                    if (!nodeName.isBlank()) {
-                        return nodeName + (taskId.isBlank() ? "" : "（" + taskId + "）");
-                    }
-                    return taskId.isBlank() ? "待办项" : taskId;
-                })
-                .reduce((left, right) -> left + "；" + right)
-                .orElse("当前没有命中的待办摘要。");
+        return initiatedView ? "当前没有命中的申请摘要。" : "当前没有命中的待办摘要。";
     }
 
-    private String buildTodoFinalAnswer(String content, String routePath, Map<String, Object> result) {
-        int count = intValue(result.get("count"));
+    private String buildTodoFinalAnswer(String content, String routePath, Map<String, Object> result, String view) {
         String taskId = extractTaskId(routePath);
-        String summary = summarizeTodoItems(result.get("items"));
         boolean explainMode = content != null && (content.contains("解释") || content.contains("路径") || content.contains("为什么"));
+        boolean initiatedView = "INITIATED".equals(view);
+        Object answerItems = initiatedView ? narrowApprovalItemsByTimeScope(content, result.get("items")) : result.get("items");
+        int count = initiatedView ? countItems(answerItems) : intValue(result.get("count"));
+        String summary = summarizeTodoItems(answerItems, view);
         if (!taskId.isBlank() && explainMode) {
-            return buildTodoExplanation(routePath, result);
+            return buildTodoExplanation(routePath, result, view);
         }
         if (count <= 0) {
-            return "当前没有待办。";
+            return initiatedView
+                    ? (containsTodayScope(content) ? "今天没有命中你发起的申请。" : "当前没有命中你发起的申请。")
+                    : "当前没有待办。";
         }
         if (!taskId.isBlank()) {
-            return "当前命中 1 条待办，" + summary + "。";
+            return initiatedView ? "当前命中 1 条你发起的申请，" + summary + "。" : "当前命中 1 条待办，" + summary + "。";
+        }
+        if (initiatedView) {
+            String statusAnalysis = buildInitiatedStatusAnalysis(answerItems);
+            return containsTodayScope(content)
+                    ? "今天你共发起 " + count + " 条申请，" + statusAnalysis + " 重点包括：" + summary + "。"
+                    : "当前你共发起 " + count + " 条申请，" + statusAnalysis + " 重点包括：" + summary + "。";
         }
         return "当前共有 " + count + " 条待办，重点包括：" + summary + "。";
+    }
+
+    private String buildInitiatedStatusAnalysis(Object items) {
+        List<Map<String, Object>> entries = listOfMaps(items);
+        if (entries.isEmpty()) {
+            return "暂无可分析的进度分布。";
+        }
+        long running = entries.stream()
+                .filter(item -> "RUNNING".equalsIgnoreCase(stringValue(item.get("instanceStatus"))))
+                .count();
+        long completed = entries.stream()
+                .filter(item -> "COMPLETED".equalsIgnoreCase(stringValue(item.get("instanceStatus"))))
+                .count();
+        long revoked = entries.stream()
+                .filter(item -> "REVOKED".equalsIgnoreCase(stringValue(item.get("instanceStatus"))))
+                .count();
+        long terminated = entries.stream()
+                .filter(item -> "TERMINATED".equalsIgnoreCase(stringValue(item.get("instanceStatus"))))
+                .count();
+        java.util.LinkedHashMap<String, Long> runningNodeCounts = entries.stream()
+                .filter(item -> "RUNNING".equalsIgnoreCase(stringValue(item.get("instanceStatus"))))
+                .map(item -> stringValue(item.get("currentNodeName")))
+                .filter(node -> !node.isBlank())
+                .collect(java.util.stream.Collectors.groupingBy(
+                        node -> node,
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.counting()
+                ));
+        String mainNode = runningNodeCounts.entrySet().stream()
+                .max(java.util.Map.Entry.comparingByValue())
+                .map(java.util.Map.Entry::getKey)
+                .orElse("");
+        StringBuilder builder = new StringBuilder();
+        builder.append("其中进行中 ").append(running).append(" 条");
+        if (completed > 0) {
+            builder.append("，已完成 ").append(completed).append(" 条");
+        }
+        if (revoked > 0) {
+            builder.append("，已撤销 ").append(revoked).append(" 条");
+        }
+        if (terminated > 0) {
+            builder.append("，已终止 ").append(terminated).append(" 条");
+        }
+        if (!mainNode.isBlank()) {
+            builder.append("，当前主要停留在“").append(mainNode).append("”");
+        }
+        String nodeBreakdown = runningNodeCounts.entrySet().stream()
+                .sorted(java.util.Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(2)
+                .map(entry -> entry.getKey() + " " + entry.getValue() + " 条")
+                .reduce((left, right) -> left + "，" + right)
+                .orElse("");
+        if (!nodeBreakdown.isBlank()) {
+            builder.append("，当前卡点分布为：").append(nodeBreakdown);
+        }
+        return builder.toString();
     }
 
     private String buildProcessStartBusinessSummary(Map<String, Object> arguments) {
@@ -2380,13 +2777,44 @@ public class DbAiCopilotService implements AiCopilotService {
         return "发起后回到审批中心查看首个待办。";
     }
 
-    private String buildTodoExplanation(String routePath, Map<String, Object> result) {
+    private String buildTodoExplanation(String routePath, Map<String, Object> result, String view) {
         String taskId = extractTaskId(routePath);
         Object items = result.get("items");
+        boolean initiatedView = "INITIATED".equals(view);
         if (!taskId.isBlank()) {
-            return "待办 " + taskId + " 已命中当前上下文，Copilot 会优先围绕该事项解释处理路径。";
+            return initiatedView
+                    ? "申请 " + taskId + " 已命中当前上下文，Copilot 会优先围绕该申请解释审批进度。"
+                    : "待办 " + taskId + " 已命中当前上下文，Copilot 会优先围绕该事项解释处理路径。";
         }
-        return "当前已读取待办列表，命中结果：" + (items == null ? "[]" : items);
+        return initiatedView
+                ? "当前已读取你发起的申请列表，命中结果：" + (items == null ? "[]" : items)
+                : "当前已读取待办列表，命中结果：" + (items == null ? "[]" : items);
+    }
+
+    private boolean containsTodayScope(String content) {
+        String normalized = content == null ? "" : content;
+        return normalized.contains("今天") || normalized.contains("今日");
+    }
+
+    private Object narrowApprovalItemsByTimeScope(String content, Object items) {
+        if (!containsTodayScope(content)) {
+            return items;
+        }
+        return listOfMaps(items).stream()
+                .filter(item -> isCreatedToday(item.get("createdAt")))
+                .toList();
+    }
+
+    private boolean isCreatedToday(Object createdAt) {
+        String text = stringValue(createdAt);
+        if (text.isBlank()) {
+            return false;
+        }
+        try {
+            return OffsetDateTime.parse(text).toLocalDate().isEqual(LocalDate.now(TIME_ZONE));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private String buildStatsFinalAnswer(Map<String, Object> result) {

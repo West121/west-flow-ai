@@ -31,6 +31,11 @@ public interface AiCopilotService {
     AiConversationDetailResponse getConversation(String conversationId);
 
     /**
+     * 删除会话及其关联记录。
+     */
+    void deleteConversation(String conversationId);
+
+    /**
      * 追加会话消息。
      */
     AiConversationDetailResponse appendMessage(String conversationId, AiMessageAppendRequest request);

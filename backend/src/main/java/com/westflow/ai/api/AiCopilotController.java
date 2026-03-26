@@ -14,9 +14,11 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 /**
  * AI Copilot 的对外 HTTP 接口。
@@ -63,6 +65,18 @@ public class AiCopilotController {
             @PathVariable String conversationId
     ) {
         return ApiResponse.success(aiCopilotService.getConversation(conversationId));
+    }
+
+    /**
+     * 删除会话。
+     */
+    @DeleteMapping("/conversations/{conversationId}")
+    @SaCheckLogin
+    public ApiResponse<Map<String, String>> deleteConversation(
+            @PathVariable String conversationId
+    ) {
+        aiCopilotService.deleteConversation(conversationId);
+        return ApiResponse.success(Map.of("conversationId", conversationId));
     }
 
     /**

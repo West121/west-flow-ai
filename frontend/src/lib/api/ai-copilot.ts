@@ -593,6 +593,14 @@ export async function createAICopilotSession(
   return mapConversationDetailToSession(detail)
 }
 
+export async function deleteAICopilotSession(
+  sessionId: string
+): Promise<void> {
+  await apiClient.delete<AICopilotApiResponse<{ conversationId: string }>>(
+    `/ai/copilot/conversations/${sessionId}`
+  )
+}
+
 export async function sendAICopilotMessage(
   input: AICopilotSendMessageInput
 ): Promise<AICopilotSession> {

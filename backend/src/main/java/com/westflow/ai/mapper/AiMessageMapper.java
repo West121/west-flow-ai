@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Select;
 
 /**
@@ -29,7 +30,13 @@ public interface AiMessageMapper {
               updated_at AS updatedAt
             FROM wf_ai_message
             WHERE conversation_id = #{conversationId}
-            ORDER BY created_at ASC, id ASC
+            ORDER BY created_at ASC,
+                     CASE role
+                         WHEN 'user' THEN 0
+                         WHEN 'assistant' THEN 1
+                         ELSE 2
+                     END ASC,
+                     id ASC
             """)
     List<AiMessageRecord> selectByConversationId(@Param("conversationId") String conversationId);
 
@@ -70,4 +77,13 @@ public interface AiMessageMapper {
             )
             """)
     int insertMessage(AiMessageRecord record);
+
+    /**
+     * 删除会话下的全部消息。
+     */
+    @Delete("""
+            DELETE FROM wf_ai_message
+            WHERE conversation_id = #{conversationId}
+            """)
+    int deleteByConversationId(@Param("conversationId") String conversationId);
 }

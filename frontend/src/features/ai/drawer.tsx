@@ -11,7 +11,7 @@ export function AICopilotDrawer() {
     <Sheet open={open} onOpenChange={(nextOpen) => !nextOpen && closeCopilot()}>
       <SheetContent
         side='right'
-        className='!w-screen !max-w-none gap-0 overflow-hidden border-white/10 bg-slate-950 p-0 text-slate-50 sm:!w-[min(100vw,1120px)] sm:!max-w-[1120px]'
+        className='!w-screen !max-w-none gap-0 overflow-hidden border-border bg-background p-0 text-foreground sm:!w-[min(100vw,1120px)] sm:!max-w-[1120px]'
       >
         <SheetTitle className='sr-only'>AI Copilot</SheetTitle>
         <SheetDescription className='sr-only'>

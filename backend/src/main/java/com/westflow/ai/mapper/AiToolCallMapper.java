@@ -6,6 +6,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -124,4 +125,13 @@ public interface AiToolCallMapper {
             @Param("summary") String summary,
             @Param("completedAt") LocalDateTime completedAt
     );
+
+    /**
+     * 删除会话下的全部工具调用。
+     */
+    @Delete("""
+            DELETE FROM wf_ai_tool_call
+            WHERE conversation_id = #{conversationId}
+            """)
+    int deleteByConversationId(@Param("conversationId") String conversationId);
 }

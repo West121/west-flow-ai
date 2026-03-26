@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -209,6 +210,14 @@ class AiCopilotControllerTest {
         ApiResponse<AiConversationDetailResponse> response = aiCopilotController.getConversation("conv_001");
         assertThat(response.data().history()).hasSize(1);
         assertThat(response.data().audit()).hasSize(1);
+    }
+
+    @Test
+    void shouldDeleteConversation() {
+        ApiResponse<Map<String, String>> response = aiCopilotController.deleteConversation("conv_001");
+        verify(aiCopilotService).deleteConversation("conv_001");
+        assertThat(response.code()).isEqualTo("OK");
+        assertThat(response.data()).containsEntry("conversationId", "conv_001");
     }
 
     @Test

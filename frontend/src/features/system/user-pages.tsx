@@ -2,6 +2,7 @@ import {
   startTransition,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -54,14 +55,18 @@ import {
   SelectItem,
   SelectLabel,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { MultiSelectDropdown } from '@/components/multi-select-dropdown'
 import { getApiErrorResponse } from '@/lib/api/client'
+import { cn } from '@/lib/utils'
 import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  getDepartmentTree,
+  type DepartmentTreeNode,
+} from '@/lib/api/system-org'
 import {
   createSystemUser,
   getSystemUserDetail,
@@ -87,12 +92,14 @@ const systemUserFormSchema = z.object({
   mobile: z.string().regex(/^1\d{10}$/, '请输入 11 位手机号'),
   email: z.email('请输入正确的邮箱地址'),
   companyId: z.string().min(1, '请选择所属公司'),
+  departmentId: z.string().min(1, '请选择所属部门'),
   primaryPostId: z.string().min(1, '请选择主岗位'),
   roleIds: z.array(z.string()).min(1, '请至少选择一个角色'),
   enabled: z.boolean(),
   partTimeAssignments: z.array(
     z.object({
       companyId: z.string().min(1, '请选择所属公司'),
+      departmentId: z.string().min(1, '请选择所属部门'),
       postId: z.string().min(1, '请选择岗位'),
       roleIds: z.array(z.string()).min(1, '请至少选择一个角色'),
       enabled: z.boolean(),
@@ -170,12 +177,14 @@ export function toFormValues(detail?: SystemUserDetail): SystemUserFormValues {
     mobile: detail?.mobile ?? '',
     email: detail?.email ?? '',
     companyId: primaryAssignment.companyId,
+    departmentId: primaryAssignment.departmentId,
     primaryPostId: primaryAssignment.postId,
     roleIds: primaryAssignment.roleIds,
     enabled: detail?.enabled ?? true,
     partTimeAssignments:
       detail?.partTimeAssignments.map((assignment) => ({
         companyId: assignment.companyId,
+        departmentId: assignment.departmentId,
         postId: assignment.postId,
         roleIds: assignment.roleIds,
         enabled: assignment.enabled,
@@ -190,12 +199,75 @@ function isSystemUserField(
   return (
     field === 'displayName' ||
     field === 'username' ||
-    field === 'mobile' ||
-    field === 'email' ||
-    field === 'companyId' ||
-    field === 'primaryPostId' ||
-    field === 'roleIds' ||
-    field === 'enabled'
+      field === 'mobile' ||
+      field === 'email' ||
+      field === 'companyId' ||
+      field === 'departmentId' ||
+      field === 'primaryPostId' ||
+      field === 'roleIds' ||
+      field === 'enabled'
+  )
+}
+
+type DepartmentOption = DepartmentTreeNode & {
+  depth: number
+}
+
+function flattenDepartmentTreeOptions(
+  nodes: DepartmentTreeNode[],
+  depth = 0
+): DepartmentOption[] {
+  return nodes.flatMap((node) => [
+    { ...node, depth },
+    ...flattenDepartmentTreeOptions(node.children, depth + 1),
+  ])
+}
+
+function DepartmentTreeSelect({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  options,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  disabled?: boolean
+  options: DepartmentOption[]
+}) {
+  const selectedLabel = options.find(
+    (department) => department.departmentId === value
+  )?.departmentName
+
+  return (
+    <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <FormControl>
+        <SelectTrigger className='w-full'>
+          <span
+            className={cn(
+              'truncate',
+              !selectedLabel && 'text-muted-foreground'
+            )}
+          >
+            {selectedLabel || placeholder}
+          </span>
+        </SelectTrigger>
+      </FormControl>
+      <SelectContent>
+        <SelectGroup>
+          <SelectLabel>部门树</SelectLabel>
+          {options.map((department) => (
+            <SelectItem
+              key={department.departmentId}
+              value={department.departmentId}
+            >
+              {`${'　'.repeat(department.depth)}${department.departmentName}`}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -418,6 +490,7 @@ function SystemUserFormPage({
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [submitAction, setSubmitAction] = useState<SubmitAction>('list')
+  const formInitializedRef = useRef(false)
   const isEdit = mode === 'edit'
   const form = useForm<SystemUserFormValues>({
     resolver: zodResolver(systemUserFormSchema),
@@ -433,6 +506,10 @@ function SystemUserFormPage({
     queryKey: ['system-user-form-options'],
     queryFn: getSystemUserFormOptions,
   })
+  const departmentTreeQuery = useQuery({
+    queryKey: ['system-departments', 'tree', 'user-form'],
+    queryFn: getDepartmentTree,
+  })
 
   const detailQuery = useQuery({
     queryKey: ['system-user', userId],
@@ -441,10 +518,34 @@ function SystemUserFormPage({
   })
 
   useEffect(() => {
-    if (detailQuery.data) {
-      form.reset(toFormValues(detailQuery.data))
+    if (formInitializedRef.current) {
+      return
     }
-  }, [detailQuery.data, form])
+
+    if (isEdit) {
+      if (
+        !detailQuery.data ||
+        !optionsQuery.data ||
+        !departmentTreeQuery.data
+      ) {
+        return
+      }
+
+      form.reset(toFormValues(detailQuery.data))
+      formInitializedRef.current = true
+      return
+    }
+
+    if (optionsQuery.data && departmentTreeQuery.data) {
+      formInitializedRef.current = true
+    }
+  }, [
+    departmentTreeQuery.data,
+    detailQuery.data,
+    form,
+    isEdit,
+    optionsQuery.data,
+  ])
 
   const createMutation = useMutation({
     mutationFn: createSystemUser,
@@ -461,6 +562,10 @@ function SystemUserFormPage({
     control: form.control,
     name: 'companyId',
   })
+  const selectedDepartmentId = useWatch({
+    control: form.control,
+    name: 'departmentId',
+  })
   const selectedPostId = useWatch({
     control: form.control,
     name: 'primaryPostId',
@@ -473,30 +578,204 @@ function SystemUserFormPage({
     control: form.control,
     name: 'enabled',
   })
+  const partTimeAssignments = useWatch({
+    control: form.control,
+    name: 'partTimeAssignments',
+  })
   const displayName = useWatch({
     control: form.control,
     name: 'displayName',
   })
+  const initialPrimaryAssignment = useMemo(
+    () => resolvePrimaryAssignmentValues(detailQuery.data),
+    [detailQuery.data]
+  )
+  const effectiveCompanyId =
+    selectedCompanyId || initialPrimaryAssignment.companyId
+  const effectiveDepartmentId =
+    selectedDepartmentId || initialPrimaryAssignment.departmentId
+  const effectivePostId = selectedPostId || initialPrimaryAssignment.postId
   const selectedCompany = optionsQuery.data?.companies.find(
-    (company) => company.id === selectedCompanyId
+    (company) => company.id === effectiveCompanyId
   )
   const selectedPost = optionsQuery.data?.posts.find(
-    (post) => post.id === selectedPostId
+    (post) => post.id === effectivePostId
+  )
+  const departmentOptions = useMemo(
+    () => flattenDepartmentTreeOptions(departmentTreeQuery.data ?? []),
+    [departmentTreeQuery.data]
+  )
+  const primaryDepartmentOptions = useMemo(
+    () =>
+      departmentOptions.filter(
+        (department) => department.companyId === effectiveCompanyId
+      ),
+    [departmentOptions, effectiveCompanyId]
+  )
+  const selectedDepartment = primaryDepartmentOptions.find(
+    (department) => department.departmentId === effectiveDepartmentId
+  )
+  const primaryPostOptions = useMemo(
+    () =>
+      (optionsQuery.data?.posts ?? []).filter(
+        (post) =>
+          post.departmentId === effectiveDepartmentId &&
+          (!effectiveCompanyId ||
+            primaryDepartmentOptions.some(
+              (department) =>
+                department.departmentId === post.departmentId &&
+                department.companyId === effectiveCompanyId
+            ))
+      ),
+    [
+      optionsQuery.data?.posts,
+      primaryDepartmentOptions,
+      effectiveCompanyId,
+      effectiveDepartmentId,
+    ]
   )
   const selectedRoleIdList = selectedRoleIds ?? []
   const selectedRoles =
     optionsQuery.data?.roles.filter((role) => selectedRoleIdList.includes(role.id)) ??
     []
+  const selectedCompanyLabel =
+    optionsQuery.data?.companies.find(
+      (company) => company.id === effectiveCompanyId
+    )
+      ?.name ?? ''
+  const selectedPrimaryPostLabel =
+    primaryPostOptions.find((post) => post.id === effectivePostId)
+      ? `${primaryPostOptions.find((post) => post.id === effectivePostId)!.name} / ${primaryPostOptions.find((post) => post.id === effectivePostId)!.departmentName}`
+      : ''
   const isSubmitting = createMutation.isPending || updateMutation.isPending
   const isInitialLoading =
-    optionsQuery.isLoading || (isEdit && detailQuery.isLoading)
+    optionsQuery.isLoading ||
+    departmentTreeQuery.isLoading ||
+    (isEdit && detailQuery.isLoading)
+
+  useEffect(() => {
+    if (!formInitializedRef.current) {
+      return
+    }
+
+    if (departmentTreeQuery.isLoading) {
+      return
+    }
+
+    if (!selectedCompanyId) {
+      if (selectedDepartmentId) {
+        form.setValue('departmentId', '')
+      }
+      if (selectedPostId) {
+        form.setValue('primaryPostId', '')
+      }
+      return
+    }
+
+    const departmentStillValid = primaryDepartmentOptions.some(
+      (department) => department.departmentId === selectedDepartmentId
+    )
+    if (!departmentStillValid && selectedDepartmentId) {
+      form.setValue('departmentId', '')
+      form.setValue('primaryPostId', '')
+    }
+  }, [
+    departmentTreeQuery.isLoading,
+    form,
+    primaryDepartmentOptions,
+    selectedCompanyId,
+    selectedDepartmentId,
+    selectedPostId,
+  ])
+
+  useEffect(() => {
+    if (!formInitializedRef.current) {
+      return
+    }
+
+    if (optionsQuery.isLoading || departmentTreeQuery.isLoading) {
+      return
+    }
+
+    if (!selectedDepartmentId) {
+      if (selectedPostId) {
+        form.setValue('primaryPostId', '')
+      }
+      return
+    }
+
+    const postStillValid = primaryPostOptions.some(
+      (post) => post.id === selectedPostId
+    )
+    if (!postStillValid && selectedPostId) {
+      form.setValue('primaryPostId', '')
+    }
+  }, [
+    departmentTreeQuery.isLoading,
+    form,
+    optionsQuery.isLoading,
+    primaryPostOptions,
+    selectedDepartmentId,
+    selectedPostId,
+  ])
+
+  useEffect(() => {
+    if (!formInitializedRef.current) {
+      return
+    }
+
+    if (optionsQuery.isLoading || departmentTreeQuery.isLoading) {
+      return
+    }
+
+    partTimeAssignments?.forEach((assignment, index) => {
+      const companyId = assignment?.companyId ?? ''
+      const departmentId = assignment?.departmentId ?? ''
+      const postId = assignment?.postId ?? ''
+      const departmentOptionsForAssignment = departmentOptions.filter(
+        (department) => department.companyId === companyId
+      )
+
+      const departmentStillValid = departmentOptionsForAssignment.some(
+        (department) => department.departmentId === departmentId
+      )
+
+      if (departmentId && !departmentStillValid) {
+        form.setValue(`partTimeAssignments.${index}.departmentId`, '')
+        form.setValue(`partTimeAssignments.${index}.postId`, '')
+        return
+      }
+
+      const validPosts = (optionsQuery.data?.posts ?? []).filter(
+        (post) => post.departmentId === departmentId
+      )
+
+      if (postId && !validPosts.some((post) => post.id === postId)) {
+        form.setValue(`partTimeAssignments.${index}.postId`, '')
+      }
+    })
+  }, [
+    departmentOptions,
+    departmentTreeQuery.isLoading,
+    form,
+    optionsQuery.data?.posts,
+    optionsQuery.isLoading,
+    partTimeAssignments,
+  ])
 
   async function onSubmit(values: SystemUserFormValues) {
     form.clearErrors()
 
     try {
       const payload: SaveSystemUserPayload = {
-        ...values,
+        displayName: values.displayName,
+        username: values.username,
+        mobile: values.mobile,
+        email: values.email,
+        companyId: values.companyId,
+        primaryPostId: values.primaryPostId,
+        roleIds: values.roleIds,
+        enabled: values.enabled,
         primaryAssignment: {
           companyId: values.companyId,
           postId: values.primaryPostId,
@@ -559,6 +838,7 @@ function SystemUserFormPage({
         description='页面需要的组织和用户数据未能加载完成。'
         retry={() => {
           void optionsQuery.refetch()
+          void departmentTreeQuery.refetch()
           if (isEdit) {
             void detailQuery.refetch()
           }
@@ -712,13 +992,20 @@ function SystemUserFormPage({
                     <FormItem>
                       <FormLabel>所属公司</FormLabel>
                       <Select
-                        value={field.value}
+                        value={field.value || effectiveCompanyId}
                         onValueChange={field.onChange}
                         disabled={isSubmitting}
                       >
                         <FormControl>
                           <SelectTrigger className='w-full'>
-                            <SelectValue placeholder='请选择所属公司' />
+                            <span
+                              className={cn(
+                                'truncate',
+                                !selectedCompanyLabel && 'text-muted-foreground'
+                              )}
+                            >
+                              {selectedCompanyLabel || '请选择所属公司'}
+                            </span>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -741,24 +1028,52 @@ function SystemUserFormPage({
                 />
                 <FormField
                   control={form.control}
+                  name='departmentId'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>所属部门</FormLabel>
+                      <DepartmentTreeSelect
+                        value={field.value || effectiveDepartmentId}
+                        onChange={field.onChange}
+                        disabled={isSubmitting}
+                        placeholder='请选择所属部门'
+                        options={primaryDepartmentOptions}
+                      />
+                      <FormDescription>
+                        先选部门，再按部门过滤岗位，重新编辑时也会优先回显这里。
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name='primaryPostId'
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>主岗位</FormLabel>
                       <Select
-                        value={field.value}
+                        value={field.value || effectivePostId}
                         onValueChange={field.onChange}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !effectiveDepartmentId}
                       >
                         <FormControl>
                           <SelectTrigger className='w-full'>
-                            <SelectValue placeholder='请选择主岗位' />
+                            <span
+                              className={cn(
+                                'truncate',
+                                !selectedPrimaryPostLabel &&
+                                  'text-muted-foreground'
+                              )}
+                            >
+                              {selectedPrimaryPostLabel || '请选择主岗位'}
+                            </span>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
                           <SelectGroup>
                             <SelectLabel>岗位列表</SelectLabel>
-                            {optionsQuery.data?.posts.map((post) => (
+                            {primaryPostOptions.map((post) => (
                               <SelectItem key={post.id} value={post.id}>
                                 {post.name} / {post.departmentName}
                               </SelectItem>
@@ -767,7 +1082,7 @@ function SystemUserFormPage({
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        选中主岗位后，审批待办和权限上下文将默认落到对应部门。
+                        主岗位会决定当前主职任职的默认审批和数据上下文。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -847,6 +1162,7 @@ function SystemUserFormPage({
                       onClick={() =>
                         partTimeFieldArray.append({
                           companyId: selectedCompanyId || '',
+                          departmentId: selectedDepartmentId || '',
                           postId: '',
                           roleIds: [],
                           enabled: true,
@@ -865,6 +1181,28 @@ function SystemUserFormPage({
                   ) : (
                     <div className='space-y-4'>
                       {partTimeFieldArray.fields.map((field, index) => {
+                        const currentAssignment = partTimeAssignments?.[index]
+                        const assignmentCompanyId = currentAssignment?.companyId ?? ''
+                        const assignmentDepartmentId =
+                          currentAssignment?.departmentId ?? ''
+                        const assignmentDepartmentOptions = departmentOptions.filter(
+                          (department) => department.companyId === assignmentCompanyId
+                        )
+                        const assignmentPostOptions = (
+                          optionsQuery.data?.posts ?? []
+                        ).filter(
+                          (post) => post.departmentId === assignmentDepartmentId
+                        )
+                        const assignmentCompanyLabel =
+                          optionsQuery.data?.companies.find(
+                            (company) => company.id === assignmentCompanyId
+                          )?.name ?? ''
+                        const assignmentPostLabel =
+                          assignmentPostOptions.find(
+                            (post) => post.id === currentAssignment?.postId
+                          )
+                            ? `${assignmentPostOptions.find((post) => post.id === currentAssignment?.postId)!.name} / ${assignmentPostOptions.find((post) => post.id === currentAssignment?.postId)!.departmentName}`
+                            : ''
                         return (
                           <div key={field.id} className='space-y-4 rounded-lg border p-4'>
                             <div className='flex items-center justify-between gap-3'>
@@ -895,7 +1233,16 @@ function SystemUserFormPage({
                                     <Select value={field.value} onValueChange={field.onChange}>
                                       <FormControl>
                                         <SelectTrigger className='w-full'>
-                                          <SelectValue placeholder='请选择所属公司' />
+                                          <span
+                                            className={cn(
+                                              'truncate',
+                                              !assignmentCompanyLabel &&
+                                                'text-muted-foreground'
+                                            )}
+                                          >
+                                            {assignmentCompanyLabel ||
+                                              '请选择所属公司'}
+                                          </span>
                                         </SelectTrigger>
                                       </FormControl>
                                       <SelectContent>
@@ -912,18 +1259,50 @@ function SystemUserFormPage({
                               />
                               <FormField
                                 control={form.control}
+                                name={`partTimeAssignments.${index}.departmentId`}
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>所属部门</FormLabel>
+                                    <DepartmentTreeSelect
+                                      value={field.value}
+                                      onChange={field.onChange}
+                                      placeholder='请选择所属部门'
+                                      disabled={isSubmitting || !assignmentCompanyId}
+                                      options={assignmentDepartmentOptions}
+                                    />
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                              <FormField
+                                control={form.control}
                                 name={`partTimeAssignments.${index}.postId`}
                                 render={({ field }) => (
                                   <FormItem>
                                     <FormLabel>岗位</FormLabel>
-                                    <Select value={field.value} onValueChange={field.onChange}>
+                                    <Select
+                                      value={field.value}
+                                      onValueChange={field.onChange}
+                                      disabled={
+                                        isSubmitting || !assignmentDepartmentId
+                                      }
+                                    >
                                       <FormControl>
                                         <SelectTrigger className='w-full'>
-                                          <SelectValue placeholder='请选择岗位' />
+                                          <span
+                                            className={cn(
+                                              'truncate',
+                                              !assignmentPostLabel &&
+                                                'text-muted-foreground'
+                                            )}
+                                          >
+                                            {assignmentPostLabel ||
+                                              '请选择岗位'}
+                                          </span>
                                         </SelectTrigger>
                                       </FormControl>
                                       <SelectContent>
-                                        {optionsQuery.data?.posts.map((post) => (
+                                        {assignmentPostOptions.map((post) => (
                                           <SelectItem key={post.id} value={post.id}>
                                             {post.name} / {post.departmentName}
                                           </SelectItem>
@@ -1019,8 +1398,8 @@ function SystemUserFormPage({
                 icon={BriefcaseBusiness}
                 label='主岗位 / 主部门'
                 value={
-                  selectedPost
-                    ? `${selectedPost.name} / ${selectedPost.departmentName}`
+                  selectedPost && selectedDepartment
+                    ? `${selectedPost.name} / ${selectedDepartment.departmentName}`
                     : '待选择'
                 }
               />
@@ -1045,14 +1424,6 @@ function SystemUserFormPage({
               />
             </CardContent>
           </Card>
-
-          <Alert>
-            <ShieldCheck />
-            <AlertTitle>页面规则</AlertTitle>
-            <AlertDescription>
-              当前功能严格遵循独立 CRUD 页面规范，不使用弹窗代替正式创建页和编辑页。
-            </AlertDescription>
-          </Alert>
 
           <Card>
             <CardHeader>

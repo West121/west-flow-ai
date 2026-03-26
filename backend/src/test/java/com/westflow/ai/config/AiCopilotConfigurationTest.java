@@ -70,7 +70,8 @@ class AiCopilotConfigurationTest {
                 supervisorAgent,
                 routingAgent,
                 aiRegistryCatalogService,
-                aiRuntimeToolCallbackProvider
+                aiRuntimeToolCallbackProvider,
+                "qwen3.5-plus"
         );
 
         assertThat(chatClient).isNotNull();

@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
@@ -95,4 +96,15 @@ public interface AiConfirmationMapper {
             WHERE id = #{confirmationId}
             """)
     int updateConfirmation(AiConfirmationRecord record);
+
+    /**
+     * 删除会话下工具调用关联的全部确认记录。
+     */
+    @Delete("""
+            DELETE FROM wf_ai_confirmation
+            WHERE tool_call_id IN (
+              SELECT id FROM wf_ai_tool_call WHERE conversation_id = #{conversationId}
+            )
+            """)
+    int deleteByConversationId(@Param("conversationId") String conversationId);
 }

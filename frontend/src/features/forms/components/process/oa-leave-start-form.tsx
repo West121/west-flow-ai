@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { UserPickerField } from '@/features/shared/pro-form'
 import { type RuntimeFormComponentProps } from '@/features/forms/runtime/types'
+import { RuntimeFormSectionTitle } from './runtime-form-section-title'
 
 function readNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -40,23 +41,6 @@ const leaveTypeOptions = [
   { value: 'SICK', label: '病假' },
 ]
 
-function FormSectionTitle({
-  icon: Icon,
-  title,
-}: {
-  icon: typeof ClipboardList
-  title: string
-}) {
-  return (
-    <div className='flex items-center gap-3 pt-1'>
-      <span className='flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary'>
-        <Icon className='size-4' />
-      </span>
-      <div className='text-base font-semibold tracking-tight text-foreground'>{title}</div>
-    </div>
-  )
-}
-
 // OA 请假发起表单只负责展示和回填基础业务字段。
 export function OALeaveStartForm({
   value,
@@ -74,7 +58,7 @@ export function OALeaveStartForm({
 
   return (
     <div className='space-y-5'>
-      <FormSectionTitle icon={ClipboardList} title='申请信息' />
+      <RuntimeFormSectionTitle icon={ClipboardList} title='申请信息' />
 
       <div className='space-y-2'>
         <Label htmlFor='leave-type'>请假类型</Label>
@@ -107,6 +91,7 @@ export function OALeaveStartForm({
           id='leave-days'
           type='number'
           min='1'
+          placeholder='请输入请假天数'
           disabled={disabled}
           value={daysValue}
           onChange={(event) => {
@@ -154,9 +139,12 @@ export function OALeaveStartForm({
             })
           }}
         />
+        <p className='text-xs text-muted-foreground'>
+          将作为负责人确认节点的默认办理人
+        </p>
       </div>
 
-      <FormSectionTitle icon={FileText} title='申请说明' />
+      <RuntimeFormSectionTitle icon={FileText} title='申请说明' />
 
       <div className='space-y-2'>
         <Label htmlFor='leave-reason'>请假原因</Label>
@@ -164,6 +152,7 @@ export function OALeaveStartForm({
           id='leave-reason'
           disabled={disabled}
           className='min-h-28'
+          placeholder='请输入请假原因'
           value={reasonValue}
           onChange={(event) => {
             onChange({

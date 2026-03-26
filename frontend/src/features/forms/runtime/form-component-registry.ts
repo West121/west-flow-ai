@@ -4,6 +4,12 @@ import {
   OALeaveApproveForm,
 } from '@/features/forms/components/node/oa-leave-approve-form'
 import {
+  OACommonStartForm,
+} from '@/features/forms/components/process/oa-common-start-form'
+import {
+  OAExpenseStartForm,
+} from '@/features/forms/components/process/oa-expense-start-form'
+import {
   OALeaveStartForm,
 } from '@/features/forms/components/process/oa-leave-start-form'
 import { type RuntimeFormComponentProps } from './types'
@@ -28,6 +34,16 @@ const leaveProcessFormFields: WorkflowProcessFormField[] = [
   { fieldKey: 'reason', label: '请假原因', valueType: 'string' },
   { fieldKey: 'urgent', label: '是否紧急', valueType: 'boolean' },
   { fieldKey: 'managerUserId', label: '直属负责人', valueType: 'string' },
+]
+
+const expenseProcessFormFields: WorkflowProcessFormField[] = [
+  { fieldKey: 'amount', label: '报销金额', valueType: 'number' },
+  { fieldKey: 'reason', label: '报销事由', valueType: 'string' },
+]
+
+const commonProcessFormFields: WorkflowProcessFormField[] = [
+  { fieldKey: 'title', label: '申请标题', valueType: 'string' },
+  { fieldKey: 'content', label: '申请内容', valueType: 'string' },
 ]
 
 // 运行态表单注册表，页面根据表单 key 和版本找到对应实现。
@@ -60,6 +76,26 @@ export const runtimeFormRegistrations: RuntimeFormRegistration[] = [
     title: 'OA 请假审批表单',
     description: '审批节点覆盖表单',
     component: OALeaveApproveForm,
+  },
+  {
+    kind: 'PROCESS_FORM',
+    processKey: 'oa_expense',
+    formKey: 'oa-expense-start-form',
+    formVersion: '1.0.0',
+    title: 'OA 报销发起表单',
+    description: '流程发起默认表单',
+    fields: expenseProcessFormFields,
+    component: OAExpenseStartForm,
+  },
+  {
+    kind: 'PROCESS_FORM',
+    processKey: 'oa_common',
+    formKey: 'oa-common-start-form',
+    formVersion: '1.0.0',
+    title: 'OA 通用申请表单',
+    description: '流程发起默认表单',
+    fields: commonProcessFormFields,
+    component: OACommonStartForm,
   },
 ]
 
@@ -119,11 +155,19 @@ export function findRuntimeFormRegistration(
 // 根据流程编码找默认发起表单。
 export function findProcessRuntimeFormByProcessKey(processKey: string) {
   return (
-    runtimeFormRegistrations.find(
-      (registration) =>
-        registration.kind === 'PROCESS_FORM' &&
-        registration.processKey === processKey
-    ) ?? null
+    runtimeFormRegistrations
+      .filter(
+        (registration) =>
+          registration.kind === 'PROCESS_FORM' &&
+          registration.processKey === processKey
+      )
+      .slice()
+      .sort((left, right) =>
+        right.formVersion.localeCompare(left.formVersion, 'zh-Hans-CN', {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      )[0] ?? null
   )
 }
 
