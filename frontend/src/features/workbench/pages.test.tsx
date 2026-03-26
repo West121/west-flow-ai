@@ -89,6 +89,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
     title,
     createAction,
     extraActions,
+    topContent,
     data,
     total,
   }: {
@@ -96,6 +97,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
     total?: number
     createAction?: { label: string; href: string }
     extraActions?: React.ReactNode
+    topContent?: React.ReactNode
     data: Array<{
       taskId?: string
       instanceId?: string
@@ -108,6 +110,7 @@ vi.mock('@/features/shared/crud/resource-list-page', () => ({
   }) => (
     <div>
       <h2>{title}</h2>
+      {topContent}
       {extraActions}
       {createAction ? <a href={createAction.href}>{createAction.label}</a> : null}
       <span>total:{total ?? data.length}</span>

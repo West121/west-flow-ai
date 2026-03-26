@@ -4,6 +4,8 @@ import com.westflow.common.api.RequestContext;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -49,6 +51,10 @@ public class IpRegionService {
         if (ip.isBlank()) {
             return "未知";
         }
+        String localRegion = resolveLocalRegion(ip);
+        if (localRegion != null) {
+            return localRegion;
+        }
         try {
             return formatRegion(searcher.search(ip));
         } catch (Exception exception) {
@@ -76,6 +82,24 @@ public class IpRegionService {
             return "";
         }
         return clientIp.trim();
+    }
+
+    private String resolveLocalRegion(String ip) {
+        if ("localhost".equalsIgnoreCase(ip)) {
+            return "本机";
+        }
+        try {
+            InetAddress address = InetAddress.getByName(ip);
+            if (address.isLoopbackAddress() || address.isAnyLocalAddress()) {
+                return "本机";
+            }
+            if (address.isSiteLocalAddress() || address.isLinkLocalAddress()) {
+                return "内网";
+            }
+            return null;
+        } catch (UnknownHostException exception) {
+            return null;
+        }
     }
 
     private String formatRegion(String region) {

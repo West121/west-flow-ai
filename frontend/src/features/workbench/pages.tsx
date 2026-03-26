@@ -54,6 +54,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  Dialog as ProDialog,
+  DialogContent as ProDialogContent,
+  DialogTrigger as ProDialogTrigger,
+} from '@/components/pro-dialog'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { UserPickerField } from '@/features/shared/pro-form'
@@ -761,60 +766,48 @@ function ApprovalSheetListPageSection({
   const completedSummary = 'read' in summary ? summary.read : summary.completed
 
   return (
-    <>
-      {renderTopContent ? renderTopContent(pageData.records) : null}
-      {approvalSheetsQuery.isError ? (
-        <Alert variant='destructive' className='mb-4'>
-          <AlertTitle>{title}加载失败</AlertTitle>
-          <AlertDescription>
-            {approvalSheetsQuery.error instanceof Error
-              ? approvalSheetsQuery.error.message
-              : '请稍后重试'}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      <ResourceListPage
-        title={title}
-        description={description}
-        endpoint={WORKBENCH_RUNTIME_ENDPOINTS.approvalSheetsPage}
-        searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
-        search={search}
-        navigate={navigate}
-        columns={createApprovalSheetColumns('workbench')}
-        data={pageData.records}
-        total={pageData.total}
-        summaries={[
-          {
-            label: view === 'CC' ? '抄送总量' : '审批单总量',
-            value: String(pageData.total),
-            hint:
-              view === 'CC'
-                ? '当前页抄送记录的真实总量。'
-                : '实例维度聚合后的审批单数量。',
-          },
-          {
-            label: view === 'CC' ? '待阅' : '进行中',
-            value: String(pendingSummary),
-            hint:
-              view === 'CC'
-                ? '尚未确认已阅的抄送记录。'
-                : '当前页里仍在流转中的审批单。',
-          },
-          {
-            label: view === 'CC' ? '已阅' : '已完成',
-            value: String(completedSummary),
-            hint:
-              view === 'CC'
-                ? '已确认已阅的抄送记录。'
-                : '当前页已完成的审批单数量。',
-          },
-        ]}
-        createAction={{
-          label: '发起流程',
-          href: '/workbench/start',
-        }}
-      />
-    </>
+    <ResourceListPage
+      title={title}
+      description={description}
+      endpoint={WORKBENCH_RUNTIME_ENDPOINTS.approvalSheetsPage}
+      searchPlaceholder='搜索流程标题、业务标题、单号或当前节点'
+      search={search}
+      navigate={navigate}
+      columns={createApprovalSheetColumns('workbench')}
+      data={pageData.records}
+      total={pageData.total}
+      summaries={[
+        {
+          label: view === 'CC' ? '抄送总量' : '审批单总量',
+          value: String(pageData.total),
+          hint:
+            view === 'CC'
+              ? '当前页抄送记录的真实总量。'
+              : '实例维度聚合后的审批单数量。',
+        },
+        {
+          label: view === 'CC' ? '待阅' : '进行中',
+          value: String(pendingSummary),
+          hint:
+            view === 'CC'
+              ? '尚未确认已阅的抄送记录。'
+              : '当前页里仍在流转中的审批单。',
+        },
+        {
+          label: view === 'CC' ? '已阅' : '已完成',
+          value: String(completedSummary),
+          hint:
+            view === 'CC'
+              ? '已确认已阅的抄送记录。'
+              : '当前页已完成的审批单数量。',
+        },
+      ]}
+      topContent={renderTopContent ? renderTopContent(pageData.records) : null}
+      createAction={{
+        label: '发起流程',
+        href: '/workbench/start',
+      }}
+    />
   )
 }
 
@@ -855,21 +848,22 @@ function WorkbenchTodoHandoverAction() {
   })
 
   return (
-    <Dialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
-      <DialogTrigger asChild>
+    <ProDialog open={handoverDialogOpen} onOpenChange={setHandoverDialogOpen}>
+      <ProDialogTrigger asChild>
         <Button type='button' variant='outline'>
           离职转办
         </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>离职转办</DialogTitle>
-          <DialogDescription>
-            选择来源用户和目标用户，系统会批量转移该来源用户的当前待办。
-          </DialogDescription>
-        </DialogHeader>
+      </ProDialogTrigger>
+      <ProDialogContent
+        title='离职转办'
+        description='选择来源用户和目标用户，系统会批量转移该来源用户的当前待办。'
+        draggable
+        resizable
+        fullscreenable
+        minimizable
+      >
         <Form {...handoverForm}>
-          <form className='space-y-4' onSubmit={onHandoverSubmit}>
+          <form className='flex flex-col gap-4' onSubmit={onHandoverSubmit}>
             <FormField
               control={handoverForm.control}
               name='sourceUserId'
@@ -924,7 +918,11 @@ function WorkbenchTodoHandoverAction() {
               )}
             />
             <DialogFooter>
-              <Button type='button' variant='outline' onClick={() => setHandoverDialogOpen(false)}>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setHandoverDialogOpen(false)}
+              >
                 取消
               </Button>
               <Button type='submit' disabled={handoverMutation.isPending}>
@@ -933,8 +931,8 @@ function WorkbenchTodoHandoverAction() {
             </DialogFooter>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </ProDialogContent>
+    </ProDialog>
   )
 }
 

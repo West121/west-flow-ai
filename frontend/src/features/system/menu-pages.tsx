@@ -759,7 +759,7 @@ function MenuFormPage({
           <CardHeader>
             <CardTitle>菜单表单</CardTitle>
             <CardDescription>
-              菜单管理覆盖目录、页面菜单和按钮权限，后续日志、字典、监控模块可以直接按这套模型扩展。
+              菜单管理覆盖目录、页面菜单和按钮权限。
             </CardDescription>
           </CardHeader>
           <CardContent>

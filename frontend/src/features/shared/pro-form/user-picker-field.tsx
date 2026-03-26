@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronsUpDown, UserRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,6 +9,11 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   listSystemUsers,
@@ -22,14 +27,6 @@ type UserPickerOption = {
   username: string
   departmentName: string
   postName: string
-}
-
-type PickerPanelMetrics = {
-  left: number
-  width: number
-  top?: number
-  bottom?: number
-  maxHeight: number
 }
 
 function buildSearch(keyword: string): ListQuerySearch {
@@ -87,8 +84,6 @@ export function UserPickerField({
   const [open, setOpen] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [options, setOptions] = useState<UserPickerOption[]>([])
-  const [panelMetrics, setPanelMetrics] = useState<PickerPanelMetrics | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -144,59 +139,6 @@ export function UserPickerField({
     }
   }, [options, value])
 
-  useEffect(() => {
-    if (!open) {
-      return undefined
-    }
-
-    const updatePanelMetrics = () => {
-      const trigger = triggerRef.current
-      if (!trigger) {
-        return
-      }
-
-      const rect = trigger.getBoundingClientRect()
-      const viewportWidth = window.innerWidth
-      const viewportHeight = window.innerHeight
-      const preferredWidth = Math.max(rect.width, 360)
-      const width = Math.min(preferredWidth, viewportWidth - 32)
-      const left = Math.min(
-        Math.max(16, rect.left),
-        Math.max(16, viewportWidth - width - 16)
-      )
-      const availableBelow = viewportHeight - rect.bottom - 16
-      const availableAbove = rect.top - 16
-      const openUpward = availableBelow < 280 && availableAbove > availableBelow
-      const availableHeight = openUpward ? availableAbove : availableBelow
-      const maxHeight = Math.max(180, Math.min(420, availableHeight - 8))
-
-      setPanelMetrics(
-        openUpward
-          ? {
-              left,
-              width,
-              bottom: Math.max(16, viewportHeight - rect.top + 8),
-              maxHeight,
-            }
-          : {
-              left,
-              width,
-              top: Math.max(16, rect.bottom + 8),
-              maxHeight,
-            }
-      )
-    }
-
-    updatePanelMetrics()
-    window.addEventListener('resize', updatePanelMetrics)
-    window.addEventListener('scroll', updatePanelMetrics, true)
-
-    return () => {
-      window.removeEventListener('resize', updatePanelMetrics)
-      window.removeEventListener('scroll', updatePanelMetrics, true)
-    }
-  }, [open])
-
   const selected = useMemo(
     () => options.find((option) => option.userId === value),
     [options, value]
@@ -205,23 +147,15 @@ export function UserPickerField({
     selected?.displayName ?? (value ? displayNames?.[value] ?? value : null)
 
   return (
-    <div className='relative'>
-      {open ? (
-        <div
-          className='fixed inset-0 z-40'
-          onClick={() => setOpen(false)}
-        />
-      ) : null}
-      <div className='relative z-50'>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button
           id={id}
-          ref={triggerRef}
           type='button'
           variant='outline'
           disabled={disabled}
           aria-label={ariaLabel}
           className='h-auto min-h-11 w-full justify-between px-3 py-2 text-left font-normal'
-          onClick={() => setOpen((currentValue) => !currentValue)}
         >
           <span className='flex min-w-0 items-center gap-3'>
             <span className='flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary'>
@@ -255,68 +189,64 @@ export function UserPickerField({
           </span>
           <ChevronsUpDown className='size-4 shrink-0 text-muted-foreground' />
         </Button>
-        {open ? (
-          <div
-            className='fixed z-50 rounded-xl border bg-popover shadow-lg'
-            style={panelMetrics ?? undefined}
-          >
-            <Command className='overflow-hidden rounded-xl'>
-              <CommandInput
-                value={keyword}
-                onValueChange={setKeyword}
-                placeholder='搜索姓名、账号、部门或岗位'
-              />
-              <CommandList
-                className='overflow-y-auto'
-                style={{
-                  maxHeight: panelMetrics ? Math.max(panelMetrics.maxHeight - 56, 120) : 320,
-                }}
-              >
-                <CommandEmpty>未找到匹配人员</CommandEmpty>
-                <CommandGroup heading='人员列表'>
-                  {options.map((option) => {
-                    const active = option.userId === value
-                    return (
-                      <CommandItem
-                        key={option.userId}
-                        value={[
-                          option.displayName,
-                          option.username,
-                          option.userId,
-                          option.departmentName,
-                          option.postName,
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                        onSelect={() => {
-                          onChange(option.userId)
-                          setOpen(false)
-                        }}
-                        className='items-start py-3'
-                      >
-                        <span
-                          className={cn(
-                            'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border',
-                            active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30'
-                          )}
-                        >
-                          {active ? <Check className='size-3' /> : null}
-                        </span>
-                        <span className='flex min-w-0 flex-1 flex-col gap-1'>
-                          <span className='truncate text-sm font-medium'>{option.displayName}</span>
-                          <span className='truncate text-xs text-muted-foreground'>
-                            {describeUser(option) || option.userId}
-                          </span>
-                        </span>
-                      </CommandItem>
-                    )
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </div>
-        ) : null}
-      </div>
-    </div>
+      </PopoverTrigger>
+      <PopoverContent
+        align='start'
+        side='bottom'
+        sideOffset={8}
+        collisionPadding={16}
+        className='w-[var(--radix-popover-trigger-width)] min-w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl p-0'
+      >
+        <Command className='overflow-hidden rounded-xl'>
+          <CommandInput
+            value={keyword}
+            onValueChange={setKeyword}
+            placeholder='搜索姓名、账号、部门或岗位'
+          />
+          <CommandList className='max-h-[320px] overflow-y-auto'>
+            <CommandEmpty>未找到匹配人员</CommandEmpty>
+            <CommandGroup heading='人员列表'>
+              {options.map((option) => {
+                const active = option.userId === value
+                return (
+                  <CommandItem
+                    key={option.userId}
+                    value={[
+                      option.displayName,
+                      option.username,
+                      option.userId,
+                      option.departmentName,
+                      option.postName,
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onSelect={() => {
+                      onChange(option.userId)
+                      setOpen(false)
+                    }}
+                    className='items-start py-3'
+                  >
+                    <span
+                      className={cn(
+                        'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border',
+                        active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30'
+                      )}
+                    >
+                      {active ? <Check className='size-3' /> : null}
+                    </span>
+                    <span className='flex min-w-0 flex-1 flex-col gap-1'>
+                      <span className='truncate text-sm font-medium'>{option.displayName}</span>
+                      <span className='truncate text-xs text-muted-foreground'>
+                        {describeUser(option) || option.userId}
+                      </span>
+                    </span>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   )
 }
