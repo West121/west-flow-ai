@@ -44,7 +44,7 @@ export function ProTableToolbar<TData>({
   onRefresh?: () => void
   isRefreshing?: boolean
   onExport?: (scope: ProTableExportScope) => void
-  onImport?: () => void
+  onImport?: (file: File) => void
   extraActions?: ReactNode
   createAction?: ReactNode
   supportsBoard?: boolean

@@ -147,6 +147,31 @@ class ProcessDefinitionControllerTest {
         assertThat(data.path("records").get(0).path("createdAt").asText()).isNotBlank();
     }
 
+    @Test
+    void shouldAuthorizeWorkflowDesignerCollaborationRoom() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/draft")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl("oa_leave", "请假审批", "OA")))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(get("/api/v1/process-definitions/collaboration/authorize")
+                        .header("Authorization", "Bearer " + token)
+                        .param("roomName", "workflow-designer:oa_leave:draft"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("roomName").asText()).isEqualTo("workflow-designer:oa_leave:draft");
+        assertThat(data.path("processDefinitionId").asText()).isEqualTo("oa_leave:draft");
+        assertThat(data.path("userId").asText()).isEqualTo("usr_001");
+        assertThat(data.path("displayName").asText()).isEqualTo("张三");
+    }
+
     private String login() throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

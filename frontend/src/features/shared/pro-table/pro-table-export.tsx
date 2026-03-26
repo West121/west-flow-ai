@@ -10,6 +10,10 @@ import { Button } from '@/components/ui/button'
 import { FileDown } from 'lucide-react'
 
 export type ProTableExportScope = 'current-page' | 'filtered-results' | 'selected-rows'
+export type ProTableExportHandler<TData> = (
+  scope: ProTableExportScope,
+  rows: TData[]
+) => void
 
 export function ProTableExport({
   onExport,

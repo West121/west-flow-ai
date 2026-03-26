@@ -11,7 +11,9 @@ import WebSocket, { WebSocketServer } from 'ws'
 
 const host = process.env.HOST || '127.0.0.1'
 const port = Number.parseInt(process.env.PORT || '1235', 10)
-const authApiBaseUrl = process.env.WORKFLOW_COLLAB_AUTH_API?.trim() || ''
+const authApiBaseUrl =
+  process.env.WORKFLOW_COLLAB_AUTH_API?.trim() ||
+  'http://127.0.0.1:8080/api/v1/process-definitions/collaboration'
 const messageSync = 0
 const messageAwareness = 1
 const wsReadyStateConnecting = 0
@@ -48,25 +50,25 @@ async function authorizeUpgrade(request) {
     return { ok: false, statusCode: 404, body: { message: 'Unknown collaboration room' } }
   }
 
-  if (!authApiBaseUrl) {
-    return { ok: true, roomName }
-  }
-
   const token = extractToken(request)
   if (!token) {
     return { ok: false, statusCode: 401, body: { message: 'Missing collaboration token' } }
   }
 
   try {
-    const response = await fetch(`${authApiBaseUrl}/auth/current-user`, {
+    const response = await fetch(
+      `${authApiBaseUrl}/authorize?roomName=${encodeURIComponent(roomName)}`,
+      {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-    })
+      }
+    )
     if (!response.ok) {
       return { ok: false, statusCode: 401, body: { message: 'Collaboration authentication failed' } }
     }
-    return { ok: true, roomName }
+    const json = await response.json().catch(() => ({}))
+    return { ok: true, roomName, auth: json?.data || null }
   } catch (error) {
     return {
       ok: false,
@@ -184,10 +186,17 @@ function handleMessage(conn, doc, message) {
   }
 }
 
-function setupWsConnection(conn, request, roomName) {
+function setupWsConnection(conn, request, roomName, auth = null) {
   conn.binaryType = 'arraybuffer'
   const doc = getSharedDoc(roomName)
   doc.conns.set(conn, new Set())
+  conn.auth = auth
+
+  if (auth) {
+    console.info(
+      `[workflow-collab] join room=${roomName} user=${auth.userId} name=${auth.displayName} processDefinitionId=${auth.processDefinitionId || '-'}`
+    )
+  }
 
   conn.on('message', (message) => {
     handleMessage(conn, doc, new Uint8Array(message))
@@ -214,6 +223,11 @@ function setupWsConnection(conn, request, roomName) {
   }, pingTimeout)
 
   conn.on('close', () => {
+    if (conn.auth) {
+      console.info(
+        `[workflow-collab] leave room=${roomName} user=${conn.auth.userId} name=${conn.auth.displayName}`
+      )
+    }
     closeConnection(doc, conn)
     clearInterval(pingInterval)
   })
@@ -244,9 +258,10 @@ const server = http.createServer((request, response) => {
   if ((request.url || '').startsWith('/health')) {
     writeJson(response, 200, {
       status: 'UP',
-      mode: authApiBaseUrl ? 'auth' : 'open',
+      mode: 'auth',
       host,
       port,
+      rooms: docs.size,
     })
     return
   }
@@ -254,12 +269,12 @@ const server = http.createServer((request, response) => {
   writeJson(response, 200, {
     service: 'workflow-designer-collaboration',
     transport: 'y-websocket-compatible',
-    mode: authApiBaseUrl ? 'auth' : 'open',
+    mode: 'auth',
   })
 })
 
-wss.on('connection', (conn, request, roomName) => {
-  setupWsConnection(conn, request, roomName)
+wss.on('connection', (conn, request, roomName, auth) => {
+  setupWsConnection(conn, request, roomName, auth)
 })
 
 server.on('upgrade', async (request, socket, head) => {
@@ -275,13 +290,13 @@ server.on('upgrade', async (request, socket, head) => {
   }
 
   wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit('connection', ws, request, authResult.roomName)
+    wss.emit('connection', ws, request, authResult.roomName, authResult.auth)
   })
 })
 
 server.listen(port, host, () => {
   console.log(
-    `[workflow-collab] listening on ws://${host}:${port} (${authApiBaseUrl ? 'auth' : 'open'})`
+    `[workflow-collab] listening on ws://${host}:${port} (auth)`
   )
 })
 

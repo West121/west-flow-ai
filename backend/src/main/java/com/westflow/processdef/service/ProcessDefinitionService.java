@@ -149,6 +149,38 @@ public class ProcessDefinitionService {
         return toDetailResponse(getRecordById(processDefinitionId));
     }
 
+    public String resolveCollaborationProcessDefinitionId(String roomName) {
+        if (roomName == null || roomName.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "协同房间不能为空",
+                    Map.of("roomName", roomName)
+            );
+        }
+        if (!roomName.startsWith("workflow-designer:")) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "协同房间不合法",
+                    Map.of("roomName", roomName)
+            );
+        }
+        if (roomName.startsWith("workflow-designer:draft:")) {
+            return null;
+        }
+        String processDefinitionId = roomName.substring("workflow-designer:".length()).trim();
+        if (processDefinitionId.isBlank()) {
+            throw new ContractException(
+                    "VALIDATION.REQUEST_INVALID",
+                    HttpStatus.BAD_REQUEST,
+                    "流程定义标识不能为空",
+                    Map.of("roomName", roomName)
+            );
+        }
+        return processDefinitionId;
+    }
+
     // 按流程键获取最近一次已发布版本，供运行时启动流程使用。
     public PublishedProcessDefinition getLatestByProcessKey(String processKey) {
         ProcessDefinitionRecord record = processDefinitionMapper.selectLatestPublishedByProcessKey(processKey);

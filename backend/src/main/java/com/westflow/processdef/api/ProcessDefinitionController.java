@@ -4,6 +4,8 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import jakarta.validation.Valid;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProcessDefinitionController {
 
     private final ProcessDefinitionService processDefinitionService;
+    private final IdentityAuthService identityAuthService;
 
     @PostMapping("/draft")
     @SaCheckLogin
@@ -39,6 +42,25 @@ public class ProcessDefinitionController {
     @SaCheckLogin
     public ApiResponse<ProcessDefinitionDetailResponse> detail(@PathVariable String processDefinitionId) {
         return ApiResponse.success(processDefinitionService.detail(processDefinitionId));
+    }
+
+    @GetMapping("/collaboration/authorize")
+    @SaCheckLogin
+    public ApiResponse<ProcessDefinitionCollaborationAuthorizeResponse> authorizeCollaborationRoom(String roomName) {
+        CurrentUserResponse currentUser = identityAuthService.currentUser();
+        String processDefinitionId = processDefinitionService.resolveCollaborationProcessDefinitionId(roomName);
+        if (processDefinitionId != null) {
+            processDefinitionService.detail(processDefinitionId);
+        }
+        return ApiResponse.success(new ProcessDefinitionCollaborationAuthorizeResponse(
+                roomName,
+                processDefinitionId,
+                currentUser.userId(),
+                currentUser.displayName(),
+                currentUser.activePostId(),
+                currentUser.activeDepartmentName(),
+                currentUser.activePostName()
+        ));
     }
 
     @PostMapping("/page")

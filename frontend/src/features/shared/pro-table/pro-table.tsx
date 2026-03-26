@@ -24,7 +24,9 @@ import { ProTableBoard, type ProTableBoardColumn } from './pro-table-board'
 import { type ProTableDensityMode } from './pro-table-density'
 import { resolveDensityClassName } from './pro-table-density-utils'
 import { ProTableToolbar } from './pro-table-toolbar'
-import { type ProTableExportScope } from './pro-table-export'
+import {
+  type ProTableExportHandler,
+} from './pro-table-export'
 
 type SummaryItem = {
   label: string
@@ -92,8 +94,8 @@ export function ProTable<TData>({
   extraActions?: ReactNode
   onRefresh?: () => void
   isRefreshing?: boolean
-  onExport?: (scope: ProTableExportScope) => void
-  onImport?: () => void
+  onExport?: ProTableExportHandler<TData>
+  onImport?: (file: File) => void
   supportsBoard?: boolean
   defaultViewMode?: 'table' | 'board'
   renderBoardCard?: (item: TData) => ReactNode
@@ -252,6 +254,14 @@ export function ProTable<TData>({
     }
     return resolveBoardColumns(data)
   }, [data, resolveBoardColumns])
+  const currentRows = useMemo(
+    () => table.getRowModel().rows.map((row) => row.original as TData),
+    [table]
+  )
+  const selectedRows = useMemo(
+    () => table.getSelectedRowModel().rows.map((row) => row.original as TData),
+    [table]
+  )
 
   return (
     <PageShell
@@ -292,7 +302,16 @@ export function ProTable<TData>({
             onDensityChange={setDensity}
             onRefresh={onRefresh}
             isRefreshing={isRefreshing}
-            onExport={onExport}
+            onExport={
+              onExport
+                ? (scope) => {
+                    onExport(
+                      scope,
+                      scope === 'selected-rows' ? selectedRows : currentRows
+                    )
+                  }
+                : undefined
+            }
             onImport={onImport}
             extraActions={extraActions}
             createAction={createActionNode}

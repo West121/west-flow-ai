@@ -5,6 +5,7 @@ import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch, type Path, type UseFormReturn } from 'react-hook-form'
+import { toast } from 'sonner'
 import {
   AlertCircle,
   ArrowLeft,
@@ -76,6 +77,16 @@ import { ProTable } from '@/features/shared/pro-table'
 import { PageShell } from '@/features/shared/page-shell'
 import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 import { AssociatedUsersDialog } from './associated-users-dialog'
+import {
+  exportAllCompaniesCsv,
+  exportAllPostsCsv,
+  exportCompaniesCsv,
+  exportDepartmentsCsv,
+  exportPostsCsv,
+  importCompaniesCsv,
+  importDepartmentsCsv,
+  importPostsCsv,
+} from './org-csv'
 
 const rolesRoute = getRouteApi('/_authenticated/system/roles/list')
 const companiesRoute = getRouteApi('/_authenticated/system/companies/list')
@@ -1574,7 +1585,27 @@ export function CompaniesListPage() {
       summaries={summaries}
       createActionNode={createActionNode}
       onRefresh={() => void query.refetch()}
-      onExport={() => void 0}
+      onExport={(scope, exportRows) => {
+        if (scope === 'filtered-results') {
+          void exportAllCompaniesCsv(search).catch((error) => {
+            handleServerError(error)
+          })
+          return
+        }
+        exportCompaniesCsv(exportRows)
+      }}
+      onImport={(file) => {
+        void importCompaniesCsv(file)
+          .then((summary) => {
+            toast.success(
+              `公司导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
+            )
+            return query.refetch()
+          })
+          .catch((error) => {
+            handleServerError(error)
+          })
+      }}
     />
   )
 }
@@ -1639,10 +1670,24 @@ export function DepartmentsListPage() {
         columns={buildDepartmentColumns(setSelectedDepartment)}
         data={rows}
         total={countDepartmentNodes(rows)}
-        summaries={summaries}
-        createActionNode={createActionNode}
-        onRefresh={() => void query.refetch()}
-        onExport={() => void 0}
+      summaries={summaries}
+      createActionNode={createActionNode}
+      onRefresh={() => void query.refetch()}
+      onExport={(_scope, exportRows) => {
+        exportDepartmentsCsv(exportRows)
+      }}
+      onImport={(file) => {
+        void importDepartmentsCsv(file)
+          .then((summary) => {
+            toast.success(
+              `部门导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
+            )
+            return query.refetch()
+          })
+          .catch((error) => {
+            handleServerError(error)
+          })
+      }}
         getSubRows={(row) => row.children}
       />
       <AssociatedUsersDialog
@@ -1674,6 +1719,11 @@ export function PostsListPage() {
   const query = useQuery({
     queryKey: ['system-posts', search],
     queryFn: () => listPosts(search),
+    placeholderData: (previous) => previous,
+  })
+  const departmentTreeQuery = useQuery({
+    queryKey: ['system-departments', 'tree', 'for-post-export'],
+    queryFn: getDepartmentTree,
     placeholderData: (previous) => previous,
   })
   const usersQuery = useQuery({
@@ -1735,10 +1785,30 @@ export function PostsListPage() {
         columns={buildPostColumns(setSelectedPost)}
         data={rows}
         total={query.data?.total}
-        summaries={summaries}
-        createActionNode={createActionNode}
-        onRefresh={() => void query.refetch()}
-        onExport={() => void 0}
+      summaries={summaries}
+      createActionNode={createActionNode}
+      onRefresh={() => void query.refetch()}
+      onExport={(scope, exportRows) => {
+        if (scope === 'filtered-results') {
+          void exportAllPostsCsv(search, departmentTreeQuery.data ?? []).catch((error) => {
+            handleServerError(error)
+          })
+          return
+        }
+        exportPostsCsv(exportRows, departmentTreeQuery.data ?? [])
+      }}
+      onImport={(file) => {
+        void importPostsCsv(file)
+          .then((summary) => {
+            toast.success(
+              `岗位导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
+            )
+            return query.refetch()
+          })
+          .catch((error) => {
+            handleServerError(error)
+          })
+      }}
       />
       <AssociatedUsersDialog
         open={Boolean(selectedPost)}
