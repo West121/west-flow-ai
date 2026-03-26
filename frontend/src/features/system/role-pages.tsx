@@ -8,6 +8,8 @@ import { useFieldArray, useForm, useWatch, type UseFormReturn } from 'react-hook
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   DatabaseZap,
   KeyRound,
   Loader2,
@@ -65,6 +67,7 @@ import {
   type SystemRoleFormOptions,
   type SystemRoleRecord,
 } from '@/lib/api/system-roles'
+import { getMenuTree, type MenuTreeNode } from '@/lib/api/system-menus'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
 import { AssociatedUsersDialog } from './associated-users-dialog'
@@ -142,6 +145,127 @@ function resolveScopeTypeLabel(scopeType: DataScopeType) {
       COMPANY: '指定公司',
     } satisfies Record<DataScopeType, string>
   )[scopeType]
+}
+
+function collectMenuTreeIds(nodes: MenuTreeNode[]): string[] {
+  return nodes.flatMap((node) => [node.menuId, ...collectMenuTreeIds(node.children)])
+}
+
+function resolveMenuTreeCheckState(node: MenuTreeNode, selectedMenuIds: string[]) {
+  const descendantIds = collectMenuTreeIds([node])
+  const selectedCount = descendantIds.filter((id) => selectedMenuIds.includes(id)).length
+
+  if (selectedCount === 0) {
+    return false
+  }
+  if (selectedCount === descendantIds.length) {
+    return true
+  }
+  return 'indeterminate' as const
+}
+
+function RoleMenuTreeSelector({
+  nodes,
+  selectedMenuIds,
+  onChange,
+}: {
+  nodes: MenuTreeNode[]
+  selectedMenuIds: string[]
+  onChange: (value: string[]) => void
+}) {
+  const topLevelNodeIds = useMemo(() => new Set(nodes.map((node) => node.menuId)), [nodes])
+  const [collapsedTopLevelNodeIds, setCollapsedTopLevelNodeIds] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [expandedChildNodeIds, setExpandedChildNodeIds] = useState<Set<string>>(() => new Set())
+
+  function toggleExpanded(menuId: string, isTopLevel: boolean) {
+    if (isTopLevel) {
+      setCollapsedTopLevelNodeIds((current) => {
+        const next = new Set(current)
+        if (next.has(menuId)) {
+          next.delete(menuId)
+        } else {
+          next.add(menuId)
+        }
+        return next
+      })
+      return
+    }
+    setExpandedChildNodeIds((current) => {
+      const next = new Set(current)
+      if (next.has(menuId)) {
+        next.delete(menuId)
+      } else {
+        next.add(menuId)
+      }
+      return next
+    })
+  }
+
+  function toggleNode(node: MenuTreeNode, checked: boolean) {
+    const descendantIds = collectMenuTreeIds([node])
+    const nextIds = checked
+      ? Array.from(new Set([...selectedMenuIds, ...descendantIds]))
+      : selectedMenuIds.filter((id) => !descendantIds.includes(id))
+    onChange(nextIds)
+  }
+
+  function renderNode(node: MenuTreeNode, depth = 0): React.ReactNode {
+    const hasChildren = node.children.length > 0
+    const isTopLevel = topLevelNodeIds.has(node.menuId)
+    const expanded = isTopLevel
+      ? !collapsedTopLevelNodeIds.has(node.menuId)
+      : expandedChildNodeIds.has(node.menuId)
+    const checkedState = resolveMenuTreeCheckState(node, selectedMenuIds)
+
+    return (
+      <div key={node.menuId} className='space-y-2'>
+        <div
+          className='flex items-start gap-3 rounded-lg border p-3'
+          style={{ marginLeft: depth * 16 }}
+        >
+          <div className='mt-0.5 flex items-center gap-1'>
+            {hasChildren ? (
+              <Button
+                type='button'
+                variant='ghost'
+                size='icon'
+                className='size-6'
+                onClick={() => toggleExpanded(node.menuId, isTopLevel)}
+              >
+                {expanded ? <ChevronDown className='size-4' /> : <ChevronRight className='size-4' />}
+              </Button>
+            ) : (
+              <span className='block size-6' />
+            )}
+            <Checkbox
+              checked={checkedState}
+              onCheckedChange={(value) => toggleNode(node, value === true)}
+            />
+          </div>
+          <div className='min-w-0 space-y-1'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <span className='text-sm font-medium'>{node.menuName}</span>
+              <Badge variant='outline'>{node.menuType}</Badge>
+            </div>
+            <p className='text-xs text-muted-foreground'>
+              {node.permissionCode
+                ?? node.routePath
+                ?? (node.parentMenuId ? '子级菜单' : '顶级菜单')}
+            </p>
+          </div>
+        </div>
+        {hasChildren && expanded ? (
+          <div className='space-y-2'>
+            {node.children.map((child) => renderNode(child, depth + 1))}
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
+  return <div className='space-y-2'>{nodes.map((node) => renderNode(node))}</div>
 }
 
 // 详情回填时把后端数据整理成表单默认值。
@@ -541,6 +665,10 @@ function RoleFormPage({
     queryKey: ['system-role-form-options'],
     queryFn: getRoleFormOptions,
   })
+  const menuTreeQuery = useQuery({
+    queryKey: ['system-menu-tree'],
+    queryFn: getMenuTree,
+  })
 
   const detailQuery = useQuery({
     queryKey: ['system-role', roleId],
@@ -583,7 +711,7 @@ function RoleFormPage({
   })
   const isSubmitting = createMutation.isPending || updateMutation.isPending
   const isInitialLoading =
-    optionsQuery.isLoading || (isEdit && detailQuery.isLoading)
+    optionsQuery.isLoading || menuTreeQuery.isLoading || (isEdit && detailQuery.isLoading)
 
   async function onSubmit(values: RoleFormValues) {
     form.clearErrors()
@@ -635,13 +763,20 @@ function RoleFormPage({
     )
   }
 
-  if (optionsQuery.isError || (isEdit && detailQuery.isError) || !optionsQuery.data) {
+  if (
+    optionsQuery.isError
+    || menuTreeQuery.isError
+    || (isEdit && detailQuery.isError)
+    || !optionsQuery.data
+    || !menuTreeQuery.data
+  ) {
     return (
       <PageErrorState
         title={isEdit ? '编辑角色' : '新建角色'}
         description='角色表单依赖的数据未能加载成功。'
         retry={() => {
           void optionsQuery.refetch()
+          void menuTreeQuery.refetch()
           if (isEdit) {
             void detailQuery.refetch()
           }
@@ -817,42 +952,14 @@ function RoleFormPage({
                       <FormDescription>
                         角色和菜单绑定后，当前登录态会自动聚合权限标识与可见菜单。
                       </FormDescription>
-                      <div className='grid gap-3 rounded-lg border p-4 md:grid-cols-2'>
-                        {optionsQuery.data.menus.map((menu) => {
-                          const checked = selectedMenuIds.includes(menu.id)
-                          return (
-                            <label
-                              key={menu.id}
-                              className='flex cursor-pointer items-start gap-3 rounded-md border p-3'
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={(value) => {
-                                  form.setValue(
-                                    'menuIds',
-                                    value
-                                      ? [...selectedMenuIds, menu.id]
-                                      : selectedMenuIds.filter((id) => id !== menu.id),
-                                    { shouldValidate: true }
-                                  )
-                                }}
-                              />
-                              <div className='space-y-1'>
-                                <div className='flex flex-wrap items-center gap-2'>
-                                  <span className='text-sm font-medium'>
-                                    {menu.name}
-                                  </span>
-                                  <Badge variant='outline'>{menu.menuType}</Badge>
-                                </div>
-                                <p className='text-xs text-muted-foreground'>
-                                  {menu.parentMenuName
-                                    ? `${menu.parentMenuName} / ${menu.name}`
-                                    : '顶级菜单'}
-                                </p>
-                              </div>
-                            </label>
-                          )
-                        })}
+                      <div className='rounded-lg border p-4'>
+                        <RoleMenuTreeSelector
+                          nodes={menuTreeQuery.data}
+                          selectedMenuIds={selectedMenuIds}
+                          onChange={(value) =>
+                            form.setValue('menuIds', value, { shouldValidate: true })
+                          }
+                        />
                       </div>
                       <FormMessage />
                     </FormItem>
