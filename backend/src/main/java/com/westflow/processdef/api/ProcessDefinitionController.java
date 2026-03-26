@@ -63,6 +63,15 @@ public class ProcessDefinitionController {
         ));
     }
 
+    @PostMapping("/collaboration/audit")
+    @SaCheckLogin
+    public ApiResponse<Void> auditCollaborationEvent(
+            @Valid @RequestBody ProcessDefinitionCollaborationAuditRequest request
+    ) {
+        processDefinitionService.recordCollaborationAudit(request, identityAuthService.currentUser());
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/page")
     @SaCheckLogin
     public ApiResponse<PageResponse<ProcessDefinitionListItemResponse>> page(@Valid @RequestBody PageRequest request) {

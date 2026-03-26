@@ -112,6 +112,7 @@ vi.mock('./designer-collab/provider', () => ({
       status: 'local',
       setLocalState: () => undefined,
       onStatusChange: () => () => undefined,
+      reconnect: () => undefined,
       destroy: () => undefined,
     }
   },

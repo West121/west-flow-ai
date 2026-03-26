@@ -23,6 +23,10 @@ const pingTimeout = 30_000
 /** @type {Map<string, Y.Doc & { name: string, conns: Map<WebSocket, Set<number>>, awareness: awarenessProtocol.Awareness }>} */
 const docs = new Map()
 
+function buildAuditUrl() {
+  return `${authApiBaseUrl}/audit`
+}
+
 function writeJson(response, statusCode, body) {
   response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' })
   response.end(JSON.stringify(body))
@@ -78,6 +82,25 @@ async function authorizeUpgrade(request) {
         error: error instanceof Error ? error.message : 'Unknown error',
       },
     }
+  }
+}
+
+async function postCollaborationAuditEvent(authToken, payload) {
+  if (!authToken) {
+    return
+  }
+
+  try {
+    await fetch(buildAuditUrl(), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch (error) {
+    console.error('[workflow-collab] audit failed', error)
   }
 }
 
@@ -191,11 +214,22 @@ function setupWsConnection(conn, request, roomName, auth = null) {
   const doc = getSharedDoc(roomName)
   doc.conns.set(conn, new Set())
   conn.auth = auth
+  conn.authToken = extractToken(request)
+  conn.connectionId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
   if (auth) {
     console.info(
       `[workflow-collab] join room=${roomName} user=${auth.userId} name=${auth.displayName} processDefinitionId=${auth.processDefinitionId || '-'}`
     )
+    void postCollaborationAuditEvent(conn.authToken, {
+      roomName,
+      eventType: 'DESIGNER_COLLAB_JOIN',
+      eventName: '加入协同房间',
+      details: {
+        connectionId: conn.connectionId,
+        processDefinitionId: auth.processDefinitionId,
+      },
+    })
   }
 
   conn.on('message', (message) => {
@@ -227,6 +261,15 @@ function setupWsConnection(conn, request, roomName, auth = null) {
       console.info(
         `[workflow-collab] leave room=${roomName} user=${conn.auth.userId} name=${conn.auth.displayName}`
       )
+      void postCollaborationAuditEvent(conn.authToken, {
+        roomName,
+        eventType: 'DESIGNER_COLLAB_LEAVE',
+        eventName: '离开协同房间',
+        details: {
+          connectionId: conn.connectionId,
+          processDefinitionId: conn.auth.processDefinitionId,
+        },
+      })
     }
     closeConnection(doc, conn)
     clearInterval(pingInterval)

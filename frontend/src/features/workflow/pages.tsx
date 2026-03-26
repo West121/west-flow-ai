@@ -877,6 +877,8 @@ function WorkflowDesignerWorkspace({
         ? `协同在线 ${collaborationPeers.length + 1}`
         : collaborationStatus === 'connecting'
           ? '协同连接中'
+          : collaborationStatus === 'reconnecting'
+            ? '协同重连中'
           : collaborationStatus === 'disconnected'
             ? '协同已断开'
             : '本地协同'
@@ -1215,15 +1217,33 @@ function WorkflowDesignerWorkspace({
                 <GuideLinesOverlay lines={helperLines} />
                 <RemoteCursorOverlay peers={collaborationPeers} />
                 {collaborationMode === 'websocket' &&
-                collaborationStatus === 'disconnected' ? (
+                (collaborationStatus === 'disconnected' ||
+                  collaborationStatus === 'reconnecting') ? (
                   <div className='absolute inset-x-4 top-4 z-40 rounded-2xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'>
-                    <div className='flex items-center gap-2 font-medium'>
-                      <PlugZap className='size-4' />
-                      协同连接已断开
+                    <div className='flex items-center justify-between gap-4'>
+                      <div>
+                        <div className='flex items-center gap-2 font-medium'>
+                          <PlugZap className='size-4' />
+                          {collaborationStatus === 'reconnecting'
+                            ? '协同正在重连'
+                            : '协同连接已断开'}
+                        </div>
+                        <p className='mt-1 text-xs text-amber-800/80 dark:text-amber-200/80'>
+                          {collaborationStatus === 'reconnecting'
+                            ? '正在自动恢复房间连接，恢复后会重新同步协同状态。'
+                            : '当前仍可继续本地编辑，连接恢复后会重新同步房间状态。'}
+                        </p>
+                      </div>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        className='border-amber-300 bg-transparent text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/40'
+                        onClick={() => collaborationProviderRef.current?.reconnect()}
+                      >
+                        <PlugZap className='size-4' />
+                        立即重试
+                      </Button>
                     </div>
-                    <p className='mt-1 text-xs text-amber-800/80 dark:text-amber-200/80'>
-                      当前仍可继续本地编辑，连接恢复后会重新同步房间状态。
-                    </p>
                   </div>
                 ) : null}
                 <ReactFlow

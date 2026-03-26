@@ -5,6 +5,7 @@ export type WorkflowDesignerCollaborationStatus =
   | 'local'
   | 'connecting'
   | 'connected'
+  | 'reconnecting'
   | 'disconnected'
 
 export type WorkflowDesignerCollaborationMode = 'broadcast' | 'websocket'

@@ -2,6 +2,7 @@ package com.westflow.processdef.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.workflowadmin.mapper.WorkflowOperationLogMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -27,6 +28,9 @@ class ProcessDefinitionControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private WorkflowOperationLogMapper workflowOperationLogMapper;
 
     @Test
     void shouldSaveDraftLoadDetailAndPublishDefinitionsThroughControllerContract() throws Exception {
@@ -170,6 +174,42 @@ class ProcessDefinitionControllerTest {
         assertThat(data.path("processDefinitionId").asText()).isEqualTo("oa_leave:draft");
         assertThat(data.path("userId").asText()).isEqualTo("usr_001");
         assertThat(data.path("displayName").asText()).isEqualTo("张三");
+    }
+
+    @Test
+    void shouldAuditWorkflowDesignerCollaborationEvent() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/draft")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDsl("oa_leave", "请假审批", "OA")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/process-definitions/collaboration/audit")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "roomName": "workflow-designer:oa_leave:draft",
+                                  "eventType": "DESIGNER_COLLAB_JOIN",
+                                  "eventName": "加入协同房间",
+                                  "details": {
+                                    "connectionId": "conn-1"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        assertThat(workflowOperationLogMapper.selectAll()).anySatisfy(record -> {
+            assertThat(record.actionType()).isEqualTo("DESIGNER_COLLAB_JOIN");
+            assertThat(record.actionName()).isEqualTo("加入协同房间");
+            assertThat(record.actionCategory()).isEqualTo("COLLABORATION");
+            assertThat(record.processDefinitionId()).isEqualTo("oa_leave:draft");
+            assertThat(record.businessType()).isEqualTo("WORKFLOW_DESIGNER");
+            assertThat(record.businessId()).isEqualTo("workflow-designer:oa_leave:draft");
+            assertThat(record.operatorUserId()).isEqualTo("usr_001");
+        });
     }
 
     private String login() throws Exception {

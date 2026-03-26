@@ -19,6 +19,7 @@ export type WorkflowDesignerCollaborationProvider = {
   status: WorkflowDesignerCollaborationStatus
   setLocalState: (state: WorkflowDesignerCollaborationAwarenessState) => void
   onStatusChange: (listener: (status: WorkflowDesignerCollaborationStatus) => void) => () => void
+  reconnect: () => void
   destroy: () => void
 }
 
@@ -161,6 +162,9 @@ function createBroadcastWorkflowDesignerCollaborationProvider(
         statusListeners.delete(listener)
       }
     },
+    reconnect: () => {
+      notifyStatus(channel ? 'connected' : 'local')
+    },
     destroy: () => {
       awareness.setLocalState(null)
       doc.off('update', handleDocUpdate)
@@ -182,6 +186,8 @@ function createWebsocketWorkflowDesignerCollaborationProvider(
   const awareness = new Awareness(doc)
   const statusListeners = new Set<(status: WorkflowDesignerCollaborationStatus) => void>()
   let status: WorkflowDesignerCollaborationStatus = 'connecting'
+  let hasConnected = false
+  let isDestroyed = false
 
   const params: Record<string, string> = {}
   if (options.authToken) {
@@ -202,10 +208,19 @@ function createWebsocketWorkflowDesignerCollaborationProvider(
   }
 
   provider.on('status', (event: { status: 'connected' | 'disconnected' | 'connecting' }) => {
-    notifyStatus(event.status)
+    if (event.status === 'connected') {
+      hasConnected = true
+      notifyStatus('connected')
+      return
+    }
+    if (event.status === 'connecting') {
+      notifyStatus(hasConnected ? 'reconnecting' : 'connecting')
+      return
+    }
+    notifyStatus(isDestroyed ? 'disconnected' : hasConnected ? 'reconnecting' : 'disconnected')
   })
   provider.on('connection-error', () => {
-    notifyStatus('disconnected')
+    notifyStatus(hasConnected ? 'reconnecting' : 'disconnected')
   })
 
   return {
@@ -224,7 +239,12 @@ function createWebsocketWorkflowDesignerCollaborationProvider(
         statusListeners.delete(listener)
       }
     },
+    reconnect: () => {
+      provider.connect()
+      notifyStatus(hasConnected ? 'reconnecting' : 'connecting')
+    },
     destroy: () => {
+      isDestroyed = true
       awareness.setLocalState(null)
       provider.destroy()
       notifyStatus('disconnected')

@@ -8,6 +8,8 @@ import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.common.query.SortItem;
+import com.westflow.identity.response.CurrentUserResponse;
+import com.westflow.processdef.api.ProcessDefinitionCollaborationAuditRequest;
 import com.westflow.processdef.api.ProcessDefinitionDetailResponse;
 import com.westflow.processdef.api.ProcessDefinitionListItemResponse;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
@@ -179,6 +181,42 @@ public class ProcessDefinitionService {
             );
         }
         return processDefinitionId;
+    }
+
+    public void recordCollaborationAudit(
+            ProcessDefinitionCollaborationAuditRequest request,
+            CurrentUserResponse currentUser
+    ) {
+        String processDefinitionId = resolveCollaborationProcessDefinitionId(request.roomName());
+        ProcessDefinitionRecord record = processDefinitionId == null ? null : getRecordById(processDefinitionId);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("roomName", request.roomName());
+        details.put("eventType", request.eventType());
+        details.put("activePostId", currentUser.activePostId());
+        details.put("activeDepartmentName", currentUser.activeDepartmentName());
+        details.put("activePostName", currentUser.activePostName());
+        if (request.details() != null) {
+            details.putAll(request.details());
+        }
+        workflowOperationLogService.record(new WorkflowOperationLogService.RecordCommand(
+                null,
+                processDefinitionId,
+                record == null ? null : record.flowableDefinitionId(),
+                "WORKFLOW_DESIGNER",
+                request.roomName(),
+                null,
+                null,
+                request.eventType(),
+                request.eventName(),
+                "COLLABORATION",
+                currentUser.userId(),
+                null,
+                null,
+                null,
+                null,
+                details,
+                java.time.Instant.now()
+        ));
     }
 
     // 按流程键获取最近一次已发布版本，供运行时启动流程使用。
