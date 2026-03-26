@@ -30,6 +30,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   Form,
   FormControl,
@@ -519,7 +520,7 @@ function ScopeValueSelect({
 }
 
 export function RolesListPage() {
-  const search = rolesRoute.useSearch()
+  const search = normalizeListQuerySearch(rolesRoute.useSearch())
   const navigate = rolesRoute.useNavigate()
   const [selectedRole, setSelectedRole] = useState<SystemRoleRecord | null>(null)
   const query = useQuery({

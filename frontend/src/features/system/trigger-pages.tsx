@@ -52,7 +52,10 @@ import {
   updateTrigger,
 } from '@/lib/api/triggers'
 import { handleServerError } from '@/lib/handle-server-error'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const triggersRoute = getRouteApi('/_authenticated/system/triggers/list')
 
@@ -648,7 +651,7 @@ function TriggerDetailMetric({
 }
 
 export function TriggersListPage() {
-  const search = triggersRoute.useSearch()
+  const search = normalizeListQuerySearch(triggersRoute.useSearch())
   const navigate = triggersRoute.useNavigate()
   const triggersQuery = useQuery({
     queryKey: ['system', 'triggers', search],

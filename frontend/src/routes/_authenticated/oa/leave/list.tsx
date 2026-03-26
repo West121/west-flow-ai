@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { OALeaveListPage } from '@/features/oa/pages'
-import { listQuerySearchSchema } from '@/features/shared/table/query-contract'
+import { listQueryRouteSearchSchema } from '@/features/shared/table/query-contract'
 
 export const Route = createFileRoute('/_authenticated/oa/leave/list')({
-  validateSearch: listQuerySearchSchema,
+  validateSearch: listQueryRouteSearchSchema,
   component: OALeaveListPage,
 })

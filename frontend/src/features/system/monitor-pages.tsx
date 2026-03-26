@@ -33,7 +33,10 @@ import {
   type TriggerExecutionListRecord,
 } from '@/lib/api/system-monitor'
 import { getApiErrorMessage } from '@/lib/api/client'
-import { type ListQuerySearch as BaseListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch as BaseListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const orchestratorScanListRoute =
   getRouteApi('/_authenticated/system/monitor/orchestrator-scans/list')
@@ -338,7 +341,7 @@ function InfoCell({
 }
 
 export function SystemMonitorOrchestratorScanListPage() {
-  const search = orchestratorScanListRoute.useSearch()
+  const search = normalizeListQuerySearch(orchestratorScanListRoute.useSearch())
   const navigate = orchestratorScanListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-monitor-orchestrator-scans', search],
@@ -457,7 +460,7 @@ export function SystemMonitorOrchestratorScanDetailPage() {
 }
 
 export function SystemMonitorTriggerExecutionListPage() {
-  const search = triggerExecutionListRoute.useSearch()
+  const search = normalizeListQuerySearch(triggerExecutionListRoute.useSearch())
   const navigate = triggerExecutionListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-monitor-trigger-executions', search],
@@ -593,7 +596,9 @@ export function SystemMonitorTriggerExecutionDetailPage() {
 }
 
 export function SystemMonitorNotificationChannelHealthListPage() {
-  const search = notificationChannelHealthListRoute.useSearch()
+  const search = normalizeListQuerySearch(
+    notificationChannelHealthListRoute.useSearch()
+  )
   const navigate = notificationChannelHealthListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-monitor-channel-health-list', search],

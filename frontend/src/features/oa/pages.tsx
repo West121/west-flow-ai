@@ -42,7 +42,10 @@ import {
   UserPickerField,
 } from '@/features/shared/pro-form'
 import { PageShell } from '@/features/shared/page-shell'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  type ListQuerySearch,
+  normalizeListQuerySearch,
+} from '@/features/shared/table/query-contract'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
 import { ProTable, type ProTableBoardColumn } from '@/features/shared/pro-table'
 import {
@@ -1170,7 +1173,7 @@ export function OALeaveCreatePage() {
 }
 
 export function OALeaveListPage() {
-  const search = leaveListRoute.useSearch()
+  const search = normalizeListQuerySearch(leaveListRoute.useSearch())
   const navigate = leaveListRoute.useNavigate()
 
   return (
@@ -1211,7 +1214,7 @@ export function OAExpenseCreatePage() {
 }
 
 export function OAExpenseListPage() {
-  const search = expenseListRoute.useSearch()
+  const search = normalizeListQuerySearch(expenseListRoute.useSearch())
   const navigate = expenseListRoute.useNavigate()
 
   return (
@@ -1252,7 +1255,7 @@ export function OACommonCreatePage() {
 }
 
 export function OACommonListPage() {
-  const search = commonListRoute.useSearch()
+  const search = normalizeListQuerySearch(commonListRoute.useSearch())
   const navigate = commonListRoute.useNavigate()
 
   return (
@@ -1270,7 +1273,7 @@ export function OACommonListPage() {
 }
 
 export function OAQueryPage() {
-  const search = oaQueryRoute.useSearch()
+  const search = normalizeListQuerySearch(oaQueryRoute.useSearch())
   const navigate = oaQueryRoute.useNavigate()
   const approvalSheetsQuery = useQuery({
     queryKey: ['oa', 'query-page', search],

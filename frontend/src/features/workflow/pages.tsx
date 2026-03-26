@@ -65,6 +65,7 @@ import {
 } from '@/features/forms/runtime/form-component-registry'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
+import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   type ProcessDefinitionMeta,
   processDefinitionDetailToWorkflowSnapshot,
@@ -308,7 +309,7 @@ const definitionColumns: ColumnDef<DefinitionRow>[] = [
 ]
 
 export function WorkflowDefinitionsListPage() {
-  const search = definitionsRoute.useSearch()
+  const search = normalizeListQuerySearch(definitionsRoute.useSearch())
   const navigate = definitionsRoute.useNavigate()
   const query = useQuery({
     queryKey: ['process-definitions', search],

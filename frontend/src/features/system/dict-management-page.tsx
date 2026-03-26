@@ -55,17 +55,30 @@ import {
   type SystemDictTypeRecord,
 } from '@/lib/api/system-dicts'
 import {
-  listQuerySearchSchema,
+  listQueryRouteSearchSchema,
+  normalizeListQuerySearch,
   type ListQuerySearch,
+  type ListQueryRouteSearch,
 } from '@/features/shared/table/query-contract'
 
 // eslint-disable-next-line react-refresh/only-export-components
-export const dictManagementSearchSchema = listQuerySearchSchema.extend({
-  typeId: z.string().catch('').default(''),
+export const dictManagementSearchSchema = listQueryRouteSearchSchema.extend({
+  typeId: z.string().optional().catch(undefined),
 })
 
 export type DictManagementSearch = ListQuerySearch & {
   typeId: string
+}
+
+// 路由层允许省略默认查询参数，页面内再补齐默认值。
+// eslint-disable-next-line react-refresh/only-export-components
+export function normalizeDictManagementSearch(
+  search: ListQueryRouteSearch & { typeId?: string | undefined }
+): DictManagementSearch {
+  return {
+    ...normalizeListQuerySearch(search),
+    typeId: search.typeId ?? '',
+  }
 }
 
 type DialogMode = 'create' | 'edit' | 'detail'

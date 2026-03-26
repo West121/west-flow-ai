@@ -96,7 +96,10 @@ import {
   type RuntimeStructureLink,
 } from '@/features/workflow/runtime-structure-utils'
 import { NodeFormRenderer } from '@/features/forms/runtime/node-form-renderer'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  type ListQuerySearch,
+  normalizeListQuerySearch,
+} from '@/features/shared/table/query-contract'
 import {
   WORKBENCH_RUNTIME_ENDPOINTS,
   getWorkbenchDashboardSummary,
@@ -1348,7 +1351,7 @@ export function Dashboard() {
 
 // 待办列表页承接任务查询和操作入口。
 export function WorkbenchTodoListPage() {
-  const search = workbenchTodoListRoute.useSearch()
+  const search = normalizeListQuerySearch(workbenchTodoListRoute.useSearch())
   const navigate = workbenchTodoListRoute.useNavigate()
   const tasksQuery = useQuery({
     queryKey: ['workbench', 'todo-page', search],
@@ -1480,7 +1483,7 @@ export function WorkbenchStartPage() {
 
 // 已办列表页复用审批单列表公共区块。
 export function WorkbenchDoneListPage() {
-  const search = workbenchDoneListRoute.useSearch()
+  const search = normalizeListQuerySearch(workbenchDoneListRoute.useSearch())
   const navigate = workbenchDoneListRoute.useNavigate()
 
   return (
@@ -1504,7 +1507,7 @@ export function WorkbenchDoneListPage() {
 
 // 我发起列表页复用审批单列表公共区块。
 export function WorkbenchInitiatedListPage() {
-  const search = workbenchInitiatedListRoute.useSearch()
+  const search = normalizeListQuerySearch(workbenchInitiatedListRoute.useSearch())
   const navigate = workbenchInitiatedListRoute.useNavigate()
 
   return (
@@ -1528,7 +1531,7 @@ export function WorkbenchInitiatedListPage() {
 
 // 抄送列表页复用审批单列表公共区块。
 export function WorkbenchCopiedListPage() {
-  const search = workbenchCopiedListRoute.useSearch()
+  const search = normalizeListQuerySearch(workbenchCopiedListRoute.useSearch())
   const navigate = workbenchCopiedListRoute.useNavigate()
 
   return (

@@ -28,7 +28,10 @@ import { Input } from '@/components/ui/input'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
 import {
   formatApprovalSheetDateTime,
@@ -734,7 +737,7 @@ function summarizePlmApprovalSheets(records: ApprovalSheetListItem[]) {
 }
 
 export function PLMQueryPage() {
-  const search = plmQueryRoute.useSearch()
+  const search = normalizeListQuerySearch(plmQueryRoute.useSearch())
   const navigate = plmQueryRoute.useNavigate()
   const approvalSheetsQuery = useQuery({
     queryKey: ['plm', 'query-page', search],

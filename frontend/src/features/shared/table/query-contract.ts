@@ -41,16 +41,39 @@ export const listQuerySearchSchema = z.object({
   groups: z.array(groupItemSchema).catch([]).default([]),
 })
 
+export const listQueryRouteSearchSchema = z.object({
+  page: z.coerce.number().optional().catch(undefined),
+  pageSize: z.coerce.number().optional().catch(undefined),
+  keyword: z.string().optional().catch(undefined),
+  filters: z.array(filterItemSchema).optional().catch(undefined),
+  sorts: z.array(sortItemSchema).optional().catch(undefined),
+  groups: z.array(groupItemSchema).optional().catch(undefined),
+})
+
 export type FilterItem = z.infer<typeof filterItemSchema>
 export type SortItem = z.infer<typeof sortItemSchema>
 export type GroupItem = z.infer<typeof groupItemSchema>
 export type ListQuerySearch = z.infer<typeof listQuerySearchSchema>
+export type ListQueryRouteSearch = z.infer<typeof listQueryRouteSearchSchema>
 
 export type ListQueryState = ListQuerySearch & {
   columns: Array<{
     key: string
     visible: boolean
   }>
+}
+
+export function normalizeListQuerySearch(
+  search: Partial<ListQuerySearch> | ListQueryRouteSearch | undefined | null
+): ListQuerySearch {
+  return {
+    page: search?.page ?? 1,
+    pageSize: search?.pageSize ?? 20,
+    keyword: search?.keyword ?? '',
+    filters: search?.filters ?? [],
+    sorts: search?.sorts ?? [],
+    groups: search?.groups ?? [],
+  }
 }
 
 export function stripDefaultListQuerySearchValues(search: ListQuerySearch) {

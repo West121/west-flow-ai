@@ -60,7 +60,10 @@ import {
 } from '@/lib/api/system-agents'
 import { handleServerError } from '@/lib/handle-server-error'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const agentListRoute = getRouteApi('/_authenticated/system/agents/list')
 
@@ -462,7 +465,7 @@ function AgentStatusFilterCard({
 }
 
 export function AgentsListPage() {
-  const search = agentListRoute.useSearch()
+  const search = normalizeListQuerySearch(agentListRoute.useSearch())
   const navigate = agentListRoute.useNavigate()
   const agentsQuery = useQuery({
     queryKey: ['system', 'agent-page', search],

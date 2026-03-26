@@ -53,7 +53,10 @@ import {
   updateNotificationChannel,
 } from '@/lib/api/notification-channels'
 import { handleServerError } from '@/lib/handle-server-error'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const notificationChannelsRoute = getRouteApi(
   '/_authenticated/system/notification-channels/list'
@@ -740,7 +743,7 @@ function NotificationChannelDiagnosticCard({
 }
 
 export function NotificationChannelsListPage() {
-  const search = notificationChannelsRoute.useSearch()
+  const search = normalizeListQuerySearch(notificationChannelsRoute.useSearch())
   const navigate = notificationChannelsRoute.useNavigate()
   const channelsQuery = useQuery({
     queryKey: ['system', 'notification-channels', search],

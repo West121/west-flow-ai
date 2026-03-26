@@ -37,7 +37,10 @@ import {
   type NotificationLogDetail,
   type NotificationLogListRecord,
 } from '@/lib/api/system-logs'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const auditLogListRoute = getRouteApi('/_authenticated/system/logs/audit/list')
 const auditLogDetailRoute = getRouteApi('/_authenticated/system/logs/audit/$logId/')
@@ -330,7 +333,7 @@ function InfoCell({
 }
 
 export function SystemAuditLogListPage() {
-  const search = auditLogListRoute.useSearch()
+  const search = normalizeListQuerySearch(auditLogListRoute.useSearch())
   const navigate = auditLogListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-log-audit-list', search],
@@ -359,7 +362,7 @@ export function SystemAuditLogListPage() {
 }
 
 export function SystemLoginLogListPage() {
-  const search = loginLogListRoute.useSearch()
+  const search = normalizeListQuerySearch(loginLogListRoute.useSearch())
   const navigate = loginLogListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-log-login-list', search],
@@ -388,7 +391,7 @@ export function SystemLoginLogListPage() {
 }
 
 export function SystemNotificationLogListPage() {
-  const search = notificationLogListRoute.useSearch()
+  const search = normalizeListQuerySearch(notificationLogListRoute.useSearch())
   const navigate = notificationLogListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-log-notification-list', search],

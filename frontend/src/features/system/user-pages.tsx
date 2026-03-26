@@ -61,6 +61,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { getApiErrorResponse } from '@/lib/api/client'
+import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 import {
   createSystemUser,
   getSystemUserDetail,
@@ -1094,7 +1095,7 @@ function SystemUserFormPage({
 }
 
 export function UsersListPage() {
-  const search = usersListRoute.useSearch()
+  const search = normalizeListQuerySearch(usersListRoute.useSearch())
   const navigate = usersListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-users', search],

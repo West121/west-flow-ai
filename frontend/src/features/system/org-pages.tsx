@@ -74,6 +74,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 import { ProFormActions, ProFormShell } from '@/features/shared/pro-form'
 import { ProTable } from '@/features/shared/pro-table'
 import { PageShell } from '@/features/shared/page-shell'
+import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 import { AssociatedUsersDialog } from './associated-users-dialog'
 
 const rolesRoute = getRouteApi('/_authenticated/system/roles/list')
@@ -1470,7 +1471,7 @@ function PostFormPage({
 }
 
 export function RolesListPage() {
-  const search = rolesRoute.useSearch()
+  const search = normalizeListQuerySearch(rolesRoute.useSearch())
   const navigate = rolesRoute.useNavigate()
 
   return (
@@ -1510,7 +1511,7 @@ export function RolesListPage() {
 }
 
 export function CompaniesListPage() {
-  const search = companiesRoute.useSearch()
+  const search = normalizeListQuerySearch(companiesRoute.useSearch())
   const navigate = companiesRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-companies', search],
@@ -1579,7 +1580,7 @@ export function CompaniesListPage() {
 }
 
 export function DepartmentsListPage() {
-  const search = departmentsRoute.useSearch()
+  const search = normalizeListQuerySearch(departmentsRoute.useSearch())
   const navigate = departmentsRoute.useNavigate()
   const [selectedDepartment, setSelectedDepartment] = useState<DepartmentTreeNode | null>(
     null
@@ -1667,7 +1668,7 @@ export function DepartmentsListPage() {
 }
 
 export function PostsListPage() {
-  const search = postsRoute.useSearch()
+  const search = normalizeListQuerySearch(postsRoute.useSearch())
   const navigate = postsRoute.useNavigate()
   const [selectedPost, setSelectedPost] = useState<PostRow | null>(null)
   const query = useQuery({

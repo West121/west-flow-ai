@@ -54,7 +54,10 @@ import {
   type SystemFileStatus,
 } from '@/lib/api/system-files'
 import { handleServerError } from '@/lib/handle-server-error'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const fileListRoute = getRouteApi('/_authenticated/system/files/list')
 const fileDetailRoute = getRouteApi('/_authenticated/system/files/$fileId/')
@@ -193,7 +196,7 @@ const fileColumns: ColumnDef<SystemFileRecord>[] = [
 ]
 
 export function FileListPage() {
-  const search = fileListRoute.useSearch()
+  const search = normalizeListQuerySearch(fileListRoute.useSearch())
   const navigate = fileListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['system-files', search],

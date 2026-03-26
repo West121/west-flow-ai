@@ -60,7 +60,10 @@ import {
   type SaveNotificationTemplatePayload,
 } from '@/lib/api/system-notifications'
 import { handleServerError } from '@/lib/handle-server-error'
-import { type ListQuerySearch } from '@/features/shared/table/query-contract'
+import {
+  normalizeListQuerySearch,
+  type ListQuerySearch,
+} from '@/features/shared/table/query-contract'
 
 const templateListRoute = getRouteApi('/_authenticated/system/notifications/templates/list')
 const templateDetailRoute = getRouteApi('/_authenticated/system/notifications/templates/$templateId/')
@@ -324,7 +327,7 @@ function PageLoadingState({
 }
 
 export function NotificationTemplatesListPage() {
-  const search = templateListRoute.useSearch()
+  const search = normalizeListQuerySearch(templateListRoute.useSearch())
   const navigate = templateListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['notification-templates', search],
@@ -357,7 +360,7 @@ export function NotificationTemplatesListPage() {
 }
 
 export function NotificationRecordsListPage() {
-  const search = recordListRoute.useSearch()
+  const search = normalizeListQuerySearch(recordListRoute.useSearch())
   const navigate = recordListRoute.useNavigate()
   const query = useQuery({
     queryKey: ['notification-records', search],
