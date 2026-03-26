@@ -17,6 +17,19 @@ type DataTableViewOptionsProps<TData> = {
 export function DataTableViewOptions<TData>({
   table,
 }: DataTableViewOptionsProps<TData>) {
+  const resolveColumnLabel = (column: ReturnType<Table<TData>['getAllColumns']>[number]) => {
+    const meta = column.columnDef.meta as { label?: string } | undefined
+
+    if (meta?.label) {
+      return meta.label
+    }
+    if (typeof column.columnDef.header === 'string') {
+      return column.columnDef.header
+    }
+
+    return column.id
+  }
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -42,11 +55,10 @@ export function DataTableViewOptions<TData>({
             return (
               <DropdownMenuCheckboxItem
                 key={column.id}
-                className='capitalize'
                 checked={column.getIsVisible()}
                 onCheckedChange={(value) => column.toggleVisibility(!!value)}
               >
-                {column.id}
+                {resolveColumnLabel(column)}
               </DropdownMenuCheckboxItem>
             )
           })}

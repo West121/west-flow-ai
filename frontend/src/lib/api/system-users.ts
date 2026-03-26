@@ -160,3 +160,13 @@ export async function updateSystemUser(
 
   return unwrapResponse(response)
 }
+
+export async function deleteSystemUser(
+  userId: string
+): Promise<{ userId: string }> {
+  const response = await apiClient.delete<ApiSuccessResponse<{ userId: string }>>(
+    `/system/users/${userId}`
+  )
+
+  return unwrapResponse(response)
+}

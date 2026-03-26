@@ -226,6 +226,16 @@ export async function updateCompany(
   return unwrapResponse(response)
 }
 
+export async function deleteCompany(
+  companyId: string
+): Promise<{ companyId: string }> {
+  const response = await apiClient.delete<ApiSuccessResponse<{ companyId: string }>>(
+    `/system/companies/${companyId}`
+  )
+
+  return unwrapResponse(response)
+}
+
 export async function listDepartments(
   search: ListQuerySearch
 ): Promise<DepartmentPageResponse> {
@@ -356,6 +366,16 @@ export async function updateDepartment(
   return unwrapResponse(response)
 }
 
+export async function deleteDepartment(
+  departmentId: string
+): Promise<{ departmentId: string }> {
+  const response = await apiClient.delete<ApiSuccessResponse<{ departmentId: string }>>(
+    `/system/departments/${departmentId}`
+  )
+
+  return unwrapResponse(response)
+}
+
 export async function getDepartmentUsers(
   departmentId: string
 ): Promise<SystemAssociatedUser[]> {
@@ -416,6 +436,16 @@ export async function updatePost(
   const response = await apiClient.put<ApiSuccessResponse<{ postId: string }>>(
     `/system/posts/${postId}`,
     payload
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function deletePost(
+  postId: string
+): Promise<{ postId: string }> {
+  const response = await apiClient.delete<ApiSuccessResponse<{ postId: string }>>(
+    `/system/posts/${postId}`
   )
 
   return unwrapResponse(response)

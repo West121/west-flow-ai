@@ -175,6 +175,28 @@ public class SystemRoleService {
         return new SystemRoleMutationResponse(roleId);
     }
 
+    /**
+     * 删除角色。
+     */
+    @Transactional
+    public SystemRoleMutationResponse delete(String roleId) {
+        detail(roleId);
+        long userRoleCount = systemRoleMapper.countUserRolesByRoleId(roleId);
+        long userPostRoleCount = systemRoleMapper.countUserPostRolesByRoleId(roleId);
+        if (userRoleCount > 0 || userPostRoleCount > 0) {
+            throw new ContractException(
+                    "BIZ.ROLE_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前角色仍已分配给用户任职，无法删除",
+                    Map.of("roleId", roleId, "userRoleCount", userRoleCount, "userPostRoleCount", userPostRoleCount)
+            );
+        }
+        systemRoleMapper.deleteRoleMenus(roleId);
+        systemRoleMapper.deleteRoleDataScopes(roleId);
+        systemRoleMapper.deleteRole(roleId);
+        return new SystemRoleMutationResponse(roleId);
+    }
+
     private SystemRoleListItemResponse mapListItem(SystemRoleListItemResponse item) {
         return new SystemRoleListItemResponse(
                 item.roleId(),

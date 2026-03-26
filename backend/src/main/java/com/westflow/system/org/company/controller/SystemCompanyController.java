@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -72,5 +73,13 @@ public class SystemCompanyController {
             @Valid @RequestBody SaveSystemCompanyRequest request
     ) {
         return ApiResponse.success(systemCompanyService.update(companyId, request));
+    }
+
+    /**
+     * 删除公司。
+     */
+    @DeleteMapping("/{companyId}")
+    public ApiResponse<SystemCompanyMutationResponse> delete(@PathVariable String companyId) {
+        return ApiResponse.success(systemCompanyService.delete(companyId));
     }
 }

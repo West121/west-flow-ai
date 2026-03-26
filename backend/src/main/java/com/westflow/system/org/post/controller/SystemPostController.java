@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -84,5 +85,13 @@ public class SystemPostController {
             @Valid @RequestBody SaveSystemPostRequest request
     ) {
         return ApiResponse.success(systemPostService.update(postId, request));
+    }
+
+    /**
+     * 删除岗位。
+     */
+    @DeleteMapping("/{postId}")
+    public ApiResponse<SystemPostMutationResponse> delete(@PathVariable String postId) {
+        return ApiResponse.success(systemPostService.delete(postId));
     }
 }

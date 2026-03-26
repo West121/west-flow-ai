@@ -272,6 +272,28 @@ public class SystemUserService {
         return new SystemUserMutationResponse(userId);
     }
 
+    /**
+     * 删除用户。
+     */
+    @Transactional
+    public SystemUserMutationResponse delete(String userId) {
+        SystemUserDetailResponse detail = detail(userId);
+        String currentUserId = StpUtil.getLoginIdAsString();
+        if (userId.equals(currentUserId)) {
+            throw new ContractException(
+                    "BIZ.USER_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "不能删除当前登录用户",
+                    Map.of("userId", userId)
+            );
+        }
+        systemUserMapper.deleteUserPostRoles(userId);
+        systemUserMapper.deleteUserPosts(userId);
+        systemUserMapper.deleteUserRoles(userId);
+        systemUserMapper.deleteUser(detail.userId());
+        return new SystemUserMutationResponse(userId);
+    }
+
     private List<SystemUserDetailResponse.Assignment> resolveAssignments(String userId) {
         Map<String, List<UserPostRoleRecord>> roleRecordsByUserPostId = new LinkedHashMap<>();
         for (UserPostRoleRecord roleRecord : systemUserMapper.selectAssignmentRolesByUserId(userId)) {

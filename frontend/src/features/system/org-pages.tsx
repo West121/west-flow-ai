@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
@@ -18,9 +18,11 @@ import {
   Loader2,
   Save,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Card,
   CardContent,
@@ -54,6 +56,9 @@ import {
   createCompany,
   createDepartment,
   createPost,
+  deleteCompany,
+  deleteDepartment,
+  deletePost,
   getCompanyDetail,
   getCompanyFormOptions,
   getDepartmentDetail,
@@ -331,7 +336,10 @@ function applyFieldErrors<T extends Record<string, unknown>>(
   return apiError
 }
 
-const companyColumns: ColumnDef<CompanyRow>[] = [
+function buildCompanyColumns(
+  onDelete: (row: CompanyRow) => void
+): ColumnDef<CompanyRow>[] {
+  return [
   {
     accessorKey: 'companyName',
     header: '公司名称',
@@ -379,13 +387,22 @@ const companyColumns: ColumnDef<CompanyRow>[] = [
             编辑
           </Link>
         </Button>
+        <Button
+          variant='ghost'
+          className='h-8 px-2 text-destructive hover:text-destructive'
+          onClick={() => onDelete(row.original)}
+        >
+          删除
+        </Button>
       </div>
     ),
   },
 ]
+}
 
 function buildDepartmentColumns(
-  onShowUsers: (row: DepartmentTreeNode) => void
+  onShowUsers: (row: DepartmentTreeNode) => void,
+  onDelete: (row: DepartmentTreeNode) => void
 ): ColumnDef<DepartmentTreeNode>[] {
   return [
     {
@@ -480,6 +497,13 @@ function buildDepartmentColumns(
               编辑
             </Link>
           </Button>
+          <Button
+            variant='ghost'
+            className='h-8 px-2 text-destructive hover:text-destructive'
+            onClick={() => onDelete(row.original)}
+          >
+            删除
+          </Button>
         </div>
       ),
     },
@@ -487,7 +511,8 @@ function buildDepartmentColumns(
 }
 
 function buildPostColumns(
-  onShowUsers: (row: PostRow) => void
+  onShowUsers: (row: PostRow) => void,
+  onDelete: (row: PostRow) => void
 ): ColumnDef<PostRow>[] {
   return [
   {
@@ -546,6 +571,13 @@ function buildPostColumns(
           >
             编辑
           </Link>
+        </Button>
+        <Button
+          variant='ghost'
+          className='h-8 px-2 text-destructive hover:text-destructive'
+          onClick={() => onDelete(row.original)}
+        >
+          删除
         </Button>
       </div>
     ),
@@ -691,7 +723,7 @@ function CompanyFormPage({
           >
             <ProFormShell
               title='公司信息'
-              description='当前基线先维护公司名称和启用状态，后续会继续扩展企业编码、法人和租户隔离配置。'
+              description='维护公司名称和启用状态。'
               actions={
                 <ProFormActions>
                   <Button
@@ -782,13 +814,6 @@ function CompanyFormPage({
               />
             </CardContent>
           </Card>
-          <Alert>
-            <ShieldCheck />
-            <AlertTitle>页面规则</AlertTitle>
-            <AlertDescription>
-              公司维护页为独立 CRUD 页面，不使用弹窗或多页签替代。
-            </AlertDescription>
-          </Alert>
         </div>
       </div>
     </PageShell>
@@ -975,7 +1000,7 @@ function DepartmentFormPage({
           >
             <ProFormShell
               title='部门信息'
-              description='维护部门名称、公司归属和树形父级。后续可在这里继续扩展负责人和数据范围。'
+              description='维护部门名称、公司归属和树形父级。'
               actions={
                 <ProFormActions>
                   <Button
@@ -1317,7 +1342,7 @@ function PostFormPage({
           >
             <ProFormShell
               title='岗位信息'
-              description='当前基线维护岗位和部门挂靠。后续会继续扩展岗位职责、审批策略和兼任限制。'
+              description='维护岗位和部门挂靠关系。'
               actions={
                 <ProFormActions>
                   <Button
@@ -1488,7 +1513,7 @@ export function RolesListPage() {
   return (
     <ProTable
       title='角色列表'
-      description='角色模块下一阶段会继续接真实接口。本轮优先完成组织管理闭环，因此暂保留角色列表基线。'
+      description='角色模块列表页展示基础角色信息和状态。'
       searchPlaceholder='搜索角色名称或权限范围'
       search={search}
       navigate={navigate}
@@ -1524,10 +1549,31 @@ export function RolesListPage() {
 export function CompaniesListPage() {
   const search = normalizeListQuerySearch(companiesRoute.useSearch())
   const navigate = companiesRoute.useNavigate()
+  const queryClient = useQueryClient()
+  const [pendingDeleteRows, setPendingDeleteRows] = useState<CompanyRow[]>([])
+  const clearSelectionRef = useRef<(() => void) | null>(null)
   const query = useQuery({
     queryKey: ['system-companies', search],
     queryFn: () => listCompanies(search),
     placeholderData: (previous) => previous,
+  })
+  const deleteMutation = useMutation({
+    mutationFn: async (companyIds: string[]) => {
+      await Promise.all(companyIds.map((companyId) => deleteCompany(companyId)))
+    },
+    onSuccess: async (_, companyIds) => {
+      toast.success(
+        companyIds.length > 1
+          ? `已删除 ${companyIds.length} 个公司`
+          : '公司已删除'
+      )
+      setPendingDeleteRows([])
+      clearSelectionRef.current?.()
+      clearSelectionRef.current = null
+      await queryClient.invalidateQueries({ queryKey: ['system-companies'] })
+      await query.refetch()
+    },
+    onError: handleServerError,
   })
 
   const rows = useMemo<CompanyRow[]>(
@@ -1557,7 +1603,7 @@ export function CompaniesListPage() {
       {
         label: '公司总量',
         value: `${query.data?.total ?? 0}`,
-        hint: '公司列表已接入真实分页接口，可继续扩展租户和业务域隔离。',
+        hint: '公司列表已接入真实分页接口，可直接维护组织顶层实体。',
       },
       {
         label: '当前页启用',
@@ -1571,51 +1617,105 @@ export function CompaniesListPage() {
       },
     ]
   }, [query.data])
+  const groupOptions = useMemo(
+    () => [
+      {
+        field: 'status',
+        label: '状态',
+        getValue: (row: CompanyRow) => row.status,
+      },
+    ],
+    []
+  )
 
   return (
-    <ProTable<CompanyRow>
-      title='公司列表'
-      description='公司列表页承载组织顶层实体维护，已接入真实分页接口和独立详情/编辑页。'
-      searchPlaceholder='搜索公司名称'
-      search={search}
-      navigate={navigate}
-      columns={companyColumns}
-      data={rows}
-      total={query.data?.total}
-      summaries={summaries}
-      createActionNode={createActionNode}
-      onRefresh={() => void query.refetch()}
-      onExport={(scope, exportRows) => {
-        if (scope === 'filtered-results') {
-          void exportAllCompaniesCsv(search).catch((error) => {
-            handleServerError(error)
-          })
-          return
+    <>
+      <ProTable<CompanyRow>
+        title='公司列表'
+        description='公司列表页承载组织顶层实体维护，已接入真实分页接口和独立详情/编辑页。'
+        searchPlaceholder='搜索公司名称'
+        search={search}
+        navigate={navigate}
+        columns={buildCompanyColumns((row) => setPendingDeleteRows([row]))}
+        data={rows}
+        total={query.data?.total}
+        summaries={summaries}
+        createActionNode={createActionNode}
+        onRefresh={() => void query.refetch()}
+        onExport={(scope, exportRows) => {
+          if (scope === 'filtered-results') {
+            void exportAllCompaniesCsv(search).catch((error) => {
+              handleServerError(error)
+            })
+            return
+          }
+          exportCompaniesCsv(exportRows)
+        }}
+        onImport={(file) => {
+          void importCompaniesCsv(file)
+            .then((summary) => {
+              toast.success(
+                `公司导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
+              )
+              return query.refetch()
+            })
+            .catch((error) => {
+              handleServerError(error)
+            })
+        }}
+        enableRowSelection
+        getRowId={(row) => row.companyId}
+        groupOptions={groupOptions}
+        renderBulkActions={({ selectedRows, clearSelection }) => (
+          <Button
+            variant='destructive'
+            size='sm'
+            onClick={() => {
+              setPendingDeleteRows(selectedRows)
+              clearSelectionRef.current = clearSelection
+            }}
+          >
+            <Trash2 className='mr-2 size-4' />
+            批量删除
+          </Button>
+        )}
+      />
+      <ConfirmDialog
+        open={pendingDeleteRows.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setPendingDeleteRows([])
+            clearSelectionRef.current = null
+          }
+        }}
+        title={pendingDeleteRows.length > 1 ? '批量删除公司' : '删除公司'}
+        desc={
+          pendingDeleteRows.length > 1
+            ? `确认删除已选中的 ${pendingDeleteRows.length} 个公司吗？删除后无法恢复。`
+            : `确认删除公司「${pendingDeleteRows[0]?.companyName ?? ''}」吗？删除后无法恢复。`
         }
-        exportCompaniesCsv(exportRows)
-      }}
-      onImport={(file) => {
-        void importCompaniesCsv(file)
-          .then((summary) => {
-            toast.success(
-              `公司导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
-            )
-            return query.refetch()
-          })
-          .catch((error) => {
-            handleServerError(error)
-          })
-      }}
-    />
+        destructive
+        isLoading={deleteMutation.isPending}
+        confirmText={deleteMutation.isPending ? '删除中…' : '确认删除'}
+        handleConfirm={() =>
+          void deleteMutation.mutate(
+            pendingDeleteRows.map((row) => row.companyId)
+          )
+        }
+      />
+    </>
   )
 }
 
 export function DepartmentsListPage() {
   const search = normalizeListQuerySearch(departmentsRoute.useSearch())
   const navigate = departmentsRoute.useNavigate()
+  const queryClient = useQueryClient()
   const [selectedDepartment, setSelectedDepartment] = useState<DepartmentTreeNode | null>(
     null
   )
+  const [pendingDeleteRows, setPendingDeleteRows] = useState<DepartmentTreeNode[]>([])
+  const clearSelectionRef = useRef<(() => void) | null>(null)
   const query = useQuery({
     queryKey: ['system-departments', 'tree'],
     queryFn: getDepartmentTree,
@@ -1625,6 +1725,26 @@ export function DepartmentsListPage() {
     queryKey: ['system-department-users', selectedDepartment?.departmentId],
     queryFn: () => getDepartmentUsers(selectedDepartment!.departmentId),
     enabled: Boolean(selectedDepartment?.departmentId),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: async (departmentIds: string[]) => {
+      await Promise.all(
+        departmentIds.map((departmentId) => deleteDepartment(departmentId))
+      )
+    },
+    onSuccess: async (_, departmentIds) => {
+      toast.success(
+        departmentIds.length > 1
+          ? `已删除 ${departmentIds.length} 个部门`
+          : '部门已删除'
+      )
+      setPendingDeleteRows([])
+      clearSelectionRef.current?.()
+      clearSelectionRef.current = null
+      await queryClient.invalidateQueries({ queryKey: ['system-departments'] })
+      await query.refetch()
+    },
+    onError: handleServerError,
   })
 
   const rows = useMemo(() => query.data ?? [], [query.data])
@@ -1658,6 +1778,22 @@ export function DepartmentsListPage() {
       },
     ]
   }, [query.data])
+  const groupOptions = useMemo(
+    () => [
+      {
+        field: 'companyName',
+        label: '公司',
+        getValue: (row: DepartmentTreeNode) => row.companyName,
+      },
+      {
+        field: 'status',
+        label: '状态',
+        getValue: (row: DepartmentTreeNode) =>
+          resolveStatusLabel(row.status),
+      },
+    ],
+    []
+  )
 
   return (
     <>
@@ -1667,28 +1803,67 @@ export function DepartmentsListPage() {
         searchPlaceholder='搜索部门名称、所属公司或上级部门'
         search={search}
         navigate={navigate}
-        columns={buildDepartmentColumns(setSelectedDepartment)}
+        columns={buildDepartmentColumns(setSelectedDepartment, (row) => setPendingDeleteRows([row]))}
         data={rows}
         total={countDepartmentNodes(rows)}
-      summaries={summaries}
-      createActionNode={createActionNode}
-      onRefresh={() => void query.refetch()}
-      onExport={(_scope, exportRows) => {
-        exportDepartmentsCsv(exportRows)
-      }}
-      onImport={(file) => {
-        void importDepartmentsCsv(file)
-          .then((summary) => {
-            toast.success(
-              `部门导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
-            )
-            return query.refetch()
-          })
-          .catch((error) => {
-            handleServerError(error)
-          })
-      }}
+        summaries={summaries}
+        createActionNode={createActionNode}
+        onRefresh={() => void query.refetch()}
+        onExport={(_scope, exportRows) => {
+          exportDepartmentsCsv(exportRows)
+        }}
+        onImport={(file) => {
+          void importDepartmentsCsv(file)
+            .then((summary) => {
+              toast.success(
+                `部门导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
+              )
+              return query.refetch()
+            })
+            .catch((error) => {
+              handleServerError(error)
+            })
+        }}
+        enableRowSelection
+        getRowId={(row) => row.departmentId}
+        groupOptions={groupOptions}
+        renderBulkActions={({ selectedRows, clearSelection }) => (
+          <Button
+            variant='destructive'
+            size='sm'
+            onClick={() => {
+              setPendingDeleteRows(selectedRows)
+              clearSelectionRef.current = clearSelection
+            }}
+          >
+            <Trash2 className='mr-2 size-4' />
+            批量删除
+          </Button>
+        )}
         getSubRows={(row) => row.children}
+      />
+      <ConfirmDialog
+        open={pendingDeleteRows.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setPendingDeleteRows([])
+            clearSelectionRef.current = null
+          }
+        }}
+        title={pendingDeleteRows.length > 1 ? '批量删除部门' : '删除部门'}
+        desc={
+          pendingDeleteRows.length > 1
+            ? `确认删除已选中的 ${pendingDeleteRows.length} 个部门吗？删除后无法恢复。`
+            : `确认删除部门「${pendingDeleteRows[0]?.departmentName ?? ''}」吗？删除后无法恢复。`
+        }
+        destructive
+        isLoading={deleteMutation.isPending}
+        confirmText={deleteMutation.isPending ? '删除中…' : '确认删除'}
+        handleConfirm={() =>
+          void deleteMutation.mutate(
+            pendingDeleteRows.map((row) => row.departmentId)
+          )
+        }
       />
       <AssociatedUsersDialog
         open={Boolean(selectedDepartment)}
@@ -1715,7 +1890,10 @@ export function DepartmentsListPage() {
 export function PostsListPage() {
   const search = normalizeListQuerySearch(postsRoute.useSearch())
   const navigate = postsRoute.useNavigate()
+  const queryClient = useQueryClient()
   const [selectedPost, setSelectedPost] = useState<PostRow | null>(null)
+  const [pendingDeleteRows, setPendingDeleteRows] = useState<PostRow[]>([])
+  const clearSelectionRef = useRef<(() => void) | null>(null)
   const query = useQuery({
     queryKey: ['system-posts', search],
     queryFn: () => listPosts(search),
@@ -1730,6 +1908,22 @@ export function PostsListPage() {
     queryKey: ['system-post-users', selectedPost?.postId],
     queryFn: () => getPostUsers(selectedPost!.postId),
     enabled: Boolean(selectedPost?.postId),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: async (postIds: string[]) => {
+      await Promise.all(postIds.map((postId) => deletePost(postId)))
+    },
+    onSuccess: async (_, postIds) => {
+      toast.success(
+        postIds.length > 1 ? `已删除 ${postIds.length} 个岗位` : '岗位已删除'
+      )
+      setPendingDeleteRows([])
+      clearSelectionRef.current?.()
+      clearSelectionRef.current = null
+      await queryClient.invalidateQueries({ queryKey: ['system-posts'] })
+      await query.refetch()
+    },
+    onError: handleServerError,
   })
 
   const rows = useMemo<PostRow[]>(
@@ -1759,7 +1953,7 @@ export function PostsListPage() {
       {
         label: '岗位总量',
         value: `${query.data?.total ?? 0}`,
-        hint: '岗位列表已接通真实接口，可继续扩展兼任岗位和审批职责绑定。',
+        hint: '岗位列表已接通真实接口，可直接维护组织岗位配置。',
       },
       {
         label: '当前页部门数',
@@ -1773,6 +1967,26 @@ export function PostsListPage() {
       },
     ]
   }, [query.data])
+  const groupOptions = useMemo(
+    () => [
+      {
+        field: 'status',
+        label: '状态',
+        getValue: (row: PostRow) => row.status,
+      },
+      {
+        field: 'companyName',
+        label: '公司',
+        getValue: (row: PostRow) => row.companyName,
+      },
+      {
+        field: 'departmentName',
+        label: '部门',
+        getValue: (row: PostRow) => row.departmentName,
+      },
+    ],
+    []
+  )
 
   return (
     <>
@@ -1782,7 +1996,7 @@ export function PostsListPage() {
         searchPlaceholder='搜索岗位名称、所属部门或所属公司'
         search={search}
         navigate={navigate}
-        columns={buildPostColumns(setSelectedPost)}
+        columns={buildPostColumns(setSelectedPost, (row) => setPendingDeleteRows([row]))}
         data={rows}
         total={query.data?.total}
       summaries={summaries}
@@ -1797,8 +2011,8 @@ export function PostsListPage() {
         }
         exportPostsCsv(exportRows, departmentTreeQuery.data ?? [])
       }}
-      onImport={(file) => {
-        void importPostsCsv(file)
+        onImport={(file) => {
+          void importPostsCsv(file)
           .then((summary) => {
             toast.success(
               `岗位导入完成，新增 ${summary.created} 条，跳过 ${summary.skipped} 条。`
@@ -1808,7 +2022,46 @@ export function PostsListPage() {
           .catch((error) => {
             handleServerError(error)
           })
-      }}
+        }}
+        enableRowSelection
+        getRowId={(row) => row.postId}
+        groupOptions={groupOptions}
+        renderBulkActions={({ selectedRows, clearSelection }) => (
+          <Button
+            variant='destructive'
+            size='sm'
+            onClick={() => {
+              setPendingDeleteRows(selectedRows)
+              clearSelectionRef.current = clearSelection
+            }}
+          >
+            <Trash2 className='mr-2 size-4' />
+            批量删除
+          </Button>
+        )}
+      />
+      <ConfirmDialog
+        open={pendingDeleteRows.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setPendingDeleteRows([])
+            clearSelectionRef.current = null
+          }
+        }}
+        title={pendingDeleteRows.length > 1 ? '批量删除岗位' : '删除岗位'}
+        desc={
+          pendingDeleteRows.length > 1
+            ? `确认删除已选中的 ${pendingDeleteRows.length} 个岗位吗？删除后无法恢复。`
+            : `确认删除岗位「${pendingDeleteRows[0]?.postName ?? ''}」吗？删除后无法恢复。`
+        }
+        destructive
+        isLoading={deleteMutation.isPending}
+        confirmText={deleteMutation.isPending ? '删除中…' : '确认删除'}
+        handleConfirm={() =>
+          void deleteMutation.mutate(
+            pendingDeleteRows.map((row) => row.postId)
+          )
+        }
       />
       <AssociatedUsersDialog
         open={Boolean(selectedPost)}
@@ -1871,7 +2124,7 @@ export function CompanyDetailPage({ companyId }: { companyId: string }) {
   return (
     <PageShell
       title='公司详情'
-      description='公司详情页独立展示基础信息和当前状态，便于后续扩展租户配置和业务边界。'
+      description='公司详情页独立展示基础信息和当前状态。'
       actions={
         <>
           <Button asChild>
@@ -1916,9 +2169,7 @@ export function CompanyDetailPage({ companyId }: { companyId: string }) {
         <Alert>
           <ShieldCheck />
           <AlertTitle>页面定位</AlertTitle>
-          <AlertDescription>
-            公司详情页为独立页面，后续会继续承载公司级业务配置与 AI 功能授权边界。
-          </AlertDescription>
+          <AlertDescription>公司详情页为独立页面。</AlertDescription>
         </Alert>
       </div>
     </PageShell>
@@ -2081,7 +2332,7 @@ export function PostDetailPage({ postId }: { postId: string }) {
   return (
     <PageShell
       title='岗位详情'
-      description='岗位详情页独立展示公司、部门和岗位基础信息，后续继续扩展审批职责与委派策略。'
+      description='岗位详情页独立展示公司、部门和岗位基础信息。'
       actions={
         <>
           <Button asChild>

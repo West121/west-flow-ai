@@ -1,4 +1,8 @@
-export { ProTable } from './pro-table'
+export {
+  ProTable,
+  type ProTableBulkActionsRenderContext,
+  type ProTableGroupOption,
+} from './pro-table'
 export { ProTableBoard, type ProTableBoardColumn } from './pro-table-board'
 export { resolveDensityClassName } from './pro-table-density-utils'
 export {

@@ -16,6 +16,7 @@ const {
   },
   systemUserApiMocks: {
     createSystemUser: vi.fn(),
+    deleteSystemUser: vi.fn(),
     getSystemUserDetail: vi.fn(),
     getSystemUserFormOptions: vi.fn(),
     listSystemUsers: vi.fn(),

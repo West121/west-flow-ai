@@ -5,6 +5,7 @@ import com.westflow.system.org.post.response.SystemPostFormOptionsResponse;
 import com.westflow.system.org.post.response.SystemPostListItemResponse;
 import com.westflow.system.org.post.model.SystemPostRecord;
 import java.util.List;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -275,4 +276,10 @@ public interface SystemPostMapper {
             WHERE id = #{id}
             """)
     int updatePost(SystemPostRecord entity);
+
+    @Select("SELECT COUNT(1) FROM wf_user_post WHERE post_id = #{postId}")
+    long countUserAssignmentsByPostId(@Param("postId") String postId);
+
+    @Delete("DELETE FROM wf_post WHERE id = #{postId}")
+    int deletePost(@Param("postId") String postId);
 }

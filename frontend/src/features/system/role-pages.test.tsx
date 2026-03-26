@@ -13,6 +13,7 @@ const {
   routeNavigateMock: vi.fn(),
   useSearchMock: vi.fn(),
   systemRoleApiMocks: {
+    deleteRole: vi.fn(),
     getRoleUsers: vi.fn(),
     listRoles: vi.fn(),
   },

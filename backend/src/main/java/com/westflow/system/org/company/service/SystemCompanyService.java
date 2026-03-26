@@ -120,6 +120,34 @@ public class SystemCompanyService {
         return new SystemCompanyMutationResponse(companyId);
     }
 
+    /**
+     * 删除公司。
+     */
+    @Transactional
+    public SystemCompanyMutationResponse delete(String companyId) {
+        SystemCompanyDetailResponse detail = detail(companyId);
+        long departmentCount = systemCompanyMapper.countDepartmentsByCompanyId(companyId);
+        if (departmentCount > 0) {
+            throw new ContractException(
+                    "BIZ.COMPANY_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前公司下仍有关联部门，无法删除",
+                    Map.of("companyId", companyId, "departmentCount", departmentCount)
+            );
+        }
+        long userCount = systemCompanyMapper.countUsersByCompanyId(companyId);
+        if (userCount > 0) {
+            throw new ContractException(
+                    "BIZ.COMPANY_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前公司下仍有关联用户，无法删除",
+                    Map.of("companyId", companyId, "userCount", userCount)
+            );
+        }
+        systemCompanyMapper.deleteCompany(detail.companyId());
+        return new SystemCompanyMutationResponse(companyId);
+    }
+
     private void validateCompanyName(String companyName, String excludeCompanyId) {
         Long total = systemCompanyMapper.countByCompanyName(companyName, excludeCompanyId);
         if (total != null && total > 0) {

@@ -5,6 +5,7 @@ import com.westflow.system.org.department.response.SystemDepartmentDetailRespons
 import com.westflow.system.org.department.response.SystemDepartmentFormOptionsResponse;
 import com.westflow.system.org.department.response.SystemDepartmentListItemResponse;
 import java.util.List;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -441,4 +442,16 @@ public interface SystemDepartmentMapper {
             @Param("companyId") String companyId,
             @Param("rootDepartmentId") String rootDepartmentId
     );
+
+    @Select("SELECT COUNT(1) FROM wf_department WHERE parent_department_id = #{departmentId}")
+    long countChildrenByParentDepartmentId(@Param("departmentId") String departmentId);
+
+    @Select("SELECT COUNT(1) FROM wf_post WHERE department_id = #{departmentId}")
+    long countPostsByDepartmentId(@Param("departmentId") String departmentId);
+
+    @Select("SELECT COUNT(1) FROM wf_user WHERE active_department_id = #{departmentId}")
+    long countUsersByDepartmentId(@Param("departmentId") String departmentId);
+
+    @Delete("DELETE FROM wf_department WHERE id = #{departmentId}")
+    int deleteDepartment(@Param("departmentId") String departmentId);
 }

@@ -202,6 +202,12 @@ public interface SystemRoleMapper {
     @Select("SELECT COUNT(1) FROM wf_user WHERE id = #{userId}")
     long countUserById(@Param("userId") String userId);
 
+    @Select("SELECT COUNT(1) FROM wf_user_role WHERE role_id = #{roleId}")
+    long countUserRolesByRoleId(@Param("roleId") String roleId);
+
+    @Select("SELECT COUNT(1) FROM wf_user_post_role WHERE role_id = #{roleId}")
+    long countUserPostRolesByRoleId(@Param("roleId") String roleId);
+
     @Insert("""
             INSERT INTO wf_role (
               id,
@@ -242,6 +248,9 @@ public interface SystemRoleMapper {
 
     @Delete("DELETE FROM wf_role_data_scope WHERE role_id = #{roleId}")
     int deleteRoleDataScopes(@Param("roleId") String roleId);
+
+    @Delete("DELETE FROM wf_role WHERE id = #{roleId}")
+    int deleteRole(@Param("roleId") String roleId);
 
     @Insert("""
             INSERT INTO wf_role_menu (

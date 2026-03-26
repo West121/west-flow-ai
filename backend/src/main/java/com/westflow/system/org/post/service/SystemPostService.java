@@ -153,6 +153,25 @@ public class SystemPostService {
         return new SystemPostMutationResponse(postId);
     }
 
+    /**
+     * 删除岗位。
+     */
+    @Transactional
+    public SystemPostMutationResponse delete(String postId) {
+        SystemPostDetailResponse detail = detail(postId);
+        long assignmentCount = systemPostMapper.countUserAssignmentsByPostId(postId);
+        if (assignmentCount > 0) {
+            throw new ContractException(
+                    "BIZ.POST_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前岗位仍有关联任职，无法删除",
+                    Map.of("postId", postId, "assignmentCount", assignmentCount)
+            );
+        }
+        systemPostMapper.deletePost(detail.postId());
+        return new SystemPostMutationResponse(postId);
+    }
+
     private SystemDepartmentDetailResponse validateDepartmentExists(String departmentId) {
         SystemDepartmentDetailResponse department = systemDepartmentMapper.selectDetail(departmentId);
         if (department == null) {

@@ -154,3 +154,13 @@ export async function getRoleUsers(
 
   return unwrapResponse(response)
 }
+
+export async function deleteRole(
+  roleId: string
+): Promise<{ roleId: string }> {
+  const response = await apiClient.delete<ApiSuccessResponse<{ roleId: string }>>(
+    `/system/roles/${roleId}`
+  )
+
+  return unwrapResponse(response)
+}

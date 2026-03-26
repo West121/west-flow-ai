@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useMemo, useState } from 'react'
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
@@ -23,6 +23,7 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
   Card,
   CardContent,
@@ -56,6 +57,7 @@ import { getApiErrorResponse } from '@/lib/api/client'
 import { handleServerError } from '@/lib/handle-server-error'
 import {
   createRole,
+  deleteRole,
   getRoleDetail,
   getRoleFormOptions,
   getRoleUsers,
@@ -395,7 +397,8 @@ function PageLoadingState({
 }
 
 function buildRoleColumns(
-  onShowUsers: (row: SystemRoleRecord) => void
+  onShowUsers: (row: SystemRoleRecord) => void,
+  onDelete: (row: SystemRoleRecord) => void
 ): ColumnDef<SystemRoleRecord>[] {
   return [
   {
@@ -467,6 +470,13 @@ function buildRoleColumns(
             编辑
           </Link>
         </Button>
+        <Button
+          variant='ghost'
+          className='h-8 px-2 text-destructive hover:text-destructive'
+          onClick={() => onDelete(row.original)}
+        >
+          删除
+        </Button>
       </div>
     ),
   },
@@ -522,7 +532,10 @@ function ScopeValueSelect({
 export function RolesListPage() {
   const search = normalizeListQuerySearch(rolesRoute.useSearch())
   const navigate = rolesRoute.useNavigate()
+  const queryClient = useQueryClient()
   const [selectedRole, setSelectedRole] = useState<SystemRoleRecord | null>(null)
+  const [pendingDeleteRoles, setPendingDeleteRoles] = useState<SystemRoleRecord[]>([])
+  const clearSelectionRef = useRef<(() => void) | null>(null)
   const query = useQuery({
     queryKey: ['system-roles', search],
     queryFn: () => listRoles(search),
@@ -531,6 +544,20 @@ export function RolesListPage() {
     queryKey: ['system-role-users', selectedRole?.roleId],
     queryFn: () => getRoleUsers(selectedRole!.roleId),
     enabled: Boolean(selectedRole?.roleId),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: async (roleIds: string[]) => {
+      await Promise.all(roleIds.map((roleId) => deleteRole(roleId)))
+    },
+    onSuccess: async (_, roleIds) => {
+      toast.success(roleIds.length > 1 ? `已删除 ${roleIds.length} 个角色` : '角色已删除')
+      setPendingDeleteRoles([])
+      clearSelectionRef.current?.()
+      clearSelectionRef.current = null
+      await queryClient.invalidateQueries({ queryKey: ['system-roles'] })
+      await query.refetch()
+    },
+    onError: handleServerError,
   })
 
   const summaries = useMemo(() => {
@@ -552,15 +579,31 @@ export function RolesListPage() {
       {
         label: '当前页启用',
         value: String(enabledCount),
-        hint: `系统角色 ${systemCount} 个，支持继续扩展业务管理员和 AI 专用角色。`,
+        hint: `系统角色 ${systemCount} 个，当前页可直接查看系统与业务角色分布。`,
       },
       {
         label: '菜单授权数',
         value: String(menuCount),
-        hint: '菜单权限矩阵已经与角色绑定，后续可以继续补按钮级细粒度授权。'
+        hint: '菜单权限矩阵已经与角色绑定。'
       },
     ]
   }, [query.data])
+  const groupOptions = useMemo(
+    () => [
+      {
+        field: 'status',
+        label: '状态',
+        getValue: (row: SystemRoleRecord) => resolveStatusLabel(row.status),
+      },
+      {
+        field: 'roleCategory',
+        label: '角色分类',
+        getValue: (row: SystemRoleRecord) =>
+          resolveRoleCategoryLabel(row.roleCategory),
+      },
+    ],
+    []
+  )
 
   if (query.isLoading) {
     return (
@@ -592,7 +635,7 @@ export function RolesListPage() {
         searchPlaceholder='搜索角色名称、角色编码或描述'
         search={search}
         navigate={navigate}
-        columns={buildRoleColumns(setSelectedRole)}
+        columns={buildRoleColumns(setSelectedRole, (row) => setPendingDeleteRoles([row]))}
         data={query.data.records}
         total={query.data.total}
         summaries={summaries}
@@ -600,6 +643,45 @@ export function RolesListPage() {
           label: '新建角色',
           href: '/system/roles/create',
         }}
+        enableRowSelection
+        getRowId={(row) => row.roleId}
+        groupOptions={groupOptions}
+        renderBulkActions={({ selectedRows, clearSelection }) => (
+          <Button
+            variant='destructive'
+            size='sm'
+            onClick={() => {
+              setPendingDeleteRoles(selectedRows)
+              clearSelectionRef.current = clearSelection
+            }}
+          >
+            <Trash2 className='mr-2 size-4' />
+            批量删除
+          </Button>
+        )}
+      />
+      <ConfirmDialog
+        open={pendingDeleteRoles.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setPendingDeleteRoles([])
+            clearSelectionRef.current = null
+          }
+        }}
+        title={pendingDeleteRoles.length > 1 ? '批量删除角色' : '删除角色'}
+        desc={
+          pendingDeleteRoles.length > 1
+            ? `确认删除已选中的 ${pendingDeleteRoles.length} 个角色吗？删除后无法恢复。`
+            : `确认删除角色「${pendingDeleteRoles[0]?.roleName ?? ''}」吗？删除后无法恢复。`
+        }
+        destructive
+        isLoading={deleteMutation.isPending}
+        confirmText={deleteMutation.isPending ? '删除中…' : '确认删除'}
+        handleConfirm={() =>
+          void deleteMutation.mutate(
+            pendingDeleteRoles.map((row) => row.roleId)
+          )
+        }
       />
       <AssociatedUsersDialog
         open={Boolean(selectedRole)}
@@ -837,7 +919,7 @@ function RoleFormPage({
           <CardHeader>
             <CardTitle>角色表单</CardTitle>
             <CardDescription>
-              角色承载菜单授权与数据权限范围，是后续审批、AI 助手和业务列表鉴权的统一入口。
+              角色统一承载菜单授权与数据权限范围。
             </CardDescription>
           </CardHeader>
           <CardContent>

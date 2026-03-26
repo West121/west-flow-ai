@@ -304,6 +304,43 @@ public class SystemDepartmentService {
         return new SystemDepartmentMutationResponse(departmentId);
     }
 
+    /**
+     * 删除部门。
+     */
+    @Transactional
+    public SystemDepartmentMutationResponse delete(String departmentId) {
+        SystemDepartmentDetailResponse detail = detail(departmentId);
+        long childCount = systemDepartmentMapper.countChildrenByParentDepartmentId(departmentId);
+        if (childCount > 0) {
+            throw new ContractException(
+                    "BIZ.DEPARTMENT_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前部门下仍有子部门，无法删除",
+                    Map.of("departmentId", departmentId, "childCount", childCount)
+            );
+        }
+        long postCount = systemDepartmentMapper.countPostsByDepartmentId(departmentId);
+        if (postCount > 0) {
+            throw new ContractException(
+                    "BIZ.DEPARTMENT_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前部门下仍有关联岗位，无法删除",
+                    Map.of("departmentId", departmentId, "postCount", postCount)
+            );
+        }
+        long userCount = systemDepartmentMapper.countUsersByDepartmentId(departmentId);
+        if (userCount > 0) {
+            throw new ContractException(
+                    "BIZ.DEPARTMENT_DELETE_BLOCKED",
+                    HttpStatus.CONFLICT,
+                    "当前部门下仍有关联用户，无法删除",
+                    Map.of("departmentId", departmentId, "userCount", userCount)
+            );
+        }
+        systemDepartmentMapper.deleteDepartment(detail.departmentId());
+        return new SystemDepartmentMutationResponse(departmentId);
+    }
+
     private void validateCompanyExists(String companyId) {
         if (systemCompanyMapper.selectDetail(companyId) == null) {
             throw new ContractException(

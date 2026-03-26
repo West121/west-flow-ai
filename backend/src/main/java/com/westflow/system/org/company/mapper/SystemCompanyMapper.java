@@ -5,6 +5,7 @@ import com.westflow.system.org.company.response.SystemCompanyFormOptionsResponse
 import com.westflow.system.org.company.response.SystemCompanyListItemResponse;
 import com.westflow.system.org.company.model.SystemCompanyRecord;
 import java.util.List;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -152,4 +153,13 @@ public interface SystemCompanyMapper {
             WHERE id = #{id}
             """)
     int updateCompany(SystemCompanyRecord entity);
+
+    @Select("SELECT COUNT(1) FROM wf_department WHERE company_id = #{companyId}")
+    long countDepartmentsByCompanyId(@Param("companyId") String companyId);
+
+    @Select("SELECT COUNT(1) FROM wf_user WHERE company_id = #{companyId}")
+    long countUsersByCompanyId(@Param("companyId") String companyId);
+
+    @Delete("DELETE FROM wf_company WHERE id = #{companyId}")
+    int deleteCompany(@Param("companyId") String companyId);
 }

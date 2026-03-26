@@ -1248,7 +1248,7 @@ function plmSummaryItems(total: number, search: ListQuerySearch) {
   ]
 }
 
-function PlmBillListPage<T>({
+function PlmBillListPage<T extends object>({
   title,
   description,
   search,

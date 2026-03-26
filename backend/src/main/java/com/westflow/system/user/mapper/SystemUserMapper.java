@@ -529,6 +529,9 @@ public interface SystemUserMapper {
             """)
     int updateUser(SystemUserRecord entity);
 
+    @Delete("DELETE FROM wf_user WHERE id = #{userId}")
+    int deleteUser(@Param("userId") String userId);
+
     @Delete("DELETE FROM wf_user_post WHERE user_id = #{userId}")
     int deleteUserPosts(@Param("userId") String userId);
 

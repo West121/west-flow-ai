@@ -4,7 +4,11 @@ import { Link } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
 import { type ListQuerySearch } from '@/features/shared/table/query-contract'
-import { ProTable } from '@/features/shared/pro-table'
+import {
+  ProTable,
+  type ProTableBulkActionsRenderContext,
+  type ProTableGroupOption,
+} from '@/features/shared/pro-table'
 
 type SummaryItem = {
   label: string
@@ -23,15 +27,22 @@ type ResourceListPageProps<TData> = {
   data: TData[]
   total?: number
   summaries: SummaryItem[]
+  topContent?: ReactNode
   createAction?: {
     label: string
     href: string
   }
   extraActions?: ReactNode
+  enableRowSelection?: boolean
+  getRowId?: (row: TData, index: number) => string
+  groupOptions?: ProTableGroupOption<TData>[]
+  renderBulkActions?: (
+    context: ProTableBulkActionsRenderContext<TData>
+  ) => ReactNode
 }
 
 // 列表页通用骨架，负责摘要区、表格区和分页查询态。
-export function ResourceListPage<TData>({
+export function ResourceListPage<TData extends object>({
   title,
   description,
   endpoint: _endpoint,
@@ -42,8 +53,13 @@ export function ResourceListPage<TData>({
   data,
   total,
   summaries,
+  topContent,
   createAction,
   extraActions,
+  enableRowSelection,
+  getRowId,
+  groupOptions,
+  renderBulkActions,
 }: ResourceListPageProps<TData>) {
   const createActionNode = createAction ? (
     <Button asChild>
@@ -64,9 +80,14 @@ export function ResourceListPage<TData>({
       data={data}
       total={total}
       summaries={summaries}
+      topContent={topContent}
       extraActions={extraActions}
       onExport={() => undefined}
       createActionNode={createActionNode}
+      enableRowSelection={enableRowSelection}
+      getRowId={getRowId}
+      groupOptions={groupOptions}
+      renderBulkActions={renderBulkActions}
     />
   )
 }

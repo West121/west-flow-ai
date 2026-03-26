@@ -6,6 +6,13 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { DataTableViewOptions } from '@/components/data-table'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   type ProTableDensityMode,
   ProTableDensity,
 } from './pro-table-density'
@@ -32,6 +39,9 @@ export function ProTableToolbar<TData>({
   viewMode = 'table',
   onViewModeChange,
   lastRefreshedLabel,
+  groupOptions = [],
+  activeGroupField,
+  onGroupFieldChange,
 }: {
   table: Table<TData>
   total: number
@@ -51,6 +61,12 @@ export function ProTableToolbar<TData>({
   viewMode?: 'table' | 'board'
   onViewModeChange?: (value: 'table' | 'board') => void
   lastRefreshedLabel?: string
+  groupOptions?: Array<{
+    field: string
+    label: string
+  }>
+  activeGroupField?: string
+  onGroupFieldChange?: (field?: string) => void
 }) {
   return (
     <div className='flex flex-col gap-4'>
@@ -126,6 +142,26 @@ export function ProTableToolbar<TData>({
         <div className='flex flex-wrap items-center justify-end gap-2'>
           {viewMode === 'table' ? (
             <>
+              {groupOptions && groupOptions.length > 0 ? (
+                <Select
+                  value={activeGroupField ?? '__none'}
+                  onValueChange={(value) =>
+                    onGroupFieldChange?.(value === '__none' ? undefined : value)
+                  }
+                >
+                  <SelectTrigger className='w-[150px]'>
+                    <SelectValue placeholder='按字段分组' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='__none'>不分组</SelectItem>
+                    {groupOptions.map((option) => (
+                      <SelectItem key={option.field} value={option.field}>
+                        按{option.label}分组
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <ProTableDensity value={density} onValueChange={onDensityChange} />
               <DataTableViewOptions table={table} />
             </>

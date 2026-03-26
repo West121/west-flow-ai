@@ -38,7 +38,7 @@ export function DataTableColumnHeader<TData, TValue>({
           <Button
             variant='ghost'
             size='sm'
-            className='h-8 data-[state=open]:bg-accent'
+            className='h-8 px-2 font-medium text-foreground hover:bg-transparent data-[state=open]:bg-background/80'
           >
             <span>{title}</span>
             {column.getIsSorted() === 'desc' ? (
@@ -53,18 +53,18 @@ export function DataTableColumnHeader<TData, TValue>({
         <DropdownMenuContent align='start'>
           <DropdownMenuItem onClick={() => column.toggleSorting(false)}>
             <ArrowUpIcon className='size-3.5 text-muted-foreground/70' />
-            Asc
+            升序
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => column.toggleSorting(true)}>
             <ArrowDownIcon className='size-3.5 text-muted-foreground/70' />
-            Desc
+            降序
           </DropdownMenuItem>
           {column.getCanHide() && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => column.toggleVisibility(false)}>
                 <EyeNoneIcon className='size-3.5 text-muted-foreground/70' />
-                Hide
+                隐藏列
               </DropdownMenuItem>
             </>
           )}

@@ -60,6 +60,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { MultiSelectDropdown } from '@/components/multi-select-dropdown'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { getApiErrorResponse } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
@@ -69,6 +70,7 @@ import {
 } from '@/lib/api/system-org'
 import {
   createSystemUser,
+  deleteSystemUser,
   getSystemUserDetail,
   getSystemUserFormOptions,
   listSystemUsers,
@@ -160,10 +162,9 @@ function resolvePrimaryAssignmentValues(detail?: SystemUserDetail) {
       detail?.departmentName || primaryAssignment?.departmentName || '',
     postId: detail?.postId || primaryAssignment?.postId || '',
     postName: detail?.postName || primaryAssignment?.postName || '',
-    roleIds:
-      detail?.roleIds?.length > 0
-        ? detail.roleIds
-        : primaryAssignment?.roleIds ?? [],
+    roleIds: (detail?.roleIds?.length ?? 0) > 0
+      ? (detail?.roleIds ?? [])
+      : (primaryAssignment?.roleIds ?? []),
   }
 }
 
@@ -304,7 +305,10 @@ function applySystemUserFieldErrors(
   return apiError
 }
 
-const userColumns: ColumnDef<UserRow>[] = [
+function buildUserColumns(
+  onDelete: (row: UserRow) => void
+): ColumnDef<UserRow>[] {
+  return [
   {
     accessorKey: 'displayName',
     header: '用户姓名',
@@ -366,10 +370,18 @@ const userColumns: ColumnDef<UserRow>[] = [
             编辑
           </Link>
         </Button>
+        <Button
+          variant='ghost'
+          className='h-8 px-2 text-destructive hover:text-destructive'
+          onClick={() => onDelete(row.original)}
+        >
+          删除
+        </Button>
       </div>
     ),
   },
 ]
+}
 
 function PageErrorState({
   title,
@@ -967,7 +979,7 @@ function SystemUserFormPage({
                         <Input placeholder='请输入邮箱地址' {...field} />
                       </FormControl>
                       <FormDescription>
-                        后续可用于邮件提醒和 AI 审批摘要分发。
+                        用于邮件通知和账号联系。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -1020,7 +1032,7 @@ function SystemUserFormPage({
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        业务数据隔离和 AI 能力授权将以公司维度继续扩展。
+                        公司字段用于确定用户当前所属的组织身份范围。
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -1425,19 +1437,6 @@ function SystemUserFormPage({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>后续扩展</CardTitle>
-              <CardDescription>
-                下一阶段会继续把代理关系、数据权限和任职审批策略加进这个页面。
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
-              <p>1. 任职级菜单与数据权限矩阵</p>
-              <p>2. 代理、委派、离职转办设置</p>
-              <p>3. 任职审批职责和负责人策略</p>
-            </CardContent>
-          </Card>
         </div>
       </div>
     </PageShell>
@@ -1447,10 +1446,31 @@ function SystemUserFormPage({
 export function UsersListPage() {
   const search = normalizeListQuerySearch(usersListRoute.useSearch())
   const navigate = usersListRoute.useNavigate()
+  const queryClient = useQueryClient()
+  const [pendingDeleteRows, setPendingDeleteRows] = useState<UserRow[]>([])
+  const clearSelectionRef = useRef<(() => void) | null>(null)
   const query = useQuery({
     queryKey: ['system-users', search],
     queryFn: () => listSystemUsers(search),
     placeholderData: (previous) => previous,
+  })
+  const deleteMutation = useMutation({
+    mutationFn: async (userIds: string[]) => {
+      await Promise.all(userIds.map((userId) => deleteSystemUser(userId)))
+    },
+    onSuccess: async (_, userIds) => {
+      toast.success(
+        userIds.length > 1
+          ? `已删除 ${userIds.length} 个用户`
+          : '用户已删除'
+      )
+      setPendingDeleteRows([])
+      clearSelectionRef.current?.()
+      clearSelectionRef.current = null
+      await queryClient.invalidateQueries({ queryKey: ['system-users'] })
+      await query.refetch()
+    },
+    onError: handleServerError,
   })
 
   const rows = useMemo<UserRow[]>(
@@ -1496,20 +1516,76 @@ export function UsersListPage() {
       },
     ]
   }, [query.data])
+  const groupOptions = useMemo(
+    () => [
+      {
+        field: 'status',
+        label: '状态',
+        getValue: (row: UserRow) => row.status,
+      },
+      {
+        field: 'departmentName',
+        label: '部门',
+        getValue: (row: UserRow) => row.departmentName,
+      },
+    ],
+    []
+  )
 
   return (
-    <ResourceListPage<UserRow>
-      title='系统用户列表'
-      description='系统用户列表页已接通真实后端分页接口，保留关键词模糊查询、分页、排序和独立详情/编辑页面跳转。'
-      endpoint='/api/v1/system/users/page'
-      searchPlaceholder='搜索姓名、账号、手机号、邮箱、部门或岗位'
-      search={search}
-      navigate={navigate}
-      columns={userColumns}
-      data={rows}
-      createAction={{ label: '新建系统用户', href: '/system/users/create' }}
-      summaries={summaries}
-    />
+    <>
+      <ResourceListPage<UserRow>
+        title='系统用户列表'
+        description='系统用户列表页已接通真实后端分页接口，保留关键词模糊查询、分页、排序和独立详情/编辑页面跳转。'
+        endpoint='/api/v1/system/users/page'
+        searchPlaceholder='搜索姓名、账号、手机号、邮箱、部门或岗位'
+        search={search}
+        navigate={navigate}
+        columns={buildUserColumns((row) => setPendingDeleteRows([row]))}
+        data={rows}
+        createAction={{ label: '新建系统用户', href: '/system/users/create' }}
+        summaries={summaries}
+        enableRowSelection
+        getRowId={(row) => row.userId}
+        groupOptions={groupOptions}
+        renderBulkActions={({ selectedRows, clearSelection }) => (
+          <Button
+            variant='destructive'
+            size='sm'
+            onClick={() => {
+              setPendingDeleteRows(selectedRows)
+              clearSelectionRef.current = clearSelection
+            }}
+          >
+            <Trash2 className='mr-2 size-4' />
+            批量删除
+          </Button>
+        )}
+      />
+      <ConfirmDialog
+        open={pendingDeleteRows.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setPendingDeleteRows([])
+            clearSelectionRef.current = null
+          }
+        }}
+        title={pendingDeleteRows.length > 1 ? '批量删除用户' : '删除用户'}
+        desc={
+          pendingDeleteRows.length > 1
+            ? `确认删除已选中的 ${pendingDeleteRows.length} 个用户吗？删除后无法恢复。`
+            : `确认删除用户「${pendingDeleteRows[0]?.displayName ?? ''}」吗？删除后无法恢复。`
+        }
+        destructive
+        isLoading={deleteMutation.isPending}
+        confirmText={deleteMutation.isPending ? '删除中…' : '确认删除'}
+        handleConfirm={() =>
+          void deleteMutation.mutate(
+            pendingDeleteRows.map((row) => row.userId)
+          )
+        }
+      />
+    </>
   )
 }
 
@@ -1575,7 +1651,7 @@ export function UserDetailPage({ userId }: { userId: string }) {
   return (
     <PageShell
       title='系统用户详情'
-      description='详情页独立展示基础身份、组织归属和当前启用状态，便于后续继续扩展角色、代理和 AI 能力信息。'
+      description='详情页独立展示基础身份、组织归属和当前启用状态。'
       actions={
         <>
           <Button asChild>
@@ -1651,9 +1727,7 @@ export function UserDetailPage({ userId }: { userId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>组织身份</CardTitle>
-              <CardDescription>
-                当前阶段聚焦公司、部门和主岗位，后续会在这里继续扩展角色与代理链路。
-              </CardDescription>
+              <CardDescription>展示当前主任职对应的公司、部门和岗位。</CardDescription>
             </CardHeader>
             <CardContent className='grid gap-3 sm:grid-cols-2'>
               <UserDetailMetric
@@ -1684,9 +1758,7 @@ export function UserDetailPage({ userId }: { userId: string }) {
           <Card>
             <CardHeader>
               <CardTitle>身份摘要</CardTitle>
-              <CardDescription>
-                当前是第一版真实详情页，后续会继续扩展角色集合、代理关系和 AI 权限摘要。
-              </CardDescription>
+              <CardDescription>汇总当前账号和主任职的关键标识。</CardDescription>
             </CardHeader>
             <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
               <p>用户 ID：{detail.userId}</p>
