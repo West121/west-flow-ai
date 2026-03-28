@@ -27,6 +27,10 @@ import {
 import { WorkflowFieldSelector, WorkflowFormulaEditor } from './expression-tools'
 import { WorkflowPrincipalPickerField } from './selection-picker'
 import {
+  isWorkflowCollaborationNodeKind,
+  resolveWorkflowCollaborationNodeLabel,
+} from './collaboration'
+import {
   type WorkflowFieldBinding,
   type WorkflowConditionOperator,
   type WorkflowGatewayDirection,
@@ -41,6 +45,7 @@ import {
   type WorkflowDynamicBuilderSourceMode,
   type WorkflowDynamicBuilderTerminatePolicy,
   type WorkflowDynamicBuildMode,
+  type WorkflowEscalationTargetMode,
   type WorkflowEdge,
   type WorkflowNode,
   type WorkflowProcessFormField,
@@ -200,6 +205,11 @@ const timeoutActions = [
   { value: 'REJECT', label: '自动拒绝' },
 ] satisfies Array<{ value: WorkflowTimeoutApprovalAction; label: string }>
 
+const escalationTargetModes = [
+  { value: 'ROLE', label: '角色' },
+  { value: 'USER', label: '指定人员' },
+] satisfies Array<{ value: WorkflowEscalationTargetMode; label: string }>
+
 const operationOptions = [
   { key: 'APPROVE', label: '通过' },
   { key: 'REJECT', label: '拒绝' },
@@ -245,6 +255,10 @@ const nodeConfigFormSchema = z
       'condition',
       'inclusive',
       'cc',
+      'supervise',
+      'meeting',
+      'read',
+      'circulate',
       'timer',
       'trigger',
       'parallel',
@@ -287,6 +301,16 @@ const nodeConfigFormSchema = z
         firstReminderAfterMinutes: z.string(),
         repeatIntervalMinutes: z.string(),
         maxTimes: z.string(),
+        channels: z.array(
+          z.enum(['IN_APP', 'EMAIL', 'WEBHOOK', 'SMS', 'WECHAT', 'DINGTALK'])
+        ),
+      }),
+      escalationPolicy: z.object({
+        enabled: z.boolean(),
+        afterMinutes: z.string(),
+        targetMode: z.enum(['USER', 'ROLE']),
+        targetUserIds: z.string(),
+        targetRoleCodes: z.string(),
         channels: z.array(
           z.enum(['IN_APP', 'EMAIL', 'WEBHOOK', 'SMS', 'WECHAT', 'DINGTALK'])
         ),
@@ -598,27 +622,76 @@ const nodeConfigFormSchema = z
           })
         }
       }
+
+      if (values.approver.escalationPolicy.enabled) {
+        if (!values.approver.escalationPolicy.afterMinutes.trim()) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '请输入升级分钟数',
+            path: ['approver', 'escalationPolicy', 'afterMinutes'],
+          })
+        } else {
+          const afterMinutes = Number(values.approver.escalationPolicy.afterMinutes)
+          if (!Number.isFinite(afterMinutes) || afterMinutes <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: '升级分钟数必须是大于 0 的数字',
+              path: ['approver', 'escalationPolicy', 'afterMinutes'],
+            })
+          }
+        }
+
+        if (
+          values.approver.escalationPolicy.targetMode === 'USER'
+          && parseListValue(values.approver.escalationPolicy.targetUserIds).length === 0
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '请选择至少一个升级人员',
+            path: ['approver', 'escalationPolicy', 'targetUserIds'],
+          })
+        }
+
+        if (
+          values.approver.escalationPolicy.targetMode === 'ROLE'
+          && parseListValue(values.approver.escalationPolicy.targetRoleCodes).length === 0
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '请选择至少一个升级角色',
+            path: ['approver', 'escalationPolicy', 'targetRoleCodes'],
+          })
+        }
+
+        if (values.approver.escalationPolicy.channels.length === 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: '请至少选择一个升级渠道',
+            path: ['approver', 'escalationPolicy', 'channels'],
+          })
+        }
+      }
     }
 
-    if (values.kind === 'cc') {
+    if (isWorkflowCollaborationNodeKind(values.kind)) {
       if (values.cc.targetMode === 'USER' && !values.cc.userIds.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: '请选择至少一个抄送人',
+          message: '请选择至少一个协同接收人',
           path: ['cc', 'userIds'],
         })
       }
       if (values.cc.targetMode === 'ROLE' && !values.cc.roleCodes.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: '请选择至少一个抄送角色',
+          message: '请选择至少一个协同角色',
           path: ['cc', 'roleCodes'],
         })
       }
       if (values.cc.targetMode === 'DEPARTMENT' && !values.cc.departmentRef.trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: '请选择抄送部门',
+          message: '请选择协同部门',
           path: ['cc', 'departmentRef'],
         })
       }
@@ -1200,6 +1273,7 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
   const voteRule = (config.voteRule ?? {}) as Record<string, unknown>
   const timeoutPolicy = (config.timeoutPolicy ?? {}) as Record<string, unknown>
   const reminderPolicy = (config.reminderPolicy ?? {}) as Record<string, unknown>
+  const escalationPolicy = (config.escalationPolicy ?? {}) as Record<string, unknown>
   const assignment = (config.assignment ?? {}) as Record<string, unknown>
   const targets = (config.targets ?? {}) as Record<string, unknown>
   const timerConfig = config as Record<string, unknown>
@@ -1299,6 +1373,35 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
             : String(reminderPolicy.maxTimes),
         channels: Array.isArray(reminderPolicy.channels)
           ? reminderPolicy.channels.filter(
+              (channel): channel is WorkflowReminderChannel =>
+                channel === 'IN_APP' ||
+                channel === 'EMAIL' ||
+                channel === 'WEBHOOK' ||
+                channel === 'SMS' ||
+                channel === 'WECHAT' ||
+                channel === 'DINGTALK'
+            )
+          : ['IN_APP'],
+      },
+      escalationPolicy: {
+        enabled: Boolean(escalationPolicy.enabled ?? false),
+        afterMinutes:
+          escalationPolicy.afterMinutes === null || escalationPolicy.afterMinutes === undefined
+            ? ''
+            : String(escalationPolicy.afterMinutes),
+        targetMode: escalationPolicy.targetMode === 'USER' ? 'USER' : 'ROLE',
+        targetUserIds: joinListValue(
+          Array.isArray(escalationPolicy.targetUserIds)
+            ? escalationPolicy.targetUserIds.map(String)
+            : []
+        ),
+        targetRoleCodes: joinListValue(
+          Array.isArray(escalationPolicy.targetRoleCodes)
+            ? escalationPolicy.targetRoleCodes.map(String)
+            : []
+        ),
+        channels: Array.isArray(escalationPolicy.channels)
+          ? escalationPolicy.channels.filter(
               (channel): channel is WorkflowReminderChannel =>
                 channel === 'IN_APP' ||
                 channel === 'EMAIL' ||
@@ -1581,6 +1684,24 @@ function buildNodePatch(values: NodeConfigFormValues) {
               : null,
             channels: values.approver.reminderPolicy.channels,
           },
+          escalationPolicy: {
+            enabled: values.approver.escalationPolicy.enabled,
+            afterMinutes: values.approver.escalationPolicy.enabled
+              ? parseNumber(values.approver.escalationPolicy.afterMinutes)
+              : null,
+            targetMode: values.approver.escalationPolicy.targetMode,
+            targetUserIds:
+              values.approver.escalationPolicy.enabled
+              && values.approver.escalationPolicy.targetMode === 'USER'
+                ? parseListValue(values.approver.escalationPolicy.targetUserIds)
+                : [],
+            targetRoleCodes:
+              values.approver.escalationPolicy.enabled
+              && values.approver.escalationPolicy.targetMode === 'ROLE'
+                ? parseListValue(values.approver.escalationPolicy.targetRoleCodes)
+                : [],
+            channels: values.approver.escalationPolicy.channels,
+          },
           operations: Object.entries(values.approver.operations)
             .filter(([, checked]) => checked)
             .map(([operation]) => operation),
@@ -1787,6 +1908,14 @@ export function NodeConfigPanel({
               maxTimes: '',
               channels: ['IN_APP'],
             },
+            escalationPolicy: {
+              enabled: false,
+              afterMinutes: '',
+              targetMode: 'ROLE',
+              targetUserIds: '',
+              targetRoleCodes: '',
+              channels: ['IN_APP'],
+            },
             operations: {
               APPROVE: true,
               REJECT: true,
@@ -1889,6 +2018,14 @@ export function NodeConfigPanel({
   const selectedReminderEnabled = useWatch({
     control: form.control,
     name: 'approver.reminderPolicy.enabled',
+  })
+  const selectedEscalationEnabled = useWatch({
+    control: form.control,
+    name: 'approver.escalationPolicy.enabled',
+  })
+  const selectedEscalationTargetMode = useWatch({
+    control: form.control,
+    name: 'approver.escalationPolicy.targetMode',
   })
   const selectedApproverUserIds = useWatch({
     control: form.control,
@@ -3300,6 +3437,136 @@ export function NodeConfigPanel({
               </div>
             ) : null}
 
+            <FormField
+              control={form.control}
+              name='approver.escalationPolicy.enabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between gap-4 py-2'>
+                  <div>
+                    <FormLabel>SLA 升级</FormLabel>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {selectedEscalationEnabled ? (
+              <div className='grid gap-4 border-l-2 border-muted pl-4'>
+                <div className='grid gap-4 md:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='approver.escalationPolicy.afterMinutes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>升级分钟数</FormLabel>
+                        <FormControl>
+                          <Input {...field} inputMode='numeric' placeholder='60' />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='approver.escalationPolicy.targetMode'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>升级目标类型</FormLabel>
+                        <FormControl>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger className='w-full'>
+                              <SelectValue placeholder='请选择升级目标类型' />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {escalationTargetModes.map((item) => (
+                                <SelectItem key={item.value} value={item.value}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                {selectedEscalationTargetMode === 'USER' ? (
+                  <FormField
+                    control={form.control}
+                    name='approver.escalationPolicy.targetUserIds'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowPrincipalPickerField
+                            kind='USER'
+                            label='升级人员'
+                            description='节点超时后，把升级提醒发送给这些人员。'
+                            value={parseListValue(field.value)}
+                            onChange={(next) => field.onChange(joinListValue(next))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name='approver.escalationPolicy.targetRoleCodes'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <WorkflowPrincipalPickerField
+                            kind='ROLE'
+                            label='升级角色'
+                            description='节点超时后，会按角色解析成启用中的用户。'
+                            value={parseListValue(field.value)}
+                            onChange={(next) => field.onChange(joinListValue(next))}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+                <div className='grid gap-2'>
+                  <Label>升级渠道</Label>
+                  <div className='grid gap-2 md:grid-cols-2'>
+                    {reminderChannels.map((item) => (
+                      <FormField
+                        key={`escalation-${item.value}`}
+                        control={form.control}
+                        name='approver.escalationPolicy.channels'
+                        render={({ field }) => {
+                          const checked = field.value.includes(item.value)
+                          return (
+                            <FormItem className='flex flex-row items-center gap-3 rounded-xl border px-3 py-2'>
+                              <FormControl>
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(nextChecked) => {
+                                    const nextValues = nextChecked
+                                      ? [...field.value, item.value]
+                                      : field.value.filter((value) => value !== item.value)
+                                    field.onChange(nextValues)
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel className='font-normal'>{item.label}</FormLabel>
+                            </FormItem>
+                          )
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <FormMessage />
+                </div>
+              </div>
+            ) : null}
+
             <div className='flex flex-col gap-2'>
               <Label>可执行操作</Label>
               <div className='grid gap-2 md:grid-cols-2'>
@@ -3344,11 +3611,11 @@ export function NodeConfigPanel({
           </section>
         ) : null}
 
-        {selectedKind === 'cc' ? (
+        {isWorkflowCollaborationNodeKind(selectedKind) ? (
           <div className='flex flex-col gap-4 rounded-2xl border p-4'>
             <div className='flex items-center gap-2 text-sm font-medium'>
               <Check className='size-4 text-primary' />
-              抄送节点
+              {resolveWorkflowCollaborationNodeLabel(selectedKind)}
             </div>
 
             <FormField
@@ -3356,11 +3623,11 @@ export function NodeConfigPanel({
               name='cc.targetMode'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>抄送对象</FormLabel>
+                  <FormLabel>协同对象</FormLabel>
                   <FormControl>
                     <Select value={field.value} onValueChange={field.onChange}>
                       <SelectTrigger className='w-full'>
-                        <SelectValue placeholder='请选择抄送对象' />
+                        <SelectValue placeholder='请选择协同对象' />
                       </SelectTrigger>
                       <SelectContent>
                         {ccTargetModes.map((item) => (
@@ -3380,7 +3647,7 @@ export function NodeConfigPanel({
               <WorkflowPrincipalPickerField
                 kind='USER'
                 label='人员编码'
-                description='支持多选，作为抄送接收人。'
+                description='支持多选，作为协同接收人。'
                 value={parseListValue(selectedCcUserIds)}
                 onChange={(next) =>
                   form.setValue('cc.userIds', next.join(', '), {
@@ -3412,7 +3679,7 @@ export function NodeConfigPanel({
               <WorkflowPrincipalPickerField
                 kind='DEPARTMENT'
                 label='部门编码'
-                description='选择要抄送的部门。'
+                description='选择要协同的部门。'
                 value={parseListValue(selectedCcDepartmentRef)}
                 onChange={(next) =>
                   form.setValue('cc.departmentRef', next[0] ?? '', {
@@ -3432,7 +3699,7 @@ export function NodeConfigPanel({
                   <div className='space-y-1'>
                     <FormLabel>已阅确认</FormLabel>
                     <p className='text-xs text-muted-foreground'>
-                      抄送后要求接收人确认已阅。
+                      协同后要求接收人确认已阅。
                     </p>
                   </div>
                   <FormControl>

@@ -88,7 +88,7 @@ public class ProcessDslToBpmnService {
             case "approver" -> buildApproverTask(node, config);
             case "subprocess" -> buildSubprocessCallActivity(node, config);
             case "dynamic-builder" -> buildDynamicBuilderPlaceholder(node, config);
-            case "cc" -> buildCcTask(node, config);
+            case "cc", "supervise", "meeting", "read", "circulate" -> buildCcTask(node, config);
             case "condition" -> buildExclusiveGateway(node, config);
             case "inclusive_split" -> buildInclusiveGateway(node, "split");
             case "inclusive_join" -> buildInclusiveGateway(node, "join");
@@ -153,6 +153,7 @@ public class ProcessDslToBpmnService {
             task.setCandidateUsers(userIds);
         }
         addExtensionAttribute(task, "taskKind", "CC");
+        addExtensionAttribute(task, "ccSemanticMode", node.type());
         return task;
     }
 
@@ -495,6 +496,14 @@ public class ProcessDslToBpmnService {
         attrs.put("reminderRepeatIntervalMinutes", stringValue(reminderPolicy.get("repeatIntervalMinutes")));
         attrs.put("reminderMaxTimes", stringValue(reminderPolicy.get("maxTimes")));
         attrs.put("reminderChannels", joinValues(reminderPolicy.get("channels")));
+
+        Map<String, Object> escalationPolicy = mapValue(config.get("escalationPolicy"));
+        attrs.put("escalationEnabled", booleanValue(escalationPolicy.get("enabled")));
+        attrs.put("escalationAfterMinutes", stringValue(escalationPolicy.get("afterMinutes")));
+        attrs.put("escalationTargetMode", stringValue(escalationPolicy.get("targetMode")));
+        attrs.put("escalationTargetUserIds", joinValues(escalationPolicy.get("targetUserIds")));
+        attrs.put("escalationTargetRoleCodes", joinValues(escalationPolicy.get("targetRoleCodes")));
+        attrs.put("escalationChannels", joinValues(escalationPolicy.get("channels")));
 
         Map<String, Object> targets = mapValue(config.get("targets"));
         attrs.put("targetMode", stringValue(targets.get("mode")));

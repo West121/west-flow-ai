@@ -32,6 +32,10 @@ import {
   type WorkflowTimerNodeConfig,
   type WorkflowTriggerNodeConfig,
 } from './types'
+import {
+  isWorkflowCollaborationNodeKind,
+  type WorkflowCollaborationNodeKind,
+} from './collaboration'
 
 export type WorkflowEdgeCondition = {
   type: WorkflowEdgeConditionType
@@ -50,6 +54,10 @@ export type WorkflowNodeConfigRecord = {
   condition: WorkflowConditionNodeConfig
   inclusive: WorkflowInclusiveGatewayNodeConfig
   cc: WorkflowCcNodeConfig
+  supervise: WorkflowCcNodeConfig
+  meeting: WorkflowCcNodeConfig
+  read: WorkflowCcNodeConfig
+  circulate: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
   trigger: WorkflowTriggerNodeConfig
   parallel: WorkflowParallelGatewayNodeConfig
@@ -93,6 +101,14 @@ const defaultApproverConfig: WorkflowApproverNodeConfig = {
     maxTimes: null,
     channels: ['IN_APP'],
   },
+  escalationPolicy: {
+    enabled: false,
+    afterMinutes: null,
+    targetMode: 'ROLE',
+    targetUserIds: [],
+    targetRoleCodes: [],
+    channels: ['IN_APP'],
+  },
   operations: ['APPROVE', 'REJECT', 'RETURN'],
   commentRequired: false,
 }
@@ -112,6 +128,26 @@ const defaultCcConfig: WorkflowCcNodeConfig = {
     departmentRef: '',
   },
   readRequired: false,
+}
+
+const defaultCollaborationConfigByKind: Record<
+  WorkflowCollaborationNodeKind,
+  WorkflowCcNodeConfig
+> = {
+  cc: defaultCcConfig,
+  supervise: {
+    ...defaultCcConfig,
+  },
+  meeting: {
+    ...defaultCcConfig,
+  },
+  read: {
+    ...defaultCcConfig,
+    readRequired: true,
+  },
+  circulate: {
+    ...defaultCcConfig,
+  },
 }
 
 const defaultConditionConfig: WorkflowConditionNodeConfig = {
@@ -272,6 +308,10 @@ function normalizeReminderChannels(value: unknown): WorkflowReminderChannel[] {
   return channels.length > 0 ? channels : [...defaultApproverConfig.reminderPolicy.channels]
 }
 
+function normalizeEscalationTargetMode(value: unknown) {
+  return value === 'USER' ? 'USER' : 'ROLE'
+}
+
 function normalizeDynamicBuilderBuildMode(
   value: unknown
 ): WorkflowDynamicBuildMode {
@@ -423,6 +463,14 @@ export function defaultNodeConfig<K extends WorkflowNodeKind>(
       return defaultInclusiveConfig as WorkflowNodeConfigMap[K]
     case 'cc':
       return defaultCcConfig as WorkflowNodeConfigMap[K]
+    case 'supervise':
+      return defaultCollaborationConfigByKind.supervise as WorkflowNodeConfigMap[K]
+    case 'meeting':
+      return defaultCollaborationConfigByKind.meeting as WorkflowNodeConfigMap[K]
+    case 'read':
+      return defaultCollaborationConfigByKind.read as WorkflowNodeConfigMap[K]
+    case 'circulate':
+      return defaultCollaborationConfigByKind.circulate as WorkflowNodeConfigMap[K]
     case 'timer':
       return defaultTimerConfig as WorkflowNodeConfigMap[K]
     case 'trigger':
@@ -475,6 +523,14 @@ export function descriptionForKind(kind: WorkflowNodeKind) {
       return '包容分支节点'
     case 'cc':
       return '抄送节点'
+    case 'supervise':
+      return '督办节点'
+    case 'meeting':
+      return '会办节点'
+    case 'read':
+      return '阅办节点'
+    case 'circulate':
+      return '传阅节点'
     case 'timer':
       return '定时节点'
     case 'trigger':
@@ -503,6 +559,14 @@ export function labelForKind(kind: WorkflowNodeKind, fallback: string) {
       return '包容分支'
     case 'cc':
       return '抄送'
+    case 'supervise':
+      return '督办'
+    case 'meeting':
+      return '会办'
+    case 'read':
+      return '阅办'
+    case 'circulate':
+      return '传阅'
     case 'timer':
       return '定时'
     case 'trigger':
@@ -637,6 +701,21 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
         ),
         channels: normalizeReminderChannels(value?.reminderPolicy?.channels),
       },
+      escalationPolicy: {
+        enabled: Boolean(value?.escalationPolicy?.enabled ?? defaultApproverConfig.escalationPolicy.enabled),
+        afterMinutes: normalizeNumber(
+          value?.escalationPolicy?.afterMinutes,
+          defaultApproverConfig.escalationPolicy.afterMinutes
+        ),
+        targetMode: normalizeEscalationTargetMode(value?.escalationPolicy?.targetMode),
+        targetUserIds: Array.isArray(value?.escalationPolicy?.targetUserIds)
+          ? value.escalationPolicy.targetUserIds.map(String)
+          : [...defaultApproverConfig.escalationPolicy.targetUserIds],
+        targetRoleCodes: Array.isArray(value?.escalationPolicy?.targetRoleCodes)
+          ? value.escalationPolicy.targetRoleCodes.map(String)
+          : [...defaultApproverConfig.escalationPolicy.targetRoleCodes],
+        channels: normalizeReminderChannels(value?.escalationPolicy?.channels),
+      },
       operations: Array.isArray(value?.operations) && value.operations.length > 0
         ? value.operations.map(String)
         : [...defaultApproverConfig.operations],
@@ -742,7 +821,7 @@ export function normalizeNodeConfig<K extends WorkflowNodeKind>(
     } as WorkflowNodeConfigMap[K]
   }
 
-  if (kind === 'cc') {
+  if (kind === 'cc' || isWorkflowCollaborationNodeKind(kind)) {
     const value = config as Partial<WorkflowCcNodeConfig> | null | undefined
     return {
       targets: {

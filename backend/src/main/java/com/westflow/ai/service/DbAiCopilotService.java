@@ -7,6 +7,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.ai.gateway.AiGatewayRequest;
 import com.westflow.ai.gateway.AiGatewayResponse;
 import com.westflow.ai.gateway.AiGatewayService;
+import com.westflow.ai.executor.AiExecutionContext;
+import com.westflow.ai.executor.AiExecutionPlan;
+import com.westflow.ai.executor.AiExecutionResult;
+import com.westflow.ai.executor.AiExecutionRouter;
+import com.westflow.ai.executor.AiExecutorType;
 import com.westflow.ai.mapper.AiAuditMapper;
 import com.westflow.ai.mapper.AiConfirmationMapper;
 import com.westflow.ai.mapper.AiConversationMapper;
@@ -33,6 +38,8 @@ import com.westflow.ai.model.AiToolCallRequest;
 import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.model.AiToolSource;
 import com.westflow.ai.model.AiToolType;
+import com.westflow.ai.planner.AiCopilotPlan;
+import com.westflow.ai.planner.AiPlanAgentService;
 import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.common.error.ContractException;
 import com.westflow.common.query.PageRequest;
@@ -48,6 +55,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +67,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class DbAiCopilotService implements AiCopilotService {
+
+    private static final Logger log = LoggerFactory.getLogger(DbAiCopilotService.class);
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
     private static final String STATUS_ACTIVE = "active";
@@ -77,6 +89,8 @@ public class DbAiCopilotService implements AiCopilotService {
     private final AiCopilotRuntimeService aiCopilotRuntimeService;
     private final AiRegistryCatalogService aiRegistryCatalogService;
     private final ProcessDefinitionService processDefinitionService;
+    private final AiPlanAgentService aiPlanAgentService;
+    private final AiExecutionRouter aiExecutionRouter;
 
     public DbAiCopilotService(
             AiConversationMapper aiConversationMapper,
@@ -91,6 +105,39 @@ public class DbAiCopilotService implements AiCopilotService {
             AiRegistryCatalogService aiRegistryCatalogService,
             ProcessDefinitionService processDefinitionService
     ) {
+        this(
+                aiConversationMapper,
+                aiMessageMapper,
+                aiToolCallMapper,
+                aiConfirmationMapper,
+                aiAuditMapper,
+                objectMapper,
+                aiGatewayService,
+                aiToolExecutionService,
+                aiCopilotRuntimeService,
+                aiRegistryCatalogService,
+                processDefinitionService,
+                null,
+                null
+        );
+    }
+
+    @Autowired
+    public DbAiCopilotService(
+            AiConversationMapper aiConversationMapper,
+            AiMessageMapper aiMessageMapper,
+            AiToolCallMapper aiToolCallMapper,
+            AiConfirmationMapper aiConfirmationMapper,
+            AiAuditMapper aiAuditMapper,
+            ObjectMapper objectMapper,
+            AiGatewayService aiGatewayService,
+            AiToolExecutionService aiToolExecutionService,
+            AiCopilotRuntimeService aiCopilotRuntimeService,
+            AiRegistryCatalogService aiRegistryCatalogService,
+            ProcessDefinitionService processDefinitionService,
+            AiPlanAgentService aiPlanAgentService,
+            AiExecutionRouter aiExecutionRouter
+    ) {
         this.aiConversationMapper = aiConversationMapper;
         this.aiMessageMapper = aiMessageMapper;
         this.aiToolCallMapper = aiToolCallMapper;
@@ -102,6 +149,8 @@ public class DbAiCopilotService implements AiCopilotService {
         this.aiCopilotRuntimeService = aiCopilotRuntimeService;
         this.aiRegistryCatalogService = aiRegistryCatalogService;
         this.processDefinitionService = processDefinitionService;
+        this.aiPlanAgentService = aiPlanAgentService;
+        this.aiExecutionRouter = aiExecutionRouter;
     }
 
     /**
@@ -348,6 +397,11 @@ public class DbAiCopilotService implements AiCopilotService {
 
         String domain = resolveDomain(conversation);
         String routePath = resolveRoutePath(conversation);
+        AssistantReply plannedReply = tryBuildAssistantReplyByPlan(conversation, content, now, domain, routePath);
+        if (plannedReply != null) {
+            return plannedReply;
+        }
+        // Legacy fallback: only used when the new planner/executor mainline fails unexpectedly.
         AiGatewayResponse gatewayResponse = aiGatewayService.route(new AiGatewayRequest(
                 conversation.conversationId(),
                 currentUserId(),
@@ -361,7 +415,9 @@ public class DbAiCopilotService implements AiCopilotService {
 
         boolean readOnlyIntent = isReadOnlyIntent(content, routePath);
 
-        if (gatewayResponse.requiresConfirmation() && !readOnlyIntent) {
+        boolean writeIntent = isExplicitProcessStartIntent(content, routePath)
+                || hasExplicitTaskHandleIntent(content);
+        if ((gatewayResponse.requiresConfirmation() || writeIntent) && !readOnlyIntent) {
             AiToolCallRequest writeToolCall;
             try {
                 writeToolCall = buildWriteToolCall(content, domain, routePath);
@@ -425,6 +481,248 @@ public class DbAiCopilotService implements AiCopilotService {
                         )
                 )
         );
+    }
+
+    private AssistantReply tryBuildAssistantReplyByPlan(
+            AiConversationRecord conversation,
+            String content,
+            LocalDateTime now,
+            String domain,
+            String routePath
+    ) {
+        if (aiPlanAgentService == null || aiExecutionRouter == null) {
+            return null;
+        }
+        try {
+            AiGatewayRequest request = new AiGatewayRequest(
+                    conversation.conversationId(),
+                    currentUserId(),
+                    content,
+                    domain,
+                    false,
+                    List.of(),
+                    parseJsonStringList(conversation.contextTagsJson()),
+                    routePath
+            );
+            AiCopilotPlan plan = aiPlanAgentService.plan(request);
+            AiExecutionResult executionResult = aiExecutionRouter.route(
+                    toExecutionPlan(plan),
+                    new AiExecutionContext(
+                            conversation.conversationId(),
+                            currentUserId(),
+                            content,
+                            domain,
+                            routePath,
+                            parseJsonStringList(conversation.contextTagsJson())
+                    )
+            );
+            return buildAssistantReplyFromExecution(conversation, content, domain, routePath, now, plan, executionResult);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "AI planner path failed, falling back to legacy conversationId={} domain={} routePath={} reason={}",
+                    conversation.conversationId(),
+                    domain,
+                    routePath,
+                    exception.getMessage()
+            );
+            return null;
+        }
+    }
+
+    private AssistantReply buildAssistantReplyFromExecution(
+            AiConversationRecord conversation,
+            String content,
+            String domain,
+            String routePath,
+            LocalDateTime now,
+            AiCopilotPlan plan,
+            AiExecutionResult executionResult
+    ) {
+        log.info(
+                "AI planner execution conversationId={} intent={} executor={} presentation={} toolCall={}",
+                conversation.conversationId(),
+                plan.intent(),
+                executionResult.executorType(),
+                executionResult.presentation(),
+                executionResult.toolCallRequest() == null ? "none" : executionResult.toolCallRequest().toolKey()
+        );
+        AiGatewayResponse gatewayResponse = gatewayResponseFromPlan(plan, executionResult, content, domain);
+        if (executionResult.toolCallRequest() != null) {
+            AiToolCallRequest toolCallRequest = preparePlannedToolCall(
+                    content,
+                    domain,
+                    routePath,
+                    executionResult.toolCallRequest()
+            );
+            if (toolCallRequest.toolType() == AiToolType.WRITE) {
+                AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(
+                        conversation.conversationId(),
+                        toolCallRequest,
+                        currentUserId()
+                );
+                persistToolCall(toolResult);
+                insertAudit(conversation.conversationId(), toolResult.toolCallId(), "WRITE", toolResult.summary());
+                if ("process.start".equals(toolCallRequest.toolKey())) {
+                    return new AssistantReply(
+                            "我已经整理出建议动作，确认后才会真正执行写操作。",
+                            List.of(
+                                    buildWritePreviewBlock(content, domain, routePath, toolResult),
+                                    confirmationBlock(toolResult, gatewayResponse, domain, routePath)
+                            )
+                    );
+                }
+                return new AssistantReply(
+                        "我已经整理出建议动作，确认后才会真正执行写操作。",
+                        List.of(
+                                buildWritePreviewBlock(content, domain, routePath, toolResult),
+                                confirmationBlock(toolResult, gatewayResponse, domain, routePath)
+                        )
+                );
+            }
+
+            AiToolCallResultResponse toolResult = aiToolExecutionService.executeToolCall(
+                    conversation.conversationId(),
+                    toolCallRequest,
+                    currentUserId()
+            );
+            persistToolCall(toolResult);
+            insertAudit(conversation.conversationId(), toolResult.toolCallId(), "READ", toolResult.summary());
+            List<TraceStep> trace = buildToolResultTrace(gatewayResponse, toolResult, "executed");
+            String fallbackReply = buildReadFinalAnswer(content, routePath, toolResult);
+            return new AssistantReply(
+                    resolveReadRuntimeReply(content, domain, routePath, gatewayResponse, toolResult, fallbackReply),
+                    buildReadBlocks(content, routePath, toolResult, gatewayResponse, trace)
+            );
+        }
+
+        String fallback = executionResult.summary().isBlank() ? "已整理当前问题，可继续补充上下文。" : executionResult.summary();
+        String runtimeReply = resolveRuntimeReply(content, gatewayResponse, domain, fallback);
+        return new AssistantReply(
+                runtimeReply,
+                List.of(
+                        defaultTextBlock(runtimeReply),
+                        traceBlock(
+                                gatewayResponse.routeMode(),
+                                gatewayResponse.agentId(),
+                                gatewayResponse.agentKey(),
+                                fallback,
+                                "executed",
+                                buildRouteTrace(gatewayResponse, domain, routePath, null)
+                        )
+                )
+        );
+    }
+
+    private AiExecutionPlan toExecutionPlan(AiCopilotPlan plan) {
+        return new AiExecutionPlan(
+                plan.intent().name(),
+                plan.domain(),
+                AiExecutorType.valueOf(plan.executor().name()),
+                plan.toolCandidates(),
+                plan.arguments(),
+                plan.presentation().name().toLowerCase(),
+                plan.needConfirmation(),
+                plan.confidence()
+        );
+    }
+
+    private AiGatewayResponse gatewayResponseFromPlan(
+            AiCopilotPlan plan,
+            AiExecutionResult executionResult,
+            String content,
+            String domain
+    ) {
+        String routeMode = plan.intent().name().equals("WRITE") ? "SUPERVISOR" : "ROUTING";
+        String agentId = switch (executionResult.executorType()) {
+            case KNOWLEDGE -> "knowledge-agent";
+            case WORKFLOW -> "workflow-agent";
+            case STATS -> "stats-agent";
+            case ACTION -> "action-agent";
+            case MCP -> "mcp-agent";
+        };
+        List<String> skillIds = aiRegistryCatalogService == null
+                ? List.of()
+                : java.util.Optional.ofNullable(aiRegistryCatalogService.matchSkills(
+                        currentUserId(),
+                        content,
+                        domain,
+                        List.of()
+                )).orElse(List.of()).stream().map(AiRegistryCatalogService.AiSkillCatalogItem::skillCode).toList();
+        return new AiGatewayResponse(
+                routeMode,
+                agentId,
+                plan.needConfirmation(),
+                skillIds,
+                agentId,
+                executionResult.summary(),
+                List.of(),
+                null
+        );
+    }
+
+    private AiToolCallRequest preparePlannedToolCall(
+            String content,
+            String domain,
+            String routePath,
+            AiToolCallRequest toolCallRequest
+    ) {
+        if (toolCallRequest == null) {
+            return null;
+        }
+        if ("process.start".equals(toolCallRequest.toolKey()) || "task.handle".equals(toolCallRequest.toolKey())) {
+            AiToolCallRequest validated = buildWriteToolCall(content, domain, routePath);
+            Map<String, Object> mergedArguments = new LinkedHashMap<>(validated.arguments());
+            mergedArguments.putAll(toolCallRequest.arguments());
+            if (mergedArguments.get("formData") instanceof Map<?, ?> incomingFormData
+                    && validated.arguments().get("formData") instanceof Map<?, ?> validatedFormData) {
+                Map<String, Object> mergedFormData = new LinkedHashMap<>();
+                validatedFormData.forEach((key, value) -> mergedFormData.put(String.valueOf(key), value));
+                incomingFormData.forEach((key, value) -> {
+                    String field = String.valueOf(key);
+                    Object current = mergedFormData.get(field);
+                    if (shouldOverrideValidatedFormValue(current, value)) {
+                        mergedFormData.put(field, value);
+                    }
+                });
+                mergedArguments.put("formData", Map.copyOf(mergedFormData));
+            }
+            return new AiToolCallRequest(
+                    validated.toolKey(),
+                    validated.toolType(),
+                    validated.toolSource(),
+                    Map.copyOf(mergedArguments)
+            );
+        }
+        return toolCallRequest;
+    }
+
+    private boolean shouldOverrideValidatedFormValue(Object current, Object incoming) {
+        if (incoming == null) {
+            return false;
+        }
+        if (incoming instanceof String incomingText) {
+            String normalizedIncoming = incomingText.trim();
+            if (normalizedIncoming.isBlank()) {
+                return false;
+            }
+            if (current instanceof String currentText && !currentText.trim().isBlank()) {
+                return false;
+            }
+            return true;
+        }
+        if (incoming instanceof Number incomingNumber) {
+            if (current instanceof Number currentNumber && currentNumber.doubleValue() != 0d) {
+                return false;
+            }
+            return incomingNumber.doubleValue() != 0d;
+        }
+        if (incoming instanceof Boolean incomingBoolean) {
+            if (current instanceof Boolean) {
+                return !Boolean.FALSE.equals(incomingBoolean);
+            }
+            return true;
+        }
+        return current == null;
     }
 
     private void appendConfirmationResultMessage(
@@ -918,6 +1216,9 @@ public class DbAiCopilotService implements AiCopilotService {
         return "GENERAL";
     }
 
+    /**
+     * legacy fallback / validated write preflight helper.
+     */
     private AiToolCallRequest buildWriteToolCall(String content, String domain, String routePath) {
         if (isExplicitProcessStartIntent(content, routePath)) {
             Map<String, Object> startDraft = buildProcessStartDraft(content, domain, routePath);
@@ -1119,6 +1420,9 @@ public class DbAiCopilotService implements AiCopilotService {
         return "";
     }
 
+    /**
+     * legacy fallback helper.
+     */
     private boolean isReadOnlyIntent(String content, String routePath) {
         String normalized = content == null ? "" : content.trim();
         if (normalized.isBlank()) {
@@ -1142,6 +1446,9 @@ public class DbAiCopilotService implements AiCopilotService {
                 || normalized.contains("查看");
     }
 
+    /**
+     * legacy fallback / validated write preflight helper.
+     */
     private boolean isExplicitProcessStartIntent(String content, String routePath) {
         String normalized = content == null ? "" : content.trim();
         if (normalized.isBlank()) {
@@ -1161,9 +1468,23 @@ public class DbAiCopilotService implements AiCopilotService {
                 || normalized.contains("目前进度")
                 || normalized.contains("进度都怎么样")
                 || normalized.contains("怎么样");
-        return startVerb && !readQualifier;
+        boolean businessMentioned = !inferBusinessTypeFromContent(normalized).isBlank();
+        boolean naturalStartVerb = normalized.contains("帮我请")
+                || normalized.contains("请个")
+                || normalized.contains("请一")
+                || normalized.contains("想请")
+                || normalized.contains("我要请")
+                || normalized.contains("帮我报销")
+                || normalized.contains("帮我提")
+                || normalized.contains("帮我申请")
+                || normalized.contains("帮我创建")
+                || normalized.contains("帮我新建");
+        return (startVerb || (businessMentioned && naturalStartVerb)) && !readQualifier;
     }
 
+    /**
+     * legacy fallback / validated write preflight helper.
+     */
     private boolean hasExplicitTaskHandleIntent(String content) {
         String normalized = content == null ? "" : content.trim();
         return normalized.contains("认领")
@@ -1202,6 +1523,14 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     private AiToolCallRequest buildReadToolCall(String content, String domain, List<String> skillIds, String routePath) {
+        if (isStatsReadIntent(content)) {
+            return new AiToolCallRequest(
+                    "stats.query",
+                    AiToolType.READ,
+                    AiToolSource.PLATFORM,
+                    Map.of("keyword", content == null ? "" : content, "domain", domain)
+            );
+        }
         return aiRegistryCatalogService.matchReadTool(
                         currentUserId(),
                         content,
@@ -1256,6 +1585,14 @@ public class DbAiCopilotService implements AiCopilotService {
     private AiToolCallRequest buildFallbackReadToolCall(String content, String domain, String routePath) {
         String normalized = content == null ? "" : content;
         String approvalSheetView = resolveApprovalSheetView(normalized, routePath);
+        if (isStatsReadIntent(normalized)) {
+            return new AiToolCallRequest(
+                    "stats.query",
+                    AiToolType.READ,
+                    AiToolSource.PLATFORM,
+                    Map.of("keyword", normalized, "domain", domain)
+            );
+        }
         if (normalized.contains("待办")
                 || normalized.contains("审批")
                 || normalized.contains("认领")
@@ -1276,17 +1613,6 @@ public class DbAiCopilotService implements AiCopilotService {
                             "view", approvalSheetView,
                             "pageSize", 100
                     )
-            );
-        }
-        if (normalized.contains("统计")
-                || normalized.contains("报表")
-                || normalized.contains("指标")
-                || normalized.contains("趋势")) {
-            return new AiToolCallRequest(
-                    "stats.query",
-                    AiToolType.READ,
-                    AiToolSource.PLATFORM,
-                    Map.of("keyword", normalized, "domain", domain)
             );
         }
         if (normalized.contains("PLM")
@@ -1313,6 +1639,72 @@ public class DbAiCopilotService implements AiCopilotService {
             );
         }
         return null;
+    }
+
+    private boolean isStatsReadIntent(String content) {
+        String normalized = content == null ? "" : content;
+        if (normalized.isBlank()) {
+            return false;
+        }
+        if (normalized.contains("统计")
+                || normalized.contains("报表")
+                || normalized.contains("指标")
+                || normalized.contains("趋势")
+                || normalized.contains("图表")) {
+            return true;
+        }
+        return (normalized.contains("用户")
+                || normalized.contains("员工")
+                || normalized.contains("人员")
+                || normalized.contains("角色")
+                || normalized.contains("权限角色")
+                || normalized.contains("字典")
+                || normalized.contains("字典项")
+                || normalized.contains("通知")
+                || normalized.contains("通知模板")
+                || normalized.contains("通知渠道")
+                || normalized.contains("通知记录")
+                || normalized.contains("通知日志")
+                || normalized.contains("日志")
+                || normalized.contains("请求日志")
+                || normalized.contains("审计日志")
+                || normalized.contains("操作日志")
+                || normalized.contains("代理")
+                || normalized.contains("委派")
+                || normalized.contains("离职转办")
+                || normalized.contains("系统消息")
+                || normalized.contains("消息")
+                || normalized.contains("文件")
+                || normalized.contains("附件")
+                || normalized.contains("触发器")
+                || normalized.contains("触发执行")
+                || normalized.contains("编排")
+                || normalized.contains("监控")
+                || normalized.contains("扫描")
+                || normalized.contains("公司")
+                || normalized.contains("部门")
+                || normalized.contains("岗位")
+                || normalized.contains("职位")
+                || normalized.contains("菜单")
+                || normalized.contains("权限点")
+                || normalized.contains("功能项"))
+                && (normalized.contains("几个")
+                || normalized.contains("多少")
+                || normalized.contains("数量")
+                || normalized.contains("分布")
+                || normalized.contains("占比")
+                || normalized.contains("对比")
+                || normalized.contains("列出")
+                || normalized.contains("列出来")
+                || normalized.contains("对应")
+                || normalized.contains("停用")
+                || normalized.contains("禁用")
+                || normalized.contains("启用")
+                || normalized.contains("状态")
+                || normalized.contains("分类")
+                || normalized.contains("岗位")
+                || normalized.contains("公司")
+                || normalized.contains("部门"));
     }
 
     private AiMessageBlockResponse confirmationBlock(
@@ -1562,6 +1954,16 @@ public class DbAiCopilotService implements AiCopilotService {
         return Map.of();
     }
 
+    private List<Map<String, Object>> mapList(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream()
+                    .map(this::mapValue)
+                    .filter(item -> !item.isEmpty())
+                    .toList();
+        }
+        return List.of();
+    }
+
     private List<AiMessageBlockResponse> buildReadBlocks(
             String content,
             String routePath,
@@ -1605,6 +2007,30 @@ public class DbAiCopilotService implements AiCopilotService {
                     defaultTextBlock("你可以继续追问某条流程的设计和发布状态。")
             );
         }
+        if ("feature.catalog.query".equals(result.toolKey())) {
+            return List.of(
+                    defaultTextBlock("已根据当前页面和业务域整理可用功能目录。"),
+                    traceBlock(
+                            gatewayResponse.routeMode(),
+                            gatewayResponse.agentId(),
+                            gatewayResponse.agentKey(),
+                            "已命中功能推荐与使用说明链路。",
+                            "executed",
+                            trace
+                    ),
+                    resultBlock(
+                            result.toolSource().name(),
+                            result.toolKey(),
+                            result.toolKey(),
+                            result.toolType().name(),
+                            result.summary(),
+                            result.result(),
+                            trace,
+                            buildFeatureCatalogFields(result.result()),
+                            buildFeatureCatalogMetrics(result.result())
+                    )
+            );
+        }
         if ("task.query".equals(result.toolKey()) || "workflow.todo.list".equals(result.toolKey())) {
             String approvalSheetView = resolveApprovalSheetViewFromArguments(result.arguments());
             Map<String, Object> normalizedApprovalResult = normalizeApprovalSheetResult(result.result());
@@ -1638,7 +2064,34 @@ public class DbAiCopilotService implements AiCopilotService {
             return List.copyOf(blocks);
         }
         if ("stats.query".equals(result.toolKey())) {
-            return List.of(
+            if (isStatsErrorResult(result.result())) {
+                return List.of(
+                        defaultTextBlock("统计查询未能生成可执行结果。"),
+                        traceBlock(
+                                gatewayResponse.routeMode(),
+                                gatewayResponse.agentId(),
+                                gatewayResponse.agentKey(),
+                                "统计查询链路已执行，但未生成安全可用的查询结果。",
+                                "failed",
+                                trace
+                        ),
+                        failureBlock(
+                                result.toolSource().name(),
+                                result.toolKey(),
+                                result.toolKey(),
+                                result.toolType().name(),
+                                stringValue(result.result().get("summary")),
+                                "AI.STATS_QUERY_FAILED",
+                                stringValue(result.result().get("summary")),
+                                stringValue(result.result().get("summary")),
+                                trace,
+                                List.of(),
+                                List.of(),
+                                result.result()
+                        )
+                );
+            }
+            java.util.ArrayList<AiMessageBlockResponse> blocks = new java.util.ArrayList<>(List.of(
                     defaultTextBlock("已通过平台统计工具生成指标摘要。"),
                     traceBlock(
                             gatewayResponse.routeMode(),
@@ -1647,36 +2100,15 @@ public class DbAiCopilotService implements AiCopilotService {
                             "已命中统计查询链路。",
                             "executed",
                             trace
-                    ),
-                    resultBlock(
-                            result.toolSource().name(),
-                            result.toolKey(),
-                            result.toolKey(),
-                            result.toolType().name(),
-                            result.summary(),
-                            result.result(),
-                            trace,
-                            buildToolContextFields(
-                                    result.toolSource().name(),
-                                    result.toolKey(),
-                                    result.toolKey(),
-                                    result.toolType().name(),
-                                    resolveDomainFromRoute(routePath),
-                                    routePath,
-                                    result.toolCallId(),
-                                    result.confirmationId(),
-                                    result.summary(),
-                                    "已执行"
-                            ),
-                            List.of(
-                                    new Metric("总量", String.valueOf(result.result().getOrDefault("total", 0)), null, "neutral"),
-                                    new Metric("已完成", String.valueOf(result.result().getOrDefault("completed", 0)), null, "positive"),
-                                    new Metric("待处理", String.valueOf(result.result().getOrDefault("pending", 0)), null, "warning"),
-                                    new Metric("完成率", String.valueOf(result.result().getOrDefault("completionRate", "--")), null, "positive")
-                            )
-                    ),
-                    buildStatsAnswerBlock(result.result())
-            );
+                    )
+            ));
+            AiMessageBlockResponse chartBlock = buildStatsChartBlock(result.result());
+            if (chartBlock != null) {
+                blocks.add(chartBlock);
+            } else {
+                blocks.add(buildStatsAnswerBlock(result.result()));
+            }
+            return List.copyOf(blocks);
         }
         if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
             return List.of(
@@ -1743,6 +2175,9 @@ public class DbAiCopilotService implements AiCopilotService {
         if ("workflow.definition.list".equals(result.toolKey())) {
             return "我已经读取流程定义列表，可继续按流程名或流程键深入查看。";
         }
+        if ("feature.catalog.query".equals(result.toolKey())) {
+            return "我已经整理当前页面可用的功能目录，可继续追问某个功能怎么使用。";
+        }
         if ("task.query".equals(result.toolKey()) || "workflow.trace.summary".equals(result.toolKey())) {
             return "INITIATED".equals(resolveApprovalSheetViewFromArguments(result.arguments()))
                     ? "我已经汇总你发起的申请进度，可继续追问某条申请当前卡在哪个节点。"
@@ -1765,6 +2200,11 @@ public class DbAiCopilotService implements AiCopilotService {
             }
             return "当前没有命中的流程定义。";
         }
+        if ("feature.catalog.query".equals(result.toolKey())) {
+            int toolCount = countItems(result.result().get("tools"));
+            int skillCount = countItems(result.result().get("skills"));
+            return "当前页面共整理出 " + toolCount + " 个可用工具、" + skillCount + " 个可用技能，可继续问我某个功能怎么使用。";
+        }
         if ("task.query".equals(result.toolKey()) || "workflow.todo.list".equals(result.toolKey())) {
             return buildTodoFinalAnswer(content, routePath, normalizeApprovalSheetResult(result.result()), resolveApprovalSheetViewFromArguments(result.arguments()));
         }
@@ -1778,6 +2218,22 @@ public class DbAiCopilotService implements AiCopilotService {
             return buildPlmFinalAnswer(result.result());
         }
         return buildReadSummary(result);
+    }
+
+    private List<Field> buildFeatureCatalogFields(Map<String, Object> result) {
+        return List.of(
+                new Field("业务域", stringValue(result.get("domain")), null),
+                new Field("来源页面", stringValue(result.get("pageRoute")), null),
+                new Field("功能摘要", stringValue(result.get("summary")), null)
+        );
+    }
+
+    private List<Metric> buildFeatureCatalogMetrics(Map<String, Object> result) {
+        return List.of(
+                new Metric("工具数", String.valueOf(countItems(result.get("tools"))), null, "neutral"),
+                new Metric("技能数", String.valueOf(countItems(result.get("skills"))), null, "positive"),
+                new Metric("MCP 数", String.valueOf(countItems(result.get("mcps"))), null, "warning")
+        );
     }
 
     private String normalizeTaskAction(Object value) {
@@ -2186,13 +2642,19 @@ public class DbAiCopilotService implements AiCopilotService {
                     toJson(toolResult.result()),
                     fallback
             );
-            if (runtimeReply == null || runtimeReply.isBlank()) {
+            if (runtimeReply == null || runtimeReply.isBlank() || isPlaceholderAiReply(runtimeReply)) {
                 return fallback;
             }
             return runtimeReply;
         } catch (RuntimeException exception) {
             return fallback;
         }
+    }
+
+    private boolean isPlaceholderAiReply(String runtimeReply) {
+        String normalized = runtimeReply == null ? "" : runtimeReply.trim();
+        return "routing-reply".equalsIgnoreCase(normalized)
+                || "supervisor-reply".equalsIgnoreCase(normalized);
     }
 
     private String newId(String prefix) {
@@ -2818,25 +3280,34 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     private String buildStatsFinalAnswer(Map<String, Object> result) {
-        Object total = result.getOrDefault("total", 0);
-        Object completed = result.getOrDefault("completed", 0);
-        Object pending = result.getOrDefault("pending", 0);
-        Object completionRate = result.getOrDefault("completionRate", "--");
-        return "当前统计：总量 " + total + "，已完成 " + completed + "，待处理 " + pending + "，完成率 " + completionRate + "。";
+        String summary = stringValue(result.get("summary"));
+        if (!summary.isBlank()) {
+            return summary;
+        }
+        List<Metric> metrics = buildStatsMetrics(result);
+        if (!metrics.isEmpty()) {
+            String metricSummary = metrics.stream()
+                    .map(metric -> metric.label() + " " + metric.value())
+                    .reduce((left, right) -> left + "，" + right)
+                    .orElse("");
+            if (!metricSummary.isBlank()) {
+                return "当前统计结果：" + metricSummary + "。";
+            }
+        }
+        return "当前已返回统计结果。";
     }
 
     private AiMessageBlockResponse buildStatsAnswerBlock(Map<String, Object> result) {
-        Object total = result.getOrDefault("total", 0);
-        Object completed = result.getOrDefault("completed", 0);
-        Object pending = result.getOrDefault("pending", 0);
-        Object completionRate = result.getOrDefault("completionRate", "--");
+        String title = stringValue(result.get("title"));
+        String summary = stringValue(result.get("summary"));
+        List<Metric> metrics = buildStatsMetrics(result);
         return new AiMessageBlockResponse(
                 "stats",
-                "统计问答结果",
+                title.isBlank() ? "统计问答结果" : title,
                 null,
                 null,
                 null,
-                "当前回答来自平台统计工具，可继续细分到流程、OA 或 PLM 维度。",
+                summary.isBlank() ? "当前回答来自平台统计工具，可继续细分到流程、OA 或 PLM 维度。" : summary,
                 null,
                 null,
                 null,
@@ -2844,17 +3315,67 @@ public class DbAiCopilotService implements AiCopilotService {
                 null,
                 null,
                 List.of(
-                        new Field("统计口径", "流程平台统计", "来自平台统计工具"),
-                        new Field("统计主题", "当前流程运营指标", null),
+                        new Field("统计口径", stringValue(result.getOrDefault("scope", "platform")), "来自平台统计工具"),
+                        new Field("统计主题", title.isBlank() ? "当前流程运营指标" : title, null),
                         new Field("摘要", "已返回真实统计数据", null)
                 ),
-                List.of(
-                        new Metric("总量", String.valueOf(total), null, "neutral"),
-                        new Metric("已完成", String.valueOf(completed), null, "positive"),
-                        new Metric("待处理", String.valueOf(pending), null, "warning"),
-                        new Metric("完成率", String.valueOf(completionRate), null, "positive")
-                )
+                metrics.isEmpty()
+                        ? List.of()
+                        : metrics
         );
+    }
+
+    private AiMessageBlockResponse buildStatsChartBlock(Map<String, Object> result) {
+        Map<String, Object> chart = mapValue(result.get("chart"));
+        List<Map<String, Object>> data = mapList(result.get("data"));
+        if (chart.isEmpty() || data.isEmpty()) {
+            return null;
+        }
+        return new AiMessageBlockResponse(
+                "chart",
+                stringValue(chart.get("title")).isBlank() ? "统计图表" : stringValue(chart.get("title")),
+                null,
+                null,
+                stringValue(chart.get("description")),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Map.of(
+                        "chart", chart,
+                        "data", data
+                ),
+                null,
+                List.of(),
+                List.of(),
+                buildStatsMetrics(result)
+        );
+    }
+
+    private boolean isStatsErrorResult(Map<String, Object> result) {
+        return Boolean.TRUE.equals(result.get("error"));
+    }
+
+    private List<Metric> buildStatsMetrics(Map<String, Object> result) {
+        List<Map<String, Object>> metricMaps = mapList(result.get("metrics"));
+        if (metricMaps.isEmpty()) {
+            return List.of();
+        }
+        return metricMaps.stream()
+                .map(metric -> new Metric(
+                        stringValue(metric.get("label")),
+                        stringValue(metric.get("value")),
+                        stringValue(metric.get("hint")).isBlank() ? null : stringValue(metric.get("hint")),
+                        stringValue(metric.get("tone")).isBlank() ? null : stringValue(metric.get("tone"))
+                ))
+                .toList();
     }
 
     private List<Field> buildPlmSummaryFields(

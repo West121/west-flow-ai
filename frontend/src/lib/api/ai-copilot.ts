@@ -78,6 +78,41 @@ export type AICopilotStatsBlock = {
   }[]
 }
 
+export type AICopilotChartBlock = {
+  type: 'chart'
+  title: string
+  summary?: string
+  detail?: string
+  result?: {
+    chart?: {
+      type?: 'bar' | 'line' | 'pie' | 'area' | 'donut' | 'table' | 'metric'
+      title?: string
+      description?: string
+      xField?: string
+      yField?: string
+      metricLabel?: string
+      valueLabel?: string
+      value?: string | number
+      columns?: {
+        key: string
+        label: string
+      }[]
+      series?: {
+        dataKey: string
+        name?: string
+        color?: string
+      }[]
+    }
+    data?: Record<string, unknown>[]
+  }
+  metrics?: {
+    label: string
+    value: string
+    hint?: string
+    tone?: 'neutral' | 'positive' | 'warning'
+  }[]
+}
+
 export type AICopilotTraceStep = {
   stage: string
   label: string
@@ -174,6 +209,7 @@ export type AICopilotMessageBlock =
   | AICopilotConfirmBlock
   | AICopilotFormPreviewBlock
   | AICopilotStatsBlock
+  | AICopilotChartBlock
   | AICopilotResultBlock
   | AICopilotFailureBlock
   | AICopilotRetryBlock

@@ -21,6 +21,14 @@ import org.springframework.stereotype.Service;
 // 校验流程 DSL 的结构、引用关系和节点配置完整性。
 public class ProcessDslValidator {
 
+    private static final Set<String> COLLABORATION_NODE_TYPES = Set.of(
+            "cc",
+            "supervise",
+            "meeting",
+            "read",
+            "circulate"
+    );
+
     private static final List<String> SUPPORTED_TIMEOUT_ACTIONS = List.of("APPROVE", "REJECT");
     private static final List<String> SUPPORTED_REMINDER_CHANNELS = List.of(
             "IN_APP",
@@ -30,6 +38,7 @@ public class ProcessDslValidator {
             "WECHAT",
             "DINGTALK"
     );
+    private static final List<String> SUPPORTED_ESCALATION_TARGET_MODES = List.of("USER", "ROLE");
     private static final List<String> SUPPORTED_SCHEDULE_TYPES = List.of("ABSOLUTE_TIME", "RELATIVE_TO_ARRIVAL");
     private static final List<String> SUPPORTED_TRIGGER_MODES = List.of("IMMEDIATE", "SCHEDULED");
     private static final List<String> SUPPORTED_SUBPROCESS_VERSION_POLICIES = List.of("LATEST_PUBLISHED", "FIXED_VERSION");
@@ -340,6 +349,7 @@ public class ProcessDslValidator {
 
             validateTimeoutPolicy(node);
             validateReminderPolicy(node);
+            validateEscalationPolicy(node);
         }
     }
 
@@ -580,36 +590,48 @@ public class ProcessDslValidator {
     // 校验抄送节点的目标配置。
     private void validateCcTargets(Collection<ProcessDslPayload.Node> nodes) {
         for (ProcessDslPayload.Node node : nodes) {
-            if (!"cc".equals(node.type())) {
+            if (!COLLABORATION_NODE_TYPES.contains(node.type())) {
                 continue;
             }
+            String nodeLabel = collaborationNodeLabel(node.type());
             Map<String, Object> targets = mapValue(safeConfig(node).get("targets"));
             if (targets.isEmpty()) {
-                throw invalid("cc 节点必须配置 targets", Map.of("nodeId", node.id()));
+                throw invalid(nodeLabel + "节点必须配置 targets", Map.of("nodeId", node.id()));
             }
             String mode = asString(targets.get("mode"));
             if (mode == null) {
-                throw invalid("cc 节点 targets.mode 不能为空", Map.of("nodeId", node.id()));
+                throw invalid(nodeLabel + "节点 targets.mode 不能为空", Map.of("nodeId", node.id()));
             }
             switch (mode) {
                 case "USER" -> {
                     if (stringList(targets.get("userIds")).isEmpty()) {
-                        throw invalid("cc 节点 USER 目标不能为空", Map.of("nodeId", node.id()));
+                        throw invalid(nodeLabel + "节点 USER 目标不能为空", Map.of("nodeId", node.id()));
                     }
                 }
                 case "ROLE" -> {
                     if (stringList(targets.get("roleCodes")).isEmpty()) {
-                        throw invalid("cc 节点 ROLE 目标不能为空", Map.of("nodeId", node.id()));
+                        throw invalid(nodeLabel + "节点 ROLE 目标不能为空", Map.of("nodeId", node.id()));
                     }
                 }
                 case "DEPARTMENT" -> {
                     if (asString(targets.get("departmentRef")) == null) {
-                        throw invalid("cc 节点部门引用不能为空", Map.of("nodeId", node.id()));
+                        throw invalid(nodeLabel + "节点部门引用不能为空", Map.of("nodeId", node.id()));
                     }
                 }
-                default -> throw invalid("cc 节点 targets.mode 不合法", Map.of("nodeId", node.id(), "mode", mode));
+                default -> throw invalid(nodeLabel + "节点 targets.mode 不合法", Map.of("nodeId", node.id(), "mode", mode));
             }
         }
+    }
+
+    private String collaborationNodeLabel(String type) {
+        return switch (type) {
+            case "cc" -> "抄送";
+            case "supervise" -> "督办";
+            case "meeting" -> "会办";
+            case "read" -> "阅办";
+            case "circulate" -> "传阅";
+            default -> type;
+        };
     }
 
     // 校验定时节点的调度类型和调度参数。
@@ -978,6 +1000,34 @@ public class ProcessDslValidator {
         }
         if (channels.stream().anyMatch(channel -> !SUPPORTED_REMINDER_CHANNELS.contains(channel))) {
             throw invalid("approver 节点 reminderPolicy.channels 不合法", Map.of("nodeId", node.id(), "channels", channels));
+        }
+    }
+
+    private void validateEscalationPolicy(ProcessDslPayload.Node node) {
+        Map<String, Object> escalationPolicy = mapValue(safeConfig(node).get("escalationPolicy"));
+        if (escalationPolicy.isEmpty() || !Boolean.TRUE.equals(escalationPolicy.get("enabled"))) {
+            return;
+        }
+        Integer afterMinutes = integerValue(escalationPolicy.get("afterMinutes"));
+        if (afterMinutes == null || afterMinutes <= 0) {
+            throw invalid("approver 节点 escalationPolicy.afterMinutes 不能为空", Map.of("nodeId", node.id()));
+        }
+        String targetMode = asString(escalationPolicy.get("targetMode"));
+        if (targetMode == null || !SUPPORTED_ESCALATION_TARGET_MODES.contains(targetMode)) {
+            throw invalid("approver 节点 escalationPolicy.targetMode 不合法", Map.of("nodeId", node.id(), "targetMode", targetMode));
+        }
+        if ("USER".equals(targetMode) && stringList(escalationPolicy.get("targetUserIds")).isEmpty()) {
+            throw invalid("approver 节点 escalationPolicy.targetUserIds 不能为空", Map.of("nodeId", node.id()));
+        }
+        if ("ROLE".equals(targetMode) && stringList(escalationPolicy.get("targetRoleCodes")).isEmpty()) {
+            throw invalid("approver 节点 escalationPolicy.targetRoleCodes 不能为空", Map.of("nodeId", node.id()));
+        }
+        List<String> channels = stringList(escalationPolicy.get("channels"));
+        if (channels.isEmpty()) {
+            throw invalid("approver 节点 escalationPolicy.channels 不能为空", Map.of("nodeId", node.id()));
+        }
+        if (channels.stream().anyMatch(channel -> !SUPPORTED_REMINDER_CHANNELS.contains(channel))) {
+            throw invalid("approver 节点 escalationPolicy.channels 不合法", Map.of("nodeId", node.id(), "channels", channels));
         }
     }
 

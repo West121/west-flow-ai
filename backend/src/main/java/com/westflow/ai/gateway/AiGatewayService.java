@@ -6,7 +6,9 @@ import java.util.List;
 
 /**
  * AI 网关路由服务。
+ * 说明：当前仅作为 planner 主链失败时的 legacy fallback，后续不再扩展新能力。
  */
+@Deprecated(forRemoval = false)
 public class AiGatewayService {
 
     private final AiOrchestrationPlanner aiOrchestrationPlanner;

@@ -113,6 +113,18 @@ export type WorkbenchProcessInstanceEvent = {
   operatorUserId?: string | null
   occurredAt: string
   details?: Record<string, unknown> | null
+  targetStrategy?: string | null
+  targetNodeId?: string | null
+  reapproveStrategy?: string | null
+  actingMode?: string | null
+  actingForUserId?: string | null
+  delegatedByUserId?: string | null
+  handoverFromUserId?: string | null
+  slaMetadata?: Record<string, unknown> | null
+  signatureType?: string | null
+  signatureStatus?: string | null
+  signatureComment?: string | null
+  signatureAt?: string | null
 }
 
 export type WorkbenchTaskTraceItem = {
@@ -120,6 +132,7 @@ export type WorkbenchTaskTraceItem = {
   nodeId: string
   nodeName: string
   taskKind?: string | null
+  taskSemanticMode?: string | null
   status: string
   assigneeUserId?: string | null
   candidateUserIds: string[]
@@ -149,6 +162,7 @@ export type WorkbenchTaskTraceItem = {
   isRejected?: boolean
   isJumped?: boolean
   isTakenBack?: boolean
+  slaMetadata?: Record<string, unknown> | null
 }
 
 export type WorkbenchCountersignGroupMember = {
@@ -248,6 +262,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   automationActionTrace?: WorkbenchAutomationActionTraceItem[] | null
   notificationSendRecords?: WorkbenchNotificationSendRecord[] | null
   taskKind?: string | null
+  taskSemanticMode?: string | null
   actingMode?: string | null
   actingForUserId?: string | null
   delegatedByUserId?: string | null
@@ -283,6 +298,7 @@ export type WorkbenchAutomationActionTraceItem = {
   occurredAt: string
   detail?: string | null
   nodeId?: string | null
+  slaMetadata?: Record<string, unknown> | null
 }
 
 export type WorkbenchNotificationSendRecord = {
@@ -347,6 +363,7 @@ export type WorkbenchTaskActionAvailability = {
   canJump: boolean
   canTakeBack: boolean
   canWakeUp: boolean
+  canSign: boolean
 }
 
 export type ApprovalSheetPageResponse = {
@@ -374,7 +391,9 @@ export type TransferWorkbenchTaskPayload = {
 }
 
 export type ReturnWorkbenchTaskPayload = {
-  targetStrategy: 'PREVIOUS_USER_TASK'
+  targetStrategy: 'PREVIOUS_USER_TASK' | 'INITIATOR' | 'ANY_USER_TASK'
+  targetTaskId?: string | null
+  targetNodeId?: string | null
   comment?: string | null
 }
 
@@ -421,6 +440,22 @@ export type WakeUpWorkbenchInstancePayload = {
 export type DelegateWorkbenchTaskPayload = {
   targetUserId: string
   comment?: string | null
+}
+
+export type SignWorkbenchTaskPayload = {
+  signatureType: string
+  signatureComment?: string | null
+}
+
+export type SignWorkbenchTaskResponse = {
+  taskId: string
+  instanceId: string
+  nodeId: string
+  signatureType: string
+  signatureStatus: string
+  signatureComment?: string | null
+  signatureAt: string
+  operatorUserId: string
 }
 
 export type HandoverWorkbenchTasksPayload = {
@@ -690,6 +725,17 @@ export async function addSignWorkbenchTask(
   const response = await apiClient.post<
     WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
   >(resolveWorkbenchRuntimePath('tasks', taskId, 'add-sign'), payload)
+
+  return unwrapResponse(response)
+}
+
+export async function signWorkbenchTask(
+  taskId: string,
+  payload: SignWorkbenchTaskPayload
+): Promise<SignWorkbenchTaskResponse> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<SignWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', taskId, 'sign'), payload)
 
   return unwrapResponse(response)
 }

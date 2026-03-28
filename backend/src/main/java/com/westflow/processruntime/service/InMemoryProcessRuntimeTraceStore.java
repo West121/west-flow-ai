@@ -86,6 +86,19 @@ public class InMemoryProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
                             normalizedInstanceId + "::" + node.id()
                     ));
                 }
+                Map<String, Object> escalationPolicy = mapValue(config.get("escalationPolicy"));
+                if (Boolean.TRUE.equals(escalationPolicy.get("enabled"))) {
+                    traces.add(new ProcessAutomationTraceItemResponse(
+                            newId("auto_trace"),
+                            "ESCALATION",
+                            node.name() + " 升级提醒",
+                            status,
+                            "system",
+                            at,
+                            "升级渠道：" + String.join("、", stringListValue(escalationPolicy.get("channels"))),
+                            normalizedInstanceId + "::" + node.id()
+                    ));
+                }
                 continue;
             }
             if ("timer".equals(node.type())) {

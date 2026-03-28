@@ -1,6 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
   Trash2,
   ArrowRight,
   BadgeCheck,
@@ -49,6 +65,7 @@ import {
   getAICopilotSession,
   listAICopilotSessions,
   sendAICopilotMessage,
+  type AICopilotChartBlock,
   type AICopilotConfirmationDecision,
   type AICopilotMessage,
   type AICopilotMessageBlock,
@@ -1259,6 +1276,8 @@ function BlockCard({
           </CardContent>
         </Card>
       )
+    case 'chart':
+      return <ChartBlockCard block={block} />
     case 'trace':
       return (
         <Card className='border-sky-500/20 bg-sky-500/10 text-foreground shadow-none'>
@@ -1600,9 +1619,216 @@ function shouldRenderConversationBlock(block: AICopilotMessageBlock) {
   return (
     (block.type === 'confirm' &&
       ((block.status ?? 'pending') === 'pending')) ||
+    block.type === 'stats' ||
+    block.type === 'chart' ||
     block.type === 'form-preview' ||
     block.type === 'failure' ||
     block.type === 'retry'
+  )
+}
+
+function ChartBlockCard({ block }: { block: AICopilotChartBlock }) {
+  const chart = block.result?.chart
+  const data = Array.isArray(block.result?.data) ? block.result.data : []
+  const chartType = chart?.type ?? 'bar'
+  const xField = chart?.xField ?? 'label'
+  const yField = chart?.yField ?? 'value'
+  const series = chart?.series ?? [{ dataKey: yField, name: '数值' }]
+  const palette = ['#0f766e', '#2563eb', '#f59e0b', '#7c3aed', '#ef4444', '#10b981']
+  const visibleMetrics =
+    chartType === 'metric'
+      ? (block.metrics ?? []).filter((metric) => {
+          const metricLabel = String(chart?.metricLabel ?? '').trim()
+          const chartValue = String(chart?.value ?? data[0]?.[yField] ?? '--').trim()
+          return !(
+            metricLabel &&
+            metric.label === metricLabel &&
+            String(metric.value).trim() === chartValue
+          )
+        })
+      : block.metrics
+
+  if (!chart || data.length === 0) {
+    if (chartType !== 'metric') {
+      return null
+    }
+  }
+
+  return (
+    <Card className='border-primary/20 bg-card text-foreground shadow-none'>
+      <CardHeader className='space-y-2 pb-3'>
+        <CardTitle className='flex items-center gap-2 text-base'>
+          <BarChart3 className='size-4 text-primary' />
+          {block.title}
+        </CardTitle>
+        {block.summary ? (
+          <p className='text-sm leading-6 text-foreground'>{block.summary}</p>
+        ) : null}
+        {block.detail ? (
+          <p className='text-xs leading-5 text-muted-foreground'>{block.detail}</p>
+        ) : null}
+      </CardHeader>
+      <CardContent className='space-y-4 pt-0'>
+        {chartType === 'metric' ? (
+          <div className='rounded-2xl border border-border bg-background/80 p-6'>
+            <div className='space-y-2'>
+              <p className='text-sm text-muted-foreground'>
+                {chart?.metricLabel ?? '核心指标'}
+              </p>
+              <div className='flex items-end gap-3'>
+                <span className='text-4xl font-semibold tracking-tight text-foreground'>
+                  {String(chart?.value ?? data[0]?.[yField] ?? '--')}
+                </span>
+                {chart?.valueLabel ? (
+                  <span className='pb-1 text-sm text-muted-foreground'>
+                    {chart.valueLabel}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : chartType === 'table' ? (
+          <div className='overflow-hidden rounded-2xl border border-border bg-background/80'>
+            <div className='overflow-x-auto'>
+              <table className='min-w-full divide-y divide-border text-sm'>
+                <thead className='bg-muted/40'>
+                  <tr>
+                    {(chart?.columns ?? []).map((column) => (
+                      <th
+                        key={column.key}
+                        className='px-4 py-3 text-left font-medium text-foreground'
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-border'>
+                  {data.map((row, index) => (
+                    <tr key={`chart-row-${index}`} className='bg-background/80'>
+                      {(chart?.columns ?? []).map((column) => (
+                        <td key={column.key} className='px-4 py-3 text-foreground'>
+                          {String(row[column.key] ?? '--')}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className='h-72 rounded-2xl border border-border bg-background/80 p-3'>
+            <ResponsiveContainer width='100%' height='100%'>
+              {chartType === 'pie' || chartType === 'donut' ? (
+              <PieChart>
+                <Tooltip />
+                <Pie
+                  data={data}
+                  dataKey={series[0]?.dataKey ?? yField}
+                  nameKey={xField}
+                  innerRadius={chartType === 'donut' ? 52 : 0}
+                  outerRadius={88}
+                  paddingAngle={2}
+                >
+                  {data.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={palette[index % palette.length]} />
+                  ))}
+                </Pie>
+              </PieChart>
+              ) : chartType === 'line' ? (
+              <LineChart data={data}>
+                <CartesianGrid strokeDasharray='3 3' vertical={false} stroke='var(--border)' />
+                <XAxis
+                  dataKey={xField}
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke='var(--muted-foreground)'
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke='var(--muted-foreground)'
+                />
+                <Tooltip />
+                {series.map((item, index) => (
+                  <Line
+                    key={item.dataKey}
+                    type='monotone'
+                    dataKey={item.dataKey}
+                    name={item.name ?? item.dataKey}
+                    stroke={item.color ?? palette[index % palette.length]}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                ))}
+              </LineChart>
+              ) : chartType === 'area' ? (
+              <AreaChart data={data}>
+                <CartesianGrid strokeDasharray='3 3' vertical={false} stroke='var(--border)' />
+                <XAxis
+                  dataKey={xField}
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke='var(--muted-foreground)'
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke='var(--muted-foreground)'
+                />
+                <Tooltip />
+                {series.map((item, index) => (
+                  <Area
+                    key={item.dataKey}
+                    type='monotone'
+                    dataKey={item.dataKey}
+                    name={item.name ?? item.dataKey}
+                    stroke={item.color ?? palette[index % palette.length]}
+                    fill={item.color ?? palette[index % palette.length]}
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                  />
+                ))}
+              </AreaChart>
+              ) : (
+              <BarChart data={data}>
+                <CartesianGrid strokeDasharray='3 3' vertical={false} stroke='var(--border)' />
+                <XAxis
+                  dataKey={xField}
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke='var(--muted-foreground)'
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  stroke='var(--muted-foreground)'
+                />
+                <Tooltip />
+                {series.map((item, index) => (
+                  <Bar
+                    key={item.dataKey}
+                    dataKey={item.dataKey}
+                    name={item.name ?? item.dataKey}
+                    radius={[8, 8, 0, 0]}
+                    fill={item.color ?? palette[index % palette.length]}
+                  />
+                ))}
+              </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        )}
+        <MetricGrid metrics={visibleMetrics} />
+      </CardContent>
+    </Card>
   )
 }
 

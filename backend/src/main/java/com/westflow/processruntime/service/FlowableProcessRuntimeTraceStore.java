@@ -154,6 +154,19 @@ public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
                             addMinutes(at, reminderPolicy.get("firstReminderAfterMinutes"))
                     ));
                 }
+                Map<String, Object> escalationPolicy = mapValue(config.get("escalationPolicy"));
+                if (Boolean.TRUE.equals(escalationPolicy.get("enabled"))) {
+                    traces.add(buildAutomationTrace(
+                            normalizedInstanceId,
+                            node,
+                            OrchestratorAutomationType.ESCALATION,
+                            status,
+                            at,
+                            dueTargets,
+                            "升级渠道：" + String.join("、", stringListValue(escalationPolicy.get("channels"))),
+                            addMinutes(at, escalationPolicy.get("afterMinutes"))
+                    ));
+                }
                 continue;
             }
             if ("timer".equals(node.type())) {
@@ -357,6 +370,7 @@ public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
         return switch (automationType) {
             case TIMEOUT_APPROVAL -> node.name() + " 超时审批";
             case AUTO_REMINDER -> node.name() + " 自动提醒";
+            case ESCALATION -> node.name() + " 升级提醒";
             case TIMER_NODE, TRIGGER_NODE -> node.name();
         };
     }

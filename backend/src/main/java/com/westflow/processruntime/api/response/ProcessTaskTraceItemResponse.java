@@ -3,6 +3,7 @@ package com.westflow.processruntime.api.response;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
 // 任务轨迹条目。
@@ -11,6 +12,7 @@ public record ProcessTaskTraceItemResponse(
         String nodeId,
         String nodeName,
         String taskKind,
+        String taskSemanticMode,
         String status,
         String assigneeUserId,
         List<String> candidateUserIds,
@@ -38,6 +40,79 @@ public record ProcessTaskTraceItemResponse(
         String actingMode,
         String actingForUserId,
         String delegatedByUserId,
-        String handoverFromUserId
+        String handoverFromUserId,
+        Map<String, Object> slaMetadata
 ) {
+    public ProcessTaskTraceItemResponse(
+            String taskId,
+            String nodeId,
+            String nodeName,
+            String taskKind,
+            String taskSemanticMode,
+            String status,
+            String assigneeUserId,
+            List<String> candidateUserIds,
+            List<String> candidateGroupIds,
+            String action,
+            String operatorUserId,
+            String comment,
+            OffsetDateTime receiveTime,
+            OffsetDateTime readTime,
+            OffsetDateTime handleStartTime,
+            OffsetDateTime handleEndTime,
+            Long handleDurationSeconds,
+            String sourceTaskId,
+            String targetTaskId,
+            String targetUserId,
+            boolean isCcTask,
+            boolean isAddSignTask,
+            boolean isRevoked,
+            boolean isRejected,
+            boolean isJumped,
+            boolean isTakenBack,
+            String targetStrategy,
+            String targetNodeId,
+            String reapproveStrategy,
+            String actingMode,
+            String actingForUserId,
+            String delegatedByUserId,
+            String handoverFromUserId
+    ) {
+        this(
+                taskId,
+                nodeId,
+                nodeName,
+                taskKind,
+                taskSemanticMode,
+                status,
+                assigneeUserId,
+                candidateUserIds,
+                candidateGroupIds,
+                action,
+                operatorUserId,
+                comment,
+                receiveTime,
+                readTime,
+                handleStartTime,
+                handleEndTime,
+                handleDurationSeconds,
+                sourceTaskId,
+                targetTaskId,
+                targetUserId,
+                isCcTask,
+                isAddSignTask,
+                isRevoked,
+                isRejected,
+                isJumped,
+                isTakenBack,
+                targetStrategy,
+                targetNodeId,
+                reapproveStrategy,
+                actingMode,
+                actingForUserId,
+                delegatedByUserId,
+                handoverFromUserId,
+                null
+        );
+    }
 }

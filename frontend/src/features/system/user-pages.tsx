@@ -1543,8 +1543,13 @@ export function UsersListPage() {
         navigate={navigate}
         columns={buildUserColumns((row) => setPendingDeleteRows([row]))}
         data={rows}
+        total={query.data?.total}
         createAction={{ label: '新建系统用户', href: '/system/users/create' }}
         summaries={summaries}
+        onRefresh={() => {
+          void query.refetch()
+        }}
+        isRefreshing={query.isFetching}
         enableRowSelection
         getRowId={(row) => row.userId}
         groupOptions={groupOptions}

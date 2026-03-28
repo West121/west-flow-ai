@@ -22,7 +22,6 @@ import { ProTableRefresh } from './pro-table-refresh'
 
 export function ProTableToolbar<TData>({
   table,
-  total,
   searchPlaceholder,
   searchValue,
   onSearchChange,
@@ -44,7 +43,6 @@ export function ProTableToolbar<TData>({
   onGroupFieldChange,
 }: {
   table: Table<TData>
-  total: number
   searchPlaceholder: string
   searchValue: string
   onSearchChange: (value: string) => void
@@ -72,12 +70,11 @@ export function ProTableToolbar<TData>({
     <div className='flex flex-col gap-4'>
       <div className='flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between'>
         <div className='space-y-2'>
-          <div className='text-sm text-muted-foreground'>
-            共 {total} 条
-            {lastRefreshedLabel ? (
-              <span className='ms-3'>最近刷新：{lastRefreshedLabel}</span>
-            ) : null}
-          </div>
+          {lastRefreshedLabel ? (
+            <div className='text-sm text-muted-foreground'>
+              最近刷新：{lastRefreshedLabel}
+            </div>
+          ) : null}
           {queryBadges && queryBadges.length > 0 ? (
             <div className='flex flex-wrap gap-2'>
               {queryBadges.map((item) => (
@@ -118,9 +115,11 @@ export function ProTableToolbar<TData>({
               </button>
             </div>
           ) : null}
-          <ProTableRefresh onRefresh={onRefresh} isRefreshing={isRefreshing} />
+          {onRefresh ? (
+            <ProTableRefresh onRefresh={onRefresh} isRefreshing={isRefreshing} />
+          ) : null}
           <ProTableExport onExport={onExport} disabled={!onExport} />
-          <ProTableImport onImport={onImport} disabled={!onImport} />
+          {onImport ? <ProTableImport onImport={onImport} /> : null}
           {extraActions}
           {createAction}
         </div>

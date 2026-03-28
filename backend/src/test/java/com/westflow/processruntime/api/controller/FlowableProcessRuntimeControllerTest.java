@@ -221,6 +221,94 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldRecordTaskSignatureAndExposeItInTaskDetailTrace() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishLeaveProcess();
+        seedLeaveBill("leave_021");
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_021",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 5,
+                                    "reason": "家里有事"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode actionsBeforeClaim = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(actionsBeforeClaim.path("canSign").asBoolean()).isFalse();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "认领后签章"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode actionsAfterClaim = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(actionsAfterClaim.path("canSign").asBoolean()).isTrue();
+
+        JsonNode signBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/sign", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "signatureType": "PERSONAL_SEAL",
+                                  "signatureComment": "已完成电子签章"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(signBody.path("taskId").asText()).isEqualTo(taskId);
+        assertThat(signBody.path("signatureType").asText()).isEqualTo("PERSONAL_SEAL");
+        assertThat(signBody.path("signatureStatus").asText()).isEqualTo("SIGNED");
+        assertThat(signBody.path("signatureComment").asText()).isEqualTo("已完成电子签章");
+        assertThat(signBody.path("signatureAt").asText()).isNotBlank();
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", taskId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(detailBody.path("instanceEvents").isArray()).isTrue();
+        assertThat(detailBody.path("instanceEvents").toString()).contains("SIGNATURE");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("PERSONAL_SEAL");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("SIGNED");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("已完成电子签章");
+    }
+
+    @Test
     void shouldExposeDashboardSummary() throws Exception {
         String token = login("zhangsan");
 
@@ -1982,6 +2070,152 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldSupportBatchClaimReadCompleteAndRejectOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishLeaveProcess();
+        publishCcLeaveProcess();
+        publishRejectRouteProcess();
+        seedLeaveBill("leave_batch_001");
+        seedLeaveBill("leave_batch_002");
+        seedLeaveBill("leave_batch_cc_001");
+        seedLeaveBill("leave_batch_cc_002");
+        seedLeaveBill("leave_batch_reject_001");
+        seedLeaveBill("leave_batch_reject_002");
+
+        String firstClaimTaskId = startProcess(applicantToken, "leave_batch_001").path("activeTasks").get(0).path("taskId").asText();
+        String secondClaimTaskId = startProcess(applicantToken, "leave_batch_002").path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode batchClaimBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/batch/claim")
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds": ["%s", "%s"],
+                                  "comment": "批量认领"
+                                }
+                                """.formatted(firstClaimTaskId, secondClaimTaskId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(batchClaimBody.path("action").asText()).isEqualTo("CLAIM");
+        assertThat(batchClaimBody.path("totalCount").asInt()).isEqualTo(2);
+        assertThat(batchClaimBody.path("successCount").asInt()).isEqualTo(2);
+        assertThat(batchClaimBody.path("failureCount").asInt()).isEqualTo(0);
+        assertThat(batchClaimBody.path("items").get(0).path("success").asBoolean()).isTrue();
+
+        JsonNode batchCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/batch/complete")
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds": ["%s", "%s"],
+                                  "comment": "批量同意",
+                                  "operatorUserId": "usr_002",
+                                  "taskFormData": {
+                                    "approvedDays": 2
+                                  }
+                                }
+                                """.formatted(firstClaimTaskId, secondClaimTaskId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(batchCompleteBody.path("action").asText()).isEqualTo("COMPLETE");
+        assertThat(batchCompleteBody.path("totalCount").asInt()).isEqualTo(2);
+        assertThat(batchCompleteBody.path("successCount").asInt()).isEqualTo(2);
+        assertThat(batchCompleteBody.path("failureCount").asInt()).isEqualTo(0);
+        assertThat(batchCompleteBody.path("items").get(0).path("status").asText()).isIn("RUNNING", "COMPLETED");
+
+        String ccTaskOne = processCcTask(applicantToken, managerToken, "leave_batch_cc_001");
+        String ccTaskTwo = processCcTask(applicantToken, managerToken, "leave_batch_cc_002");
+
+        JsonNode batchReadBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/batch/read")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds": ["%s", "%s"]
+                                }
+                                """.formatted(ccTaskOne, ccTaskTwo)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(batchReadBody.path("action").asText()).isEqualTo("READ");
+        assertThat(batchReadBody.path("successCount").asInt()).isEqualTo(2);
+        assertThat(batchReadBody.path("failureCount").asInt()).isEqualTo(0);
+        assertThat(batchReadBody.path("items").get(0).path("status").asText()).isIn("RUNNING", "COMPLETED");
+
+        String rejectTaskOne = startRejectRouteProcess(applicantToken, "leave_batch_reject_001").path("activeTasks").get(0).path("taskId").asText();
+        String rejectTaskTwo = startRejectRouteProcess(applicantToken, "leave_batch_reject_002").path("activeTasks").get(0).path("taskId").asText();
+        JsonNode batchRejectBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/batch/reject")
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "taskIds": ["%s", "%s"],
+                                  "targetStrategy": "INITIATOR",
+                                  "comment": "批量驳回到发起人",
+                                  "reapproveStrategy": "CONTINUE"
+                                }
+                                """.formatted(rejectTaskOne, rejectTaskTwo)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(batchRejectBody.path("action").asText()).isEqualTo("REJECT");
+        assertThat(batchRejectBody.path("successCount").asInt()).isEqualTo(2);
+        assertThat(batchRejectBody.path("failureCount").asInt()).isEqualTo(0);
+        assertThat(batchRejectBody.path("items").get(0).path("success").asBoolean()).isTrue();
+    }
+
+    @Test
+    void shouldSupportReturnAndRejectToInitiatorOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishRejectRouteProcess();
+        seedLeaveBill("leave_return_initiator_001");
+        seedLeaveBill("leave_return_initiator_002");
+
+        String returnTaskId = startRejectRouteProcess(applicantToken, "leave_return_initiator_001")
+                .path("activeTasks").get(0).path("taskId").asText();
+        JsonNode returnBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/return", returnTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "INITIATOR",
+                                  "comment": "退回到发起人"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(returnBody.path("status").asText()).isIn("RUNNING", "COMPLETED");
+
+        String rejectTaskId = startRejectRouteProcess(applicantToken, "leave_return_initiator_002")
+                .path("activeTasks").get(0).path("taskId").asText();
+        JsonNode rejectBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/reject", rejectTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "INITIATOR",
+                                  "comment": "驳回到发起人",
+                                  "reapproveStrategy": "CONTINUE"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(rejectBody.path("status").asText()).isIn("RUNNING", "COMPLETED");
+    }
+
+    @Test
     void shouldSupportAddSignAndRemoveSignOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -2109,12 +2343,13 @@ class FlowableProcessRuntimeControllerTest {
 
         JsonNode takeBackDetail = approvalDetailByBusiness(applicantToken, "leave_012");
         assertThat(takeBackDetail.path("taskTrace").toString()).contains("TAKEN_BACK");
-        JsonNode takenBackTrace = takeBackDetail.path("taskTrace").findValuesAsText("status").contains("TAKEN_BACK")
-                ? takeBackDetail.path("taskTrace").findParents("status").stream()
-                        .filter(node -> "TAKEN_BACK".equals(node.path("status").asText()))
-                        .findFirst()
-                        .orElseThrow()
-                : null;
+        JsonNode takenBackTrace = null;
+        for (JsonNode trace : takeBackDetail.path("taskTrace")) {
+            if ("TAKEN_BACK".equals(trace.path("status").asText())) {
+                takenBackTrace = trace;
+                break;
+            }
+        }
         assertThat(takenBackTrace).isNotNull();
         assertThat(takenBackTrace.path("isTakenBack").asBoolean()).isTrue();
 
@@ -2307,6 +2542,22 @@ class FlowableProcessRuntimeControllerTest {
                 .andReturn()
                 .getResponse()
                 .getContentAsString()).path("data");
+    }
+
+    private String processCcTask(String applicantToken, String managerToken, String businessId) throws Exception {
+        String approvalTaskId = startProcess(applicantToken, businessId).path("activeTasks").get(0).path("taskId").asText();
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", approvalTaskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "comment": "生成抄送"
+                                }
+                                """))
+                .andExpect(status().isOk());
+        JsonNode detail = approvalDetailByBusiness(applicantToken, businessId);
+        return detail.path("taskTrace").get(1).path("taskId").asText();
     }
 
     private JsonNode claimTask(String token, String taskId, String comment) throws Exception {

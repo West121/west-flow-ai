@@ -11,6 +11,7 @@ import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
 import com.westflow.orchestrator.model.OrchestratorScanExecutionRecord;
 import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
 import com.westflow.orchestrator.repository.OrchestratorExecutionRepository;
+import com.westflow.system.user.mapper.SystemUserMapper;
 import com.westflow.system.trigger.mapper.SystemTriggerMapper;
 import com.westflow.system.trigger.model.TriggerDefinitionRecord;
 import java.time.Duration;
@@ -74,6 +75,12 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
     private static final String ATTR_REMINDER_REPEAT_INTERVAL_MINUTES = "reminderRepeatIntervalMinutes";
     private static final String ATTR_REMINDER_MAX_TIMES = "reminderMaxTimes";
     private static final String ATTR_REMINDER_CHANNELS = "reminderChannels";
+    private static final String ATTR_ESCALATION_ENABLED = "escalationEnabled";
+    private static final String ATTR_ESCALATION_AFTER_MINUTES = "escalationAfterMinutes";
+    private static final String ATTR_ESCALATION_TARGET_MODE = "escalationTargetMode";
+    private static final String ATTR_ESCALATION_TARGET_USER_IDS = "escalationTargetUserIds";
+    private static final String ATTR_ESCALATION_TARGET_ROLE_CODES = "escalationTargetRoleCodes";
+    private static final String ATTR_ESCALATION_CHANNELS = "escalationChannels";
     private static final String ATTR_TRIGGER_KEY = "triggerKey";
     private static final Set<String> SUPPORTED_NODE_TYPES = Set.of("approver", "timer", "trigger");
 
@@ -83,6 +90,7 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
     private final NotificationDispatchService notificationDispatchService;
     private final NotificationChannelMapper notificationChannelMapper;
     private final SystemTriggerMapper systemTriggerMapper;
+    private final SystemUserMapper systemUserMapper;
 
     public FlowableOrchestratorRuntimeBridge(
             FlowableEngineFacade flowableEngineFacade,
@@ -90,7 +98,8 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
             OrchestratorExecutionRepository orchestratorExecutionRepository,
             NotificationDispatchService notificationDispatchService,
             NotificationChannelMapper notificationChannelMapper,
-            SystemTriggerMapper systemTriggerMapper
+            SystemTriggerMapper systemTriggerMapper,
+            SystemUserMapper systemUserMapper
     ) {
         this.flowableEngineFacade = flowableEngineFacade;
         this.orchestratorScanMapper = orchestratorScanMapper;
@@ -98,6 +107,7 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
         this.notificationDispatchService = notificationDispatchService;
         this.notificationChannelMapper = notificationChannelMapper;
         this.systemTriggerMapper = systemTriggerMapper;
+        this.systemUserMapper = systemUserMapper;
     }
 
     @Override
@@ -138,6 +148,7 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
             return switch (target.automationType()) {
                 case TIMEOUT_APPROVAL -> executeTimeoutApproval(runId, target, executedAt);
                 case AUTO_REMINDER -> executeAutoReminder(runId, target, executedAt);
+                case ESCALATION -> executeEscalation(runId, target, executedAt);
                 case TIMER_NODE -> executeTimerNode(runId, target, executedAt);
                 case TRIGGER_NODE -> executeTriggerNode(runId, target, executedAt);
             };
@@ -244,10 +255,12 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
 
         boolean timeoutEnabled = Boolean.parseBoolean(resolveAttribute(element, ATTR_TIMEOUT_ENABLED));
         boolean reminderEnabled = Boolean.parseBoolean(resolveAttribute(element, ATTR_REMINDER_ENABLED));
+        boolean escalationEnabled = Boolean.parseBoolean(resolveAttribute(element, ATTR_ESCALATION_ENABLED));
         Long timeoutMinutes = parseLong(resolveAttribute(element, ATTR_TIMEOUT_DURATION_MINUTES));
         Long reminderMinutes = parseLong(resolveAttribute(element, ATTR_REMINDER_FIRST_REMINDER_MINUTES));
         Long reminderRepeatIntervalMinutes = parseLong(resolveAttribute(element, ATTR_REMINDER_REPEAT_INTERVAL_MINUTES));
         Long reminderMaxTimes = parseLong(resolveAttribute(element, ATTR_REMINDER_MAX_TIMES));
+        Long escalationMinutes = parseLong(resolveAttribute(element, ATTR_ESCALATION_AFTER_MINUTES));
 
         List<OrchestratorScanTargetRecord> targets = new ArrayList<>();
         for (Task task : activeTasks) {
@@ -292,6 +305,20 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                         seenTargetIds
                 );
             }
+
+            if (escalationEnabled && escalationMinutes != null) {
+                Instant dueAt = createdAt.plus(Duration.ofMinutes(escalationMinutes));
+                addApproverTarget(
+                        targets,
+                        asOf,
+                        instance,
+                        task.getId(),
+                        element,
+                        OrchestratorAutomationType.ESCALATION,
+                        dueAt,
+                        seenTargetIds
+                );
+            }
         }
 
         return targets;
@@ -317,6 +344,8 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                 dueAt,
                 automationType == OrchestratorAutomationType.TIMEOUT_APPROVAL
                         ? "审批超时后自动处理"
+                        : automationType == OrchestratorAutomationType.ESCALATION
+                        ? "审批节点超时升级"
                         : "审批节点自动提醒"
         ), seenTargetIds);
     }
@@ -450,6 +479,66 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                 target,
                 OrchestratorExecutionStatus.SUCCEEDED,
                 "已派发 %d 条审批提醒".formatted(channels.size()),
+                executedAt
+        );
+    }
+
+    private OrchestratorScanExecutionRecord executeEscalation(
+            String runId,
+            OrchestratorScanTargetRecord target,
+            Instant executedAt
+    ) {
+        Task task = requireActiveTask(target.nodeId());
+        FlowElement element = requireTaskElement(task);
+        List<NotificationChannelRecord> channels = resolveEscalationChannels(element);
+        if (channels.isEmpty()) {
+            return buildExecutionRecord(
+                    runId,
+                    target,
+                    OrchestratorExecutionStatus.FAILED,
+                    "未找到可用的升级通知渠道",
+                    executedAt
+            );
+        }
+        List<String> recipients = resolveEscalationRecipients(element);
+        if (recipients.isEmpty()) {
+            return buildExecutionRecord(
+                    runId,
+                    target,
+                    OrchestratorExecutionStatus.FAILED,
+                    "未解析到升级接收人",
+                    executedAt
+            );
+        }
+        String taskName = safeText(task.getName(), task.getTaskDefinitionKey());
+        long dispatchCount = 0L;
+        for (String recipient : recipients) {
+            for (NotificationChannelRecord channel : channels) {
+                notificationDispatchService.dispatchByChannelCode(
+                        channel.channelCode(),
+                        new NotificationDispatchRequest(
+                                recipient,
+                                "审批升级：" + taskName,
+                                "任务 %s 已超过升级时限，业务单号：%s".formatted(
+                                        taskName,
+                                        safeText(target.businessId(), task.getProcessInstanceId())
+                                ),
+                                Map.of(
+                                        "taskId", task.getId(),
+                                        "processInstanceId", task.getProcessInstanceId(),
+                                        "automationType", target.automationType().name(),
+                                        "escalation", Boolean.TRUE
+                                )
+                        )
+                );
+                dispatchCount++;
+            }
+        }
+        return buildExecutionRecord(
+                runId,
+                target,
+                OrchestratorExecutionStatus.SUCCEEDED,
+                "已向 %d 位接收人派发 %d 条升级通知".formatted(recipients.size(), dispatchCount),
                 executedAt
         );
     }
@@ -591,6 +680,15 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
 
     private List<NotificationChannelRecord> resolveReminderChannels(FlowElement element) {
         Set<String> expectedTypes = splitCsv(resolveAttribute(element, ATTR_REMINDER_CHANNELS));
+        return resolveNotificationChannelsByTypes(expectedTypes);
+    }
+
+    private List<NotificationChannelRecord> resolveEscalationChannels(FlowElement element) {
+        Set<String> expectedTypes = splitCsv(resolveAttribute(element, ATTR_ESCALATION_CHANNELS));
+        return resolveNotificationChannelsByTypes(expectedTypes);
+    }
+
+    private List<NotificationChannelRecord> resolveNotificationChannelsByTypes(Set<String> expectedTypes) {
         if (expectedTypes.isEmpty()) {
             return List.of();
         }
@@ -602,6 +700,21 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
             channels.putIfAbsent(channel.channelType(), channel);
         }
         return new ArrayList<>(channels.values());
+    }
+
+    private List<String> resolveEscalationRecipients(FlowElement element) {
+        String targetMode = resolveAttribute(element, ATTR_ESCALATION_TARGET_MODE);
+        if ("USER".equalsIgnoreCase(targetMode)) {
+            return splitCsv(resolveAttribute(element, ATTR_ESCALATION_TARGET_USER_IDS)).stream().toList();
+        }
+        if ("ROLE".equalsIgnoreCase(targetMode)) {
+            Set<String> roleRefs = splitCsv(resolveAttribute(element, ATTR_ESCALATION_TARGET_ROLE_CODES));
+            if (roleRefs.isEmpty() || systemUserMapper == null) {
+                return List.of();
+            }
+            return systemUserMapper.selectEnabledUserIdsByRoleRefs(new ArrayList<>(roleRefs));
+        }
+        return List.of();
     }
 
     private String resolveNextActivityId(FlowElement element) {

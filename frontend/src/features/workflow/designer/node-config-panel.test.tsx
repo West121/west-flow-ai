@@ -2,7 +2,21 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { NodeConfigPanel } from './node-config-panel'
 import { workflowNodeTemplates } from './palette'
-import { type WorkflowApproverNodeConfig, type WorkflowEdge, type WorkflowNode } from './types'
+import {
+  type WorkflowApproverNodeConfig,
+  type WorkflowEdge,
+  type WorkflowNode,
+  type WorkflowReminderChannel,
+} from './types'
+
+const defaultEscalationPolicy = {
+  enabled: false,
+  afterMinutes: null,
+  targetMode: 'ROLE' as const,
+  targetUserIds: [] as string[],
+  targetRoleCodes: [] as string[],
+  channels: ['IN_APP'] as WorkflowReminderChannel[],
+}
 
 vi.mock('./selection-api', () => ({
   searchPrincipalOptions: vi.fn(async (kind: string) => {
@@ -83,6 +97,29 @@ function buildTimerNode(): WorkflowNode {
   }
 }
 
+function buildCollaborationNode(kind: 'cc' | 'supervise' | 'meeting' | 'read' | 'circulate'): WorkflowNode {
+  return {
+    id: `${kind}_1`,
+    type: 'workflow',
+    position: { x: 100, y: 100 },
+    data: {
+      kind,
+      label: '协同',
+      description: '协同节点',
+      tone: 'neutral',
+      config: {
+        targets: {
+          mode: 'USER',
+          userIds: ['usr_002'],
+          roleCodes: [],
+          departmentRef: '',
+        },
+        readRequired: kind === 'read',
+      } as never,
+    },
+  }
+}
+
 function buildApproverNode(
   assignmentMode:
     | 'USER'
@@ -140,6 +177,7 @@ function buildApproverNode(
           maxTimes: 3,
           channels: ['IN_APP', 'EMAIL'],
         },
+        escalationPolicy: defaultEscalationPolicy,
       },
     },
   }
@@ -327,6 +365,28 @@ describe('workflow designer node config panel', () => {
       workflowNodeTemplates.some((template) => template.kind === 'dynamic-builder')
     ).toBe(true)
     expect(workflowNodeTemplates.some((template) => template.kind === 'inclusive')).toBe(true)
+    expect(workflowNodeTemplates.some((template) => template.kind === 'cc')).toBe(true)
+    expect(workflowNodeTemplates.some((template) => template.kind === 'supervise')).toBe(true)
+    expect(workflowNodeTemplates.some((template) => template.kind === 'meeting')).toBe(true)
+    expect(workflowNodeTemplates.some((template) => template.kind === 'read')).toBe(true)
+    expect(workflowNodeTemplates.some((template) => template.kind === 'circulate')).toBe(true)
+  })
+
+  it('renders collaboration node sections with explicit labels', () => {
+    render(
+      <NodeConfigPanel
+        node={buildCollaborationNode('supervise')}
+        edges={edges}
+        onApply={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('督办')).toBeInTheDocument()
+    expect(screen.getByText('协同对象')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '选择' }))
+    expect(
+      screen.getByText('支持多选，确认后会同步回节点配置。')
+    ).toBeInTheDocument()
   })
 
   it('submits timer node automation settings', async () => {
@@ -365,6 +425,7 @@ describe('workflow designer node config panel', () => {
 
     expect(screen.getByText('超时审批')).toBeInTheDocument()
     expect(screen.getByText('自动提醒')).toBeInTheDocument()
+    expect(screen.getByText('SLA 升级')).toBeInTheDocument()
     expect(screen.getByText('重新审批策略')).toBeInTheDocument()
     expect(screen.getByDisplayValue('60')).toBeInTheDocument()
     expect(screen.getByDisplayValue('45')).toBeInTheDocument()
@@ -411,6 +472,39 @@ describe('workflow designer node config panel', () => {
           assignment: expect.objectContaining({
             mode: 'FORM_FIELD',
             formFieldKey: 'departmentId',
+          }),
+        }),
+      }),
+      undefined
+    )
+  })
+
+  it('submits approver escalation policy back to the canvas patch', async () => {
+    const onApply = vi.fn()
+
+    render(<NodeConfigPanel node={buildApproverNode()} edges={edges} onApply={onApply} />)
+
+    fireEvent.click(screen.getByRole('switch', { name: 'SLA 升级' }))
+    fireEvent.change(screen.getByPlaceholderText('60'), {
+      target: { value: '90' },
+    })
+    const selectButtons = screen.getAllByRole('button', { name: '选择' })
+    fireEvent.click(selectButtons[selectButtons.length - 1]!)
+    await waitFor(() => expect(screen.getByText('部门负责人')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('部门负责人'))
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+
+    await waitFor(() => expect(onApply).toHaveBeenCalled())
+    expect(onApply).toHaveBeenLastCalledWith(
+      'approve_1',
+      expect.objectContaining({
+        config: expect.objectContaining({
+          escalationPolicy: expect.objectContaining({
+            enabled: true,
+            afterMinutes: 90,
+            targetMode: 'ROLE',
+            targetRoleCodes: expect.arrayContaining(['role_manager']),
+            channels: expect.arrayContaining(['IN_APP']),
           }),
         }),
       }),

@@ -17,11 +17,13 @@ import {
 
 type DataTablePaginationProps<TData> = {
   table: Table<TData>
+  total?: number
   className?: string
 }
 
 export function DataTablePagination<TData>({
   table,
+  total,
   className,
 }: DataTablePaginationProps<TData>) {
   const currentPage = table.getState().pagination.pageIndex + 1
@@ -38,8 +40,9 @@ export function DataTablePagination<TData>({
       style={{ overflowClipMargin: 1 }}
     >
       <div className='flex w-full items-center justify-between'>
-        <div className='flex w-[100px] items-center justify-center text-sm font-medium @2xl/content:hidden'>
-          第 {currentPage} / {totalPages} 页
+        <div className='flex items-center gap-4 text-sm text-muted-foreground'>
+          <span className='font-medium text-foreground'>共 {total ?? table.getRowCount()} 条</span>
+          <span className='@2xl/content:hidden'>第 {currentPage} / {totalPages} 页</span>
         </div>
         <div className='flex items-center gap-2 @max-2xl/content:flex-row-reverse'>
           <Select
@@ -52,7 +55,7 @@ export function DataTablePagination<TData>({
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side='top'>
-              {[10, 20, 30, 40, 50].map((pageSize) => (
+              {[10, 20, 50, 100].map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>

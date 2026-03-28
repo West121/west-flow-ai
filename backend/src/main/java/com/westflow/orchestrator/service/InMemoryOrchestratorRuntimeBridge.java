@@ -23,6 +23,7 @@ public class InMemoryOrchestratorRuntimeBridge implements OrchestratorRuntimeBri
         String message = switch (target.automationType()) {
             case TIMEOUT_APPROVAL -> "已执行超时审批";
             case AUTO_REMINDER -> "已执行自动提醒";
+            case ESCALATION -> "已执行超时升级";
             case TIMER_NODE -> "已执行定时节点推进";
             case TRIGGER_NODE -> "已执行触发节点";
         };

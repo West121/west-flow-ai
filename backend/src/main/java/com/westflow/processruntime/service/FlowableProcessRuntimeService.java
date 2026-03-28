@@ -18,6 +18,8 @@ import com.westflow.processruntime.api.request.ApprovalSheetPageRequest;
 import com.westflow.processruntime.api.request.AddSignTaskRequest;
 import com.westflow.processruntime.api.request.AppendTaskRequest;
 import com.westflow.processruntime.api.response.AppendTaskResponse;
+import com.westflow.processruntime.api.request.BatchTaskActionRequest;
+import com.westflow.processruntime.api.response.BatchTaskActionResponse;
 import com.westflow.processruntime.api.request.ClaimTaskRequest;
 import com.westflow.processruntime.api.response.ClaimTaskResponse;
 import com.westflow.processruntime.api.request.CompleteTaskRequest;
@@ -75,9 +77,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.StartEvent;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricActivityInstance;
@@ -736,6 +740,7 @@ public class FlowableProcessRuntimeService {
     public TaskActionAvailabilityResponse actions(String taskId) {
         Task task = requireActiveTask(taskId);
         String taskKind = resolveTaskKind(task);
+        String taskSemanticMode = resolveTaskSemanticMode(task);
         boolean isNormalTask = "NORMAL".equals(taskKind);
         boolean isAppendTask = "APPEND".equals(taskKind);
         boolean isAddSignTask = "ADD_SIGN".equals(taskKind);
@@ -752,7 +757,9 @@ public class FlowableProcessRuntimeService {
         boolean canAddSign = isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy;
         boolean canRemoveSign = isNormalTask && canHandle && blockedByAddSign && !blockedByAppendPolicy;
         boolean canComplete = isFlowHandleTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy;
+        boolean canSign = canHandle && !blockedByAddSign && !blockedByAppendPolicy;
         boolean canRead = "CC".equals(taskKind)
+                && supportsSemanticRead(taskSemanticMode)
                 && (isAssignee || isCandidate)
                 && "CC_PENDING".equals(resolveTaskStatus(task));
         return new TaskActionAvailabilityResponse(
@@ -771,7 +778,8 @@ public class FlowableProcessRuntimeService {
                 canTakeBack,
                 false,
                 isNormalTask && canHandle && !blockedByAppendPolicy,
-                false
+                false,
+                canSign
         );
     }
 
@@ -1110,7 +1118,9 @@ public class FlowableProcessRuntimeService {
      */
     public CompleteTaskResponse read(String taskId) {
         Task task = requireActiveTask(taskId);
-        if (!"CC".equals(resolveTaskKind(task))) {
+        String taskKind = resolveTaskKind(task);
+        String taskSemanticMode = resolveTaskSemanticMode(task);
+        if (!"CC".equals(taskKind) || !supportsSemanticRead(taskSemanticMode)) {
             throw actionNotAllowed("当前任务不支持已阅", Map.of("taskId", taskId));
         }
         List<String> candidateUserIds = candidateUsers(taskId);
@@ -1122,7 +1132,10 @@ public class FlowableProcessRuntimeService {
         }
 
         Task activeTask = claimTaskIfNeeded(task, currentUserId());
-        flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowTaskKind", "CC");
+        flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowTaskKind", taskKind);
+        if (taskSemanticMode != null) {
+            flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowTaskSemanticMode", taskSemanticMode);
+        }
         flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowReadTime", Timestamp.from(Instant.now()));
         flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowAction", "READ");
         flowableEngineFacade.taskService().setVariableLocal(activeTask.getId(), "westflowTargetUserId", currentUserId());
@@ -1131,9 +1144,9 @@ public class FlowableProcessRuntimeService {
                 activeTask.getProcessInstanceId(),
                 activeTask.getId(),
                 activeTask.getTaskDefinitionKey(),
-                "TASK_READ",
-                "抄送已阅",
-                "CC",
+                resolveReadEventType(taskSemanticMode),
+                resolveReadEventName(taskSemanticMode),
+                resolveReadActionCategory(taskSemanticMode),
                 activeTask.getParentTaskId(),
                 activeTask.getId(),
                 currentUserId(),
@@ -1151,6 +1164,29 @@ public class FlowableProcessRuntimeService {
                 null
         );
         return nextTaskResponse(activeTask.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 批量已阅抄送任务。
+     */
+    public BatchTaskActionResponse batchRead(BatchTaskActionRequest request) {
+        return batchTaskAction("READ", request.taskIds(), taskId -> {
+            CompleteTaskResponse response = read(taskId);
+            return new BatchTaskActionResponse.Item(
+                    taskId,
+                    response.instanceId(),
+                    true,
+                    "OK",
+                    response.status(),
+                    "success",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    response.nextTasks()
+            );
+        });
     }
 
     /**
@@ -1173,6 +1209,29 @@ public class FlowableProcessRuntimeService {
         flowableTaskActionService.claim(taskId, assigneeUserId);
         Task claimedTask = requireActiveTask(taskId);
         return new ClaimTaskResponse(claimedTask.getId(), claimedTask.getProcessInstanceId(), "PENDING", claimedTask.getAssignee());
+    }
+
+    /**
+     * 批量认领待办任务。
+     */
+    public BatchTaskActionResponse batchClaim(BatchTaskActionRequest request) {
+        return batchTaskAction("CLAIM", request.taskIds(), taskId -> {
+            ClaimTaskResponse response = claim(taskId, new ClaimTaskRequest(request.comment()));
+            return new BatchTaskActionResponse.Item(
+                    taskId,
+                    response.instanceId(),
+                    true,
+                    "OK",
+                    response.status(),
+                    "success",
+                    null,
+                    response.assigneeUserId(),
+                    null,
+                    null,
+                    null,
+                    List.of()
+            );
+        });
     }
 
     /**
@@ -1417,6 +1476,37 @@ public class FlowableProcessRuntimeService {
                 null
         );
         return nextTaskResponse(task.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 批量完成任务。
+     */
+    public BatchTaskActionResponse batchComplete(BatchTaskActionRequest request) {
+        return batchTaskAction("COMPLETE", request.taskIds(), taskId -> {
+            CompleteTaskResponse response = complete(
+                    taskId,
+                    new CompleteTaskRequest(
+                            "APPROVE",
+                            normalizeUserId(request.operatorUserId()),
+                            request.comment(),
+                            request.taskFormData()
+                    )
+            );
+            return new BatchTaskActionResponse.Item(
+                    taskId,
+                    response.instanceId(),
+                    true,
+                    "OK",
+                    response.status(),
+                    "success",
+                    taskId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    response.nextTasks()
+            );
+        });
     }
 
     /**
@@ -1786,14 +1876,11 @@ public class FlowableProcessRuntimeService {
         String targetStrategy = request.targetStrategy() == null || request.targetStrategy().isBlank()
                 ? "PREVIOUS_USER_TASK"
                 : request.targetStrategy().trim();
-        if (!"PREVIOUS_USER_TASK".equals(targetStrategy)) {
-            throw actionNotAllowed("当前仅支持退回上一步人工节点", Map.of("targetStrategy", targetStrategy));
-        }
-        HistoricTaskInstance previousTask = requirePreviousUserTask(task);
+        RejectTarget target = resolveReturnTarget(task, request.targetTaskId(), request.targetNodeId(), targetStrategy);
         appendComment(task, request.comment());
         flowableTaskActionService.moveToActivity(
                 taskId,
-                previousTask.getTaskDefinitionKey(),
+                target.nodeId(),
                 actionVariables("RETURN", currentUserId(), request.comment(), Map.of("targetStrategy", targetStrategy))
         );
         appendInstanceEvent(
@@ -1805,16 +1892,18 @@ public class FlowableProcessRuntimeService {
                 "TASK",
                 task.getId(),
                 task.getId(),
-                previousTask.getAssignee(),
+                target.targetUserId(),
                 eventDetails(
                         "comment", request.comment(),
                         "targetStrategy", targetStrategy,
                         "sourceTaskId", task.getId(),
                         "targetTaskId", task.getId(),
-                        "targetUserId", previousTask.getAssignee()
+                        "targetUserId", target.targetUserId(),
+                        "targetNodeId", target.nodeId(),
+                        "targetNodeName", target.nodeName()
                 ),
                 targetStrategy,
-                previousTask.getTaskDefinitionKey(),
+                target.nodeId(),
                 null,
                 null,
                 null,
@@ -1878,6 +1967,40 @@ public class FlowableProcessRuntimeService {
                 null
         );
         return nextTaskResponse(task.getProcessInstanceId(), taskId);
+    }
+
+    /**
+     * 按规则批量驳回任务。
+     */
+    public BatchTaskActionResponse batchReject(BatchTaskActionRequest request) {
+        return batchTaskAction("REJECT", request.taskIds(), taskId -> {
+            CompleteTaskResponse response = reject(
+                    taskId,
+                    new RejectTaskRequest(
+                            request.targetStrategy() == null || request.targetStrategy().isBlank()
+                                    ? "PREVIOUS_USER_TASK"
+                                    : request.targetStrategy().trim(),
+                            request.targetTaskId(),
+                            request.targetNodeId(),
+                            request.reapproveStrategy(),
+                            request.comment()
+                    )
+            );
+            return new BatchTaskActionResponse.Item(
+                    taskId,
+                    response.instanceId(),
+                    true,
+                    "OK",
+                    response.status(),
+                    "success",
+                    taskId,
+                    null,
+                    request.targetStrategy(),
+                    request.targetNodeId(),
+                    request.reapproveStrategy(),
+                    response.nextTasks()
+            );
+        });
     }
 
     private ProcessTaskDetailResponse buildDetail(
@@ -2005,6 +2128,11 @@ public class FlowableProcessRuntimeService {
                 : referenceHistoricTask != null
                         ? resolveHistoricTaskKind(referenceHistoricTask)
                         : resolveTaskKind(historicProcessInstance.getProcessDefinitionId(), nodeId);
+        String detailTaskSemanticMode = referenceActiveTask != null
+                ? resolveTaskSemanticMode(referenceActiveTask)
+                : referenceHistoricTask != null
+                        ? resolveHistoricTaskSemanticMode(referenceHistoricTask)
+                        : resolveTaskSemanticMode(historicProcessInstance.getProcessDefinitionId(), nodeId);
         return new ProcessTaskDetailResponse(
                 referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),
                 processInstanceId,
@@ -2029,6 +2157,7 @@ public class FlowableProcessRuntimeService {
                 nodeId,
                 nodeName,
                 detailTaskKind,
+                detailTaskSemanticMode,
                 activeTasks.isEmpty() ? resolveHistoricTaskStatus(referenceHistoricTask, historicProcessInstance) : resolveTaskStatus(referenceActiveTask),
                 resolveAssignmentMode(
                         referenceActiveTask == null ? List.of() : candidateUsers(referenceActiveTask.getId()),
@@ -2199,6 +2328,7 @@ public class FlowableProcessRuntimeService {
             OffsetDateTime createdAt = toOffsetDateTime(task.getCreateTime());
             OffsetDateTime endedAt = toOffsetDateTime(task.getEndTime());
             String taskKind = resolveHistoricTaskKind(task);
+            String taskSemanticMode = resolveHistoricTaskSemanticMode(task);
             Map<String, Object> localVariables = historicTaskLocalVariables(task.getId());
             String historicStatus = resolveHistoricTaskStatus(task, null);
             items.add(new ProcessTaskTraceItemResponse(
@@ -2206,6 +2336,7 @@ public class FlowableProcessRuntimeService {
                     task.getTaskDefinitionKey(),
                     task.getName(),
                     taskKind,
+                    taskSemanticMode,
                     historicStatus,
                     task.getAssignee(),
                     List.of(),
@@ -2242,12 +2373,14 @@ public class FlowableProcessRuntimeService {
             }
             OffsetDateTime createdAt = toOffsetDateTime(task.getCreateTime());
             String taskKind = resolveTaskKind(task);
+            String taskSemanticMode = resolveTaskSemanticMode(task);
             Map<String, Object> localVariables = taskLocalVariables(task.getId());
             items.add(new ProcessTaskTraceItemResponse(
                     task.getId(),
                     task.getTaskDefinitionKey(),
                     task.getName(),
                     taskKind,
+                    taskSemanticMode,
                     resolveTraceTaskStatus(task, localVariables),
                     task.getAssignee(),
                     candidateUsers(task.getId()),
@@ -3387,19 +3520,167 @@ public class FlowableProcessRuntimeService {
                         previousTask.getAssignee()
                 );
             }
+            case "INITIATOR" -> resolveInitiatorTarget(task);
             case "ANY_USER_TASK" -> {
-                String targetNodeId = requireTargetNode(task.getProcessDefinitionId(), request.targetNodeId());
+                HistoricTaskInstance targetTask = requireHistoricTargetTask(task, request.targetTaskId(), request.targetNodeId());
                 yield new RejectTarget(
-                        targetNodeId,
-                        resolveNodeName(task.getProcessDefinitionId(), targetNodeId),
-                        null
+                        targetTask.getTaskDefinitionKey(),
+                        targetTask.getName(),
+                        targetTask.getAssignee()
                 );
             }
             default -> throw actionNotAllowed(
-                    "当前真实运行态仅支持驳回到上一步或指定节点",
+                    "当前真实运行态仅支持驳回到上一步、发起人或任意历史人工节点",
                     Map.of("targetStrategy", targetStrategy)
             );
         };
+    }
+
+    private RejectTarget resolveReturnTarget(Task task, String targetTaskId, String targetNodeId, String targetStrategy) {
+        return switch (targetStrategy) {
+            case "PREVIOUS_USER_TASK" -> {
+                HistoricTaskInstance previousTask = requirePreviousUserTask(task);
+                yield new RejectTarget(
+                        previousTask.getTaskDefinitionKey(),
+                        previousTask.getName(),
+                        previousTask.getAssignee()
+                );
+            }
+            case "INITIATOR" -> resolveInitiatorTarget(task);
+            case "ANY_USER_TASK" -> {
+                HistoricTaskInstance targetTask = requireHistoricTargetTask(task, targetTaskId, targetNodeId);
+                yield new RejectTarget(
+                        targetTask.getTaskDefinitionKey(),
+                        targetTask.getName(),
+                        targetTask.getAssignee()
+                );
+            }
+            default -> throw actionNotAllowed(
+                    "当前真实运行态仅支持退回到上一步、发起人或任意历史人工节点",
+                    Map.of("targetStrategy", targetStrategy)
+            );
+        };
+    }
+
+    private RejectTarget resolveInitiatorTarget(Task task) {
+        String initiatorUserId = stringValue(runtimeVariables(task.getProcessInstanceId()).get("westflowInitiatorUserId"));
+        String startNodeId = resolveStartNodeId(task.getProcessDefinitionId());
+        return new RejectTarget(
+                startNodeId,
+                resolveNodeName(task.getProcessDefinitionId(), startNodeId),
+                initiatorUserId
+        );
+    }
+
+    private String resolveStartNodeId(String processDefinitionId) {
+        BpmnModel bpmnModel = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
+        if (bpmnModel == null || bpmnModel.getMainProcess() == null) {
+            throw new ContractException("PROCESS.RUNTIME_INVALID", HttpStatus.INTERNAL_SERVER_ERROR, "流程定义缺少开始节点");
+        }
+        return bpmnModel.getMainProcess().getFlowElements().stream()
+                .filter(element -> element instanceof StartEvent)
+                .map(BaseElement::getId)
+                .findFirst()
+                .orElseThrow(() -> new ContractException("PROCESS.RUNTIME_INVALID", HttpStatus.INTERNAL_SERVER_ERROR, "流程定义缺少开始节点"));
+    }
+
+    private BatchTaskActionResponse batchTaskAction(
+            String action,
+            List<String> taskIds,
+            Function<String, BatchTaskActionResponse.Item> executor
+    ) {
+        List<BatchTaskActionResponse.Item> items = new ArrayList<>();
+        for (String taskId : taskIds) {
+            try {
+                items.add(executor.apply(taskId));
+            } catch (ContractException ex) {
+                items.add(new BatchTaskActionResponse.Item(
+                        taskId,
+                        null,
+                        false,
+                        ex.getCode(),
+                        "FAILED",
+                        ex.getMessage(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of()
+                ));
+            } catch (RuntimeException ex) {
+                items.add(new BatchTaskActionResponse.Item(
+                        taskId,
+                        null,
+                        false,
+                        "SYS.INTERNAL_ERROR",
+                        "FAILED",
+                        "系统异常，请稍后重试",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of()
+                ));
+            }
+        }
+        int successCount = (int) items.stream().filter(BatchTaskActionResponse.Item::success).count();
+        return new BatchTaskActionResponse(
+                action,
+                taskIds.size(),
+                successCount,
+                taskIds.size() - successCount,
+                items
+        );
+    }
+
+    private HistoricTaskInstance requireHistoricTargetTask(Task task, String targetTaskId, String targetNodeId) {
+        HistoricTaskInstance targetTask;
+        if (targetTaskId != null && !targetTaskId.isBlank()) {
+            targetTask = flowableEngineFacade.historyService()
+                    .createHistoricTaskInstanceQuery()
+                    .taskId(targetTaskId)
+                    .singleResult();
+            if (targetTask == null
+                    || targetTask.getEndTime() == null
+                    || !task.getProcessInstanceId().equals(targetTask.getProcessInstanceId())) {
+                throw actionNotAllowed(
+                        "目标历史任务不存在",
+                        Map.of("taskId", task.getId(), "targetTaskId", targetTaskId)
+                );
+            }
+        } else if (targetNodeId != null && !targetNodeId.isBlank()) {
+            targetTask = flowableEngineFacade.historyService()
+                    .createHistoricTaskInstanceQuery()
+                    .processInstanceId(task.getProcessInstanceId())
+                    .taskDefinitionKey(targetNodeId)
+                    .finished()
+                    .orderByHistoricTaskInstanceEndTime()
+                    .desc()
+                    .list()
+                    .stream()
+                    .findFirst()
+                    .orElse(null);
+            if (targetTask == null) {
+                throw actionNotAllowed(
+                        "目标历史节点不存在",
+                        Map.of("taskId", task.getId(), "targetNodeId", targetNodeId)
+                );
+            }
+        } else {
+            throw actionNotAllowed(
+                    "目标历史节点不能为空",
+                    Map.of("taskId", task.getId(), "targetTaskId", targetTaskId, "targetNodeId", targetNodeId)
+            );
+        }
+        if (!"NORMAL".equals(resolveHistoricTaskKind(targetTask))) {
+            throw actionNotAllowed(
+                    "目标节点不是人工审批节点",
+                    Map.of("taskId", task.getId(), "targetTaskId", targetTask.getId(), "targetNodeId", targetTask.getTaskDefinitionKey())
+            );
+        }
+        return targetTask;
     }
 
     private String normalizeReapproveStrategy(String reapproveStrategy) {
@@ -5053,6 +5334,28 @@ public class FlowableProcessRuntimeService {
         return resolveTaskKind(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
     }
 
+    private String resolveTaskSemanticMode(Task task) {
+        if (task == null) {
+            return null;
+        }
+        String localTaskSemanticMode = stringValue(taskLocalVariables(task.getId()).get("westflowTaskSemanticMode"));
+        if (localTaskSemanticMode != null) {
+            return localTaskSemanticMode;
+        }
+        return resolveTaskSemanticMode(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+    }
+
+    private String resolveHistoricTaskSemanticMode(HistoricTaskInstance task) {
+        if (task == null) {
+            return null;
+        }
+        String localTaskSemanticMode = stringValue(historicTaskLocalVariables(task.getId()).get("westflowTaskSemanticMode"));
+        if (localTaskSemanticMode != null) {
+            return localTaskSemanticMode;
+        }
+        return resolveTaskSemanticMode(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+    }
+
     private String resolveTaskKind(String engineProcessDefinitionId, String nodeId) {
         if (nodeId == null || nodeId.isBlank()) {
             return "NORMAL";
@@ -5070,6 +5373,60 @@ public class FlowableProcessRuntimeService {
             return "NORMAL";
         }
         return attrs.get(0).getValue();
+    }
+
+    private String resolveTaskSemanticMode(String engineProcessDefinitionId, String nodeId) {
+        if (nodeId == null || nodeId.isBlank()) {
+            return null;
+        }
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(engineProcessDefinitionId);
+        if (model == null) {
+            return null;
+        }
+        BaseElement element = model.getFlowElement(nodeId);
+        if (element == null) {
+            return null;
+        }
+        List<org.flowable.bpmn.model.ExtensionAttribute> attrs = element.getAttributes().get("ccSemanticMode");
+        if (attrs == null || attrs.isEmpty() || attrs.get(0).getValue() == null || attrs.get(0).getValue().isBlank()) {
+            return null;
+        }
+        return attrs.get(0).getValue();
+    }
+
+    private boolean supportsSemanticRead(String taskSemanticMode) {
+        return taskSemanticMode == null
+                || List.of("cc", "supervise", "meeting", "read", "circulate").contains(taskSemanticMode);
+    }
+
+    private String resolveReadEventType(String taskSemanticMode) {
+        return switch (taskSemanticMode == null ? "cc" : taskSemanticMode) {
+            case "supervise" -> "TASK_SUPERVISE_READ";
+            case "meeting" -> "TASK_MEETING_READ";
+            case "read" -> "TASK_READ_CONFIRM";
+            case "circulate" -> "TASK_CIRCULATE_READ";
+            default -> "TASK_READ";
+        };
+    }
+
+    private String resolveReadEventName(String taskSemanticMode) {
+        return switch (taskSemanticMode == null ? "cc" : taskSemanticMode) {
+            case "supervise" -> "督办已阅";
+            case "meeting" -> "会办已阅";
+            case "read" -> "阅办已阅";
+            case "circulate" -> "传阅已阅";
+            default -> "抄送已阅";
+        };
+    }
+
+    private String resolveReadActionCategory(String taskSemanticMode) {
+        return switch (taskSemanticMode == null ? "cc" : taskSemanticMode) {
+            case "supervise" -> "SUPERVISE";
+            case "meeting" -> "MEETING";
+            case "read" -> "READ";
+            case "circulate" -> "CIRCULATE";
+            default -> "CC";
+        };
     }
 
     private String resolveTaskStatus(Task task) {

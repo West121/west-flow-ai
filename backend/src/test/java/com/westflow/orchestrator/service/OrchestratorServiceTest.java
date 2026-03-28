@@ -9,6 +9,7 @@ import com.westflow.orchestrator.model.OrchestratorAutomationType;
 import com.westflow.orchestrator.model.OrchestratorExecutionStatus;
 import com.westflow.orchestrator.model.OrchestratorScanTargetRecord;
 import com.westflow.orchestrator.repository.OrchestratorExecutionRepository;
+import com.westflow.system.user.mapper.SystemUserMapper;
 import com.westflow.system.trigger.mapper.SystemTriggerMapper;
 import com.westflow.system.trigger.model.TriggerDefinitionRecord;
 import java.time.Instant;
@@ -79,11 +80,12 @@ class OrchestratorServiceTest {
 
         List<OrchestratorScanTargetRecord> targets = fixture.bridge().loadDueScanTargets(scannedAt);
 
-        assertThat(targets).hasSize(4);
+        assertThat(targets).hasSize(5);
         assertThat(targets).extracting(OrchestratorScanTargetRecord::automationType)
                 .containsExactlyInAnyOrder(
                         OrchestratorAutomationType.TIMEOUT_APPROVAL,
                         OrchestratorAutomationType.AUTO_REMINDER,
+                        OrchestratorAutomationType.ESCALATION,
                         OrchestratorAutomationType.TIMER_NODE,
                         OrchestratorAutomationType.TRIGGER_NODE
                 );
@@ -246,6 +248,11 @@ class OrchestratorServiceTest {
         addAttribute(element, "reminderRepeatIntervalMinutes", "5");
         addAttribute(element, "reminderMaxTimes", "3");
         addAttribute(element, "reminderChannels", "IN_APP,EMAIL");
+        addAttribute(element, "escalationEnabled", "true");
+        addAttribute(element, "escalationAfterMinutes", "30");
+        addAttribute(element, "escalationTargetMode", "ROLE");
+        addAttribute(element, "escalationTargetRoleCodes", "role_manager");
+        addAttribute(element, "escalationChannels", "IN_APP");
         return element;
     }
 
@@ -293,6 +300,7 @@ class OrchestratorServiceTest {
         private final OrchestratorExecutionRepository orchestratorExecutionRepository = mock(OrchestratorExecutionRepository.class);
         private final NotificationDispatchService notificationDispatchService = mock(NotificationDispatchService.class);
         private final NotificationChannelMapper notificationChannelMapper = mock(NotificationChannelMapper.class);
+        private final SystemUserMapper systemUserMapper = mock(SystemUserMapper.class);
         private final SystemTriggerMapper systemTriggerMapper = new SystemTriggerMapper();
         private final ProcessInstanceQuery instanceQuery = mock(ProcessInstanceQuery.class);
         private final TaskQuery taskQuery = mock(TaskQuery.class);
@@ -330,7 +338,8 @@ class OrchestratorServiceTest {
                     orchestratorExecutionRepository,
                     notificationDispatchService,
                     notificationChannelMapper,
-                    systemTriggerMapper
+                    systemTriggerMapper,
+                    systemUserMapper
             );
         }
     }

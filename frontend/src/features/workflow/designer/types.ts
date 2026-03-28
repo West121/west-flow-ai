@@ -9,6 +9,10 @@ export type WorkflowNodeKind =
   | 'condition'
   | 'inclusive'
   | 'cc'
+  | 'supervise'
+  | 'meeting'
+  | 'read'
+  | 'circulate'
   | 'timer'
   | 'trigger'
   | 'parallel'
@@ -47,6 +51,7 @@ export type WorkflowVoteRule = {
 }
 
 export type WorkflowTimeoutApprovalAction = 'APPROVE' | 'REJECT'
+export type WorkflowEscalationTargetMode = 'USER' | 'ROLE'
 export type WorkflowReminderChannel =
   | 'IN_APP'
   | 'EMAIL'
@@ -203,6 +208,14 @@ export type WorkflowApproverNodeConfig = {
     maxTimes: number | null
     channels: WorkflowReminderChannel[]
   }
+  escalationPolicy: {
+    enabled: boolean
+    afterMinutes: number | null
+    targetMode: WorkflowEscalationTargetMode
+    targetUserIds: string[]
+    targetRoleCodes: string[]
+    channels: WorkflowReminderChannel[]
+  }
   operations: string[]
   commentRequired: boolean
 }
@@ -281,6 +294,10 @@ export type WorkflowNodeConfigMap = {
   condition: WorkflowConditionNodeConfig
   inclusive: WorkflowInclusiveGatewayNodeConfig
   cc: WorkflowCcNodeConfig
+  supervise: WorkflowCcNodeConfig
+  meeting: WorkflowCcNodeConfig
+  read: WorkflowCcNodeConfig
+  circulate: WorkflowCcNodeConfig
   timer: WorkflowTimerNodeConfig
   trigger: WorkflowTriggerNodeConfig
   parallel: WorkflowParallelGatewayNodeConfig

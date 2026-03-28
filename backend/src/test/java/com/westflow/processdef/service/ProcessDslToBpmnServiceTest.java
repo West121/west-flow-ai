@@ -134,6 +134,14 @@ class ProcessDslToBpmnServiceTest {
                                         "repeatIntervalMinutes", 5,
                                         "maxTimes", 3,
                                         "channels", List.of("IN_APP", "EMAIL")
+                                ),
+                                "escalationPolicy", Map.of(
+                                        "enabled", true,
+                                        "afterMinutes", 60,
+                                        "targetMode", "ROLE",
+                                        "targetUserIds", List.of(),
+                                        "targetRoleCodes", List.of("role_manager"),
+                                        "channels", List.of("IN_APP", "WECHAT")
                                 )
                         )),
                         node("timer_1", "timer", "定时等待", Map.of(
@@ -171,12 +179,87 @@ class ProcessDslToBpmnServiceTest {
                 "reminderRepeatIntervalMinutes=\"5\"",
                 "reminderMaxTimes=\"3\"",
                 "reminderChannels=\"IN_APP,EMAIL\"",
+                "escalationEnabled=\"true\"",
+                "escalationAfterMinutes=\"60\"",
+                "escalationTargetMode=\"ROLE\"",
+                "escalationTargetRoleCodes=\"role_manager\"",
+                "escalationChannels=\"IN_APP,WECHAT\"",
                 "<intermediateCatchEvent",
                 "id=\"timer_1\"",
                 "<timeDuration>PT15M</timeDuration>",
                 "<serviceTask",
                 "id=\"trigger_1\"",
                 "flowable:delegateExpression=\"${flowableTriggerDelegate}\""
+        );
+    }
+
+    @Test
+    void shouldConvertCollaborationNodeKindsIntoCcBpmnXml() {
+        ProcessDslPayload payload = new ProcessDslPayload(
+                "1.0.0",
+                "oa_collaboration",
+                "协同审批",
+                "OA",
+                "oa-collaboration-form",
+                "1.0.0",
+                List.of(),
+                Map.of(
+                        "allowWithdraw", true,
+                        "allowUrge", true,
+                        "allowTransfer", true
+                ),
+                List.of(
+                        node("start_1", "start", "开始", Map.of(
+                                "initiatorEditable", true
+                        )),
+                        node("supervise_1", "supervise", "督办", Map.of(
+                                "targets", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_003"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", ""
+                                ),
+                                "readRequired", false
+                        )),
+                        node("read_1", "read", "阅办", Map.of(
+                                "targets", Map.of(
+                                        "mode", "ROLE",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of("OA_USER"),
+                                        "departmentRef", ""
+                                ),
+                                "readRequired", true
+                        )),
+                        node("circulate_1", "circulate", "传阅", Map.of(
+                                "targets", Map.of(
+                                        "mode", "DEPARTMENT",
+                                        "userIds", List.of(),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "dept_hr"
+                                ),
+                                "readRequired", false
+                        )),
+                        node("end_1", "end", "结束", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "supervise_1", 1, null),
+                        edge("edge_2", "supervise_1", "read_1", 2, null),
+                        edge("edge_3", "read_1", "circulate_1", 3, null),
+                        edge("edge_4", "circulate_1", "end_1", 4, null)
+                )
+        );
+
+        String xml = service.convert(payload, "oa_collaboration:1", 1);
+
+        assertThat(xml).contains(
+                "<userTask",
+                "id=\"supervise_1\"",
+                "ccSemanticMode=\"supervise\"",
+                "id=\"read_1\"",
+                "ccSemanticMode=\"read\"",
+                "id=\"circulate_1\"",
+                "ccSemanticMode=\"circulate\"",
+                "taskKind=\"CC\""
         );
     }
 

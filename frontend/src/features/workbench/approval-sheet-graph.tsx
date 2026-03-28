@@ -26,6 +26,7 @@ import { WorkflowNodeCard } from '@/features/workflow/designer/workflow-node'
 import { type WorkflowNodeData } from '@/features/workflow/designer/types'
 import {
   resolveApprovalSheetActingModeLabel,
+  resolveApprovalSheetCollaborationNodeLabel,
   formatApprovalSheetBoolean,
   formatApprovalSheetDateTime,
   formatApprovalSheetDuration,
@@ -445,6 +446,10 @@ function ApprovalSheetGraphInner({
     () => buildTimelineEntries(playbackEvents, taskTrace),
     [playbackEvents, taskTrace]
   )
+  const flowNodeMap = useMemo(
+    () => new Map(flowNodes.map((node) => [node.id, node])),
+    [flowNodes]
+  )
 
   const activePlaybackEvent = useMemo(() => {
     if (mode === 'playing') {
@@ -737,6 +742,12 @@ function ApprovalSheetGraphInner({
                     const active = traceItem?.taskId
                       ? traceItem.taskId === activePlaybackEvent?.taskId
                       : event.id === activePlaybackEvent?.id
+                    const flowNode = flowNodeMap.get(traceItem?.nodeId ?? event.nodeId)
+                    const collaborationNodeLabel = flowNode
+                      ? resolveApprovalSheetCollaborationNodeLabel(flowNode.type)
+                      : '--'
+                    const showCollaborationNodeLabel =
+                      Boolean(flowNode) && collaborationNodeLabel !== (flowNode?.type ?? '')
 
                     return (
                       <li
@@ -782,6 +793,11 @@ function ApprovalSheetGraphInner({
                             <span className='font-medium leading-none'>
                               {traceItem?.nodeName ?? event.label}
                             </span>
+                            {showCollaborationNodeLabel ? (
+                              <Badge variant='outline'>
+                                {collaborationNodeLabel}
+                              </Badge>
+                            ) : null}
                             <Badge variant={active ? 'default' : 'secondary'}>
                               {traceItem
                                 ? resolveApprovalSheetResultLabel(traceItem)

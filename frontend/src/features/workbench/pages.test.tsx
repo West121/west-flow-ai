@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   Dashboard,
@@ -33,15 +33,17 @@ const {
       handoverWorkbenchTasks: vi.fn(),
       listWorkbenchTasks: vi.fn(),
     listApprovalSheets: vi.fn(),
-    readWorkbenchTask: vi.fn(),
-    removeSignWorkbenchTask: vi.fn(),
-    revokeWorkbenchTask: vi.fn(),
-    returnWorkbenchTask: vi.fn(),
-    startWorkbenchProcess: vi.fn(),
-    transferWorkbenchTask: vi.fn(),
-    urgeWorkbenchTask: vi.fn(),
+      readWorkbenchTask: vi.fn(),
+      removeSignWorkbenchTask: vi.fn(),
+      revokeWorkbenchTask: vi.fn(),
+      returnWorkbenchTask: vi.fn(),
+      signWorkbenchTask: vi.fn(),
+      startWorkbenchProcess: vi.fn(),
+      transferWorkbenchTask: vi.fn(),
+      urgeWorkbenchTask: vi.fn(),
   },
   advancedRuntimeApiMocks: {
+    createProcessCollaborationEvent: vi.fn(),
     getProcessTerminationSnapshot: vi.fn(),
     listProcessCollaborationTrace: vi.fn(),
     listProcessTerminationAuditTrail: vi.fn(),
@@ -406,6 +408,16 @@ describe('workbench pages', () => {
       ],
     })
     advancedRuntimeApiMocks.getProcessTerminationSnapshot.mockResolvedValue(null)
+    advancedRuntimeApiMocks.createProcessCollaborationEvent.mockResolvedValue({
+      eventId: 'collab_001',
+      instanceId: 'pi_001',
+      eventType: 'COMMENT',
+      eventName: '批注',
+      subject: '默认协同',
+      content: '默认协同内容',
+      operatorUserId: 'usr_001',
+      occurredAt: '2026-03-22T09:00:00+08:00',
+    })
     advancedRuntimeApiMocks.listProcessTerminationAuditTrail.mockResolvedValue([])
     advancedRuntimeApiMocks.listProcessCollaborationTrace.mockResolvedValue([])
     advancedRuntimeApiMocks.listProcessTimeTravelTrace.mockResolvedValue([])
@@ -442,6 +454,16 @@ describe('workbench pages', () => {
       completedTaskId: 'task_001',
       status: 'RUNNING',
       nextTasks: [],
+    })
+    workbenchApiMocks.signWorkbenchTask.mockResolvedValue({
+      taskId: 'task_001',
+      instanceId: 'pi_001',
+      nodeId: 'approve_manager',
+      signatureType: 'PERSONAL_SEAL',
+      signatureStatus: 'SIGNED',
+      signatureComment: '已完成电子签章',
+      signatureAt: '2026-03-22T09:16:00+08:00',
+      operatorUserId: 'usr_002',
     })
     workbenchApiMocks.revokeWorkbenchTask.mockResolvedValue({
       instanceId: 'pi_001',
@@ -808,6 +830,76 @@ describe('workbench pages', () => {
     expect(screen.queryByRole('button', { name: '唤醒' })).not.toBeInTheDocument()
   })
 
+  it('shows signature action and trace items in the task detail page', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_sign_001',
+        instanceId: 'pi_sign_001',
+        status: 'PENDING',
+        instanceStatus: 'RUNNING',
+        assigneeUserId: 'usr_002',
+        activeTaskIds: ['task_sign_001'],
+        instanceEvents: [
+          {
+            eventId: 'evt_sign_001',
+            instanceId: 'pi_sign_001',
+            nodeId: 'approve_manager',
+            taskId: 'task_sign_001',
+            eventType: 'TASK_SIGNATURE',
+            eventName: '任务已签章',
+            actionCategory: 'SIGNATURE',
+            operatorUserId: 'usr_002',
+            occurredAt: '2026-03-22T09:16:00+08:00',
+            signatureType: 'PERSONAL_SEAL',
+            signatureStatus: 'SIGNED',
+            signatureComment: '已完成电子签章',
+            signatureAt: '2026-03-22T09:16:00+08:00',
+            details: {
+              signatureType: 'PERSONAL_SEAL',
+              signatureStatus: 'SIGNED',
+              signatureComment: '已完成电子签章',
+              signatureAt: '2026-03-22T09:16:00+08:00',
+            },
+          },
+        ],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+      canDelegate: false,
+      canHandover: false,
+      canSign: true,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_sign_001' />)
+
+    expect(await screen.findByRole('button', { name: '签章' })).toBeInTheDocument()
+    const traceTab = await screen.findByRole('tab', { name: '轨迹' })
+    fireEvent.mouseDown(traceTab)
+    fireEvent.click(traceTab)
+    expect(await screen.findByText('电子签章')).toBeInTheDocument()
+    expect(screen.getByText('个人印章')).toBeInTheDocument()
+    expect(screen.getByText('已签章')).toBeInTheDocument()
+    expect(
+      screen.getAllByText((_, element) =>
+        element?.textContent?.includes('签章说明：已完成电子签章') ?? false
+      ).length
+    ).toBeGreaterThan(0)
+  })
+
   it('merges instance events and task trace for playback on completed approval sheets', async () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
       createWorkbenchTaskDetail({
@@ -945,6 +1037,7 @@ describe('workbench pages', () => {
       canJump: false,
       canTakeBack: false,
       canWakeUp: false,
+      canSign: false,
     })
     workbenchApiMocks.listApprovalSheets.mockResolvedValue(
       createApprovalSheetPage({
@@ -1699,6 +1792,84 @@ describe('workbench pages', () => {
   it('shows termination strategy, collaboration and time-travel sections in approval detail', async () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
       createWorkbenchTaskDetail({
+        flowNodes: [
+          {
+            id: 'start_1',
+            type: 'start',
+            name: '流程发起',
+            position: { x: 100, y: 100 },
+          },
+          {
+            id: 'supervise_1',
+            type: 'supervise',
+            name: '督办节点',
+            position: { x: 340, y: 100 },
+          },
+          {
+            id: 'end_1',
+            type: 'end',
+            name: '流程结束',
+            position: { x: 580, y: 100 },
+          },
+        ],
+        flowEdges: [
+          {
+            id: 'edge_1',
+            source: 'start_1',
+            target: 'supervise_1',
+            label: '提交',
+          },
+          {
+            id: 'edge_2',
+            source: 'supervise_1',
+            target: 'end_1',
+            label: '通过',
+          },
+        ],
+        instanceEvents: [
+          {
+            eventId: 'evt_001',
+            instanceId: 'pi_001',
+            nodeId: 'start_1',
+            taskId: null,
+            eventType: 'INSTANCE_STARTED',
+            eventName: '流程实例已发起',
+            operatorUserId: 'usr_001',
+            occurredAt: '2026-03-23T10:00:00+08:00',
+            details: {},
+          },
+          {
+            eventId: 'evt_002',
+            instanceId: 'pi_001',
+            nodeId: 'supervise_1',
+            taskId: 'task_001',
+            eventType: 'TASK_CREATED',
+            eventName: '任务已创建',
+            operatorUserId: 'usr_001',
+            occurredAt: '2026-03-23T10:05:00+08:00',
+            details: {},
+          },
+        ],
+        taskTrace: [
+          {
+            taskId: 'task_001',
+            nodeId: 'supervise_1',
+            nodeName: '督办节点',
+            taskKind: 'supervise',
+            status: 'PENDING',
+            assigneeUserId: 'usr_002',
+            candidateUserIds: ['usr_002'],
+            candidateGroupIds: [],
+            action: null,
+            operatorUserId: null,
+            comment: '待处理',
+            receiveTime: '2026-03-23T10:05:00+08:00',
+            readTime: '2026-03-23T10:06:00+08:00',
+            handleStartTime: '2026-03-23T10:07:00+08:00',
+            handleEndTime: null,
+            handleDurationSeconds: null,
+          },
+        ],
         processLinks: [
           {
             linkId: 'subprocess_001',
@@ -1768,7 +1939,7 @@ describe('workbench pages', () => {
         eventId: 'col_001',
         instanceId: 'pi_001',
         taskId: 'task_001',
-        eventType: 'COMMENT',
+        eventType: 'SUPERVISE',
         subject: '请补充材料',
         content: '请补充请假附件。',
         mentionedUserIds: ['usr_002'],
@@ -1808,6 +1979,7 @@ describe('workbench pages', () => {
     expect(await screen.findByText('终止高级策略')).toBeInTheDocument()
     expect(screen.getByText('协同轨迹')).toBeInTheDocument()
     expect(screen.getByText('穿越时空轨迹')).toBeInTheDocument()
+    expect(await screen.findByText('督办')).toBeInTheDocument()
     expect(await screen.findByText('请补充材料')).toBeInTheDocument()
     expect(await screen.findByText('回退到历史节点')).toBeInTheDocument()
   })
@@ -1897,6 +2069,7 @@ describe('workbench pages', () => {
     workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
       createWorkbenchTaskDetail({
         taskId: 'task_pending_005',
+        taskSemanticMode: 'supervise',
         activeTaskIds: ['task_pending_005'],
       })
     )
@@ -1936,9 +2109,9 @@ describe('workbench pages', () => {
     expect(screen.getByRole('button', { name: '减签' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '撤销' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '催办' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '已阅' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '督办已阅' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '已阅' }))
+    fireEvent.click(screen.getByRole('button', { name: '督办已阅' }))
 
     await waitFor(() => {
       expect(workbenchApiMocks.readWorkbenchTask).toHaveBeenCalledWith(
@@ -1996,6 +2169,102 @@ describe('workbench pages', () => {
           comment: '转给王五处理',
         }
       )
+    })
+  })
+
+  it('submits the return dialog with an initiator target strategy', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_return_001',
+        activeTaskIds: ['task_return_001'],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: true,
+      canReturn: true,
+    })
+    workbenchApiMocks.returnWorkbenchTask.mockResolvedValue({
+      instanceId: 'pi_001',
+      completedTaskId: 'task_return_001',
+      status: 'RETURNED',
+      nextTasks: [],
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_return_001' />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '退回' }))
+    const returnDialog = await screen.findByRole('dialog', { name: '退回' })
+    fireEvent.change(within(returnDialog).getByRole('combobox'), {
+      target: { value: 'INITIATOR' },
+    })
+    fireEvent.change(within(returnDialog).getByLabelText('退回说明'), {
+      target: { value: '退回发起人补充材料' },
+    })
+    fireEvent.click(within(returnDialog).getByRole('button', { name: '确认退回' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.returnWorkbenchTask).toHaveBeenCalledWith(
+        'task_return_001',
+        expect.objectContaining({
+          targetStrategy: 'INITIATOR',
+          comment: '退回发起人补充材料',
+        })
+      )
+    })
+  })
+
+  it('submits the collaboration dialog with an explicit event type', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_collab_001',
+        activeTaskIds: ['task_collab_001'],
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: true,
+      canReturn: true,
+    })
+    advancedRuntimeApiMocks.listProcessCollaborationTrace.mockResolvedValue([])
+    advancedRuntimeApiMocks.listProcessTerminationAuditTrail.mockResolvedValue([])
+    advancedRuntimeApiMocks.getProcessTerminationSnapshot.mockResolvedValue(null)
+    advancedRuntimeApiMocks.listProcessTimeTravelTrace.mockResolvedValue([])
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_collab_001' />)
+
+    await screen.findByText('业务正文')
+    const runtimeTab = screen.getByRole('tab', { name: '运行态' })
+    fireEvent.mouseDown(runtimeTab)
+    fireEvent.click(runtimeTab)
+    fireEvent.click(await screen.findByRole('button', { name: '发起协同' }))
+    const collaborationDialog = await screen.findByRole('dialog', { name: '发起协同' })
+    fireEvent.change(within(collaborationDialog).getByRole('combobox'), {
+      target: { value: 'SUPERVISE' },
+    })
+    fireEvent.change(within(collaborationDialog).getByLabelText('协同标题'), {
+      target: { value: '请尽快处理' },
+    })
+    fireEvent.change(within(collaborationDialog).getByLabelText('协同内容'), {
+      target: { value: '这是一条督办提醒。' },
+    })
+    fireEvent.click(within(collaborationDialog).getByRole('button', { name: '发送协同' }))
+
+    await waitFor(() => {
+      expect(advancedRuntimeApiMocks.createProcessCollaborationEvent).toHaveBeenCalledWith({
+        instanceId: 'pi_001',
+        taskId: 'task_collab_001',
+        eventType: 'SUPERVISE',
+        subject: '请尽快处理',
+        content: '这是一条督办提醒。',
+        mentionedUserIds: [],
+      })
     })
   })
 

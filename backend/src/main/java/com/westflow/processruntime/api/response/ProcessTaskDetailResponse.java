@@ -32,6 +32,7 @@ public record ProcessTaskDetailResponse(
         String nodeId,
         String nodeName,
         String taskKind,
+        String taskSemanticMode,
         String status,
         String assignmentMode,
         List<String> candidateUserIds,

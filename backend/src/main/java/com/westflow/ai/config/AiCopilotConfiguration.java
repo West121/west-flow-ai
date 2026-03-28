@@ -4,14 +4,24 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SupervisorAgent;
 import com.westflow.ai.gateway.AiGatewayService;
+import com.westflow.ai.executor.AiActionExecutor;
+import com.westflow.ai.executor.AiExecutionRouter;
+import com.westflow.ai.executor.AiExecutor;
+import com.westflow.ai.executor.AiKnowledgeExecutor;
+import com.westflow.ai.executor.AiMcpExecutor;
+import com.westflow.ai.executor.AiStatsExecutor;
+import com.westflow.ai.executor.AiWorkflowExecutor;
 import com.westflow.ai.model.AiToolType;
 import com.westflow.ai.model.AiToolSource;
+import com.westflow.ai.planner.AiPlanAgentService;
+import com.westflow.ai.planner.ChatClientAiPlanModelInvoker;
 import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.ai.runtime.SpringAiAlibabaCopilotRuntimeService;
 import com.westflow.ai.orchestration.AiOrchestrationPlanner;
 import com.westflow.ai.service.AiRegistryCatalogService;
 import com.westflow.ai.service.AiRuntimeToolCallbackProvider;
 import com.westflow.ai.service.AiToolExecutionService;
+import com.westflow.ai.stats.AiStatsText2SqlService;
 import com.westflow.ai.tool.AiToolDefinition;
 import com.westflow.ai.tool.AiToolRegistry;
 import com.westflow.common.error.ContractException;
@@ -38,6 +48,8 @@ import com.westflow.processruntime.service.FlowableRuntimeStartService;
 import com.westflow.oa.api.OALaunchResponse;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,6 +67,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  */
 @Configuration
 public class AiCopilotConfiguration {
+
+    private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
 
     /**
      * 装配 Spring AI ChatClient。
@@ -76,7 +90,9 @@ public class AiCopilotConfiguration {
             FlowableRuntimeStartService flowableRuntimeStartService,
             OALaunchService oaLaunchService,
             PlmLaunchService plmLaunchService,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            AiStatsText2SqlService aiStatsText2SqlService,
+            AiRegistryCatalogService aiRegistryCatalogService
     ) {
         return new AiToolRegistry(List.of(
                 AiToolDefinition.read(
@@ -115,12 +131,52 @@ public class AiCopilotConfiguration {
                         "stats.query",
                         AiToolSource.PLATFORM,
                         "查询统计",
-                        context -> Map.of(
-                                "publishedDefinitionCount", scalarCount(jdbcTemplate, "SELECT COUNT(*) FROM wf_process_definition WHERE status = 'PUBLISHED'"),
-                                "activeConversationCount", scalarCount(jdbcTemplate, "SELECT COUNT(*) FROM wf_ai_conversation WHERE status = 'active'"),
-                                "runtimeTaskCount", scalarCount(jdbcTemplate, "SELECT COUNT(*) FROM ACT_RU_TASK"),
-                                "runtimeInstanceCount", scalarCount(jdbcTemplate, "SELECT COUNT(*) FROM ACT_RU_EXECUTION WHERE PARENT_ID_ IS NULL")
-                        )
+                        context -> aiStatsText2SqlService.query(context.request().arguments())
+                ),
+                AiToolDefinition.read(
+                        "feature.catalog.query",
+                        AiToolSource.PLATFORM,
+                        "查询功能目录",
+                        context -> {
+                            String userId = stringValue(context.request().arguments().get("userId"));
+                            String domain = stringValue(context.request().arguments().get("domain"));
+                            String routePath = stringValue(context.request().arguments().get("pageRoute"));
+                            List<Map<String, Object>> tools = aiRegistryCatalogService.listReadableTools(userId, domain).stream()
+                                    .limit(6)
+                                    .map(item -> Map.<String, Object>of(
+                                            "toolCode", item.toolCode(),
+                                            "toolName", item.toolName(),
+                                            "toolType", item.toolType().name(),
+                                            "routePrefixes", item.routePrefixes(),
+                                            "triggerKeywords", item.triggerKeywords()
+                                    ))
+                                    .toList();
+                            List<Map<String, Object>> skills = aiRegistryCatalogService.listSkillsForDomain(userId, domain).stream()
+                                    .limit(6)
+                                    .map(item -> Map.<String, Object>of(
+                                            "skillCode", item.skillCode(),
+                                            "skillName", item.skillName(),
+                                            "triggerKeywords", item.triggerKeywords()
+                                    ))
+                                    .toList();
+                            List<Map<String, Object>> mcps = aiRegistryCatalogService.listMcps(userId, domain).stream()
+                                    .limit(3)
+                                    .map(item -> Map.<String, Object>of(
+                                            "mcpCode", item.mcpCode(),
+                                            "mcpName", item.mcpName(),
+                                            "transportType", item.transportType()
+                                    ))
+                                    .toList();
+                            return Map.of(
+                                    "title", "当前页面功能目录",
+                                    "summary", "已整理当前页面上下文可用的功能目录。",
+                                    "domain", domain,
+                                    "pageRoute", routePath,
+                                    "tools", tools,
+                                    "skills", skills,
+                                    "mcps", mcps
+                            );
+                        }
                 ),
                 AiToolDefinition.read(
                         "plm.bill.query",
@@ -225,6 +281,61 @@ public class AiCopilotConfiguration {
             AiRegistryCatalogService aiRegistryCatalogService
     ) {
         return new AiToolExecutionService(aiToolRegistry, aiRegistryCatalogService);
+    }
+
+    @Bean
+    public AiPlanAgentService aiPlanAgentService(
+            ChatClient aiCopilotChatClient,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+            AiRegistryCatalogService aiRegistryCatalogService
+    ) {
+        return new AiPlanAgentService(
+                new ChatClientAiPlanModelInvoker(aiCopilotChatClient),
+                objectMapper,
+                aiRegistryCatalogService
+        );
+    }
+
+    @Bean
+    public AiKnowledgeExecutor aiKnowledgeExecutor() {
+        return new AiKnowledgeExecutor();
+    }
+
+    @Bean
+    public AiWorkflowExecutor aiWorkflowExecutor() {
+        return new AiWorkflowExecutor();
+    }
+
+    @Bean
+    public AiStatsExecutor aiStatsExecutor() {
+        return new AiStatsExecutor();
+    }
+
+    @Bean
+    public AiActionExecutor aiActionExecutor() {
+        return new AiActionExecutor();
+    }
+
+    @Bean
+    public AiMcpExecutor aiMcpExecutor() {
+        return new AiMcpExecutor();
+    }
+
+    @Bean
+    public AiExecutionRouter aiExecutionRouter(
+            AiKnowledgeExecutor aiKnowledgeExecutor,
+            AiWorkflowExecutor aiWorkflowExecutor,
+            AiStatsExecutor aiStatsExecutor,
+            AiActionExecutor aiActionExecutor,
+            AiMcpExecutor aiMcpExecutor
+    ) {
+        return new AiExecutionRouter(List.<AiExecutor>of(
+                aiKnowledgeExecutor,
+                aiWorkflowExecutor,
+                aiStatsExecutor,
+                aiActionExecutor,
+                aiMcpExecutor
+        ));
     }
 
     /**
@@ -393,11 +504,6 @@ public class AiCopilotConfiguration {
             return normalized;
         }
         return Map.of();
-    }
-
-    private static long scalarCount(JdbcTemplate jdbcTemplate, String sql) {
-        Long count = jdbcTemplate.queryForObject(sql, Long.class);
-        return count == null ? 0L : count;
     }
 
     private static Map<String, Object> handleProcessStart(

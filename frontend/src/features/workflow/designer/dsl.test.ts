@@ -1,10 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { type WorkflowApproverNodeConfig, type WorkflowNode, type WorkflowSnapshot } from './types'
+import {
+  type WorkflowApproverNodeConfig,
+  type WorkflowNode,
+  type WorkflowReminderChannel,
+  type WorkflowSnapshot,
+} from './types'
 import {
   type ProcessDefinitionDetailResponse,
   processDefinitionDetailToWorkflowSnapshot,
   workflowSnapshotToProcessDefinitionDsl,
 } from './dsl'
+
+const defaultEscalationPolicy = {
+  enabled: false,
+  afterMinutes: null,
+  targetMode: 'ROLE' as const,
+  targetUserIds: [] as string[],
+  targetRoleCodes: [] as string[],
+  channels: ['IN_APP'] as WorkflowReminderChannel[],
+}
 
 const snapshot: WorkflowSnapshot = {
   nodes: [
@@ -56,6 +70,7 @@ const snapshot: WorkflowSnapshot = {
             maxTimes: null,
             channels: ['IN_APP'],
           },
+          escalationPolicy: defaultEscalationPolicy,
           operations: ['APPROVE', 'REJECT', 'RETURN'],
           commentRequired: false,
         },
@@ -331,6 +346,7 @@ describe('workflow designer dsl mapping', () => {
                     maxTimes: null,
                     channels: ['IN_APP'],
                   },
+                  escalationPolicy: defaultEscalationPolicy,
                   operations: ['APPROVE', 'REJECT', 'RETURN'],
                   commentRequired: false,
                   assignment: {
@@ -925,6 +941,7 @@ describe('workflow designer dsl mapping', () => {
                 maxTimes: null,
                 channels: ['IN_APP'],
               },
+              escalationPolicy: defaultEscalationPolicy,
               operations: ['APPROVE', 'REJECT', 'RETURN'],
               commentRequired: true,
             },
@@ -1129,6 +1146,7 @@ describe('workflow designer dsl mapping', () => {
                 maxTimes: null,
                 channels: ['IN_APP'],
               },
+              escalationPolicy: defaultEscalationPolicy,
               operations: ['APPROVE', 'REJECT', 'RETURN'],
               commentRequired: false,
             },
@@ -1168,6 +1186,7 @@ describe('workflow designer dsl mapping', () => {
                 maxTimes: null,
                 channels: ['IN_APP'],
               },
+              escalationPolicy: defaultEscalationPolicy,
               operations: ['APPROVE', 'REJECT', 'RETURN'],
               commentRequired: false,
             },

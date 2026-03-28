@@ -64,6 +64,15 @@ function resolveColumnLabel<TData>(columnDef: ColumnDef<TData, unknown>) {
   return null
 }
 
+function resolveColumnMeta<TData>(columnDef: ColumnDef<TData, unknown>) {
+  return (columnDef.meta as {
+    label?: string
+    headerClassName?: string
+    headerContentClassName?: string
+    cellClassName?: string
+  } | undefined) ?? {}
+}
+
 function toSortingState(search: ListQuerySearch): SortingState {
   return (search.sorts ?? []).map((item) => ({
     id: item.field,
@@ -254,7 +263,7 @@ export function ProTable<TData extends object>({
     const selectionColumn: ColumnDef<TData, unknown> = {
       id: 'select',
       header: ({ table }) => (
-        <div className='flex items-center justify-center'>
+        <div className='flex h-full items-center justify-center'>
           <Checkbox
             aria-label='选择当前页全部'
             checked={
@@ -266,7 +275,7 @@ export function ProTable<TData extends object>({
         </div>
       ),
       cell: ({ row }) => (
-        <div className='flex items-center justify-center'>
+        <div className='flex h-full items-center justify-center'>
           <Checkbox
             aria-label={`选择${row.id}`}
             checked={row.getIsSelected()}
@@ -274,6 +283,12 @@ export function ProTable<TData extends object>({
           />
         </div>
       ),
+      meta: {
+        label: '选择',
+        headerClassName: 'px-0 text-center align-middle',
+        headerContentClassName: 'justify-center pe-0',
+        cellClassName: 'px-0 text-center align-middle',
+      } as ColumnDef<TData, unknown>['meta'],
       enableSorting: false,
       enableHiding: false,
       size: 40,
@@ -494,7 +509,6 @@ export function ProTable<TData extends object>({
         <CardContent className='flex flex-col gap-4'>
           <ProTableToolbar
             table={table}
-            total={total ?? data.length}
             searchPlaceholder={searchPlaceholder}
             searchValue={globalFilter ?? ''}
             onSearchChange={(value) => onGlobalFilterChange?.(value)}
@@ -558,12 +572,23 @@ export function ProTable<TData extends object>({
                     {table.getHeaderGroups().map((headerGroup) => (
                       <TableRow key={headerGroup.id}>
                         {headerGroup.headers.map((header) => (
+                          (() => {
+                            const headerMeta = resolveColumnMeta(header.column.columnDef)
+                            return (
                           <TableHead
                             key={header.id}
-                            className='relative bg-muted/60 text-foreground'
+                            className={cn(
+                              'relative bg-muted/60 text-foreground',
+                              headerMeta.headerClassName
+                            )}
                             style={{ width: header.getSize() }}
                           >
-                            <div className='flex min-w-0 items-center justify-between gap-2 pe-2'>
+                            <div
+                              className={cn(
+                                'flex min-w-0 items-center justify-between gap-2 pe-2',
+                                headerMeta.headerContentClassName
+                              )}
+                            >
                               {header.isPlaceholder
                                 ? null
                                 : flexRender(header.column.columnDef.header, header.getContext())}
@@ -583,6 +608,8 @@ export function ProTable<TData extends object>({
                               />
                             ) : null}
                           </TableHead>
+                            )
+                          })()
                         ))}
                       </TableRow>
                     ))}
@@ -603,13 +630,21 @@ export function ProTable<TData extends object>({
                             {rows.map((row) => (
                               <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined}>
                                 {row.getVisibleCells().map((cell) => (
+                                  (() => {
+                                    const cellMeta = resolveColumnMeta(cell.column.columnDef)
+                                    return (
                                   <TableCell
                                     key={cell.id}
-                                    className='align-top'
+                                    className={cn(
+                                      cell.column.id === 'select' ? 'align-middle' : 'align-top',
+                                      cellMeta.cellClassName
+                                    )}
                                     style={{ width: cell.column.getSize() }}
                                   >
                                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                   </TableCell>
+                                    )
+                                  })()
                                 ))}
                               </TableRow>
                             ))}
@@ -619,13 +654,21 @@ export function ProTable<TData extends object>({
                         table.getRowModel().rows.map((row) => (
                           <TableRow key={row.id} data-state={row.getIsSelected() ? 'selected' : undefined}>
                             {row.getVisibleCells().map((cell) => (
+                              (() => {
+                                const cellMeta = resolveColumnMeta(cell.column.columnDef)
+                                return (
                               <TableCell
                                 key={cell.id}
-                                className='align-top'
+                                className={cn(
+                                  cell.column.id === 'select' ? 'align-middle' : 'align-top',
+                                  cellMeta.cellClassName
+                                )}
                                 style={{ width: cell.column.getSize() }}
                               >
                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                               </TableCell>
+                                )
+                              })()
                             ))}
                           </TableRow>
                         ))
@@ -640,7 +683,7 @@ export function ProTable<TData extends object>({
                   </TableBody>
                 </Table>
               </div>
-              {!isTreeMode ? <DataTablePagination table={table} /> : null}
+              {!isTreeMode ? <DataTablePagination table={table} total={total} /> : null}
             </>
           )}
         </CardContent>

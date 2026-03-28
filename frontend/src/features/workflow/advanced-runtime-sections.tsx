@@ -1,6 +1,9 @@
 import { type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  resolveWorkflowCollaborationEventTypeLabel,
+} from './designer/collaboration'
 import type {
   ProcessCollaborationEvent,
   ProcessTerminationAudit,
@@ -54,7 +57,9 @@ export function ProcessCollaborationSection({
           items.map((item) => (
             <div key={item.eventId} className='rounded-md border px-4 py-3 text-sm'>
               <div className='flex flex-wrap items-center gap-2'>
-                <Badge variant='outline'>{item.eventType}</Badge>
+                <Badge variant='outline'>
+                  {resolveWorkflowCollaborationEventTypeLabel(item.eventType)}
+                </Badge>
                 <span className='font-medium'>{item.subject || '协同事件'}</span>
               </div>
               <div className='mt-2 text-muted-foreground'>{item.content || '--'}</div>
@@ -159,8 +164,10 @@ export function ProcessTerminationSection({
           <div className='space-y-3'>
             {audits.map((item) => (
               <div key={item.auditId} className='rounded-md border px-4 py-3 text-sm'>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <Badge variant='outline'>{item.eventType}</Badge>
+              <div className='flex flex-wrap items-center gap-2'>
+                  <Badge variant='outline'>
+                    {resolveWorkflowCollaborationEventTypeLabel(item.eventType)}
+                  </Badge>
                   <Badge variant='secondary'>{item.propagationPolicy}</Badge>
                   <span className='font-medium'>{item.resultStatus}</span>
                 </div>

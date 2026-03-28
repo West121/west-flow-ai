@@ -1,4 +1,8 @@
 import { type WorkbenchTaskDetail, type WorkbenchTaskTraceItem } from '@/lib/api/workbench'
+import {
+  resolveWorkflowCollaborationEventTypeLabel,
+  resolveWorkflowCollaborationNodeLabel,
+} from '@/features/workflow/designer/collaboration'
 
 // 统一把审批单详情里的时间、文本和轨迹文案转成页面可直接展示的格式。
 export function formatApprovalSheetDateTime(
@@ -144,6 +148,12 @@ export function resolveApprovalSheetBusinessRows(
 // 轨迹结果文案统一从这里出，详情页、时间线和流程图都可以复用。
 export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   if (item.action === 'REJECT_ROUTE') {
+    if (item.targetStrategy === 'INITIATOR') {
+      return '驳回到发起人'
+    }
+    if (item.targetStrategy === 'ANY_USER_TASK') {
+      return '驳回到指定节点'
+    }
     return '驳回到上一步人工节点'
   }
   if (item.action === 'DELEGATE') {
@@ -177,10 +187,27 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
     return '动态构建'
   }
   if (item.action === 'READ') {
-    return '已阅'
+    switch (item.taskSemanticMode) {
+      case 'supervise':
+        return '督办已阅'
+      case 'meeting':
+        return '会办已阅'
+      case 'read':
+        return '阅办已阅'
+      case 'circulate':
+        return '传阅已阅'
+      default:
+        return '已阅'
+    }
   }
   if (item.action === 'RETURN') {
-    return '退回'
+    if (item.targetStrategy === 'INITIATOR') {
+      return '退回发起人'
+    }
+    if (item.targetStrategy === 'ANY_USER_TASK') {
+      return '退回指定节点'
+    }
+    return '退回上一步'
   }
   if (item.action === 'TRANSFER') {
     return '转办'
@@ -222,6 +249,27 @@ export function resolveApprovalSheetResultLabel(item: WorkbenchTaskTraceItem) {
   }
 }
 
+// 协同轨迹里的节点类型与事件类型都需要明确中文标签，避免展示原始代码值。
+export function resolveApprovalSheetCollaborationNodeLabel(kind: string | null | undefined) {
+  if (!kind) {
+    return '--'
+  }
+
+  const label = resolveWorkflowCollaborationNodeLabel(kind)
+  return label === kind ? kind : label
+}
+
+export function resolveApprovalSheetCollaborationEventTypeLabel(
+  eventType: string | null | undefined
+) {
+  if (!eventType) {
+    return '--'
+  }
+
+  const label = resolveWorkflowCollaborationEventTypeLabel(eventType)
+  return label === eventType ? eventType : label
+}
+
 // 会签模式文案统一集中在这里，避免详情页和设计器说明口径漂移。
 export function resolveCountersignModeLabel(value: string | null | undefined) {
   switch (value) {
@@ -253,6 +301,38 @@ export function resolveCountersignMemberStatusLabel(
       return '等待中'
     case 'AUTO_FINISHED':
       return '自动结束'
+    default:
+      return value?.trim() || '--'
+  }
+}
+
+// 电子签章类型统一成中文，避免页面直接暴露实现枚举。
+export function resolveSignatureTypeLabel(value: string | null | undefined) {
+  switch (value) {
+    case 'PERSONAL_SEAL':
+      return '个人印章'
+    case 'COMPANY_SEAL':
+      return '公司印章'
+    case 'DIGITAL_SIGNATURE':
+      return '数字签名'
+    case 'HANDWRITING':
+      return '手写签名'
+    default:
+      return value?.trim() || '--'
+  }
+}
+
+// 电子签章状态统一成页面可读文案。
+export function resolveSignatureStatusLabel(value: string | null | undefined) {
+  switch (value) {
+    case 'SIGNED':
+      return '已签章'
+    case 'PENDING':
+      return '待签章'
+    case 'REVOKED':
+      return '已撤销'
+    case 'FAILED':
+      return '签章失败'
     default:
       return value?.trim() || '--'
   }

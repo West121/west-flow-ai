@@ -1,12 +1,16 @@
 import {
   BellRing,
+  BookOpenText,
   Clock3,
   Flag,
   GitBranch,
   GitMerge,
   Play,
+  SendHorizontal,
+  ShieldAlert,
   Zap,
   UserRoundCheck,
+  UsersRound,
 } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@/lib/utils'
@@ -15,6 +19,7 @@ import {
   type WorkflowNode,
   type WorkflowNodeData,
 } from './types'
+import { resolveWorkflowCollaborationNodeLabel } from './collaboration'
 
 const toneClassNames = {
   brand: {
@@ -69,6 +74,10 @@ const kindBadgeLabels = {
   'dynamic-builder': '动态构建',
   parallel: '并行',
   cc: '抄送',
+  supervise: '督办',
+  meeting: '会办',
+  read: '阅办',
+  circulate: '传阅',
   timer: '定时',
   trigger: '触发',
   end: '结束',
@@ -110,6 +119,14 @@ function renderIcon(kind: WorkflowNodeData['kind']) {
       return <GitMerge className='size-5' />
     case 'cc':
       return <BellRing className='size-5' />
+    case 'supervise':
+      return <ShieldAlert className='size-5' />
+    case 'meeting':
+      return <UsersRound className='size-5' />
+    case 'read':
+      return <BookOpenText className='size-5' />
+    case 'circulate':
+      return <SendHorizontal className='size-5' />
     case 'timer':
       return <Clock3 className='size-5' />
     case 'trigger':
@@ -137,6 +154,7 @@ export function WorkflowNodeCard({
   const marker = resolveNodeMarker(workflowData)
   const markerClasses =
     marker && !previewClasses ? toneClassNames[marker.tone] : null
+  const collaborationLabel = resolveWorkflowCollaborationNodeLabel(workflowData.kind)
   const showTarget = workflowData.kind !== 'start'
   const showSource = workflowData.kind !== 'end'
   const collaboration = workflowData.collaboration
@@ -200,7 +218,9 @@ export function WorkflowNodeCard({
                   previewClasses?.badge ?? classes.badge
                 )}
               >
-                {kindBadgeLabels[workflowData.kind]}
+                {collaborationLabel !== workflowData.kind
+                  ? collaborationLabel
+                  : kindBadgeLabels[workflowData.kind]}
               </span>
             </div>
           </div>

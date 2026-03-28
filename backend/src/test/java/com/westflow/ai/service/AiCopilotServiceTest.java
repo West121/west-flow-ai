@@ -22,6 +22,13 @@ import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.model.AiToolSource;
 import com.westflow.ai.model.AiToolType;
 import com.westflow.ai.orchestration.AiOrchestrationPlanner;
+import com.westflow.ai.executor.AiActionExecutor;
+import com.westflow.ai.executor.AiExecutionRouter;
+import com.westflow.ai.executor.AiKnowledgeExecutor;
+import com.westflow.ai.executor.AiMcpExecutor;
+import com.westflow.ai.executor.AiStatsExecutor;
+import com.westflow.ai.executor.AiWorkflowExecutor;
+import com.westflow.ai.planner.AiPlanAgentService;
 import com.westflow.ai.runtime.AiCopilotRuntimeService;
 import com.westflow.ai.runtime.SpringAiAlibabaCopilotRuntimeService;
 import com.westflow.ai.skill.AiSkillDescriptor;
@@ -32,6 +39,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -82,15 +90,25 @@ class AiCopilotServiceTest {
 
     private AiCopilotService aiCopilotService;
     private AtomicBoolean confirmedWriteExecuted;
+    private ObjectMapper objectMapper;
+    private AiRegistryCatalogService aiRegistryCatalogService;
+    private AiGatewayService aiGatewayService;
+    private AiToolExecutionService aiToolExecutionService;
+    private AiCopilotRuntimeService runtimeService;
+    private AiExecutionRouter aiExecutionRouter;
+    private AiAgentRegistry aiAgentRegistry;
+    private AiSkillRegistry aiSkillRegistry;
 
     @BeforeEach
     void setUp() {
         confirmedWriteExecuted = new AtomicBoolean(false);
-        AiAgentRegistry aiAgentRegistry = new AiAgentRegistry(List.of(
+        String today = LocalDate.now(ZoneId.of("Asia/Shanghai")).toString();
+        objectMapper = new ObjectMapper();
+        aiAgentRegistry = new AiAgentRegistry(List.of(
                 new AiAgentDescriptor("supervisor", "Supervisor", "SUPERVISOR", List.of("OA", "PLM", "GENERAL"), true, 100),
                 new AiAgentDescriptor("routing", "Routing", "ROUTING", List.of("OA", "PLM", "GENERAL"), false, 80)
         ));
-        AiSkillRegistry aiSkillRegistry = new AiSkillRegistry(List.of(
+        aiSkillRegistry = new AiSkillRegistry(List.of(
                 new AiSkillDescriptor("approval-trace", "审批轨迹解释", List.of("OA", "PLM"), List.of("轨迹", "路径"), false, 90),
                 new AiSkillDescriptor("plm-change-summary", "PLM 变更摘要", List.of("PLM"), List.of("PLM", "ECR", "ECO"), false, 80)
         ));
@@ -112,7 +130,7 @@ class AiCopilotServiceTest {
                                                         "currentNodeName", "部门经理审批",
                                                         "currentTaskId", "task_init_001",
                                                         "instanceStatus", "RUNNING",
-                                                        "createdAt", "2026-03-26T09:00:00+08:00"
+                                                        "createdAt", today + "T09:00:00+08:00"
                                                 ),
                                                 Map.of(
                                                         "instanceId", "proc_002",
@@ -121,7 +139,7 @@ class AiCopilotServiceTest {
                                                         "currentNodeName", "负责人确认",
                                                         "currentTaskId", "task_init_002",
                                                         "instanceStatus", "RUNNING",
-                                                        "createdAt", "2026-03-26T11:30:00+08:00"
+                                                        "createdAt", today + "T11:30:00+08:00"
                                                 )
                                         )
                                 );
@@ -145,11 +163,152 @@ class AiCopilotServiceTest {
                         "stats.query",
                         AiToolSource.PLATFORM,
                         "已返回统计摘要",
+                        context -> {
+                            String keyword = String.valueOf(context.request().arguments().getOrDefault("keyword", ""));
+                            if (keyword.contains("角色") && keyword.contains("用户") && keyword.contains("关联")) {
+                                return Map.of(
+                                        "scope", "role.user.association",
+                                        "title", "角色关联概览",
+                                        "summary", "系统当前共有 13 个角色，关联用户共 13 人。",
+                                        "metrics", List.of(
+                                                Map.of("label", "角色总数", "value", 13, "tone", "positive"),
+                                                Map.of("label", "关联用户数", "value", 13, "tone", "neutral"),
+                                                Map.of("label", "统计范围", "value", "全部角色", "tone", "neutral")
+                                        ),
+                                        "data", List.of(
+                                                Map.of("label", "角色总数", "value", 13),
+                                                Map.of("label", "关联用户数", "value", 13)
+                                        )
+                                );
+                            }
+                            if (keyword.contains("停用") || keyword.contains("禁用")) {
+                                return Map.of(
+                                        "scope", "user.disabled.count",
+                                        "title", "停用用户统计",
+                                        "summary", "系统当前共有 0 名停用用户。",
+                                        "metrics", List.of(
+                                                Map.of("label", "停用用户数", "value", 0, "tone", "neutral"),
+                                                Map.of("label", "统计范围", "value", "全部用户", "tone", "neutral")
+                                        ),
+                                        "chart", Map.of(
+                                                "type", "metric",
+                                                "title", "停用用户统计",
+                                                "description", "展示当前系统停用用户总数。",
+                                                "metricLabel", "停用用户数",
+                                                "valueLabel", "全部用户",
+                                                "value", 0
+                                        ),
+                                        "data", List.of(Map.of("label", "全部用户", "value", 0))
+                                );
+                            }
+                            if (keyword.contains("每个角色") || keyword.contains("角色对应")) {
+                                return Map.of(
+                                        "scope", "role.user.association.byRole",
+                                        "title", "角色关联用户分布",
+                                        "summary", "当前共 13 个角色，关联用户共 13 人。主要角色分布为 平台管理员（3）、部门经理（2）。",
+                                        "metrics", List.of(
+                                                Map.of("label", "角色总数", "value", 13, "tone", "positive"),
+                                                Map.of("label", "关联用户数", "value", 13, "tone", "neutral"),
+                                                Map.of("label", "最多用户角色", "value", "平台管理员", "tone", "warning")
+                                        ),
+                                        "chart", Map.of(
+                                                "type", "bar",
+                                                "title", "角色关联用户分布",
+                                                "description", "展示每个角色当前关联的用户数量。",
+                                                "xField", "roleName",
+                                                "yField", "userCount",
+                                                "series", List.of(Map.of("dataKey", "userCount", "name", "关联用户数"))
+                                        ),
+                                        "data", List.of(
+                                                Map.of("roleName", "平台管理员", "userCount", 3),
+                                                Map.of("roleName", "部门经理", "userCount", 2)
+                                        )
+                                );
+                            }
+                            if (keyword.contains("角色")) {
+                                return Map.of(
+                                        "scope", "role.count",
+                                        "title", "角色数量统计",
+                                        "summary", "系统当前共有 13 个角色。",
+                                        "metrics", List.of(
+                                                Map.of("label", "角色总数", "value", 13, "tone", "positive"),
+                                                Map.of("label", "统计范围", "value", "全部角色", "tone", "neutral")
+                                        ),
+                                        "chart", Map.of(
+                                                "type", "metric",
+                                                "title", "角色数量统计",
+                                                "description", "展示当前系统角色总数。",
+                                                "metricLabel", "角色总数",
+                                                "valueLabel", "全部角色",
+                                                "value", 13
+                                        ),
+                                        "data", List.of(Map.of("label", "全部角色", "value", 13))
+                                );
+                            }
+                            if (keyword.contains("菜单")) {
+                                return Map.of(
+                                        "scope", "menu.count",
+                                        "title", "菜单数量统计",
+                                        "summary", "系统当前共有 28 个菜单。",
+                                        "metrics", List.of(
+                                                Map.of("label", "菜单总数", "value", 28, "tone", "positive"),
+                                                Map.of("label", "统计范围", "value", "全部菜单", "tone", "neutral")
+                                        ),
+                                        "chart", Map.of(
+                                                "type", "metric",
+                                                "title", "菜单数量统计",
+                                                "description", "展示当前系统菜单总数。",
+                                                "metricLabel", "菜单总数",
+                                                "valueLabel", "全部菜单",
+                                                "value", 28
+                                        ),
+                                        "data", List.of(Map.of("label", "全部菜单", "value", 28))
+                                );
+                            }
+                            return Map.of(
+                                    "scope", "user.department",
+                                    "title", "按部门统计用户",
+                                    "summary", "当前共 13 名启用用户，主要集中在 PLM产品组（4）和人力资源部（3）。",
+                                    "metrics", List.of(
+                                            Map.of("label", "用户总数", "value", 13, "tone", "positive"),
+                                            Map.of("label", "部门数", "value", 5, "tone", "neutral"),
+                                            Map.of("label", "最多用户部门", "value", "PLM产品组", "tone", "warning")
+                                    ),
+                                    "chart", Map.of(
+                                            "type", "bar",
+                                            "title", "部门用户分布",
+                                            "description", "按部门统计当前启用用户数量。",
+                                            "xField", "departmentName",
+                                            "yField", "userCount",
+                                            "series", List.of(Map.of("dataKey", "userCount", "name", "用户数"))
+                                    ),
+                                    "data", List.of(
+                                            Map.of("departmentName", "PLM产品组", "userCount", 4),
+                                            Map.of("departmentName", "人力资源部", "userCount", 3),
+                                            Map.of("departmentName", "财务部", "userCount", 2)
+                                    )
+                            );
+                        }
+                ),
+                AiToolDefinition.read(
+                        "feature.catalog.query",
+                        AiToolSource.PLATFORM,
+                        "已返回功能目录",
                         context -> Map.of(
-                                "total", 12,
-                                "completed", 9,
-                                "pending", 3,
-                                "completionRate", "75%"
+                                "title", "当前页面功能目录",
+                                "summary", "当前页面可用 2 个工具、1 个技能、1 个 MCP。",
+                                "domain", String.valueOf(context.request().arguments().getOrDefault("domain", "GENERAL")),
+                                "pageRoute", String.valueOf(context.request().arguments().getOrDefault("pageRoute", "/")),
+                                "tools", List.of(
+                                        Map.of("toolCode", "stats.query", "toolName", "查询统计"),
+                                        Map.of("toolCode", "task.query", "toolName", "查询待办")
+                                ),
+                                "skills", List.of(
+                                        Map.of("skillCode", "system-feature-skill", "skillName", "系统功能说明")
+                                ),
+                                "mcps", List.of(
+                                        Map.of("mcpCode", "westflow-internal-mcp", "mcpName", "内部 MCP")
+                                )
                         )
                 ),
                 AiToolDefinition.read(
@@ -225,12 +384,12 @@ class AiCopilotServiceTest {
                 )
         ));
         ChatClient chatClient = org.mockito.Mockito.mock(ChatClient.class);
-        AiCopilotRuntimeService runtimeService = new SpringAiAlibabaCopilotRuntimeService(
+        runtimeService = new SpringAiAlibabaCopilotRuntimeService(
                 chatClient,
                 mockSupervisorAgent("supervisor-reply"),
                 mockRoutingAgent("routing-reply")
         );
-        AiRegistryCatalogService aiRegistryCatalogService = mock(AiRegistryCatalogService.class);
+        aiRegistryCatalogService = mock(AiRegistryCatalogService.class);
         lenient().when(aiRegistryCatalogService.matchReadTool(anyString(), anyString(), anyString(), any(), anyString()))
                 .thenAnswer(invocation -> {
                     String content = invocation.getArgument(1, String.class);
@@ -300,20 +459,109 @@ class AiCopilotServiceTest {
                     }
                     return java.util.Optional.empty();
                 });
+        lenient().when(aiRegistryCatalogService.findTool(anyString(), anyString()))
+                .thenAnswer(invocation -> {
+                    String toolKey = invocation.getArgument(1, String.class);
+                    return switch (toolKey) {
+                        case "task.query", "workflow.todo.list", "plm.bill.query" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                toolKey,
+                                toolKey,
+                                AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "",
+                                List.of("OA", "PLM", "SYSTEM", "GENERAL"),
+                                List.of(),
+                                List.of(),
+                                "",
+                                "",
+                                90,
+                                Map.of()
+                        ));
+                        case "stats.query", "feature.catalog.query", "workflow.trace.summary", "plm.change.summary" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                toolKey,
+                                toolKey,
+                                "workflow.trace.summary".equals(toolKey) || "plm.change.summary".equals(toolKey)
+                                        ? AiToolSource.SKILL
+                                        : AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "",
+                                List.of("OA", "PLM", "SYSTEM", "GENERAL"),
+                                List.of(),
+                                List.of(),
+                                "",
+                                "",
+                                90,
+                                Map.of()
+                        ));
+                        case "process.start", "task.handle", "workflow.task.complete", "workflow.task.reject", "workflow.task.fail" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                toolKey,
+                                toolKey,
+                                switch (toolKey) {
+                                    case "workflow.task.complete", "workflow.task.reject" -> AiToolSource.AGENT;
+                                    case "workflow.task.fail" -> AiToolSource.PLATFORM;
+                                    default -> AiToolSource.PLATFORM;
+                                },
+                                AiToolType.WRITE,
+                                "",
+                                List.of("OA", "PLM", "SYSTEM", "GENERAL"),
+                                List.of(),
+                                List.of(),
+                                "",
+                                "",
+                                90,
+                                Map.of()
+                        ));
+                        default -> java.util.Optional.empty();
+                    };
+                });
+        lenient().when(aiRegistryCatalogService.matchSkills(anyString(), anyString(), anyString(), any()))
+                .thenAnswer(invocation -> {
+                    String content = invocation.getArgument(1, String.class);
+                    if (content != null && (content.contains("功能") || content.contains("使用") || content.contains("怎么"))) {
+                        return List.of(new AiRegistryCatalogService.AiSkillCatalogItem(
+                                "system-feature-skill",
+                                "系统功能说明",
+                                "",
+                                List.of("GENERAL", "SYSTEM"),
+                                List.of("功能", "使用", "怎么"),
+                                false,
+                                90,
+                                "/skills/system",
+                                "系统功能说明内容",
+                                Map.of()
+                        ));
+                    }
+                    return List.of();
+                });
+        lenient().when(aiRegistryCatalogService.listSkillsForDomain(anyString(), anyString())).thenReturn(List.of());
+        lenient().when(aiRegistryCatalogService.listReadableTools(anyString(), anyString())).thenReturn(List.of());
+        lenient().when(aiRegistryCatalogService.listMcps(anyString(), anyString())).thenReturn(List.of());
         lenient().when(processDefinitionService.getLatestByProcessKey(anyString()))
                 .thenAnswer(invocation -> publishedProcessDefinition(invocation.getArgument(0, String.class)));
+        AiPlanAgentService planAgentService = new AiPlanAgentService(prompt -> "", objectMapper, aiRegistryCatalogService);
+        aiExecutionRouter = new AiExecutionRouter(List.of(
+                new AiKnowledgeExecutor(),
+                new AiWorkflowExecutor(),
+                new AiStatsExecutor(),
+                new AiActionExecutor(),
+                new AiMcpExecutor()
+        ));
+        aiGatewayService = new AiGatewayService(new AiOrchestrationPlanner(aiAgentRegistry, aiSkillRegistry));
+        aiToolExecutionService = new AiToolExecutionService(aiToolRegistry, aiRegistryCatalogService);
         aiCopilotService = new DbAiCopilotService(
                 aiConversationMapper,
                 aiMessageMapper,
                 aiToolCallMapper,
                 aiConfirmationMapper,
                 aiAuditMapper,
-                new ObjectMapper(),
-                new AiGatewayService(new AiOrchestrationPlanner(aiAgentRegistry, aiSkillRegistry)),
-                new AiToolExecutionService(aiToolRegistry),
+                objectMapper,
+                aiGatewayService,
+                aiToolExecutionService,
                 runtimeService,
                 aiRegistryCatalogService,
-                processDefinitionService
+                processDefinitionService,
+                planAgentService,
+                aiExecutionRouter
         ) {
             @Override
             protected String currentUserId() {
@@ -415,6 +663,35 @@ class AiCopilotServiceTest {
                 .contains("工具名称", "工具类型", "确认人", "确认意见", "待办动作", "动作语义", "业务类型", "业务标识", "业务单据", "业务标题");
         verify(aiConfirmationMapper).insertConfirmation(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
+    }
+
+    @Test
+    void shouldUseFeatureCatalogToolForKnowledgeQuestions() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("SYSTEM", "route:/system/users/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("当前页面适合做什么")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("当前页面共整理出 2 个可用工具、1 个可用技能");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .containsExactly("text", "trace", "result");
+        AiMessageBlockResponse resultBlock = assistantMessage.blocks().stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.sourceKey()).isEqualTo("feature.catalog.query");
+        assertThat(resultBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("工具数", "技能数", "MCP 数");
+        verify(aiToolCallMapper).insertToolCall(any());
     }
 
     @Test
@@ -588,6 +865,34 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldInferLeaveProcessStartFromNaturalLanguageRequest() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我请个5天的事假")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        AiMessageBlockResponse previewBlock = assistantMessage.blocks().stream()
+                .filter(block -> "form-preview".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(previewBlock.result())
+                .containsEntry("processKey", "oa_leave")
+                .containsEntry("businessType", "OA_LEAVE");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> formData = (Map<String, Object>) previewBlock.result().get("formData");
+        assertThat(formData)
+                .containsEntry("days", 5)
+                .containsEntry("leaveType", "PERSONAL");
+    }
+
+    @Test
     void shouldRejectProcessStartPreviewWhenPublishedProcessOrFormIsMissing() {
         when(aiConversationMapper.selectById("conv_001"))
                 .thenReturn(conversationWithTags("OA", "route:/"));
@@ -635,6 +940,136 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldUseRoleStatsForRoleCountQuery() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("SYSTEM", "route:/system/roles/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("系统有多少个角色")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("系统当前共有 13 个角色");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("chart")
+                .doesNotContain("result", "stats");
+        assertThat(assistantMessage.blocks().stream()
+                .filter(block -> "chart".equals(block.type()))
+                .findFirst()
+                .orElseThrow()
+                .result())
+                .containsKey("chart")
+                .containsKey("data");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> chart = (Map<String, Object>) assistantMessage.blocks().stream()
+                .filter(block -> "chart".equals(block.type()))
+                .findFirst()
+                .orElseThrow()
+                .result()
+                .get("chart");
+        assertThat(chart)
+                .containsEntry("type", "metric")
+                .containsEntry("value", 13);
+        verify(aiToolCallMapper).insertToolCall(any());
+    }
+
+    @Test
+    void shouldUseMenuStatsForMenuCountQuery() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("SYSTEM", "route:/system/menus/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("系统有多少个菜单")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("系统当前共有 28 个菜单");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("chart")
+                .doesNotContain("result", "stats");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> chart = (Map<String, Object>) assistantMessage.blocks().stream()
+                .filter(block -> "chart".equals(block.type()))
+                .findFirst()
+                .orElseThrow()
+                .result()
+                .get("chart");
+        assertThat(chart)
+                .containsEntry("type", "metric")
+                .containsEntry("value", 28);
+    }
+
+    @Test
+    void shouldUseRoleUserAssociationStatsForCompositeCountQuery() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("SYSTEM", "route:/system/roles/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我查询下系统角色有多少，关联的用户有多少")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("13 个角色", "13 人");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("stats")
+                .doesNotContain("result");
+        AiMessageBlockResponse statsBlock = assistantMessage.blocks().stream()
+                .filter(block -> "stats".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(statsBlock.metrics())
+                .extracting(metric -> metric.label() + ":" + metric.value())
+                .contains("角色总数:13", "关联用户数:13");
+    }
+
+    @Test
+    void shouldUseRoleUserAssociationChartForGroupedRoleQuery() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("SYSTEM", "route:/system/roles/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("要列出来每个角色对应的用户数量")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("主要角色分布");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("chart")
+                .doesNotContain("result");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> chart = (Map<String, Object>) assistantMessage.blocks().stream()
+                .filter(block -> "chart".equals(block.type()))
+                .findFirst()
+                .orElseThrow()
+                .result()
+                .get("chart");
+        assertThat(chart)
+                .containsEntry("type", "bar")
+                .containsEntry("xField", "roleName")
+                .containsEntry("yField", "userCount");
+    }
+
+    @Test
     void shouldAppendReadIntentMessageThroughSkillRouting() {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
         List<AiMessageRecord> storedMessages = mockStoredMessages(
@@ -666,6 +1101,85 @@ class AiCopilotServiceTest {
                 .contains("trace", "result");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiConfirmationMapper, never()).insertConfirmation(any());
+    }
+
+    @Test
+    void shouldAnswerKnowledgeQuestionsThroughFeatureCatalogTool() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("SYSTEM", "route:/system/roles/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("当前页面适合做什么，系统功能怎么用")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("当前页面共整理出 2 个可用工具、1 个可用技能");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "result")
+                .doesNotContain("chart", "confirm", "form-preview");
+        AiMessageBlockResponse resultBlock = assistantMessage.blocks().stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.sourceKey()).isEqualTo("feature.catalog.query");
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务域", "来源页面", "功能摘要");
+        assertThat(resultBlock.metrics())
+                .extracting(metric -> metric.label() + ":" + metric.value())
+                .contains("工具数:2", "技能数:1", "MCP 数:1");
+    }
+
+    @Test
+    void shouldFallbackToLegacyGatewayWhenPlannerMainlineFails() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("GENERAL", "route:/"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        AiPlanAgentService failingPlanAgentService = new AiPlanAgentService(
+                prompt -> {
+                    throw new IllegalStateException("planner failed");
+                },
+                objectMapper,
+                aiRegistryCatalogService
+        );
+        AiCopilotService fallbackService = new DbAiCopilotService(
+                aiConversationMapper,
+                aiMessageMapper,
+                aiToolCallMapper,
+                aiConfirmationMapper,
+                aiAuditMapper,
+                objectMapper,
+                aiGatewayService,
+                aiToolExecutionService,
+                runtimeService,
+                aiRegistryCatalogService,
+                processDefinitionService,
+                failingPlanAgentService,
+                aiExecutionRouter
+        ) {
+            @Override
+            protected String currentUserId() {
+                return "usr_001";
+            }
+        };
+
+        AiConversationDetailResponse detail = fallbackService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("梳理当前待办")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).isEqualTo("当前共有 1 条待办，重点包括：task_001。");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "result");
     }
 
     @Test
@@ -738,25 +1252,45 @@ class AiCopilotServiceTest {
 
         AiConversationDetailResponse detail = aiCopilotService.appendMessage(
                 "conv_001",
-                new AiMessageAppendRequest("给我看一下本周流程统计")
+                new AiMessageAppendRequest("按部门统计用户，图表展示")
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
-        assertThat(assistantMessage.content()).isEqualTo("当前统计：总量 12，已完成 9，待处理 3，完成率 75%。");
+        assertThat(assistantMessage.content()).contains("当前共 13 名启用用户");
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
-                .contains("trace", "result", "stats");
-        AiMessageBlockResponse statsBlock = blocks.stream()
-                .filter(block -> "stats".equals(block.type()))
+                .contains("trace", "chart")
+                .doesNotContain("result");
+        AiMessageBlockResponse chartBlock = blocks.stream()
+                .filter(block -> "chart".equals(block.type()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(statsBlock.fields())
-                .extracting(AiMessageBlockResponse.Field::label)
-                .contains("统计口径", "统计主题", "摘要");
-        assertThat(statsBlock.metrics())
+        assertThat(chartBlock.metrics())
                 .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("总量", "已完成", "待处理", "完成率");
+                .contains("用户总数", "部门数", "最多用户部门");
+        assertThat(chartBlock.result()).containsKeys("chart", "data");
+    }
+
+    @Test
+    void shouldRouteDisabledUserCountToStatsInsteadOfTodoQuery() {
+        when(aiConversationMapper.selectById("conv_001")).thenReturn(conversationWithTags("GENERAL", "route:/"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("停用用户有几个")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("0 名停用用户");
+        assertThat(assistantMessage.content()).doesNotContain("当前没有待办");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "chart")
+                .doesNotContain("result");
     }
 
     @Test

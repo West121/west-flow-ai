@@ -184,6 +184,15 @@ public class AiRegistryCatalogService {
                 .toList();
     }
 
+    /**
+     * 列出当前用户在指定业务域可用的技能目录。
+     */
+    public List<AiSkillCatalogItem> listSkillsForDomain(String userId, String domain) {
+        return listSkills(userId, domain).stream()
+                .sorted(Comparator.comparingInt(AiSkillCatalogItem::priority).reversed())
+                .toList();
+    }
+
     private List<AiToolCatalogItem> listTools(String userId) {
         List<String> capabilities = capabilities(userId);
         return aiRegistryMapper.selectEnabledToolRegistries().stream()

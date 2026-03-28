@@ -500,7 +500,7 @@ class ProcessDslValidatorTest {
                 )
         );
 
-        assertValidationFailure(dsl, "cc 节点必须配置 targets");
+        assertValidationFailure(dsl, "抄送节点必须配置 targets");
     }
 
     @Test
@@ -537,7 +537,35 @@ class ProcessDslValidatorTest {
                 )
         );
 
-        assertValidationFailure(dsl, "cc 节点 USER 目标不能为空");
+        assertValidationFailure(dsl, "抄送节点 USER 目标不能为空");
+    }
+
+    @Test
+    void shouldAcceptCollaborationNodeKindsWithValidTargets() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        approverNode("approve_1"),
+                        collaborationNode("cc_1", "cc"),
+                        collaborationNode("supervise_1", "supervise"),
+                        collaborationNode("meeting_1", "meeting"),
+                        collaborationNode("read_1", "read"),
+                        collaborationNode("circulate_1", "circulate"),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "cc_1"),
+                        edge("edge_3", "cc_1", "supervise_1"),
+                        edge("edge_4", "supervise_1", "meeting_1"),
+                        edge("edge_5", "meeting_1", "read_1"),
+                        edge("edge_6", "read_1", "circulate_1"),
+                        edge("edge_7", "circulate_1", "end_1")
+                )
+        );
+
+        assertThatCode(() -> validator.validate(dsl)).doesNotThrowAnyException();
     }
 
     @Test
@@ -571,6 +599,42 @@ class ProcessDslValidatorTest {
         );
 
         assertValidationFailure(dsl, "approver 节点 timeoutPolicy.durationMinutes 不能为空");
+    }
+
+    @Test
+    void shouldRejectApproverEscalationPolicyWithoutTargets() {
+        ProcessDslPayload dsl = withNodesAndEdges(
+                validDsl(),
+                List.of(
+                        node("start_1", "start", Map.of("initiatorEditable", true)),
+                        node("approve_1", "approver", Map.of(
+                                "assignment", Map.of(
+                                        "mode", "USER",
+                                        "userIds", List.of("usr_002"),
+                                        "roleCodes", List.of(),
+                                        "departmentRef", "",
+                                        "formFieldKey", ""
+                                ),
+                                "approvalPolicy", approvalPolicy(),
+                                "operations", List.of("APPROVE", "REJECT", "RETURN"),
+                                "commentRequired", false,
+                                "escalationPolicy", Map.of(
+                                        "enabled", true,
+                                        "afterMinutes", 30,
+                                        "targetMode", "ROLE",
+                                        "targetRoleCodes", List.of(),
+                                        "channels", List.of("IN_APP")
+                                )
+                        )),
+                        node("end_1", "end", Map.of())
+                ),
+                List.of(
+                        edge("edge_1", "start_1", "approve_1"),
+                        edge("edge_2", "approve_1", "end_1")
+                )
+        );
+
+        assertValidationFailure(dsl, "approver 节点 escalationPolicy.targetRoleCodes 不能为空");
     }
 
     @Test
@@ -1398,6 +1462,18 @@ class ProcessDslValidatorTest {
         config.put("commentRequired", false);
         config.putAll(overrides);
         return node(id, "approver", config);
+    }
+
+    private ProcessDslPayload.Node collaborationNode(String id, String type) {
+        return node(id, type, Map.of(
+                "targets", Map.of(
+                        "mode", "USER",
+                        "userIds", List.of("usr_003"),
+                        "roleCodes", List.of(),
+                        "departmentRef", ""
+                ),
+                "readRequired", true
+        ));
     }
 
     private Map<String, Object> approvalPolicy() {

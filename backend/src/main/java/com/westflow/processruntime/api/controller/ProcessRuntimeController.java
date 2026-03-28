@@ -5,6 +5,9 @@ import com.westflow.common.api.ApiResponse;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
+import com.westflow.processruntime.signature.api.SignTaskRequest;
+import com.westflow.processruntime.signature.api.TaskSignatureResponse;
+import com.westflow.processruntime.signature.service.TaskSignatureService;
 import com.westflow.processruntime.api.request.*;
 import com.westflow.processruntime.api.response.*;
 import jakarta.validation.Valid;
@@ -22,9 +25,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProcessRuntimeController {
 
     private final FlowableProcessRuntimeService flowableProcessRuntimeService;
+    private final TaskSignatureService taskSignatureService;
 
-    public ProcessRuntimeController(FlowableProcessRuntimeService flowableProcessRuntimeService) {
+    public ProcessRuntimeController(
+            FlowableProcessRuntimeService flowableProcessRuntimeService,
+            TaskSignatureService taskSignatureService
+    ) {
         this.flowableProcessRuntimeService = flowableProcessRuntimeService;
+        this.taskSignatureService = taskSignatureService;
     }
 
     @PostMapping("/start")
@@ -120,6 +128,16 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.actions(taskId));
     }
 
+    @PostMapping("/tasks/{taskId}/sign")
+    @SaCheckLogin
+    // 为当前任务执行电子签章并写入实例轨迹。
+    public ApiResponse<TaskSignatureResponse> sign(
+            @PathVariable String taskId,
+            @Valid @RequestBody SignTaskRequest request
+    ) {
+        return ApiResponse.success(taskSignatureService.sign(taskId, request));
+    }
+
     @PostMapping("/tasks/{taskId}/add-sign")
     @SaCheckLogin
     // 为任务增加会签处理人。
@@ -155,11 +173,25 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.read(taskId));
     }
 
+    @PostMapping("/tasks/batch/read")
+    @SaCheckLogin
+    // 批量将任务标记为已读。
+    public ApiResponse<BatchTaskActionResponse> batchRead(@Valid @RequestBody BatchTaskActionRequest request) {
+        return ApiResponse.success(flowableProcessRuntimeService.batchRead(request));
+    }
+
     @PostMapping("/tasks/{taskId}/reject")
     @SaCheckLogin
     // 按规则驳回任务。
     public ApiResponse<CompleteTaskResponse> reject(@PathVariable String taskId, @Valid @RequestBody RejectTaskRequest request) {
         return ApiResponse.success(flowableProcessRuntimeService.reject(taskId, request));
+    }
+
+    @PostMapping("/tasks/batch/reject")
+    @SaCheckLogin
+    // 按规则批量驳回任务。
+    public ApiResponse<BatchTaskActionResponse> batchReject(@Valid @RequestBody BatchTaskActionRequest request) {
+        return ApiResponse.success(flowableProcessRuntimeService.batchReject(request));
     }
 
     @PostMapping("/tasks/{taskId}/jump")
@@ -218,11 +250,25 @@ public class ProcessRuntimeController {
         return ApiResponse.success(flowableProcessRuntimeService.claim(taskId, request == null ? new ClaimTaskRequest(null) : request));
     }
 
+    @PostMapping("/tasks/batch/claim")
+    @SaCheckLogin
+    // 批量认领待办任务。
+    public ApiResponse<BatchTaskActionResponse> batchClaim(@Valid @RequestBody BatchTaskActionRequest request) {
+        return ApiResponse.success(flowableProcessRuntimeService.batchClaim(request));
+    }
+
     @PostMapping("/tasks/{taskId}/complete")
     @SaCheckLogin
     // 完成任务。
     public ApiResponse<CompleteTaskResponse> complete(@PathVariable String taskId, @Valid @RequestBody CompleteTaskRequest request) {
         return ApiResponse.success(flowableProcessRuntimeService.complete(taskId, request));
+    }
+
+    @PostMapping("/tasks/batch/complete")
+    @SaCheckLogin
+    // 批量完成任务。
+    public ApiResponse<BatchTaskActionResponse> batchComplete(@Valid @RequestBody BatchTaskActionRequest request) {
+        return ApiResponse.success(flowableProcessRuntimeService.batchComplete(request));
     }
 
     @PostMapping("/tasks/{taskId}/append")
@@ -250,7 +296,7 @@ public class ProcessRuntimeController {
     @SaCheckLogin
     // 退回到上一节点。
     public ApiResponse<CompleteTaskResponse> returnTask(@PathVariable String taskId, @RequestBody(required = false) ReturnTaskRequest request) {
-        ReturnTaskRequest payload = request == null ? new ReturnTaskRequest(null, null) : request;
+        ReturnTaskRequest payload = request == null ? new ReturnTaskRequest(null, null, null, null) : request;
         return ApiResponse.success(flowableProcessRuntimeService.returnToPrevious(taskId, payload));
     }
 }

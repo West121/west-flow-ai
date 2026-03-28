@@ -1078,4 +1078,149 @@ describe('AICopilotPage', () => {
       )
     )
   })
+
+  it('renders chart blocks for structured statistics replies', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_stats_chart_001',
+        title: '用户统计图表',
+        preview: '已按部门汇总用户并生成图表。',
+        status: 'active',
+        updatedAt: '2026-03-27T09:25:00.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot', 'route:/system/users/list'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(async () =>
+      buildSession({
+        sessionId: 'session_stats_chart_001',
+        title: '用户统计图表',
+        contextTags: ['AI Copilot', 'route:/system/users/list'],
+        history: [
+          {
+            messageId: 'session_stats_chart_001_msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-27T09:25:10.000Z',
+            content: '当前共 13 名启用用户，主要集中在 PLM产品组 和 人力资源部。',
+            blocks: [
+              {
+                type: 'stats',
+                title: '按部门统计用户',
+                description: '已按部门汇总当前启用用户分布。',
+                metrics: [
+                  { label: '用户总数', value: '13', tone: 'positive' },
+                  { label: '部门数', value: '5', tone: 'neutral' },
+                ],
+              },
+              {
+                type: 'chart',
+                title: '部门用户分布',
+                summary: '当前共 13 名启用用户，主要集中在 PLM产品组 和 人力资源部。',
+                detail: '按部门统计当前启用用户数量。',
+                result: {
+                  chart: {
+                    type: 'bar',
+                    xField: 'departmentName',
+                    yField: 'userCount',
+                    series: [{ dataKey: 'userCount', name: '用户数' }],
+                  },
+                  data: [
+                    { departmentName: 'PLM产品组', userCount: 4 },
+                    { departmentName: '人力资源部', userCount: 3 },
+                    { departmentName: '财务部', userCount: 2 },
+                  ],
+                },
+                metrics: [{ label: '用户总数', value: '13', tone: 'positive' }],
+              },
+            ],
+          },
+        ],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('用户统计图表')).toBeInTheDocument()
+    expect(await screen.findByText('部门用户分布')).toBeInTheDocument()
+    expect(await screen.findByText('按部门统计用户')).toBeInTheDocument()
+    expect(screen.getAllByText('用户总数').length).toBeGreaterThan(0)
+  })
+
+  it('renders table and metric presentations for structured statistics replies', async () => {
+    aiCopilotApiMocks.listAICopilotSessions.mockResolvedValueOnce([
+      {
+        sessionId: 'session_stats_modes_001',
+        title: '统计展示模式',
+        preview: '支持表格和指标卡展示。',
+        status: 'active',
+        updatedAt: '2026-03-27T10:00:00.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot', 'route:/system/users/list'],
+      },
+    ])
+    aiCopilotApiMocks.getAICopilotSession.mockImplementationOnce(async () =>
+      buildSession({
+        sessionId: 'session_stats_modes_001',
+        title: '统计展示模式',
+        contextTags: ['AI Copilot', 'route:/system/users/list'],
+        history: [
+          {
+            messageId: 'session_stats_modes_001_msg_001',
+            role: 'assistant',
+            authorName: 'AI Copilot',
+            createdAt: '2026-03-27T10:00:10.000Z',
+            content: '当前共 0 名停用用户。',
+            blocks: [
+              {
+                type: 'chart',
+                title: '停用用户统计',
+                summary: '当前共 0 名停用用户。',
+                result: {
+                  chart: {
+                    type: 'metric',
+                    metricLabel: '用户总数',
+                    valueLabel: '停用用户',
+                    value: 0,
+                  },
+                  data: [{ label: '停用用户', value: 0 }],
+                },
+                metrics: [{ label: '用户总数', value: '0', tone: 'warning' }],
+              },
+              {
+                type: 'chart',
+                title: '按部门统计用户',
+                summary: '按表格展示部门用户分布。',
+                result: {
+                  chart: {
+                    type: 'table',
+                    columns: [
+                      { key: 'departmentName', label: '部门' },
+                      { key: 'userCount', label: '用户数' },
+                    ],
+                  },
+                  data: [
+                    { departmentName: 'PLM产品组', userCount: 4 },
+                    { departmentName: '人力资源部', userCount: 3 },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    expect(await screen.findByText('停用用户统计')).toBeInTheDocument()
+    expect(await screen.findByText('停用用户')).toBeInTheDocument()
+    expect(screen.getAllByText('0').length).toBeGreaterThan(0)
+    expect(await screen.findByText('部门')).toBeInTheDocument()
+    expect(await screen.findByText('PLM产品组')).toBeInTheDocument()
+  })
 })

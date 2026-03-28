@@ -33,6 +33,9 @@ type ResourceListPageProps<TData> = {
     href: string
   }
   extraActions?: ReactNode
+  onRefresh?: () => void
+  isRefreshing?: boolean
+  onImport?: (file: File) => void
   enableRowSelection?: boolean
   getRowId?: (row: TData, index: number) => string
   groupOptions?: ProTableGroupOption<TData>[]
@@ -56,6 +59,9 @@ export function ResourceListPage<TData extends object>({
   topContent,
   createAction,
   extraActions,
+  onRefresh,
+  isRefreshing,
+  onImport,
   enableRowSelection,
   getRowId,
   groupOptions,
@@ -82,7 +88,10 @@ export function ResourceListPage<TData extends object>({
       summaries={summaries}
       topContent={topContent}
       extraActions={extraActions}
+      onRefresh={onRefresh}
+      isRefreshing={isRefreshing}
       onExport={() => undefined}
+      onImport={onImport}
       createActionNode={createActionNode}
       enableRowSelection={enableRowSelection}
       getRowId={getRowId}

@@ -52,7 +52,14 @@ class InMemoryProcessRuntimeTraceStoreTest {
                                 Map.of(),
                                 Map.of(
                                         "timeoutPolicy", Map.of("enabled", true, "action", "AUTO_APPROVE"),
-                                        "reminderPolicy", Map.of("enabled", true, "channels", List.of("IN_APP", "EMAIL"))
+                                        "reminderPolicy", Map.of("enabled", true, "channels", List.of("IN_APP", "EMAIL")),
+                                        "escalationPolicy", Map.of(
+                                                "enabled", true,
+                                                "afterMinutes", 60,
+                                                "targetMode", "ROLE",
+                                                "targetRoleCodes", List.of("role_manager"),
+                                                "channels", List.of("IN_APP")
+                                        )
                                 ),
                                 Map.of()
                         ),
@@ -91,7 +98,7 @@ class InMemoryProcessRuntimeTraceStoreTest {
 
         assertThat(automationTraces)
                 .extracting(ProcessAutomationTraceItemResponse::traceType)
-                .containsExactlyInAnyOrder("TIMEOUT_APPROVAL", "AUTO_REMINDER", "TIMER_NODE", "TRIGGER_NODE");
+                .containsExactlyInAnyOrder("TIMEOUT_APPROVAL", "AUTO_REMINDER", "ESCALATION", "TIMER_NODE", "TRIGGER_NODE");
         assertThat(automationTraces)
                 .extracting(ProcessAutomationTraceItemResponse::nodeId)
                 .anyMatch(nodeId -> nodeId.endsWith("n_approver"));

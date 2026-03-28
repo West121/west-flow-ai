@@ -68,6 +68,9 @@ import {
   ProcessTerminationSection,
   ProcessTimeTravelSection,
 } from '@/features/workflow/advanced-runtime-sections'
+import {
+  workflowCollaborationEventTypeOptions,
+} from '@/features/workflow/designer/collaboration'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
 import {
   ApprovalTagList,
@@ -84,6 +87,8 @@ import {
   resolveCountersignModeLabel,
   resolveApprovalSheetActingModeLabel,
   resolveApprovalSheetResultLabel,
+  resolveSignatureStatusLabel,
+  resolveSignatureTypeLabel,
 } from '@/features/workbench/approval-sheet-helpers'
 import {
   createApprovalSheetColumns,
@@ -124,6 +129,7 @@ import {
   revokeWorkbenchTask,
   rejectWorkbenchTask,
   returnWorkbenchTask,
+  signWorkbenchTask,
   takeBackWorkbenchTask,
   transferWorkbenchTask,
   wakeUpWorkbenchInstance,
@@ -627,6 +633,86 @@ function ApprovalSheetActionTimeline({
             暂无动作轨迹。
           </div>
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function getSignatureEventValue(
+  event: NonNullable<WorkbenchTaskDetail['instanceEvents']>[number],
+  key: 'signatureType' | 'signatureStatus' | 'signatureComment' | 'signatureAt'
+) {
+  const detailValues = (event.details ?? {}) as Record<string, unknown>
+  const directValue = event[key]
+  if (typeof directValue === 'string' && directValue.trim()) {
+    return directValue.trim()
+  }
+  const detailValue = detailValues[key]
+  if (typeof detailValue === 'string' && detailValue.trim()) {
+    return detailValue.trim()
+  }
+  return null
+}
+
+// 电子签章结果单独收口，避免埋在普通轨迹里难以定位。
+function ApprovalSheetSignatureSection({
+  instanceEvents,
+  userDisplayNames,
+}: {
+  instanceEvents: WorkbenchTaskDetail['instanceEvents']
+  userDisplayNames?: Record<string, string> | null
+}) {
+  const signatureEvents =
+    instanceEvents?.filter((event) => {
+      const detailValues = (event.details ?? {}) as Record<string, unknown>
+      return event.actionCategory === 'SIGNATURE' || typeof detailValues.signatureType === 'string'
+    }) ?? []
+
+  if (!signatureEvents.length) {
+    return null
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>电子签章</CardTitle>
+        <CardDescription>
+          展示签章类型、签章状态、签章说明和签章时间，便于在审批轨迹里直接回查签章结果。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3'>
+        {signatureEvents.map((event) => {
+          const signatureType = getSignatureEventValue(event, 'signatureType')
+          const signatureStatus = getSignatureEventValue(event, 'signatureStatus')
+          const signatureComment = getSignatureEventValue(event, 'signatureComment')
+          const signatureAt = getSignatureEventValue(event, 'signatureAt')
+          return (
+            <div key={event.eventId} className='rounded-lg border p-4'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Badge variant='secondary'>{resolveSignatureTypeLabel(signatureType)}</Badge>
+                <Badge variant='outline'>{resolveSignatureStatusLabel(signatureStatus)}</Badge>
+                <span className='text-sm font-medium'>
+                  {event.eventName}
+                </span>
+              </div>
+              <div className='mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-2 xl:grid-cols-4'>
+                <div className='flex items-center gap-1'>
+                  签章人：
+                  <ApprovalUserTag
+                    userId={event.operatorUserId}
+                    displayNames={userDisplayNames}
+                  />
+                </div>
+                <div>签章时间：{formatDateTime(signatureAt)}</div>
+                <div>任务编号：{formatApprovalSheetText(event.taskId)}</div>
+                <div>节点编号：{formatApprovalSheetText(event.nodeId)}</div>
+              </div>
+              <p className='mt-3 text-sm text-foreground/90'>
+                签章说明：{formatApprovalSheetText(signatureComment)}
+              </p>
+            </div>
+          )
+        })}
       </CardContent>
     </Card>
   )
@@ -1153,6 +1239,13 @@ const delegateTaskSchema = z.object({
 type DelegateTaskFormValues = z.input<typeof delegateTaskSchema>
 
 const returnTaskSchema = z.object({
+  targetStrategy: z.enum([
+    'PREVIOUS_USER_TASK',
+    'INITIATOR',
+    'ANY_USER_TASK',
+  ]),
+  targetTaskId: z.string().max(120, '退回目标任务编号最多 120 个字符').default(''),
+  targetNodeId: z.string().max(120, '退回目标节点编号最多 120 个字符').default(''),
   comment: z.string().max(500, '退回说明最多 500 个字符').default(''),
 })
 
@@ -1209,6 +1302,18 @@ const removeSignTaskSchema = z.object({
 
 type RemoveSignTaskFormValues = z.input<typeof removeSignTaskSchema>
 
+const signTaskSchema = z.object({
+  signatureType: z.enum([
+    'PERSONAL_SEAL',
+    'COMPANY_SEAL',
+    'DIGITAL_SIGNATURE',
+    'HANDWRITING',
+  ]),
+  signatureComment: z.string().max(500, '签章说明最多 500 个字符').default(''),
+})
+
+type SignTaskFormValues = z.input<typeof signTaskSchema>
+
 const simpleActionCommentSchema = z.object({
   comment: z.string().max(500, '说明最多 500 个字符').default(''),
 })
@@ -1216,6 +1321,13 @@ const simpleActionCommentSchema = z.object({
 type SimpleActionCommentFormValues = z.input<typeof simpleActionCommentSchema>
 
 const collaborationEventSchema = z.object({
+  eventType: z.enum([
+    'COMMENT',
+    'SUPERVISE',
+    'MEETING',
+    'READ',
+    'CIRCULATE',
+  ]),
   subject: z.string().max(120, '协同标题最多 120 个字符').default(''),
   content: z.string().trim().min(1, '请输入协同内容').max(500, '协同内容最多 500 个字符'),
   mentionedUserId: z.string().default(''),
@@ -1596,6 +1708,7 @@ export function WorkbenchTodoDetailPage({
   const queryClient = useQueryClient()
   const currentUserId = useAuthStore((state) => state.currentUser?.userId ?? null)
   const [addSignDialogOpen, setAddSignDialogOpen] = useState(false)
+  const [signDialogOpen, setSignDialogOpen] = useState(false)
   const [removeSignDialogOpen, setRemoveSignDialogOpen] = useState(false)
   const [revokeDialogOpen, setRevokeDialogOpen] = useState(false)
   const [delegateDialogOpen, setDelegateDialogOpen] = useState(false)
@@ -1799,6 +1912,9 @@ export function WorkbenchTodoDetailPage({
   const returnForm = useForm<ReturnTaskFormValues>({
     resolver: zodResolver(returnTaskSchema),
     defaultValues: {
+      targetStrategy: 'PREVIOUS_USER_TASK',
+      targetTaskId: '',
+      targetNodeId: '',
       comment: '',
     },
   })
@@ -1807,6 +1923,13 @@ export function WorkbenchTodoDetailPage({
     defaultValues: {
       targetUserId: '',
       comment: '',
+    },
+  })
+  const signForm = useForm<SignTaskFormValues>({
+    resolver: zodResolver(signTaskSchema),
+    defaultValues: {
+      signatureType: 'PERSONAL_SEAL',
+      signatureComment: '',
     },
   })
   const removeSignForm = useForm<RemoveSignTaskFormValues>({
@@ -1861,6 +1984,7 @@ export function WorkbenchTodoDetailPage({
   const collaborationForm = useForm<CollaborationEventFormValues>({
     resolver: zodResolver(collaborationEventSchema),
     defaultValues: {
+      eventType: 'COMMENT',
       subject: '',
       content: '',
       mentionedUserId: '',
@@ -1884,11 +2008,18 @@ export function WorkbenchTodoDetailPage({
       comment: '',
     })
     returnForm.reset({
+      targetStrategy: 'PREVIOUS_USER_TASK',
+      targetTaskId: '',
+      targetNodeId: '',
       comment: '',
     })
     addSignForm.reset({
       targetUserId: '',
       comment: '',
+    })
+    signForm.reset({
+      signatureType: 'PERSONAL_SEAL',
+      signatureComment: '',
     })
     removeSignForm.reset({
       targetTaskId: '',
@@ -1919,12 +2050,14 @@ export function WorkbenchTodoDetailPage({
       comment: '',
     })
     collaborationForm.reset({
+      eventType: 'COMMENT',
       subject: '',
       content: '',
       mentionedUserId: '',
     })
   }, [
     addSignForm,
+    signForm,
     delegateForm,
     claimForm,
     detail,
@@ -2032,13 +2165,18 @@ export function WorkbenchTodoDetailPage({
   const returnMutation = useMutation({
     mutationFn: (payload: ReturnTaskFormValues) =>
       returnWorkbenchTask(requireActionTaskId(), {
-        targetStrategy: 'PREVIOUS_USER_TASK',
+        targetStrategy: payload.targetStrategy,
+        targetTaskId: payload.targetTaskId?.trim() || undefined,
+        targetNodeId: payload.targetNodeId?.trim() || undefined,
         comment: payload.comment?.trim() || undefined,
       }),
     onSuccess: async () => {
       await refreshWorkbenchQueries()
       setReturnDialogOpen(false)
       returnForm.reset({
+        targetStrategy: 'PREVIOUS_USER_TASK',
+        targetTaskId: '',
+        targetNodeId: '',
         comment: '',
       })
       if (locator.mode === 'task') {
@@ -2061,6 +2199,22 @@ export function WorkbenchTodoDetailPage({
       addSignForm.reset({
         targetUserId: '',
         comment: '',
+      })
+    },
+    onError: handleServerError,
+  })
+  const signMutation = useMutation({
+    mutationFn: (payload: SignTaskFormValues) =>
+      signWorkbenchTask(requireActionTaskId(), {
+        signatureType: payload.signatureType,
+        signatureComment: payload.signatureComment?.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      await refreshWorkbenchQueries()
+      setSignDialogOpen(false)
+      signForm.reset({
+        signatureType: 'PERSONAL_SEAL',
+        signatureComment: '',
       })
     },
     onError: handleServerError,
@@ -2202,7 +2356,7 @@ export function WorkbenchTodoDetailPage({
       createProcessCollaborationEvent({
         instanceId: detail?.instanceId ?? null,
         taskId: detail?.taskId ?? null,
-        eventType: 'COMMENT',
+        eventType: payload.eventType,
         subject: payload.subject?.trim() || null,
         content: payload.content.trim(),
         mentionedUserIds: payload.mentionedUserId?.trim()
@@ -2213,6 +2367,7 @@ export function WorkbenchTodoDetailPage({
       await refreshWorkbenchQueries()
       setCollaborationDialogOpen(false)
       collaborationForm.reset({
+        eventType: 'COMMENT',
         subject: '',
         content: '',
         mentionedUserId: '',
@@ -2228,6 +2383,20 @@ export function WorkbenchTodoDetailPage({
 
     return resolveTaskStatusLabel(detail.status)
   }, [detail])
+  const readActionLabel = useMemo(() => {
+    switch (detail?.taskSemanticMode) {
+      case 'supervise':
+        return '督办已阅'
+      case 'meeting':
+        return '会办已阅'
+      case 'read':
+        return '阅办已阅'
+      case 'circulate':
+        return '传阅已阅'
+      default:
+        return '已阅'
+    }
+  }, [detail?.taskSemanticMode])
 
   const onTransferSubmit = transferForm.handleSubmit((values) => {
     transferMutation.mutate(values)
@@ -2240,6 +2409,9 @@ export function WorkbenchTodoDetailPage({
   })
   const onAddSignSubmit = addSignForm.handleSubmit((values) => {
     addSignMutation.mutate(values)
+  })
+  const onSignSubmit = signForm.handleSubmit((values) => {
+    signMutation.mutate(values)
   })
   const onRemoveSignSubmit = removeSignForm.handleSubmit((values) => {
     removeSignMutation.mutate(values)
@@ -2256,6 +2428,7 @@ export function WorkbenchTodoDetailPage({
   const hasNodeForm = Boolean(detail?.nodeFormKey && detail?.nodeFormVersion)
   const hasMoreActions = Boolean(
     actionsQuery.data?.canAddSign ||
+      actionsQuery.data?.canSign ||
       actionsQuery.data?.canRemoveSign ||
       actionsQuery.data?.canRevoke ||
       actionsQuery.data?.canUrge ||
@@ -2276,6 +2449,11 @@ export function WorkbenchTodoDetailPage({
   const rejectTargetStrategy =
     useWatch({
       control: rejectForm.control,
+      name: 'targetStrategy',
+    }) ?? 'PREVIOUS_USER_TASK'
+  const returnTargetStrategy =
+    useWatch({
+      control: returnForm.control,
       name: 'targetStrategy',
     }) ?? 'PREVIOUS_USER_TASK'
   const businessBillHref = detail ? resolveBusinessBillHref(detail) : null
@@ -2419,6 +2597,68 @@ export function WorkbenchTodoDetailPage({
                       </Button>
                       <Button type='submit' disabled={addSignMutation.isPending}>
                         {addSignMutation.isPending ? '加签中' : '确认加签'}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </Form>
+              </DialogContent>
+            </Dialog>
+          ) : null}
+
+          {actionsQuery.data?.canSign ? (
+            <Dialog open={signDialogOpen} onOpenChange={setSignDialogOpen}>
+              <DialogTrigger asChild>
+                <Button type='button' size='sm' variant='outline'>签章</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>电子签章</DialogTitle>
+                  <DialogDescription>
+                    对当前任务执行电子签章，签章结果会写入实例轨迹并在详情页展示。
+                  </DialogDescription>
+                </DialogHeader>
+                <Form {...signForm}>
+                  <form className='space-y-4' onSubmit={onSignSubmit}>
+                    <FormField
+                      control={signForm.control}
+                      name='signatureType'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>签章类型</FormLabel>
+                          <FormControl>
+                            <select
+                              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                              {...field}
+                            >
+                              <option value='PERSONAL_SEAL'>个人印章</option>
+                              <option value='COMPANY_SEAL'>公司印章</option>
+                              <option value='DIGITAL_SIGNATURE'>数字签名</option>
+                              <option value='HANDWRITING'>手写签名</option>
+                            </select>
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={signForm.control}
+                      name='signatureComment'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>签章说明</FormLabel>
+                          <FormControl>
+                            <Textarea className='min-h-24' placeholder='请输入签章说明' {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <DialogFooter>
+                      <Button type='button' variant='outline' onClick={() => setSignDialogOpen(false)}>
+                        取消
+                      </Button>
+                      <Button type='submit' disabled={signMutation.isPending}>
+                        {signMutation.isPending ? '签章中' : '确认签章'}
                       </Button>
                     </DialogFooter>
                   </form>
@@ -2581,7 +2821,7 @@ export function WorkbenchTodoDetailPage({
                 readMutation.mutate()
               }}
             >
-              {readMutation.isPending ? '处理中' : '已阅'}
+              {readMutation.isPending ? '处理中' : readActionLabel}
             </Button>
           ) : null}
 
@@ -2920,11 +3160,59 @@ export function WorkbenchTodoDetailPage({
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>退回上一步</DialogTitle>
-              <DialogDescription>请填写退回说明，系统会把任务重新投递到上一步办理人。</DialogDescription>
+              <DialogTitle>退回</DialogTitle>
+              <DialogDescription>可退回到上一步、发起人，或指定已走过的人工节点。</DialogDescription>
             </DialogHeader>
             <Form {...returnForm}>
               <form className='space-y-4' onSubmit={onReturnSubmit}>
+                <FormField
+                  control={returnForm.control}
+                  name='targetStrategy'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>退回目标</FormLabel>
+                      <FormControl>
+                        <select className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm' {...field}>
+                          <option value='PREVIOUS_USER_TASK'>上一步人工节点</option>
+                          <option value='INITIATOR'>发起人</option>
+                          <option value='ANY_USER_TASK'>任意已走人工节点</option>
+                        </select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {returnTargetStrategy === 'ANY_USER_TASK' ? (
+                  <FormField
+                    control={returnForm.control}
+                    name='targetNodeId'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>目标节点编号</FormLabel>
+                        <FormControl>
+                          <Input placeholder='例如：approve_finance' {...field} />
+                        </FormControl>
+                        <FormDescription>当前版本通过节点编号指定任意退回目标。</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : (
+                  <FormField
+                    control={returnForm.control}
+                    name='targetTaskId'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>目标任务编号</FormLabel>
+                        <FormControl>
+                          <Input placeholder='可选，系统会自动解析默认目标' {...field} />
+                        </FormControl>
+                        <FormDescription>上一步或发起人场景可留空，让系统自动回退。</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={returnForm.control}
                   name='comment'
@@ -3324,6 +3612,25 @@ export function WorkbenchTodoDetailPage({
                                   >
                                     <FormField
                                       control={collaborationForm.control}
+                                      name='eventType'
+                                      render={({ field }) => (
+                                        <FormItem>
+                                          <FormLabel>协同类型</FormLabel>
+                                          <FormControl>
+                                            <select className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm' {...field}>
+                                              {workflowCollaborationEventTypeOptions.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </FormControl>
+                                          <FormMessage />
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={collaborationForm.control}
                                       name='subject'
                                       render={({ field }) => (
                                         <FormItem>
@@ -3409,6 +3716,10 @@ export function WorkbenchTodoDetailPage({
                       <TabsContent value='trace' className='space-y-4'>
                         <ApprovalSheetActionTimeline
                           taskTrace={detail.taskTrace ?? []}
+                          userDisplayNames={detail.userDisplayNames}
+                        />
+                        <ApprovalSheetSignatureSection
+                          instanceEvents={detail.instanceEvents ?? []}
                           userDisplayNames={detail.userDisplayNames}
                         />
                       </TabsContent>

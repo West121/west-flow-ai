@@ -21,6 +21,10 @@ export type ProcessDefinitionDslNodeType =
   | 'subprocess'
   | 'dynamic_builder'
   | 'cc'
+  | 'supervise'
+  | 'meeting'
+  | 'read'
+  | 'circulate'
   | 'timer'
   | 'trigger'
   | 'condition'
@@ -105,6 +109,10 @@ function nodeTypeFor(kind: string, config?: Record<string, unknown>): ProcessDef
     case 'approver':
     case 'subprocess':
     case 'cc':
+    case 'supervise':
+    case 'meeting':
+    case 'read':
+    case 'circulate':
     case 'timer':
     case 'trigger':
     case 'condition':
@@ -134,6 +142,10 @@ function nodeKindFor(type: ProcessDefinitionDslNodeType) {
     case 'subprocess':
     case 'timer':
     case 'trigger':
+    case 'supervise':
+    case 'meeting':
+    case 'read':
+    case 'circulate':
       return type
     case 'dynamic_builder':
       return 'dynamic-builder'
