@@ -6,6 +6,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 // 业务流程关联表的写入接口。
@@ -85,4 +86,30 @@ public interface BusinessProcessLinkMapper {
             ORDER BY updated_at DESC, created_at DESC
             """)
     List<BusinessProcessLinkRecord> selectAll();
+
+    @Select("""
+            SELECT
+              id,
+              business_type AS businessType,
+              business_id AS businessId,
+              process_instance_id AS processInstanceId,
+              process_definition_id AS processDefinitionId,
+              start_user_id AS startUserId,
+              status
+            FROM wf_business_process_link
+            WHERE start_user_id = #{startUserId}
+            ORDER BY updated_at DESC, created_at DESC
+            """)
+    List<BusinessProcessLinkRecord> selectByStartUser(@Param("startUserId") String startUserId);
+
+    @Update("""
+            UPDATE wf_business_process_link
+            SET status = #{status},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE process_instance_id = #{processInstanceId}
+            """)
+    int updateStatusByProcessInstanceId(
+            @Param("processInstanceId") String processInstanceId,
+            @Param("status") String status
+    );
 }

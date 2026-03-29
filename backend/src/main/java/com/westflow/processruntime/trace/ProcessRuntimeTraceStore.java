@@ -1,4 +1,4 @@
-package com.westflow.processruntime.service;
+package com.westflow.processruntime.trace;
 
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processruntime.api.response.ProcessAutomationTraceItemResponse;

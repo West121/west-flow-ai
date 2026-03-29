@@ -1,4 +1,4 @@
-package com.westflow.processruntime.service;
+package com.westflow.processruntime.link;
 
 import com.westflow.processruntime.mapper.ProcessLinkMapper;
 import com.westflow.processruntime.model.ProcessLinkRecord;

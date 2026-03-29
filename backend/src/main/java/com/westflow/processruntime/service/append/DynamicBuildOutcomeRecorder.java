@@ -1,7 +1,7 @@
 package com.westflow.processruntime.service.append;
 
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
-import com.westflow.processruntime.service.RuntimeAppendLinkService;
+import com.westflow.processruntime.link.RuntimeAppendLinkService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;

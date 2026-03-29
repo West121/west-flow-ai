@@ -4,6 +4,7 @@ import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processruntime.api.response.ProcessAutomationTraceItemResponse;
 import com.westflow.processruntime.api.response.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.response.ProcessNotificationSendRecordResponse;
+import com.westflow.processruntime.trace.InMemoryProcessRuntimeTraceStore;
 import java.lang.reflect.Constructor;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;

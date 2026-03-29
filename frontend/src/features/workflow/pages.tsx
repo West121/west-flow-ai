@@ -49,6 +49,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { LongText } from '@/components/long-text'
 import { useTheme } from '@/context/theme-provider'
 import { useAuthStore } from '@/stores/auth-store'
 import {
@@ -266,23 +267,28 @@ const definitionColumns: ColumnDef<DefinitionRow>[] = [
     accessorKey: 'processName',
     header: '流程名称',
     cell: ({ row }) => (
-      <div className='flex flex-col gap-1'>
-        <Link
-          to='/workflow/designer'
-          search={{ processDefinitionId: row.original.processDefinitionId }}
-          className='font-medium text-primary hover:underline'
-        >
-          {row.original.processName}
-        </Link>
-        <span className='text-xs text-muted-foreground'>
+      <div className='flex min-w-0 flex-col gap-1'>
+        <LongText className='max-w-full'>
+          <Link
+            to='/workflow/designer'
+            search={{ processDefinitionId: row.original.processDefinitionId }}
+            className='font-medium text-primary hover:underline'
+          >
+            {row.original.processName}
+          </Link>
+        </LongText>
+        <LongText className='max-w-full text-xs text-muted-foreground'>
           {row.original.processDefinitionId}
-        </span>
+        </LongText>
       </div>
     ),
   },
   {
     accessorKey: 'processKey',
     header: '流程编码',
+    cell: ({ row }) => (
+      <LongText className='max-w-full'>{row.original.processKey}</LongText>
+    ),
   },
   {
     accessorKey: 'version',
@@ -291,6 +297,9 @@ const definitionColumns: ColumnDef<DefinitionRow>[] = [
   {
     accessorKey: 'category',
     header: '业务域',
+    cell: ({ row }) => (
+      <LongText className='max-w-full'>{row.original.category}</LongText>
+    ),
   },
   {
     accessorKey: 'createdAt',
@@ -373,6 +382,7 @@ export function WorkflowDefinitionsListPage() {
       navigate={navigate}
       columns={definitionColumns}
       data={rows}
+      total={query.data?.total}
       summaries={summaries}
       createAction={{ label: '新建设计', href: '/workflow/designer' }}
     />
@@ -690,6 +700,8 @@ function WorkflowDesignerWorkspace({
   > | null>(null)
   const [collaborationStatus, setCollaborationStatus] =
     useState<WorkflowDesignerCollaborationStatus>('local')
+  const [collaborationOfflineNoticeVisible, setCollaborationOfflineNoticeVisible] =
+    useState(false)
   const [collaborationPeers, setCollaborationPeers] = useState<
     WorkflowDesignerCollaborationPeer[]
   >([])
@@ -771,6 +783,24 @@ function WorkflowDesignerWorkspace({
   useEffect(() => {
     collaborationPeersRef.current = collaborationPeers
   }, [collaborationPeers])
+
+  useEffect(() => {
+    if (collaborationMode !== 'websocket') {
+      setCollaborationOfflineNoticeVisible(false)
+      return
+    }
+
+    if (collaborationStatus === 'connected' || collaborationStatus === 'connecting') {
+      setCollaborationOfflineNoticeVisible(false)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setCollaborationOfflineNoticeVisible(true)
+    }, 1500)
+
+    return () => window.clearTimeout(timer)
+  }, [collaborationMode, collaborationStatus])
 
   useEffect(() => {
     if (!collaborationReady) {
@@ -881,10 +911,9 @@ function WorkflowDesignerWorkspace({
         ? `协同在线 ${collaborationPeers.length + 1}`
         : collaborationStatus === 'connecting'
           ? '协同连接中'
-          : collaborationStatus === 'reconnecting'
-            ? '协同重连中'
-          : collaborationStatus === 'disconnected'
-            ? '协同已断开'
+          : collaborationStatus === 'reconnecting' ||
+              collaborationStatus === 'disconnected'
+            ? '协同离线'
             : '本地协同'
     })()
     return <Badge variant='secondary'>{label}</Badge>
@@ -1221,21 +1250,16 @@ function WorkflowDesignerWorkspace({
                 <GuideLinesOverlay lines={helperLines} />
                 <RemoteCursorOverlay peers={collaborationPeers} />
                 {collaborationMode === 'websocket' &&
-                (collaborationStatus === 'disconnected' ||
-                  collaborationStatus === 'reconnecting') ? (
+                collaborationOfflineNoticeVisible ? (
                   <div className='absolute inset-x-4 top-4 z-40 rounded-2xl border border-amber-300 bg-amber-50/95 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200'>
                     <div className='flex items-center justify-between gap-4'>
                       <div>
                         <div className='flex items-center gap-2 font-medium'>
                           <PlugZap className='size-4' />
-                          {collaborationStatus === 'reconnecting'
-                            ? '协同正在重连'
-                            : '协同连接已断开'}
+                          协同连接异常
                         </div>
                         <p className='mt-1 text-xs text-amber-800/80 dark:text-amber-200/80'>
-                          {collaborationStatus === 'reconnecting'
-                            ? '正在自动恢复房间连接，恢复后会重新同步协同状态。'
-                            : '当前仍可继续本地编辑，连接恢复后会重新同步房间状态。'}
+                          当前仍可继续本地编辑，系统正在尝试恢复协同连接。
                         </p>
                       </div>
                       <Button

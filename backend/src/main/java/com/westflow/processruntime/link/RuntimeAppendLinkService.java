@@ -1,4 +1,4 @@
-package com.westflow.processruntime.service;
+package com.westflow.processruntime.link;
 
 import com.westflow.processruntime.mapper.RuntimeAppendLinkMapper;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
@@ -27,6 +27,14 @@ public class RuntimeAppendLinkService {
     // 按父流程实例查询附属结构。
     public List<RuntimeAppendLinkRecord> listByParentInstanceId(String parentInstanceId) {
         return runtimeAppendLinkMapper.selectByParentInstanceId(parentInstanceId);
+    }
+
+    // 按父流程实例批量查询附属结构。
+    public List<RuntimeAppendLinkRecord> listByParentInstanceIds(List<String> parentInstanceIds) {
+        if (parentInstanceIds == null || parentInstanceIds.isEmpty()) {
+            return List.of();
+        }
+        return runtimeAppendLinkMapper.selectByParentInstanceIds(parentInstanceIds);
     }
 
     // 按源任务查询附属结构。

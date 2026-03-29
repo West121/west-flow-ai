@@ -309,6 +309,7 @@ export function WorkflowVersionsListPage({
       navigate={navigate as never}
       columns={columns}
       data={query.data?.records ?? []}
+      total={query.data?.total}
       summaries={[
         {
           label: '版本总数',
@@ -412,6 +413,7 @@ export function WorkflowPublishRecordsListPage({
       navigate={navigate as never}
       columns={columns}
       data={query.data?.records ?? []}
+      total={query.data?.total}
       summaries={[
         {
           label: '发布记录数',
@@ -514,6 +516,7 @@ export function WorkflowInstancesListPage({
       navigate={navigate as never}
       columns={columns}
       data={query.data?.records ?? []}
+      total={query.data?.total}
       summaries={[
         {
           label: '实例总数',
@@ -704,6 +707,7 @@ export function WorkflowOperationLogsListPage({
       navigate={navigate as never}
       columns={columns}
       data={query.data?.records ?? []}
+      total={query.data?.total}
       summaries={[
         {
           label: '日志总数',
@@ -810,6 +814,7 @@ export function WorkflowBindingsListPage({
       navigate={navigate as never}
       columns={columns}
       data={query.data?.records ?? []}
+      total={query.data?.total}
       summaries={[
         {
           label: '绑定总数',
@@ -1106,6 +1111,7 @@ export function ApprovalOpinionConfigsListPage({
       navigate={navigate as never}
       columns={columns}
       data={query.data?.records ?? []}
+      total={query.data?.total}
       summaries={[
         {
           label: '配置总数',

@@ -135,6 +135,43 @@ public interface RuntimeAppendLinkMapper {
     List<RuntimeAppendLinkRecord> selectByParentInstanceId(@Param("parentInstanceId") String parentInstanceId);
 
     @Select("""
+            <script>
+            SELECT
+              id,
+              root_instance_id AS rootInstanceId,
+              parent_instance_id AS parentInstanceId,
+              source_task_id AS sourceTaskId,
+              source_node_id AS sourceNodeId,
+              append_type AS appendType,
+              runtime_link_type AS runtimeLinkType,
+              policy,
+              target_task_id AS targetTaskId,
+              target_instance_id AS targetInstanceId,
+              target_user_id AS targetUserId,
+              called_process_key AS calledProcessKey,
+              called_definition_id AS calledDefinitionId,
+              called_version_policy AS calledVersionPolicy,
+              called_version AS calledVersion,
+              resolved_target_mode AS resolvedTargetMode,
+              target_business_type AS targetBusinessType,
+              target_scene_code AS targetSceneCode,
+              status,
+              trigger_mode AS triggerMode,
+              operator_user_id AS operatorUserId,
+              comment_text AS commentText,
+              created_at AS createdAt,
+              finished_at AS finishedAt
+            FROM wf_runtime_append_link
+            WHERE parent_instance_id IN
+            <foreach collection="parentInstanceIds" item="parentInstanceId" open="(" separator="," close=")">
+              #{parentInstanceId}
+            </foreach>
+            ORDER BY created_at ASC, id ASC
+            </script>
+            """)
+    List<RuntimeAppendLinkRecord> selectByParentInstanceIds(@Param("parentInstanceIds") List<String> parentInstanceIds);
+
+    @Select("""
             SELECT
               id,
               root_instance_id AS rootInstanceId,

@@ -8,7 +8,7 @@ import com.westflow.processbinding.mapper.BusinessProcessLinkMapper;
 import com.westflow.processdef.mapper.ProcessDefinitionMapper;
 import com.westflow.processruntime.api.response.ProcessInstanceLinkResponse;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
-import com.westflow.processruntime.service.ProcessLinkService;
+import com.westflow.processruntime.link.ProcessLinkService;
 import com.westflow.workflowadmin.api.response.WorkflowInstanceDetailResponse;
 import java.time.Instant;
 import java.time.OffsetDateTime;

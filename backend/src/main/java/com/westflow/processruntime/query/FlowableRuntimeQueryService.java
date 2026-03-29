@@ -1,4 +1,4 @@
-package com.westflow.processruntime.service;
+package com.westflow.processruntime.query;
 
 import com.westflow.common.query.PageResponse;
 import java.util.Date;

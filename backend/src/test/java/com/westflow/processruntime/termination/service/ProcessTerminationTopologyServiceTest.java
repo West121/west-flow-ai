@@ -2,8 +2,8 @@ package com.westflow.processruntime.termination.service;
 
 import com.westflow.processruntime.model.ProcessLinkRecord;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
-import com.westflow.processruntime.service.ProcessLinkService;
-import com.westflow.processruntime.service.RuntimeAppendLinkService;
+import com.westflow.processruntime.link.ProcessLinkService;
+import com.westflow.processruntime.link.RuntimeAppendLinkService;
 import com.westflow.processruntime.termination.api.ProcessTerminationNodeResponse;
 import com.westflow.processruntime.termination.api.ProcessTerminationPlanResponse;
 import com.westflow.processruntime.termination.api.ProcessTerminationSnapshotResponse;

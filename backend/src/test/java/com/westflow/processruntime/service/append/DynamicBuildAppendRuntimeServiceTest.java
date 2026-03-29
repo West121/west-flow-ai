@@ -7,10 +7,10 @@ import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import com.westflow.processbinding.service.BusinessProcessBindingService;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
-import com.westflow.processruntime.service.CountersignAssigneeResolver;
-import com.westflow.processruntime.service.FlowableTaskActionService;
-import com.westflow.processruntime.service.ProcessLinkService;
-import com.westflow.processruntime.service.RuntimeAppendLinkService;
+import com.westflow.processruntime.action.FlowableTaskActionService;
+import com.westflow.processruntime.link.ProcessLinkService;
+import com.westflow.processruntime.link.RuntimeAppendLinkService;
+import com.westflow.processruntime.support.CountersignAssigneeResolver;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +18,10 @@ import org.flowable.engine.RuntimeService;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.task.api.Task;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.MockedStatic;
@@ -73,8 +73,30 @@ class DynamicBuildAppendRuntimeServiceTest {
     @Mock
     private Task createdTask;
 
-    @InjectMocks
     private DynamicBuildAppendRuntimeService dynamicBuildAppendRuntimeService;
+
+    private DynamicBuildResolutionService dynamicBuildResolutionService;
+    private DynamicBuildAppendCreationService dynamicBuildAppendCreationService;
+
+    @BeforeEach
+    void setUp() {
+        dynamicBuildResolutionService = new DynamicBuildResolutionService(
+                businessProcessBindingService,
+                countersignAssigneeResolver
+        );
+        dynamicBuildAppendCreationService = new DynamicBuildAppendCreationService(
+                flowableEngineFacade,
+                processDefinitionService,
+                flowableTaskActionService,
+                runtimeAppendLinkService,
+                dynamicBuildOutcomeRecorder,
+                processLinkService
+        );
+        dynamicBuildAppendRuntimeService = new DynamicBuildAppendRuntimeService(
+                dynamicBuildAppendCreationService,
+                dynamicBuildResolutionService
+        );
+    }
 
     @Test
     void shouldCreateAppendTaskAndPersistLinkFromDynamicBuilder() {

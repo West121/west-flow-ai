@@ -12,7 +12,7 @@ import com.westflow.processdef.mapper.ProcessDefinitionMapper;
 import com.westflow.processdef.model.ProcessDefinitionRecord;
 import com.westflow.processruntime.api.response.ProcessInstanceLinkResponse;
 import com.westflow.processruntime.service.FlowableProcessRuntimeService;
-import com.westflow.processruntime.service.ProcessLinkService;
+import com.westflow.processruntime.link.ProcessLinkService;
 import com.westflow.workflowadmin.api.response.WorkflowInstanceDetailResponse;
 import com.westflow.workflowadmin.api.response.WorkflowInstanceListItemResponse;
 import com.westflow.workflowadmin.api.response.WorkflowOperationLogDetailResponse;

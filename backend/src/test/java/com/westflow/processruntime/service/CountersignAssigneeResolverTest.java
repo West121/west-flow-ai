@@ -1,5 +1,6 @@
 package com.westflow.processruntime.service;
 
+import com.westflow.processruntime.support.CountersignAssigneeResolver;
 import com.westflow.system.org.department.mapper.SystemDepartmentMapper;
 import com.westflow.system.user.mapper.SystemUserMapper;
 import java.util.List;
