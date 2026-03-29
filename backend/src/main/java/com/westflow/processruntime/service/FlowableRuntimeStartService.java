@@ -53,6 +53,7 @@ public class FlowableRuntimeStartService {
      */
     public StartProcessResponse start(StartProcessRequest request) {
         PublishedProcessDefinition definition = processDefinitionService.getLatestByProcessKey(request.processKey());
+        String effectiveBusinessType = resolveEffectiveBusinessType(definition.processKey(), request.businessType());
         Map<String, Object> variables = buildStartVariables(definition, request);
         ProcessInstance instance = flowableEngineFacade.runtimeService()
                 .startProcessInstanceByKey(definition.processKey(), request.businessKey(), variables);
@@ -73,7 +74,7 @@ public class FlowableRuntimeStartService {
                 instance.getProcessInstanceId(),
                 definition.processDefinitionId(),
                 instance.getProcessDefinitionId(),
-                request.businessType(),
+                effectiveBusinessType,
                 request.businessKey(),
                 activeTasks.isEmpty() ? null : activeTasks.get(0).taskId(),
                 activeTasks.isEmpty() ? null : activeTasks.get(0).nodeId(),
@@ -190,15 +191,16 @@ public class FlowableRuntimeStartService {
     private Map<String, Object> buildStartVariables(PublishedProcessDefinition definition, StartProcessRequest request) {
         Map<String, Object> variables = new LinkedHashMap<>();
         CurrentUserResponse currentUser = identityAuthService.currentUser();
+        String effectiveBusinessType = resolveEffectiveBusinessType(definition.processKey(), request.businessType());
         if (request.formData() != null && !request.formData().isEmpty()) {
-            Map<String, Object> normalizedFormData = normalizeStartFormData(request.businessType(), request.formData());
+            Map<String, Object> normalizedFormData = normalizeStartFormData(effectiveBusinessType, request.formData());
             variables.putAll(normalizedFormData);
             variables.put("westflowFormData", new LinkedHashMap<>(normalizedFormData));
         }
         variables.put("westflowProcessDefinitionId", definition.processDefinitionId());
         variables.put("westflowProcessKey", definition.processKey());
         variables.put("westflowProcessName", definition.processName());
-        variables.put("westflowBusinessType", request.businessType());
+        variables.put("westflowBusinessType", effectiveBusinessType);
         variables.put("westflowBusinessKey", request.businessKey());
         variables.put("westflowInitiatorUserId", currentUser.userId());
         variables.put("westflowInitiatorPostId", currentUser.activePostId());
@@ -209,11 +211,26 @@ public class FlowableRuntimeStartService {
         variables.put("westflowInitiatorCompanyName", currentUser.companyName());
         definition.dsl().nodes().stream()
                 .filter(node -> "subprocess".equals(node.type()))
-                .forEach(node -> appendSubprocessStartVariables(variables, request.businessType(), node));
+                .forEach(node -> appendSubprocessStartVariables(variables, effectiveBusinessType, node));
         definition.dsl().nodes().stream()
                 .filter(node -> "approver".equals(node.type()))
                 .forEach(node -> appendCountersignStartVariables(variables, node));
         return variables;
+    }
+
+    private String resolveEffectiveBusinessType(String processKey, String businessType) {
+        if (businessType != null && !businessType.isBlank()) {
+            return businessType;
+        }
+        return switch (processKey) {
+            case "oa_leave" -> "OA_LEAVE";
+            case "oa_expense" -> "OA_EXPENSE";
+            case "oa_common" -> "OA_COMMON";
+            case "plm_ecr" -> "PLM_ECR";
+            case "plm_eco" -> "PLM_ECO";
+            case "plm_material" -> "PLM_MATERIAL";
+            default -> businessType;
+        };
     }
 
     private Map<String, Object> normalizeStartFormData(String businessType, Map<String, Object> formData) {
@@ -228,6 +245,16 @@ public class FlowableRuntimeStartService {
         }
         if (leaveDays == null && days != null) {
             normalized.put("leaveDays", days);
+        }
+        if (!normalized.containsKey("leaveType") || normalized.get("leaveType") == null) {
+            normalized.put("leaveType", "ANNUAL");
+        }
+        if (!normalized.containsKey("urgent") || normalized.get("urgent") == null) {
+            normalized.put("urgent", Boolean.FALSE);
+        }
+        if (!normalized.containsKey("managerUserId") || normalized.get("managerUserId") == null
+                || String.valueOf(normalized.get("managerUserId")).isBlank()) {
+            normalized.put("managerUserId", "usr_002");
         }
         return normalized;
     }

@@ -356,6 +356,102 @@ class FlowableRuntimeStartServiceTest {
     }
 
     @Test
+    void shouldDefaultLeaveUrgentVariableToFalseWhenMissing() throws Exception {
+        StpUtil.login("usr_001");
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "processKey": "oa_leave_urgent_default",
+                  "processName": "请假审批",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "formFields": [
+                    { "fieldKey": "days", "label": "请假天数", "valueType": "NUMBER", "required": true },
+                    { "fieldKey": "urgent", "label": "是否紧急", "valueType": "BOOLEAN", "required": false },
+                    { "fieldKey": "reason", "label": "请假原因", "valueType": "STRING", "required": true }
+                  ],
+                  "settings": {},
+                  "nodes": [
+                    { "id": "start_1", "type": "start", "name": "开始", "position": { "x": 100, "y": 100 }, "config": { "initiatorEditable": true }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "condition_leave_split", "type": "condition", "name": "请假天数分支", "position": { "x": 320, "y": 100 }, "config": { "defaultEdgeId": "edge_default" }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "approve_default", "type": "approver", "name": "默认审批", "position": { "x": 560, "y": 40 }, "config": { "assignment": { "mode": "USER", "userIds": ["usr_002"], "roleCodes": [], "departmentRef": "", "formFieldKey": "", "formulaExpression": "" }, "approvalMode": "SINGLE", "approvalPolicy": { "type": "SINGLE", "voteThreshold": null }, "operations": ["APPROVE"], "commentRequired": false }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "approve_urgent", "type": "approver", "name": "紧急审批", "position": { "x": 560, "y": 180 }, "config": { "assignment": { "mode": "USER", "userIds": ["usr_003"], "roleCodes": [], "departmentRef": "", "formFieldKey": "", "formulaExpression": "" }, "approvalMode": "SINGLE", "approvalPolicy": { "type": "SINGLE", "voteThreshold": null }, "operations": ["APPROVE"], "commentRequired": false }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "end_1", "type": "end", "name": "结束", "position": { "x": 820, "y": 100 }, "config": {}, "ui": { "width": 240, "height": 88 } }
+                  ],
+                  "edges": [
+                    { "id": "edge_1", "source": "start_1", "target": "condition_leave_split", "priority": 10, "label": "提交" },
+                    { "id": "edge_default", "source": "condition_leave_split", "target": "approve_default", "priority": 10, "label": "默认" },
+                    { "id": "edge_urgent", "source": "condition_leave_split", "target": "approve_urgent", "priority": 20, "label": "紧急", "condition": { "type": "FORMULA", "formulaExpression": "urgent == true || days >= 5" } },
+                    { "id": "edge_2", "source": "approve_default", "target": "end_1", "priority": 10, "label": "通过" },
+                    { "id": "edge_3", "source": "approve_urgent", "target": "end_1", "priority": 10, "label": "通过" }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_leave_urgent_default",
+                "leave_bill_urgent_default_001",
+                "OA_LEAVE",
+                java.util.Map.of("days", 2, "reason", "默认不紧急")
+        ));
+
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                .processInstanceId(response.instanceId())
+                .singleResult();
+        assertThat(processInstance).isNotNull();
+        assertThat(runtimeService.getVariable(response.instanceId(), "urgent")).isEqualTo(Boolean.FALSE);
+        assertThat(response.activeTasks()).singleElement().satisfies(task -> {
+            assertThat(task.nodeId()).isEqualTo("approve_default");
+            assertThat(task.assigneeUserId()).isEqualTo("usr_002");
+        });
+    }
+
+    @Test
+    void shouldInferLeaveBusinessTypeFromProcessKeyWhenMissing() throws Exception {
+        StpUtil.login("usr_001");
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "processKey": "oa_leave",
+                  "processName": "请假审批",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "formFields": [
+                    { "fieldKey": "days", "label": "请假天数", "valueType": "NUMBER", "required": true },
+                    { "fieldKey": "urgent", "label": "是否紧急", "valueType": "BOOLEAN", "required": false },
+                    { "fieldKey": "reason", "label": "请假原因", "valueType": "STRING", "required": true }
+                  ],
+                  "settings": {},
+                  "nodes": [
+                    { "id": "start_1", "type": "start", "name": "开始", "position": { "x": 100, "y": 100 }, "config": { "initiatorEditable": true }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "condition_leave_split", "type": "condition", "name": "请假天数分支", "position": { "x": 320, "y": 100 }, "config": { "defaultEdgeId": "edge_default" }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "approve_default", "type": "approver", "name": "默认审批", "position": { "x": 560, "y": 40 }, "config": { "assignment": { "mode": "USER", "userIds": ["usr_002"], "roleCodes": [], "departmentRef": "", "formFieldKey": "", "formulaExpression": "" }, "approvalMode": "SINGLE", "approvalPolicy": { "type": "SINGLE", "voteThreshold": null }, "operations": ["APPROVE"], "commentRequired": false }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "approve_urgent", "type": "approver", "name": "紧急审批", "position": { "x": 560, "y": 180 }, "config": { "assignment": { "mode": "USER", "userIds": ["usr_003"], "roleCodes": [], "departmentRef": "", "formFieldKey": "", "formulaExpression": "" }, "approvalMode": "SINGLE", "approvalPolicy": { "type": "SINGLE", "voteThreshold": null }, "operations": ["APPROVE"], "commentRequired": false }, "ui": { "width": 240, "height": 88 } },
+                    { "id": "end_1", "type": "end", "name": "结束", "position": { "x": 820, "y": 100 }, "config": {}, "ui": { "width": 240, "height": 88 } }
+                  ],
+                  "edges": [
+                    { "id": "edge_1", "source": "start_1", "target": "condition_leave_split", "priority": 10, "label": "提交" },
+                    { "id": "edge_default", "source": "condition_leave_split", "target": "approve_default", "priority": 10, "label": "默认" },
+                    { "id": "edge_urgent", "source": "condition_leave_split", "target": "approve_urgent", "priority": 20, "label": "紧急", "condition": { "type": "FORMULA", "formulaExpression": "urgent == true || days >= 5" } },
+                    { "id": "edge_2", "source": "approve_default", "target": "end_1", "priority": 10, "label": "通过" },
+                    { "id": "edge_3", "source": "approve_urgent", "target": "end_1", "priority": 10, "label": "通过" }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+
+        StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
+                "oa_leave",
+                "leave_bill_missing_type_001",
+                null,
+                java.util.Map.of("days", 2, "reason", "缺省业务类型")
+        ));
+
+        assertThat(runtimeService.getVariable(response.instanceId(), "westflowBusinessType")).isEqualTo("OA_LEAVE");
+        assertThat(runtimeService.getVariable(response.instanceId(), "urgent")).isEqualTo(Boolean.FALSE);
+        assertThat(runtimeService.getVariable(response.instanceId(), "managerUserId")).isEqualTo("usr_002");
+    }
+
+    @Test
     void shouldStartParallelCountersignWithAllTasksActive() throws Exception {
         StpUtil.login("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("PARALLEL"));

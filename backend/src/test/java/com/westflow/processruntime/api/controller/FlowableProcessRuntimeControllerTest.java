@@ -2070,6 +2070,120 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldSupportSemanticCollaborationReadFlowOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String superviseToken = login("lisi");
+        String meetingToken = login("wangwu");
+        String readToken = login("zhouba");
+        publishSemanticCollaborationProcess();
+        seedLeaveBill("leave_026");
+
+        String superviseTaskId = startCollaborationProcess(applicantToken, "leave_026")
+                .path("activeTasks").get(0).path("taskId").asText();
+        JsonNode superviseDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", superviseTaskId)
+                        .header("Authorization", "Bearer " + superviseToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(superviseDetail.path("taskKind").asText()).isEqualTo("CC");
+        assertThat(superviseDetail.path("taskSemanticMode").asText()).isEqualTo("supervise");
+
+        JsonNode superviseActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", superviseTaskId)
+                        .header("Authorization", "Bearer " + superviseToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(superviseActions.path("canRead").asBoolean()).isTrue();
+        assertThat(superviseActions.path("canApprove").asBoolean()).isFalse();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/read", superviseTaskId)
+                        .header("Authorization", "Bearer " + superviseToken))
+                .andExpect(status().isOk());
+
+        JsonNode afterSupervise = approvalDetailByBusiness(applicantToken, "leave_026");
+        assertThat(afterSupervise.path("instanceEvents").toString()).contains("TASK_SUPERVISE_READ");
+        assertThat(afterSupervise.path("taskSemanticMode").asText()).isEqualTo("meeting");
+
+        String meetingTaskId = afterSupervise.path("taskId").asText();
+        JsonNode meetingDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", meetingTaskId)
+                        .header("Authorization", "Bearer " + meetingToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(meetingDetail.path("taskSemanticMode").asText()).isEqualTo("meeting");
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/read", meetingTaskId)
+                        .header("Authorization", "Bearer " + meetingToken))
+                .andExpect(status().isOk());
+
+        JsonNode afterMeeting = approvalDetailByBusiness(applicantToken, "leave_026");
+        assertThat(afterMeeting.path("instanceEvents").toString()).contains("TASK_MEETING_READ");
+        assertThat(afterMeeting.path("taskSemanticMode").asText()).isEqualTo("read");
+
+        String readTaskId = afterMeeting.path("taskId").asText();
+        JsonNode readDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", readTaskId)
+                        .header("Authorization", "Bearer " + readToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(readDetail.path("taskSemanticMode").asText()).isEqualTo("read");
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/read", readTaskId)
+                        .header("Authorization", "Bearer " + readToken))
+                .andExpect(status().isOk());
+
+        JsonNode afterRead = approvalDetailByBusiness(applicantToken, "leave_026");
+        assertThat(afterRead.path("instanceEvents").toString()).contains("TASK_READ_CONFIRM");
+        assertThat(afterRead.path("taskSemanticMode").asText()).isEqualTo("circulate");
+
+        String circulateTaskId = afterRead.path("taskId").asText();
+        JsonNode circulateDetail = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", circulateTaskId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(circulateDetail.path("taskSemanticMode").asText()).isEqualTo("circulate");
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/read", circulateTaskId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk());
+
+        JsonNode completedDetail = approvalDetailByBusiness(applicantToken, "leave_026");
+        assertThat(completedDetail.path("instanceStatus").asText()).isEqualTo("COMPLETED");
+        assertThat(completedDetail.path("instanceEvents").toString())
+                .contains("TASK_CIRCULATE_READ", "督办已阅", "会办已阅", "阅办已阅", "传阅已阅");
+    }
+
+    @Test
+    void shouldRejectSemanticReadWhenCurrentUserIsNotTarget() throws Exception {
+        String applicantToken = login("zhangsan");
+        String superviseToken = login("lisi");
+        String wrongUserToken = login("zhaoliu");
+        publishSemanticCollaborationProcess();
+        seedLeaveBill("leave_027");
+
+        String superviseTaskId = startCollaborationProcess(applicantToken, "leave_027")
+                .path("activeTasks").get(0).path("taskId").asText();
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/read", superviseTaskId)
+                        .header("Authorization", "Bearer " + superviseToken))
+                .andExpect(status().isOk());
+
+        String meetingTaskId = approvalDetailByBusiness(applicantToken, "leave_027").path("taskId").asText();
+        String response = mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/read", meetingTaskId)
+                        .header("Authorization", "Bearer " + wrongUserToken))
+                .andExpect(status().isUnprocessableEntity())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(response).contains("当前用户不能操作该抄送任务");
+    }
+
+    @Test
     void shouldSupportBatchClaimReadCompleteAndRejectOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -2295,6 +2409,332 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldReturnFocusToOriginalTaskAfterAddSignTaskCompletedOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        String addSignToken = login("wangwu");
+        publishLeaveProcess();
+        seedLeaveBill("leave_015");
+
+        String taskId = startProcess(applicantToken, "leave_015").path("activeTasks").get(0).path("taskId").asText();
+        claimTask(managerToken, taskId, "认领后加签");
+
+        JsonNode addSignBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/add-sign", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_003",
+                                  "comment": "请王五一起复核"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String addSignTaskId = addSignBody.path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode focusOnAddSign = approvalDetailByBusiness(managerToken, "leave_015");
+        assertThat(focusOnAddSign.path("taskId").asText()).isEqualTo(addSignTaskId);
+        assertThat(focusOnAddSign.path("assigneeUserId").asText()).isEqualTo("usr_003");
+        assertThat(focusOnAddSign.path("taskKind").asText()).isEqualTo("ADD_SIGN");
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", addSignTaskId)
+                        .header("Authorization", "Bearer " + addSignToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_003",
+                                  "comment": "加签通过"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode focusBackToOriginal = approvalDetailByBusiness(managerToken, "leave_015");
+        assertThat(focusBackToOriginal.path("taskId").asText()).isEqualTo(taskId);
+        assertThat(focusBackToOriginal.path("assigneeUserId").asText()).isEqualTo("usr_002");
+        assertThat(focusBackToOriginal.path("taskKind").asText()).isEqualTo("NORMAL");
+        assertThat(focusBackToOriginal.path("taskTrace").toString()).contains("ADD_SIGN", "COMPLETED");
+    }
+
+    @Test
+    void shouldSupportRejectSequentialCountersignToPreviousSignerOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String firstSignerToken = login("lisi");
+        String secondSignerToken = login("wangwu");
+        publishExplicitSequentialCountersignProcess();
+        seedLeaveBill("leave_016");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_016");
+        String firstTaskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode firstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + firstSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "第一签通过"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String secondTaskId = firstCompleteBody.path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode rejectBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/reject", secondTaskId)
+                        .header("Authorization", "Bearer " + secondSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "PREVIOUS_USER_TASK",
+                                  "comment": "退回给上一位会签人重新确认",
+                                  "reapproveStrategy": "RESTART_ALL"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(rejectBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_002");
+
+        JsonNode detailBody = approvalDetailByBusiness(firstSignerToken, "leave_016");
+        assertThat(detailBody.path("assigneeUserId").asText()).isEqualTo("usr_002");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("TASK_REJECTED");
+        assertThat(detailBody.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("SEQUENTIAL");
+    }
+
+    @Test
+    void shouldSupportReturnSequentialCountersignToPreviousSignerOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String firstSignerToken = login("lisi");
+        String secondSignerToken = login("wangwu");
+        publishExplicitSequentialCountersignProcess();
+        seedLeaveBill("leave_019");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_019");
+        String firstTaskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode firstCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", firstTaskId)
+                        .header("Authorization", "Bearer " + firstSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_002",
+                                  "comment": "第一签通过"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String secondTaskId = firstCompleteBody.path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode returnBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/return", secondTaskId)
+                        .header("Authorization", "Bearer " + secondSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "PREVIOUS_USER_TASK",
+                                  "comment": "退回给上一位会签人重新确认"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(returnBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_002");
+
+        JsonNode detailBody = approvalDetailByBusiness(firstSignerToken, "leave_019");
+        assertThat(detailBody.path("assigneeUserId").asText()).isEqualTo("usr_002");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("TASK_RETURNED");
+        assertThat(detailBody.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("SEQUENTIAL");
+    }
+
+    @Test
+    void shouldSupportRejectParallelCountersignToInitiatorOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String firstSignerToken = login("lisi");
+        publishExplicitParallelCountersignProcess();
+        seedLeaveBill("leave_017");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_017");
+        String firstTaskId = findTaskId(startBody, "usr_002");
+        assertThat(startBody.path("activeTasks")).hasSize(2);
+
+        JsonNode rejectBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/reject", firstTaskId)
+                        .header("Authorization", "Bearer " + firstSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "INITIATOR",
+                                  "comment": "并签驳回到发起人",
+                                  "reapproveStrategy": "RESTART_ALL"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(rejectBody.path("status").asText()).isIn("RUNNING", "COMPLETED");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_017");
+        assertThat(detailBody.path("assigneeUserId").asText()).isEqualTo("usr_001");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("TASK_REJECTED");
+        assertThat(detailBody.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("PARALLEL");
+    }
+
+    @Test
+    void shouldSupportReturnParallelCountersignToInitiatorOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String firstSignerToken = login("lisi");
+        publishExplicitParallelCountersignProcess();
+        seedLeaveBill("leave_020");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_020");
+        String firstTaskId = findTaskId(startBody, "usr_002");
+        assertThat(startBody.path("activeTasks")).hasSize(2);
+
+        JsonNode returnBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/return", firstTaskId)
+                        .header("Authorization", "Bearer " + firstSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "INITIATOR",
+                                  "comment": "并签退回发起人"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(returnBody.path("status").asText()).isIn("RUNNING", "COMPLETED");
+        assertThat(returnBody.path("nextTasks").get(0).path("assigneeUserId").asText()).isEqualTo("usr_001");
+
+        JsonNode detailBody = approvalDetailByBusiness(applicantToken, "leave_020");
+        assertThat(detailBody.path("assigneeUserId").asText()).isEqualTo("usr_001");
+        assertThat(detailBody.path("instanceEvents").toString()).contains("TASK_RETURNED");
+        assertThat(detailBody.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("PARALLEL");
+    }
+
+    @Test
+    void shouldSupportAddSignOnSequentialCountersignTaskAndReturnFocusToCountersignAssignee() throws Exception {
+        String applicantToken = login("zhangsan");
+        String firstSignerToken = login("lisi");
+        String addSignToken = login("zhaoliu");
+        publishExplicitSequentialCountersignProcess();
+        seedLeaveBill("leave_025");
+
+        JsonNode startBody = startProcess(applicantToken, "leave_025");
+        String firstTaskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode addSignBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/add-sign", firstTaskId)
+                        .header("Authorization", "Bearer " + firstSignerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetUserId": "usr_004",
+                                  "comment": "请赵六并行协助复核"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String addSignTaskId = addSignBody.path("nextTasks").get(0).path("taskId").asText();
+
+        JsonNode focusOnAddSign = approvalDetailByBusiness(firstSignerToken, "leave_025");
+        assertThat(focusOnAddSign.path("taskId").asText()).isEqualTo(addSignTaskId);
+        assertThat(focusOnAddSign.path("assigneeUserId").asText()).isEqualTo("usr_004");
+        assertThat(focusOnAddSign.path("taskKind").asText()).isEqualTo("ADD_SIGN");
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", addSignTaskId)
+                        .header("Authorization", "Bearer " + addSignToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "APPROVE",
+                                  "operatorUserId": "usr_004",
+                                  "comment": "加签复核通过"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode focusBackToCountersign = approvalDetailByBusiness(firstSignerToken, "leave_025");
+        assertThat(focusBackToCountersign.path("taskId").asText()).isEqualTo(firstTaskId);
+        assertThat(focusBackToCountersign.path("assigneeUserId").asText()).isEqualTo("usr_002");
+        assertThat(focusBackToCountersign.path("taskKind").asText()).isEqualTo("NORMAL");
+        assertThat(focusBackToCountersign.path("taskTrace").toString()).contains("ADD_SIGN", "COMPLETED");
+        assertThat(focusBackToCountersign.path("countersignGroups").get(0).path("approvalMode").asText()).isEqualTo("SEQUENTIAL");
+    }
+
+    @Test
+    void shouldFailRejectAndReturnToGatewayNodeOnRealFlowableRuntime() throws Exception {
+        String applicantToken = login("zhangsan");
+        String financeToken = login("lisi");
+        processDefinitionService.publish(buildInclusiveGatewayPayload());
+        seedLeaveBill("leave_018");
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_inclusive",
+                                  "businessKey": "leave_018",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "amount": 2000,
+                                    "reason": "网关驳回边界"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        String rejectResponse = mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/reject", taskId)
+                        .header("Authorization", "Bearer " + financeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "ANY_USER_TASK",
+                                  "targetNodeId": "inclusive_split_1",
+                                  "comment": "尝试驳回到网关",
+                                  "reapproveStrategy": "CONTINUE"
+                                }
+                                """))
+                .andExpect(status().is4xxClientError())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(rejectResponse).contains("目标历史节点不存在");
+
+        String returnResponse = mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/return", taskId)
+                        .header("Authorization", "Bearer " + financeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetStrategy": "ANY_USER_TASK",
+                                  "targetNodeId": "inclusive_split_1",
+                                  "comment": "尝试退回到网关"
+                                }
+                                """))
+                .andExpect(status().is4xxClientError())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        assertThat(returnResponse).contains("目标历史节点不存在");
+    }
+
+    @Test
     void shouldSupportTakeBackAndWakeUpOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -2503,6 +2943,27 @@ class FlowableProcessRuntimeControllerTest {
                                   "formData": {
                                     "days": 2,
                                     "reason": "流程回退测试"
+                                  }
+                                }
+                                """.formatted(businessId)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+    }
+
+    private JsonNode startCollaborationProcess(String token, String businessId) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_collaboration_modes",
+                                  "businessKey": "%s",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 2,
+                                    "reason": "协同审批语义测试"
                                   }
                                 }
                                 """.formatted(businessId)))
@@ -2868,6 +3329,81 @@ class FlowableProcessRuntimeControllerTest {
                       "position": {"x": 320, "y": 100},
                       "config": {
                         "approvalMode": "SEQUENTIAL",
+                        "reapprovePolicy": "RESTART_ALL",
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002", "usr_003"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL"
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishExplicitParallelCountersignProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_leave",
+                  "processName": "请假并行会签",
+                  "category": "OA",
+                  "processFormKey": "oa_leave_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人会签",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "approvalMode": "PARALLEL",
                         "reapprovePolicy": "RESTART_ALL",
                         "assignment": {
                           "mode": "USER",
@@ -3417,6 +3953,37 @@ class FlowableProcessRuntimeControllerTest {
                     {"id": "edge_1", "source": "start_1", "target": "approve_manager", "priority": 10, "label": "提交"},
                     {"id": "edge_2", "source": "approve_manager", "target": "approve_hr", "priority": 10, "label": "负责人通过"},
                     {"id": "edge_3", "source": "approve_hr", "target": "end_1", "priority": 10, "label": "人事通过"}
+                  ]
+                }
+                """, ProcessDslPayload.class));
+    }
+
+    private void publishSemanticCollaborationProcess() throws Exception {
+        processDefinitionService.publish(objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "oa_collaboration_modes",
+                  "processName": "协同审批模式",
+                  "category": "OA",
+                  "processFormKey": "oa_collaboration_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {"id": "start_1", "type": "start", "name": "开始", "position": {"x": 100, "y": 100}, "config": {"initiatorEditable": true}, "ui": {"width": 240, "height": 88}},
+                    {"id": "supervise_1", "type": "supervise", "name": "督办", "position": {"x": 320, "y": 100}, "config": {"targets": {"mode": "USER", "userIds": ["usr_002"], "roleCodes": [], "departmentRef": ""}, "readRequired": false}, "ui": {"width": 240, "height": 88}},
+                    {"id": "meeting_1", "type": "meeting", "name": "会办", "position": {"x": 540, "y": 100}, "config": {"targets": {"mode": "USER", "userIds": ["usr_003"], "roleCodes": [], "departmentRef": ""}, "readRequired": true}, "ui": {"width": 240, "height": 88}},
+                    {"id": "read_1", "type": "read", "name": "阅办", "position": {"x": 760, "y": 100}, "config": {"targets": {"mode": "USER", "userIds": ["usr_006"], "roleCodes": [], "departmentRef": ""}, "readRequired": true}, "ui": {"width": 240, "height": 88}},
+                    {"id": "circulate_1", "type": "circulate", "name": "传阅", "position": {"x": 980, "y": 100}, "config": {"targets": {"mode": "USER", "userIds": ["usr_001"], "roleCodes": [], "departmentRef": ""}, "readRequired": false}, "ui": {"width": 240, "height": 88}},
+                    {"id": "end_1", "type": "end", "name": "结束", "position": {"x": 1200, "y": 100}, "config": {}, "ui": {"width": 240, "height": 88}}
+                  ],
+                  "edges": [
+                    {"id": "edge_1", "source": "start_1", "target": "supervise_1", "priority": 10, "label": "提交"},
+                    {"id": "edge_2", "source": "supervise_1", "target": "meeting_1", "priority": 10, "label": "下一步"},
+                    {"id": "edge_3", "source": "meeting_1", "target": "read_1", "priority": 10, "label": "下一步"},
+                    {"id": "edge_4", "source": "read_1", "target": "circulate_1", "priority": 10, "label": "下一步"},
+                    {"id": "edge_5", "source": "circulate_1", "target": "end_1", "priority": 10, "label": "结束"}
                   ]
                 }
                 """, ProcessDslPayload.class));

@@ -393,9 +393,6 @@ describe('oa pages', () => {
       target: { value: '3' },
     })
     fireEvent.click(screen.getByRole('switch', { name: '是否紧急' }))
-    fireEvent.click(screen.getByLabelText('直属负责人'))
-    const managerOptions = await screen.findAllByText('王主管')
-    fireEvent.click(managerOptions[managerOptions.length - 1]!)
     fireEvent.change(screen.getByLabelText('请假原因'), {
       target: { value: '外出处理事务' },
     })
@@ -407,7 +404,7 @@ describe('oa pages', () => {
         days: 3,
         reason: '外出处理事务',
         urgent: true,
-        managerUserId: 'usr_005',
+        managerUserId: 'usr_002',
       })
     })
 
@@ -432,9 +429,6 @@ describe('oa pages', () => {
     fireEvent.change(screen.getByLabelText('请假天数'), {
       target: { value: '2' },
     })
-    fireEvent.click(screen.getByLabelText('直属负责人'))
-    const managerOptions = await screen.findAllByText('李四')
-    fireEvent.click(managerOptions[managerOptions.length - 1]!)
     fireEvent.change(screen.getByLabelText('请假原因'), {
       target: { value: '家中有事' },
     })

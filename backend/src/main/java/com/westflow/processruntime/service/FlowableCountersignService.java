@@ -152,6 +152,15 @@ public class FlowableCountersignService {
                 .toList();
     }
 
+    /**
+     * 会签发生驳回/退回重建时，移除当前节点的运行中快照并按最新活动任务重新同步。
+     */
+    public void rebuildTaskGroupsForNode(String processDefinitionId, String processInstanceId, String nodeId) {
+        deleteRunningGroups(processInstanceId, nodeId);
+        deleteVoteSnapshot(processInstanceId, nodeId);
+        syncTaskGroups(processDefinitionId, processInstanceId, null);
+    }
+
     private void syncTaskGroups(String processDefinitionId, String processInstanceId, String completedTaskId) {
         BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
         if (model == null) {
@@ -455,6 +464,38 @@ public class FlowableCountersignService {
                 """,
                 status,
                 groupId
+        );
+    }
+
+    private void deleteRunningGroups(String processInstanceId, String nodeId) {
+        List<String> groupIds = jdbcTemplate.query(
+                """
+                SELECT id
+                FROM wf_task_group
+                WHERE process_instance_id = ?
+                  AND node_id = ?
+                  AND group_status = 'RUNNING'
+                ORDER BY created_at DESC
+                """,
+                (resultSet, rowNum) -> resultSet.getString("id"),
+                processInstanceId,
+                nodeId
+        );
+        for (String groupId : groupIds) {
+            jdbcTemplate.update("DELETE FROM wf_task_group_member WHERE task_group_id = ?", groupId);
+            jdbcTemplate.update("DELETE FROM wf_task_group WHERE id = ?", groupId);
+        }
+    }
+
+    private void deleteVoteSnapshot(String processInstanceId, String nodeId) {
+        jdbcTemplate.update(
+                """
+                DELETE FROM wf_task_vote_snapshot
+                WHERE process_instance_id = ?
+                  AND node_id = ?
+                """,
+                processInstanceId,
+                nodeId
         );
     }
 

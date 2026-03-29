@@ -68,6 +68,17 @@ public class FlowableTaskActionService {
         builder.moveExecutionToActivityId(task.getExecutionId(), targetNodeId).changeState();
     }
 
+    // 按节点整体迁移执行流，适用于会签等一个节点存在多个活动任务的场景。
+    public void moveActivityIdTo(String processInstanceId, String currentNodeId, String targetNodeId, Map<String, Object> variables) {
+        var builder = flowableEngineFacade.runtimeService()
+                .createChangeActivityStateBuilder()
+                .processInstanceId(processInstanceId);
+        if (variables != null && !variables.isEmpty()) {
+            builder.processVariables(variables);
+        }
+        builder.moveActivityIdTo(currentNodeId, targetNodeId).changeState();
+    }
+
     // 撤销时直接终止整个流程实例。
     public void revokeProcessInstance(String processInstanceId, String deleteReason) {
         deleteAdhocTasksByProcessInstanceId(processInstanceId, deleteReason);

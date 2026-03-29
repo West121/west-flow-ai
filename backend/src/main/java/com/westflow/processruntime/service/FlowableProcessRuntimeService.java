@@ -65,6 +65,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
@@ -81,6 +82,8 @@ import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.flowable.bpmn.model.BaseElement;
 import org.flowable.bpmn.model.BpmnModel;
+import org.flowable.bpmn.model.FlowNode;
+import org.flowable.bpmn.model.SequenceFlow;
 import org.flowable.bpmn.model.StartEvent;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -160,9 +163,12 @@ public class FlowableProcessRuntimeService {
      * 发起真实 Flowable 流程实例。
      */
     public StartProcessResponse start(StartProcessRequest request) {
+        String effectiveBusinessType = resolveStartBusinessType(request);
         StartProcessResponse response = flowableRuntimeStartService.start(request);
-        syncBusinessProcessLinkOnStart(request, response);
-        updateBusinessProcessLink(request.businessType(), request.businessKey(), response.instanceId(), response.status());
+        if (request.businessKey() != null && !request.businessKey().isBlank()) {
+            syncBusinessProcessLinkOnStart(request, response, effectiveBusinessType);
+            updateBusinessProcessLink(effectiveBusinessType, request.businessKey(), response.instanceId(), response.status());
+        }
         return response;
     }
 
@@ -1878,9 +1884,11 @@ public class FlowableProcessRuntimeService {
                 : request.targetStrategy().trim();
         RejectTarget target = resolveReturnTarget(task, request.targetTaskId(), request.targetNodeId(), targetStrategy);
         appendComment(task, request.comment());
-        flowableTaskActionService.moveToActivity(
-                taskId,
-                target.nodeId(),
+        routeTaskToTarget(
+                task,
+                target,
+                targetStrategy,
+                normalizeReapproveStrategy(null),
                 actionVariables("RETURN", currentUserId(), request.comment(), Map.of("targetStrategy", targetStrategy))
         );
         appendInstanceEvent(
@@ -1922,10 +1930,13 @@ public class FlowableProcessRuntimeService {
                 ? "PREVIOUS_USER_TASK"
                 : request.targetStrategy().trim();
         RejectTarget target = resolveRejectTarget(task, request, targetStrategy);
+        String reapproveStrategy = normalizeReapproveStrategy(request.reapproveStrategy());
         appendComment(task, request.comment());
-        flowableTaskActionService.moveToActivity(
-                taskId,
-                target.nodeId(),
+        routeTaskToTarget(
+                task,
+                target,
+                targetStrategy,
+                reapproveStrategy,
                 actionVariables(
                         "REJECT_ROUTE",
                         currentUserId(),
@@ -1934,7 +1945,7 @@ public class FlowableProcessRuntimeService {
                                 "targetStrategy", targetStrategy,
                                 "targetNodeId", target.nodeId(),
                                 "targetNodeName", target.nodeName(),
-                                "reapproveStrategy", normalizeReapproveStrategy(request.reapproveStrategy())
+                                "reapproveStrategy", reapproveStrategy
                         )
                 )
         );
@@ -1956,11 +1967,11 @@ public class FlowableProcessRuntimeService {
                         "targetStrategy", targetStrategy,
                         "targetNodeId", target.nodeId(),
                         "targetNodeName", target.nodeName(),
-                        "reapproveStrategy", normalizeReapproveStrategy(request.reapproveStrategy())
+                        "reapproveStrategy", reapproveStrategy
                 ),
                 targetStrategy,
                 target.nodeId(),
-                normalizeReapproveStrategy(request.reapproveStrategy()),
+                reapproveStrategy,
                 null,
                 null,
                 null,
@@ -3683,10 +3694,122 @@ public class FlowableProcessRuntimeService {
         return targetTask;
     }
 
+    private void routeTaskToTarget(
+            Task task,
+            RejectTarget target,
+            String targetStrategy,
+            String reapproveStrategy,
+            Map<String, Object> actionVariables
+    ) {
+        String approvalMode = countersignApprovalMode(task.getProcessDefinitionId(), task.getTaskDefinitionKey());
+        if (approvalMode == null) {
+            flowableTaskActionService.moveToActivity(task.getId(), target.nodeId(), actionVariables);
+            return;
+        }
+
+        String currentNodeId = task.getTaskDefinitionKey();
+        String actualTargetNodeId = target.nodeId();
+        Map<String, Object> processVariables = new LinkedHashMap<>(actionVariables);
+        List<String> rerouteAssignees = resolveCountersignRerouteAssignees(
+                task,
+                target,
+                targetStrategy,
+                approvalMode,
+                reapproveStrategy
+        );
+        if (!rerouteAssignees.isEmpty()) {
+            processVariables.put(countersignCollectionVariable(currentNodeId), rerouteAssignees);
+            if ("OR_SIGN".equals(approvalMode) || "VOTE".equals(approvalMode)) {
+                processVariables.put(countersignDecisionVariable(currentNodeId), "PENDING");
+            }
+            actualTargetNodeId = currentNodeId.equals(target.nodeId())
+                    ? resolveCountersignReentryNodeId(task.getProcessDefinitionId(), currentNodeId)
+                    : target.nodeId();
+        }
+
+        flowableTaskActionService.moveActivityIdTo(task.getProcessInstanceId(), currentNodeId, actualTargetNodeId, processVariables);
+        flowableCountersignService.rebuildTaskGroupsForNode(task.getProcessDefinitionId(), task.getProcessInstanceId(), currentNodeId);
+    }
+
+    private List<String> resolveCountersignRerouteAssignees(
+            Task task,
+            RejectTarget target,
+            String targetStrategy,
+            String approvalMode,
+            String reapproveStrategy
+    ) {
+        String currentNodeId = task.getTaskDefinitionKey();
+        if ("INITIATOR".equals(targetStrategy) && target.targetUserId() != null && !target.targetUserId().isBlank()) {
+            return List.of(target.targetUserId());
+        }
+        if (!currentNodeId.equals(target.nodeId()) || target.targetUserId() == null || target.targetUserId().isBlank()) {
+            return List.of();
+        }
+        List<String> assignees = currentCountersignAssignees(task.getProcessInstanceId(), currentNodeId);
+        if (assignees.isEmpty()) {
+            return List.of(target.targetUserId());
+        }
+        int targetIndex = assignees.indexOf(target.targetUserId());
+        if (targetIndex < 0) {
+            return List.of(target.targetUserId());
+        }
+        if ("SEQUENTIAL".equals(approvalMode)) {
+            if ("RESTART_ALL".equals(reapproveStrategy) || "CONTINUE_PROGRESS".equals(reapproveStrategy)) {
+                return List.copyOf(assignees.subList(targetIndex, assignees.size()));
+            }
+            return List.of(target.targetUserId());
+        }
+        return List.of(target.targetUserId());
+    }
+
+    private List<String> currentCountersignAssignees(String processInstanceId, String nodeId) {
+        Object runtimeValue = flowableEngineFacade.runtimeService()
+                .getVariable(processInstanceId, countersignCollectionVariable(nodeId));
+        if (runtimeValue instanceof List<?> values) {
+            return values.stream()
+                    .map(String::valueOf)
+                    .filter(value -> value != null && !value.isBlank())
+                    .distinct()
+                    .toList();
+        }
+        if (runtimeValue instanceof String value && !value.isBlank()) {
+            return Arrays.stream(value.split(","))
+                    .map(String::trim)
+                    .filter(item -> !item.isBlank())
+                    .distinct()
+                    .toList();
+        }
+        return List.of();
+    }
+
+    private String resolveCountersignReentryNodeId(String processDefinitionId, String nodeId) {
+        BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(processDefinitionId);
+        if (model == null) {
+            return nodeId;
+        }
+        BaseElement element = model.getFlowElement(nodeId);
+        if (!(element instanceof FlowNode flowNode) || flowNode.getIncomingFlows() == null || flowNode.getIncomingFlows().isEmpty()) {
+            return nodeId;
+        }
+        SequenceFlow incoming = flowNode.getIncomingFlows().get(0);
+        if (incoming == null || incoming.getSourceRef() == null || incoming.getSourceRef().isBlank()) {
+            return nodeId;
+        }
+        return incoming.getSourceRef();
+    }
+
     private String normalizeReapproveStrategy(String reapproveStrategy) {
         return reapproveStrategy == null || reapproveStrategy.isBlank()
                 ? "CONTINUE"
                 : reapproveStrategy.trim();
+    }
+
+    private String countersignCollectionVariable(String nodeId) {
+        return "wfCountersignAssignees_" + nodeId;
+    }
+
+    private String countersignDecisionVariable(String nodeId) {
+        return "wfCountersignDecision_" + nodeId;
     }
 
     private String normalizeTerminateScope(String terminateScope) {
@@ -5778,8 +5901,8 @@ public class FlowableProcessRuntimeService {
         return links.stream().findFirst();
     }
 
-    private void syncBusinessProcessLinkOnStart(StartProcessRequest request, StartProcessResponse response) {
-        Optional<BusinessLinkSnapshot> existingLink = findBusinessLink(request.businessType(), request.businessKey());
+    private void syncBusinessProcessLinkOnStart(StartProcessRequest request, StartProcessResponse response, String businessType) {
+        Optional<BusinessLinkSnapshot> existingLink = findBusinessLink(businessType, request.businessKey());
         if (existingLink.isPresent()
                 && Objects.equals(existingLink.get().processInstanceId(), response.instanceId())
                 && Objects.equals(existingLink.get().processDefinitionId(), response.processDefinitionId())
@@ -5788,13 +5911,28 @@ public class FlowableProcessRuntimeService {
             return;
         }
         insertBusinessLink(
-                request.businessType(),
+                businessType,
                 request.businessKey(),
                 response.instanceId(),
                 response.processDefinitionId(),
                 currentUserId(),
                 response.status()
         );
+    }
+
+    private String resolveStartBusinessType(StartProcessRequest request) {
+        if (request.businessType() != null && !request.businessType().isBlank()) {
+            return request.businessType();
+        }
+        return switch (request.processKey()) {
+            case "oa_leave" -> "OA_LEAVE";
+            case "oa_expense" -> "OA_EXPENSE";
+            case "oa_common" -> "OA_COMMON";
+            case "plm_ecr" -> "PLM_ECR";
+            case "plm_eco" -> "PLM_ECO";
+            case "plm_material" -> "PLM_MATERIAL";
+            default -> request.businessType();
+        };
     }
 
     private String resolveProcessInstanceIdByBusinessKey(String businessId) {
