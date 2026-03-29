@@ -190,6 +190,9 @@ public class FlowableProcessRuntimeService {
                         .taskCandidateGroupIn(currentCandidateGroupIds)
                         .active()
                         .list();
+        Map<String, Map<String, Object>> runtimeVariablesByInstanceId = new HashMap<>();
+        Map<String, PublishedProcessDefinition> definitionByInstanceId = new HashMap<>();
+        Map<String, List<IdentityLink>> identityLinksByTaskId = new HashMap<>();
         List<ProcessTaskListItemResponse> allRecords = java.util.stream.Stream.concat(
                         candidateOrAssignedTasks.stream(),
                         departmentCandidateTasks.stream()
@@ -198,7 +201,7 @@ public class FlowableProcessRuntimeService {
                 .values()
                 .stream()
                 .filter(task -> !"CC".equals(resolveTaskKind(task)))
-                .map(this::toTaskListItem)
+                .map(task -> toTaskListItem(task, runtimeVariablesByInstanceId, definitionByInstanceId, identityLinksByTaskId))
                 .filter(Objects::nonNull)
                 .filter(item -> matchesTaskKeyword(item, request.keyword()))
                 .sorted(Comparator.comparing(ProcessTaskListItemResponse::createdAt).reversed())
@@ -5047,18 +5050,29 @@ public class FlowableProcessRuntimeService {
         return Map.copyOf(details);
     }
 
-    private ProcessTaskListItemResponse toTaskListItem(Task task) {
-        Map<String, Object> variables = runtimeVariables(task.getProcessInstanceId());
-        String processKey = stringValue(variables.get("westflowProcessKey"));
-        PublishedProcessDefinition definition = resolvePublishedDefinition(
-                stringValue(variables.get("westflowProcessDefinitionId")),
-                stringValue(variables.get("westflowProcessDefinitionId")),
-                processKey,
-                task.getProcessInstanceId()
-        );
+    private ProcessTaskListItemResponse toTaskListItem(
+            Task task,
+            Map<String, Map<String, Object>> runtimeVariablesByInstanceId,
+            Map<String, PublishedProcessDefinition> definitionByInstanceId,
+            Map<String, List<IdentityLink>> identityLinksByTaskId
+    ) {
+        String processInstanceId = task.getProcessInstanceId();
+        Map<String, Object> variables = runtimeVariablesByInstanceId.computeIfAbsent(processInstanceId, this::runtimeVariables);
+        PublishedProcessDefinition definition = definitionByInstanceId.computeIfAbsent(processInstanceId, instanceId -> {
+            String processKey = stringValue(variables.get("westflowProcessKey"));
+            return resolvePublishedDefinition(
+                    stringValue(variables.get("westflowProcessDefinitionId")),
+                    stringValue(variables.get("westflowProcessDefinitionId")),
+                    processKey,
+                    instanceId
+            );
+        });
+        List<IdentityLink> identityLinks = identityLinksByTaskId.computeIfAbsent(task.getId(), this::identityLinksForTask);
+        List<String> candidateUserIds = candidateUsers(identityLinks);
+        List<String> candidateGroupIds = candidateGroups(identityLinks);
         return new ProcessTaskListItemResponse(
                 task.getId(),
-                task.getProcessInstanceId(),
+                processInstanceId,
                 definition.processDefinitionId(),
                 definition.processKey(),
                 definition.processName(),
@@ -5073,9 +5087,9 @@ public class FlowableProcessRuntimeService {
                 task.getName(),
                 resolveTaskKind(task),
                 resolveTaskStatus(task),
-                resolveAssignmentMode(candidateUsers(task.getId()), candidateGroups(task.getId()), task.getAssignee()),
-                candidateUsers(task.getId()),
-                candidateGroups(task.getId()),
+                resolveAssignmentMode(candidateUserIds, candidateGroupIds, task.getAssignee()),
+                candidateUserIds,
+                candidateGroupIds,
                 task.getAssignee(),
                 toOffsetDateTime(task.getCreateTime()),
                 toOffsetDateTime(task.getCreateTime()),
@@ -5322,7 +5336,11 @@ public class FlowableProcessRuntimeService {
     }
 
     private List<String> candidateUsers(String taskId) {
-        return identityLinksForTask(taskId).stream()
+        return candidateUsers(identityLinksForTask(taskId));
+    }
+
+    private List<String> candidateUsers(List<IdentityLink> identityLinks) {
+        return identityLinks.stream()
                 .filter(link -> "candidate".equals(link.getType()))
                 .map(link -> link.getUserId())
                 .filter(userId -> userId != null && !userId.isBlank())
@@ -5331,7 +5349,11 @@ public class FlowableProcessRuntimeService {
     }
 
     private List<String> candidateGroups(String taskId) {
-        return identityLinksForTask(taskId).stream()
+        return candidateGroups(identityLinksForTask(taskId));
+    }
+
+    private List<String> candidateGroups(List<IdentityLink> identityLinks) {
+        return identityLinks.stream()
                 .filter(link -> "candidate".equals(link.getType()))
                 .map(IdentityLink::getGroupId)
                 .filter(groupId -> groupId != null && !groupId.isBlank())

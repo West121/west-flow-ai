@@ -12,6 +12,7 @@ import com.westflow.processruntime.api.response.ProcessInstanceLinkResponse;
 import com.westflow.processruntime.api.response.RuntimeAppendLinkResponse;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
@@ -106,6 +107,41 @@ class FlowableRuntimeStartServiceTest {
         jdbcTemplate.update("DELETE FROM wf_task_group");
     }
 
+    private void loginAs(String user) {
+        String loginId = switch (user) {
+            case "zhangsan" -> "usr_001";
+            case "lisi" -> "usr_002";
+            case "wangwu" -> "usr_003";
+            case "zhaoliu" -> "usr_004";
+            case "zhouba" -> "usr_005";
+            default -> user;
+        };
+        StpUtil.login(loginId);
+    }
+
+    private void createTestRoleAssignments(String roleId, String roleCode, String roleName, String... userIds) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO wf_role (id, role_code, role_name, role_category, enabled, created_at, updated_at)
+                VALUES (?, ?, ?, 'TEST', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """,
+                roleId,
+                roleCode,
+                roleName
+        );
+        for (String userId : userIds) {
+            jdbcTemplate.update(
+                    """
+                    INSERT INTO wf_user_role (id, user_id, role_id, created_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    UUID.randomUUID().toString(),
+                    userId,
+                    roleId
+            );
+        }
+    }
+
     @Test
     void shouldOnlyExposeFlowableTraceStoreAsRuntimeBean() {
         Map<String, ProcessRuntimeTraceStore> traceStores = applicationContext.getBeansOfType(ProcessRuntimeTraceStore.class);
@@ -119,7 +155,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldExecuteDynamicBuilderAndCreateAppendTasksFromRuleExpression() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildDynamicBuilderTaskPayload());
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -154,7 +190,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldExecuteDynamicBuilderAndCreateAppendSubprocessesFromRuleExpression() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildDynamicBuilderSubprocessChildPayload());
         processDefinitionService.publish(buildDynamicBuilderSubprocessParentPayload());
 
@@ -187,7 +223,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldExposeDynamicBuilderTemplateFallbackResolutionMetadata() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildDynamicBuilderTemplateFallbackTaskPayload());
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -213,7 +249,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldExposeDynamicBuilderSkippedResolutionMetadata() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildDynamicBuilderSkipTaskPayload());
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -240,7 +276,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartRealFlowableInstanceAndReturnFirstActiveTask() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(objectMapper.readValue("""
                 {
                   "dslVersion": "1.0.0",
@@ -335,7 +371,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartSequentialCountersignWithOnlyFirstTaskActive() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("SEQUENTIAL"));
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -357,7 +393,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldDefaultLeaveUrgentVariableToFalseWhenMissing() throws Exception {
-        StpUtil.login("usr_001");
+        loginAs("usr_001");
         processDefinitionService.publish(objectMapper.readValue("""
                 {
                   "processKey": "oa_leave_urgent_default",
@@ -408,7 +444,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldInferLeaveBusinessTypeFromProcessKeyWhenMissing() throws Exception {
-        StpUtil.login("usr_001");
+        loginAs("usr_001");
         processDefinitionService.publish(objectMapper.readValue("""
                 {
                   "processKey": "oa_leave",
@@ -453,7 +489,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartParallelCountersignWithAllTasksActive() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("PARALLEL"));
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -473,12 +509,19 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartRoleBasedParallelCountersignWithResolvedAssignees() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
+        createTestRoleAssignments(
+                "role_test_parallel",
+                "TEST_COUNTERSIGN_ROLE",
+                "测试会签角色",
+                "usr_001",
+                "usr_002"
+        );
         processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
                 {
                   "mode": "ROLE",
                   "userIds": [],
-                  "roleCodes": ["OA_USER"],
+                  "roleCodes": ["TEST_COUNTERSIGN_ROLE"],
                   "departmentRef": "",
                   "formFieldKey": "",
                   "formulaExpression": ""
@@ -498,7 +541,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartFormulaBasedParallelCountersignWithResolvedAssignees() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
                 {
                   "mode": "FORMULA",
@@ -523,7 +566,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartDepartmentBasedParallelCountersignWithResolvedAssignees() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
                 {
                   "mode": "DEPARTMENT",
@@ -548,7 +591,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartDepartmentAndChildrenBasedParallelCountersignWithResolvedAssignees() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         jdbcTemplate.update("""
                 INSERT INTO wf_department (id, company_id, parent_department_id, department_name, enabled, created_at, updated_at)
                 VALUES (?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -624,7 +667,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartFormFieldBasedParallelCountersignWithResolvedAssignees() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("PARALLEL", """
                 {
                   "mode": "FORM_FIELD",
@@ -653,14 +696,21 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldResolveRoleBasedVoteCountersignWithDefaultWeights() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
+        createTestRoleAssignments(
+                "role_test_vote",
+                "TEST_VOTE_ROLE",
+                "测试票签角色",
+                "usr_001",
+                "usr_002"
+        );
         processDefinitionService.publish(buildCountersignPayload(
                 "VOTE",
                 """
                 {
                   "mode": "ROLE",
                   "userIds": [],
-                  "roleCodes": ["OA_USER"],
+                  "roleCodes": ["TEST_VOTE_ROLE"],
                   "departmentRef": "",
                   "formFieldKey": "",
                   "formulaExpression": ""
@@ -705,7 +755,7 @@ class FlowableRuntimeStartServiceTest {
                 .findFirst()
                 .orElseThrow()
                 .getId();
-        StpUtil.login("lisi");
+        loginAs("lisi");
         var secondComplete = flowableProcessRuntimeService.complete(secondTaskId, new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -723,7 +773,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldSelectHighestPriorityBranchWhenInclusiveSplitRequiresFixedCount() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildInclusiveRequiredCountPayload());
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -763,7 +813,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldFallbackToDefaultBranchWhenInclusiveSplitHasNoEligibleBranch() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildInclusiveDefaultBranchPayload());
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -802,7 +852,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldStartSubprocessAndPersistProcessLink() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildSubprocessParentPayload());
 
@@ -854,7 +904,7 @@ class FlowableRuntimeStartServiceTest {
                 .singleResult();
         assertThat(childTask).isNotNull();
 
-        StpUtil.login("lisi");
+        loginAs("lisi");
         flowableProcessRuntimeService.complete(childTask.getId(), new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -880,7 +930,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldTerminateParentProcessWhenChildFinishPolicyRequiresIt() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildSubprocessParentTerminateParentPayload());
 
@@ -900,7 +950,7 @@ class FlowableRuntimeStartServiceTest {
                 .singleResult();
         assertThat(childTask).isNotNull();
 
-        StpUtil.login("lisi");
+        loginAs("lisi");
         flowableProcessRuntimeService.complete(childTask.getId(), new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -925,7 +975,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldPersistFixedVersionChildStartStrategyForSubprocess() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildSubprocessChildPayload());
         processDefinitionService.publish(buildSubprocessParentFixedVersionPayload());
@@ -964,7 +1014,7 @@ class FlowableRuntimeStartServiceTest {
         assertThat(childTask).isNotNull();
         runtimeService.setVariable(childInstance.getProcessInstanceId(), "approvedResult", "APPROVED");
 
-        StpUtil.login("lisi");
+        loginAs("lisi");
         flowableProcessRuntimeService.complete(childTask.getId(), new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -1010,7 +1060,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldResolveSceneBindingSubprocessAtRuntime() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildSubprocessChildPayloadWithKey(
                 "oa_sub_review_scene",
                 "场景绑定子流程"
@@ -1057,7 +1107,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldExposeDescendantSubprocessLinksWhenCallScopeIncludesDescendants() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildSubprocessLeafPayload());
         processDefinitionService.publish(buildNestedSubprocessChildPayload());
         processDefinitionService.publish(buildParentWithDescendantCallScopePayload());
@@ -1077,7 +1127,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldAdvanceSequentialCountersignAndSyncTaskGroupAfterComplete() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("SEQUENTIAL"));
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -1088,7 +1138,7 @@ class FlowableRuntimeStartServiceTest {
         ));
         String firstTaskId = response.activeTasks().get(0).taskId();
 
-        StpUtil.login("lisi");
+        loginAs("lisi");
         var firstComplete = flowableProcessRuntimeService.complete(firstTaskId, new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -1117,7 +1167,7 @@ class FlowableRuntimeStartServiceTest {
         )).isEqualTo(1);
 
         String secondTaskId = firstComplete.nextTasks().get(0).taskId();
-        StpUtil.login("wangwu");
+        loginAs("wangwu");
         var secondComplete = flowableProcessRuntimeService.complete(secondTaskId, new CompleteTaskRequest(
                 "APPROVE",
                 "usr_003",
@@ -1135,7 +1185,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldCompleteNormalApprovalIntoCcNodeWithoutCountersignFailure() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(objectMapper.readValue("""
                 {
                   "dslVersion": "1.0.0",
@@ -1216,7 +1266,7 @@ class FlowableRuntimeStartServiceTest {
                 java.util.Map.of("days", 2, "reason", "生成抄送")
         ));
 
-        StpUtil.login("lisi");
+        loginAs("lisi");
         var completeResponse = flowableProcessRuntimeService.complete(response.activeTasks().get(0).taskId(), new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -1233,7 +1283,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldCompleteOrSignAfterAnySingleApprovalAndAutoFinishRemainingMembers() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("OR_SIGN"));
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -1251,7 +1301,7 @@ class FlowableRuntimeStartServiceTest {
                 .orElseThrow()
                 .taskId();
 
-        StpUtil.login("lisi");
+        loginAs("lisi");
         var completeResponse = flowableProcessRuntimeService.complete(firstTaskId, new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -1280,7 +1330,7 @@ class FlowableRuntimeStartServiceTest {
 
     @Test
     void shouldResolveVoteCountersignAfterThresholdReached() throws Exception {
-        StpUtil.login("zhangsan");
+        loginAs("zhangsan");
         processDefinitionService.publish(buildCountersignPayload("VOTE"));
 
         StartProcessResponse response = flowableRuntimeStartService.start(new StartProcessRequest(
@@ -1297,7 +1347,7 @@ class FlowableRuntimeStartServiceTest {
                 .findFirst()
                 .orElseThrow()
                 .taskId();
-        StpUtil.login("lisi");
+        loginAs("lisi");
         var firstComplete = flowableProcessRuntimeService.complete(firstTaskId, new CompleteTaskRequest(
                 "APPROVE",
                 "usr_002",
@@ -1312,7 +1362,7 @@ class FlowableRuntimeStartServiceTest {
                 .findFirst()
                 .orElseThrow()
                 .taskId();
-        StpUtil.login("wangwu");
+        loginAs("wangwu");
         var secondComplete = flowableProcessRuntimeService.complete(secondTaskId, new CompleteTaskRequest(
                 "APPROVE",
                 "usr_003",
