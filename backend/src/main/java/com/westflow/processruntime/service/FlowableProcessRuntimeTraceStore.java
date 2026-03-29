@@ -212,7 +212,7 @@ public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
             List<NotificationLogRecord> persisted = notificationLogMapper.selectByInstanceId(instanceId);
             if (!persisted.isEmpty()) {
                 return persisted.stream()
-                        .map(this::toNotificationRecord)
+                        .map(record -> toNotificationRecord(record))
                         .sorted(Comparator.comparing(ProcessNotificationSendRecordResponse::sentAt, Comparator.nullsLast(Comparator.naturalOrder()))
                                 .thenComparing(ProcessNotificationSendRecordResponse::channelType))
                         .toList();

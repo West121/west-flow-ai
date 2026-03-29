@@ -6,11 +6,13 @@ import concurrent.futures
 import statistics
 import time
 from dataclasses import dataclass
+from typing import Callable
 
 import requests
 
 
 DEFAULT_BASE_URL = "http://127.0.0.1:8080/api/v1"
+REQUEST_TIMEOUT = 20
 
 
 @dataclass
@@ -20,11 +22,17 @@ class Sample:
     elapsed_ms: float
 
 
-def login(base_url: str, username: str, password: str) -> str:
-    response = requests.post(
+def create_session() -> requests.Session:
+    session = requests.Session()
+    session.trust_env = False
+    return session
+
+
+def login(session: requests.Session, base_url: str, username: str, password: str) -> str:
+    response = session.post(
         f"{base_url}/auth/login",
         json={"username": username, "password": password},
-        timeout=10,
+        timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     return response.json()["data"]["accessToken"]
@@ -41,7 +49,7 @@ def percentile(values: list[float], p: float) -> float:
 def print_summary(title: str, samples: list[Sample]) -> None:
     grouped: dict[str, list[Sample]] = {}
     for sample in samples:
-      grouped.setdefault(sample.name, []).append(sample)
+        grouped.setdefault(sample.name, []).append(sample)
 
     print(f"\n== {title} ==")
     for name, bucket in grouped.items():
@@ -55,22 +63,37 @@ def print_summary(title: str, samples: list[Sample]) -> None:
         )
 
 
+def timed_request(
+    samples: list[Sample],
+    name: str,
+    operation: Callable[[], requests.Response],
+) -> requests.Response | None:
+    start = time.perf_counter()
+    try:
+        response = operation()
+    except requests.RequestException:
+        samples.append(
+            Sample(name=name, status_code=599, elapsed_ms=(time.perf_counter() - start) * 1000)
+        )
+        return None
+    samples.append(
+        Sample(name=name, status_code=response.status_code, elapsed_ms=(time.perf_counter() - start) * 1000)
+    )
+    return response
+
+
 def read_flow(base_url: str, token: str) -> list[Sample]:
+    session = create_session()
     headers = {"Authorization": f"Bearer {token}"}
     samples: list[Sample] = []
 
-    def timed_post(name: str, path: str, payload: dict) -> requests.Response:
-        start = time.perf_counter()
-        response = requests.post(
+    def timed_post(name: str, path: str, payload: dict) -> requests.Response | None:
+        return timed_request(samples, name, lambda: session.post(
             f"{base_url}{path}",
             headers=headers,
             json=payload,
-            timeout=20,
-        )
-        samples.append(
-            Sample(name=name, status_code=response.status_code, elapsed_ms=(time.perf_counter() - start) * 1000)
-        )
-        return response
+            timeout=REQUEST_TIMEOUT,
+        ))
 
     tasks = timed_post(
         "tasks.page",
@@ -91,42 +114,32 @@ def read_flow(base_url: str, token: str) -> list[Sample]:
             "businessTypes": [],
         },
     )
+    if tasks is None or tasks.status_code < 200 or tasks.status_code >= 300:
+        return samples
     records = tasks.json().get("data", {}).get("records", [])
     if records:
         task_id = records[0]["taskId"]
-        start = time.perf_counter()
-        detail = requests.get(
+        timed_request(samples, "tasks.detail", lambda: session.get(
             f"{base_url}/process-runtime/tasks/{task_id}",
             headers=headers,
-            timeout=20,
-        )
-        samples.append(
-            Sample(
-                name="tasks.detail",
-                status_code=detail.status_code,
-                elapsed_ms=(time.perf_counter() - start) * 1000,
-            )
-        )
+            timeout=REQUEST_TIMEOUT,
+        ))
 
     return samples
 
 
 def action_flow(base_url: str, admin_token: str, approver_token: str, iteration: int) -> list[Sample]:
+    session = create_session()
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
     approver_headers = {"Authorization": f"Bearer {approver_token}"}
     samples: list[Sample] = []
 
     def timed(name: str, fn):
-        start = time.perf_counter()
-        response = fn()
-        samples.append(
-            Sample(name=name, status_code=response.status_code, elapsed_ms=(time.perf_counter() - start) * 1000)
-        )
-        return response
+        return timed_request(samples, name, fn)
 
     created = timed(
         "oa.leaves.create",
-        lambda: requests.post(
+        lambda: session.post(
             f"{base_url}/oa/leaves",
             headers=admin_headers,
             json={
@@ -136,9 +149,11 @@ def action_flow(base_url: str, admin_token: str, approver_token: str, iteration:
                 "reason": f"perf-{int(time.time() * 1000)}-{iteration}",
                 "managerUserId": "usr_002",
             },
-            timeout=20,
+            timeout=REQUEST_TIMEOUT,
         ),
     )
+    if created is None or created.status_code < 200 or created.status_code >= 300:
+        return samples
     data = created.json().get("data", {})
     task_id = data.get("firstActiveTask", {}).get("taskId")
     if not task_id:
@@ -146,27 +161,27 @@ def action_flow(base_url: str, admin_token: str, approver_token: str, iteration:
 
     timed(
         "tasks.claim",
-        lambda: requests.post(
+        lambda: session.post(
             f"{base_url}/process-runtime/tasks/{task_id}/claim",
             headers=approver_headers,
             json={"comment": "perf claim"},
-            timeout=20,
+            timeout=REQUEST_TIMEOUT,
         ),
     )
     timed(
         "tasks.complete",
-        lambda: requests.post(
+        lambda: session.post(
             f"{base_url}/process-runtime/tasks/{task_id}/complete",
             headers=approver_headers,
             json={"action": "APPROVE", "comment": "perf approve", "taskFormData": {}},
-            timeout=20,
+            timeout=REQUEST_TIMEOUT,
         ),
     )
     return samples
 
 
 def run_read_test(base_url: str, username: str, password: str, concurrency: int, iterations: int) -> list[Sample]:
-    token = login(base_url, username, password)
+    token = login(create_session(), base_url, username, password)
     samples: list[Sample] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [executor.submit(read_flow, base_url, token) for _ in range(iterations)]
@@ -176,8 +191,8 @@ def run_read_test(base_url: str, username: str, password: str, concurrency: int,
 
 
 def run_action_test(base_url: str, concurrency: int, iterations: int) -> list[Sample]:
-    admin_token = login(base_url, "admin", "admin123")
-    approver_token = login(base_url, "zhangsan", "123456")
+    admin_token = login(create_session(), base_url, "admin", "admin123")
+    approver_token = login(create_session(), base_url, "zhangsan", "123456")
     samples: list[Sample] = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [

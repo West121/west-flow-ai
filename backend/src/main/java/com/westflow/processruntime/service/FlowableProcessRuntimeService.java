@@ -177,34 +177,26 @@ public class FlowableProcessRuntimeService {
      */
     public PageResponse<ProcessTaskListItemResponse> page(PageRequest request) {
         String currentUserId = currentUserId();
-        List<Task> candidateOrAssignedTasks = flowableEngineFacade.taskService()
-                .createTaskQuery()
-                .taskCandidateOrAssigned(currentUserId)
-                .active()
-                .list();
-        List<String> currentCandidateGroupIds = currentCandidateGroupIds();
-        List<Task> departmentCandidateTasks = currentCandidateGroupIds.isEmpty()
-                ? List.of()
-                : flowableEngineFacade.taskService()
-                        .createTaskQuery()
-                        .taskCandidateGroupIn(currentCandidateGroupIds)
-                        .active()
-                        .list();
+        List<Task> visibleTasks = visibleActiveTasks(currentUserId);
+        if (isDefaultTaskPageRequest(request)) {
+            List<Task> pageTasks = pageSlice(visibleTasks, request.page(), request.pageSize());
+            Map<String, Map<String, Object>> runtimeVariablesByInstanceId = new HashMap<>();
+            Map<String, PublishedProcessDefinition> definitionByInstanceId = new HashMap<>();
+            Map<String, List<IdentityLink>> identityLinksByTaskId = new HashMap<>();
+            List<ProcessTaskListItemResponse> records = pageTasks.stream()
+                    .map(task -> toTaskListItem(task, runtimeVariablesByInstanceId, definitionByInstanceId, identityLinksByTaskId))
+                    .filter(Objects::nonNull)
+                    .toList();
+            return page(records, request.page(), request.pageSize(), visibleTasks.size());
+        }
         Map<String, Map<String, Object>> runtimeVariablesByInstanceId = new HashMap<>();
         Map<String, PublishedProcessDefinition> definitionByInstanceId = new HashMap<>();
         Map<String, List<IdentityLink>> identityLinksByTaskId = new HashMap<>();
-        List<ProcessTaskListItemResponse> allRecords = java.util.stream.Stream.concat(
-                        candidateOrAssignedTasks.stream(),
-                        departmentCandidateTasks.stream()
-                )
-                .collect(Collectors.toMap(Task::getId, task -> task, (left, right) -> left, LinkedHashMap::new))
-                .values()
-                .stream()
+        List<ProcessTaskListItemResponse> allRecords = visibleTasks.stream()
                 .filter(task -> !"CC".equals(resolveTaskKind(task)))
                 .map(task -> toTaskListItem(task, runtimeVariablesByInstanceId, definitionByInstanceId, identityLinksByTaskId))
                 .filter(Objects::nonNull)
                 .filter(item -> matchesTaskKeyword(item, request.keyword()))
-                .sorted(Comparator.comparing(ProcessTaskListItemResponse::createdAt).reversed())
                 .toList();
         return page(allRecords, request.page(), request.pageSize());
     }
@@ -214,6 +206,9 @@ public class FlowableProcessRuntimeService {
      */
     public PageResponse<ApprovalSheetListItemResponse> pageApprovalSheets(ApprovalSheetPageRequest request) {
         String currentUserId = currentUserId();
+        if (request.view() == ApprovalSheetListView.TODO && isDefaultApprovalSheetRequest(request)) {
+            return pageTodoApprovalSheetsFast(currentUserId, request.page(), request.pageSize());
+        }
         List<ApprovalSheetListItemResponse> records = switch (request.view()) {
             case TODO -> buildTodoApprovalSheets(currentUserId);
             case INITIATED -> buildInitiatedApprovalSheets(currentUserId, request.businessTypes());
@@ -3022,6 +3017,24 @@ public class FlowableProcessRuntimeService {
         return List.copyOf(projections.values());
     }
 
+    private PageResponse<ApprovalSheetListItemResponse> pageTodoApprovalSheetsFast(String currentUserId, int page, int pageSize) {
+        List<Task> visibleTasks = visibleActiveTasks(currentUserId);
+        LinkedHashMap<String, Task> taskByInstanceId = new LinkedHashMap<>();
+        for (Task task : visibleTasks) {
+            taskByInstanceId.putIfAbsent(task.getProcessInstanceId(), task);
+        }
+        List<Task> pagedTasks = pageSlice(new ArrayList<>(taskByInstanceId.values()), page, pageSize);
+        Map<String, Map<String, Object>> runtimeVariablesByInstanceId = new HashMap<>();
+        Map<String, PublishedProcessDefinition> definitionByInstanceId = new HashMap<>();
+        Map<String, List<IdentityLink>> identityLinksByTaskId = new HashMap<>();
+        List<ApprovalSheetListItemResponse> records = pagedTasks.stream()
+                .map(task -> toTaskListItem(task, runtimeVariablesByInstanceId, definitionByInstanceId, identityLinksByTaskId))
+                .filter(Objects::nonNull)
+                .map(this::toApprovalSheetFromTask)
+                .toList();
+        return page(records, page, pageSize, taskByInstanceId.size());
+    }
+
     private List<ApprovalSheetListItemResponse> buildInitiatedApprovalSheets(String currentUserId, List<String> businessTypes) {
         return queryBusinessLinksByStartUser(currentUserId).stream()
                 .filter(link -> businessTypes.isEmpty() || businessTypes.contains(link.businessType()))
@@ -5097,6 +5110,44 @@ public class FlowableProcessRuntimeService {
         );
     }
 
+    private List<Task> visibleActiveTasks(String currentUserId) {
+        List<Task> candidateOrAssignedTasks = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .taskCandidateOrAssigned(currentUserId)
+                .active()
+                .list();
+        List<String> currentCandidateGroupIds = currentCandidateGroupIds();
+        List<Task> departmentCandidateTasks = currentCandidateGroupIds.isEmpty()
+                ? List.of()
+                : flowableEngineFacade.taskService()
+                        .createTaskQuery()
+                        .taskCandidateGroupIn(currentCandidateGroupIds)
+                        .active()
+                        .list();
+        return java.util.stream.Stream.concat(candidateOrAssignedTasks.stream(), departmentCandidateTasks.stream())
+                .collect(Collectors.toMap(Task::getId, task -> task, (left, right) -> left, LinkedHashMap::new))
+                .values()
+                .stream()
+                .filter(task -> !"CC".equals(resolveTaskKind(task)))
+                .sorted(Comparator.comparing(Task::getCreateTime).reversed())
+                .toList();
+    }
+
+    private boolean isDefaultTaskPageRequest(PageRequest request) {
+        return (request.keyword() == null || request.keyword().isBlank())
+                && request.filters().isEmpty()
+                && request.sorts().isEmpty()
+                && request.groups().isEmpty();
+    }
+
+    private boolean isDefaultApprovalSheetRequest(ApprovalSheetPageRequest request) {
+        return (request.keyword() == null || request.keyword().isBlank())
+                && request.filters().isEmpty()
+                && request.sorts().isEmpty()
+                && request.groups().isEmpty()
+                && (request.businessTypes() == null || request.businessTypes().isEmpty());
+    }
+
     private ProcessTaskSnapshot toTaskView(Task task) {
         return new ProcessTaskSnapshot(
                 task.getId(),
@@ -6381,13 +6432,19 @@ public class FlowableProcessRuntimeService {
     }
 
     private <T> PageResponse<T> page(List<T> records, int page, int pageSize) {
-        long total = records.size();
+        return page(records, page, pageSize, records.size());
+    }
+
+    private <T> PageResponse<T> page(List<T> records, int page, int pageSize, long total) {
         long pages = total == 0 ? 0 : (total + pageSize - 1L) / pageSize;
-        long offset = Math.max(0L, (long) (page - 1) * pageSize);
-        List<T> currentPage = total == 0
-                ? List.of()
-                : records.stream().skip(offset).limit(pageSize).toList();
+        List<T> currentPage = total == records.size() ? pageSlice(records, page, pageSize) : records;
         return new PageResponse<>(page, pageSize, total, pages, currentPage, List.of());
+    }
+
+    private <T> List<T> pageSlice(List<T> records, int page, int pageSize) {
+        long total = records.size();
+        long offset = Math.max(0L, (long) (page - 1) * pageSize);
+        return total == 0 ? List.of() : records.stream().skip(offset).limit(pageSize).toList();
     }
 
     /**
