@@ -144,7 +144,8 @@ export function buildRuntimeStructureTree(
   const rootInstanceId = normalizedLinks.find(
     (link) =>
       link.rootInstanceId === currentInstanceId ||
-      link.parentInstanceId === currentInstanceId
+      link.parentInstanceId === currentInstanceId ||
+      resolveRuntimeStructureTargetInstanceId(link) === currentInstanceId
   )?.rootInstanceId
     ?? currentInstanceId
 

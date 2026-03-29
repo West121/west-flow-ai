@@ -23,6 +23,10 @@ const {
   routeNavigateMock: vi.fn(),
     workbenchApiMocks: {
       addSignWorkbenchTask: vi.fn(),
+      batchClaimWorkbenchTasks: vi.fn(),
+      batchCompleteWorkbenchTasks: vi.fn(),
+      batchReadWorkbenchTasks: vi.fn(),
+      batchRejectWorkbenchTasks: vi.fn(),
       claimWorkbenchTask: vi.fn(),
       completeWorkbenchTask: vi.fn(),
       delegateWorkbenchTask: vi.fn(),

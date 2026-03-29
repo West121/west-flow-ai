@@ -2028,12 +2028,16 @@ public class FlowableProcessRuntimeService {
                 ? runtimeVariables(processInstanceId)
                 : historicVariables(processInstanceId);
         HistoricProcessInstance historicProcessInstance = requireHistoricProcessInstance(processInstanceId);
-        PublishedProcessDefinition definition = resolvePublishedDefinition(
-                platformProcessDefinitionIdOverride,
-                stringValue(variables.get("westflowProcessDefinitionId")),
-                stringValue(variables.get("westflowProcessKey")),
-                processInstanceId
-        );
+        PublishedProcessDefinition definition =
+                platformProcessDefinitionIdOverride != null && !platformProcessDefinitionIdOverride.isBlank()
+                        ? resolvePublishedDefinition(
+                                platformProcessDefinitionIdOverride,
+                                stringValue(variables.get("westflowProcessDefinitionId")),
+                                stringValue(variables.get("westflowProcessKey")),
+                                processInstanceId
+                        )
+                        : resolvePublishedDefinitionByInstance(processInstanceId)
+                                .orElseThrow(() -> resourceNotFound("流程定义不存在", Map.of("processInstanceId", processInstanceId)));
         ProcessDslPayload payload = definition.dsl();
         String businessType = stringValue(variables.get("westflowBusinessType"));
         String businessKey = stringValue(variables.get("westflowBusinessKey"));
@@ -5058,15 +5062,11 @@ public class FlowableProcessRuntimeService {
     ) {
         String processInstanceId = task.getProcessInstanceId();
         Map<String, Object> variables = runtimeVariablesByInstanceId.computeIfAbsent(processInstanceId, this::runtimeVariables);
-        PublishedProcessDefinition definition = definitionByInstanceId.computeIfAbsent(processInstanceId, instanceId -> {
-            String processKey = stringValue(variables.get("westflowProcessKey"));
-            return resolvePublishedDefinition(
-                    stringValue(variables.get("westflowProcessDefinitionId")),
-                    stringValue(variables.get("westflowProcessDefinitionId")),
-                    processKey,
-                    instanceId
-            );
-        });
+        PublishedProcessDefinition definition = definitionByInstanceId.computeIfAbsent(
+                processInstanceId,
+                instanceId -> resolvePublishedDefinitionByInstance(instanceId)
+                        .orElseThrow(() -> resourceNotFound("流程定义不存在", Map.of("processInstanceId", instanceId)))
+        );
         List<IdentityLink> identityLinks = identityLinksByTaskId.computeIfAbsent(task.getId(), this::identityLinksForTask);
         List<String> candidateUserIds = candidateUsers(identityLinks);
         List<String> candidateGroupIds = candidateGroups(identityLinks);
@@ -5137,6 +5137,19 @@ public class FlowableProcessRuntimeService {
         Map<String, Object> variables = runtimeOrHistoricVariables(processInstanceId);
         String platformDefinitionId = stringValue(variables.get("westflowProcessDefinitionId"));
         String processKey = stringValue(variables.get("westflowProcessKey"));
+        String flowableDefinitionId = activeFlowableDefinitionId(processInstanceId);
+        if ((platformDefinitionId == null || platformDefinitionId.isBlank())
+                && flowableDefinitionId != null
+                && !flowableDefinitionId.isBlank()) {
+            try {
+                return Optional.of(processDefinitionService.getByFlowableDefinitionId(flowableDefinitionId));
+            } catch (RuntimeException ignored) {
+                // Fall through to process key resolution below.
+            }
+        }
+        if (processKey == null || processKey.isBlank()) {
+            processKey = activeProcessKey(processInstanceId);
+        }
         try {
             return Optional.of(resolvePublishedDefinition(platformDefinitionId, platformDefinitionId, processKey, processInstanceId));
         } catch (RuntimeException exception) {
@@ -5889,6 +5902,21 @@ public class FlowableProcessRuntimeService {
                 .processInstanceId(processInstanceId)
                 .singleResult();
         return historicInstance == null ? null : historicInstance.getProcessDefinitionId();
+    }
+
+    private String activeProcessKey(String processInstanceId) {
+        ProcessInstance runtimeInstance = flowableEngineFacade.runtimeService()
+                .createProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        if (runtimeInstance != null) {
+            return runtimeInstance.getProcessDefinitionKey();
+        }
+        HistoricProcessInstance historicInstance = flowableEngineFacade.historyService()
+                .createHistoricProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        return historicInstance == null ? null : historicInstance.getProcessDefinitionKey();
     }
 
     private Map<String, Object> historicVariables(String processInstanceId) {

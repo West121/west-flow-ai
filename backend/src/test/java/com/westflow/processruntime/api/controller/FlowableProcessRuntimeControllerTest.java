@@ -732,6 +732,122 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldExposeCustomPublishedSubprocessTaskInWorkbenchTodoPage() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        processDefinitionService.publish(buildSubprocessChildPayloadWithKey(
+                "oa_sub_review_custom_runtime",
+                "子流程审批自定义运行态"
+        ));
+        processDefinitionService.publish(buildSubprocessParentPayloadWithCalledProcessKey(
+                "oa_parent_with_subprocess_custom_runtime",
+                "oa_sub_review_custom_runtime"
+        ));
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_parent_with_subprocess_custom_runtime",
+                                  "businessKey": "parent_bill_custom_runtime_001",
+                                  "businessType": "OA_COMMON",
+                                  "formData": {
+                                    "billNo": "BILL-CUSTOM-RUNTIME-001"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String instanceId = startBody.path("instanceId").asText();
+        String childInstanceId = jdbcTemplate.queryForObject(
+                "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ?",
+                String.class,
+                instanceId
+        );
+
+        JsonNode pageBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/page")
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "page": 1,
+                                  "pageSize": 20,
+                                  "keyword": "子流程审批自定义运行态",
+                                  "filters": [],
+                                  "sorts": [],
+                                  "groups": []
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(pageBody.path("total").asInt()).isGreaterThanOrEqualTo(1);
+        assertThat(pageBody.path("records").toString()).contains(childInstanceId);
+        assertThat(pageBody.path("records").toString()).contains("子流程审批");
+    }
+
+    @Test
+    void shouldExposeCustomPublishedSubprocessTaskDetailInWorkbenchTodoPage() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        processDefinitionService.publish(buildSubprocessChildPayloadWithKey(
+                "oa_sub_review_custom_runtime_detail",
+                "子流程审批自定义详情"
+        ));
+        processDefinitionService.publish(buildSubprocessParentPayloadWithCalledProcessKey(
+                "oa_parent_with_subprocess_custom_runtime_detail",
+                "oa_sub_review_custom_runtime_detail"
+        ));
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_parent_with_subprocess_custom_runtime_detail",
+                                  "businessKey": "parent_bill_custom_runtime_detail_001",
+                                  "businessType": "OA_COMMON",
+                                  "formData": {
+                                    "billNo": "BILL-CUSTOM-RUNTIME-DETAIL-001"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String instanceId = startBody.path("instanceId").asText();
+        String childInstanceId = jdbcTemplate.queryForObject(
+                "SELECT child_instance_id FROM wf_process_link WHERE parent_instance_id = ?",
+                String.class,
+                instanceId
+        );
+        String childTaskId = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(childInstanceId)
+                .singleResult()
+                .getId();
+
+        JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", childTaskId)
+                        .header("Authorization", "Bearer " + managerToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        assertThat(detailBody.path("processLinks").toString()).contains(instanceId);
+        assertThat(detailBody.path("processLinks").toString()).contains(childInstanceId);
+        assertThat(detailBody.path("processName").asText()).isEqualTo("子流程审批自定义详情");
+    }
+
+    @Test
     void shouldWaitForConfirmationWhenParentResumeStrategyRequestsItEvenIfJoinModeIsAutoReturn() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");
@@ -4226,6 +4342,79 @@ class FlowableProcessRuntimeControllerTest {
                   ]
                 }
                 """, ProcessDslPayload.class);
+    }
+
+    private ProcessDslPayload buildSubprocessParentPayloadWithCalledProcessKey(
+            String processKey,
+            String calledProcessKey
+    ) throws Exception {
+        return objectMapper.readValue("""
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "%s",
+                  "processName": "主流程带子流程",
+                  "category": "OA",
+                  "processFormKey": "oa_parent_form",
+                  "processFormVersion": "1.0.0",
+                  "settings": {
+                    "allowWithdraw": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {
+                        "initiatorEditable": true
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "subprocess_1",
+                      "type": "subprocess",
+                      "name": "子流程节点",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "calledProcessKey": "%s",
+                        "calledVersionPolicy": "LATEST_PUBLISHED",
+                        "businessBindingMode": "INHERIT_PARENT",
+                        "terminatePolicy": "TERMINATE_SUBPROCESS_ONLY",
+                        "childFinishPolicy": "RETURN_TO_PARENT",
+                        "callScope": "CHILD_ONLY",
+                        "joinMode": "AUTO_RETURN",
+                        "childStartStrategy": "LATEST_PUBLISHED",
+                        "parentResumeStrategy": "AUTO_RETURN"
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "subprocess_1",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "subprocess_1",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "完成"
+                    }
+                  ]
+                }
+                """.formatted(processKey, calledProcessKey), ProcessDslPayload.class);
     }
 
     private ProcessDslPayload buildSubprocessLeafPayload() throws Exception {

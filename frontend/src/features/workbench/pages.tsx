@@ -59,6 +59,7 @@ import {
   DialogContent as ProDialogContent,
   DialogTrigger as ProDialogTrigger,
 } from '@/components/pro-dialog'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
 import { UserPickerField } from '@/features/shared/pro-form'
@@ -97,6 +98,7 @@ import {
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { type NavigateFn } from '@/hooks/use-table-url-state'
 import { handleServerError } from '@/lib/handle-server-error'
+import { toast } from 'sonner'
 import {
   RuntimeStructureSection,
 } from '@/features/workflow/runtime-structure'
@@ -114,6 +116,10 @@ import {
   WORKBENCH_RUNTIME_ENDPOINTS,
   getWorkbenchDashboardSummary,
   addSignWorkbenchTask,
+  batchClaimWorkbenchTasks,
+  batchCompleteWorkbenchTasks,
+  batchReadWorkbenchTasks,
+  batchRejectWorkbenchTasks,
   getApprovalSheetDetailByBusiness,
   claimWorkbenchTask,
   completeWorkbenchTask,
@@ -135,6 +141,7 @@ import {
   wakeUpWorkbenchInstance,
   urgeWorkbenchTask,
   type ApprovalSheetListItem,
+  type BatchWorkbenchTaskResponse,
   type CompleteWorkbenchTaskPayload,
   type WorkbenchTaskDetail,
   type WorkbenchTaskListItem,
@@ -1459,6 +1466,176 @@ export function Dashboard() {
   )
 }
 
+type WorkbenchTodoBatchActionsProps = {
+  selectedRows: WorkbenchTaskListItem[]
+  clearSelection: () => void
+}
+
+function WorkbenchTodoBatchActions({
+  selectedRows,
+  clearSelection,
+}: WorkbenchTodoBatchActionsProps) {
+  const [pendingAction, setPendingAction] = useState<{
+    type: 'claim' | 'read' | 'approve' | 'reject'
+    taskIds: string[]
+  } | null>(null)
+  const queryClient = useQueryClient()
+  const taskIds = useMemo(
+    () => selectedRows.map((item) => item.taskId).filter(Boolean),
+    [selectedRows]
+  )
+
+  function openPendingAction(action: 'claim' | 'read' | 'approve' | 'reject') {
+    setPendingAction({
+      type: action,
+      taskIds,
+    })
+  }
+
+  function closePendingAction() {
+    setPendingAction(null)
+  }
+
+  async function refreshWorkbenchList() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-page'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'dashboard-summary'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'approval-sheet-detail'] }),
+      queryClient.invalidateQueries({ queryKey: ['workbench', 'todo-detail'] }),
+    ])
+  }
+
+  function showBatchResult(label: string, response: BatchWorkbenchTaskResponse) {
+    if (response.failureCount === 0) {
+      toast.success(`${label}成功`, {
+        description: `共 ${response.totalCount} 项，已成功处理 ${response.successCount} 项。`,
+      })
+      return
+    }
+
+    toast.warning(`${label}部分完成`, {
+      description: `共 ${response.totalCount} 项，成功 ${response.successCount} 项，失败 ${response.failureCount} 项。`,
+    })
+  }
+
+  const batchClaimMutation = useMutation({
+    mutationFn: () =>
+      batchClaimWorkbenchTasks({
+        taskIds: pendingAction?.taskIds ?? [],
+        comment: '批量认领',
+      }),
+    onSuccess: async (response) => {
+      showBatchResult('批量认领', response)
+      clearSelection()
+      await refreshWorkbenchList()
+      closePendingAction()
+    },
+    onError: handleServerError,
+  })
+
+  const batchReadMutation = useMutation({
+    mutationFn: () =>
+      batchReadWorkbenchTasks({
+        taskIds: pendingAction?.taskIds ?? [],
+      }),
+    onSuccess: async (response) => {
+      showBatchResult('批量已阅', response)
+      clearSelection()
+      await refreshWorkbenchList()
+      closePendingAction()
+    },
+    onError: handleServerError,
+  })
+
+  const batchApproveMutation = useMutation({
+    mutationFn: () =>
+      batchCompleteWorkbenchTasks({
+        taskIds: pendingAction?.taskIds ?? [],
+        action: 'APPROVE',
+        comment: '批量同意',
+      }),
+    onSuccess: async (response) => {
+      showBatchResult('批量同意', response)
+      clearSelection()
+      await refreshWorkbenchList()
+      closePendingAction()
+    },
+    onError: handleServerError,
+  })
+
+  const batchRejectMutation = useMutation({
+    mutationFn: () =>
+      batchRejectWorkbenchTasks({
+        taskIds: pendingAction?.taskIds ?? [],
+        targetStrategy: 'INITIATOR',
+        reapproveStrategy: 'CONTINUE',
+        comment: '批量驳回',
+      }),
+    onSuccess: async (response) => {
+      showBatchResult('批量驳回', response)
+      clearSelection()
+      await refreshWorkbenchList()
+      closePendingAction()
+    },
+    onError: handleServerError,
+  })
+
+  return (
+    <>
+      <Button variant='outline' size='sm' onClick={() => openPendingAction('claim')}>
+        批量认领
+      </Button>
+      <Button variant='outline' size='sm' onClick={() => openPendingAction('read')}>
+        批量已阅
+      </Button>
+      <Button variant='outline' size='sm' onClick={() => openPendingAction('approve')}>
+        批量同意
+      </Button>
+      <Button variant='destructive' size='sm' onClick={() => openPendingAction('reject')}>
+        批量驳回
+      </Button>
+
+      <ConfirmDialog
+        open={pendingAction?.type === 'claim'}
+        onOpenChange={(open) => (open ? openPendingAction('claim') : closePendingAction())}
+        title='确认批量认领'
+        desc={`将批量认领已选择的 ${pendingAction?.taskIds.length ?? 0} 项待办。`}
+        handleConfirm={() => batchClaimMutation.mutate()}
+        confirmText='确认认领'
+        isLoading={batchClaimMutation.isPending}
+      />
+      <ConfirmDialog
+        open={pendingAction?.type === 'read'}
+        onOpenChange={(open) => (open ? openPendingAction('read') : closePendingAction())}
+        title='确认批量已阅'
+        desc={`将批量已阅已选择的 ${pendingAction?.taskIds.length ?? 0} 项待办。`}
+        handleConfirm={() => batchReadMutation.mutate()}
+        confirmText='确认已阅'
+        isLoading={batchReadMutation.isPending}
+      />
+      <ConfirmDialog
+        open={pendingAction?.type === 'approve'}
+        onOpenChange={(open) => (open ? openPendingAction('approve') : closePendingAction())}
+        title='确认批量同意'
+        desc={`将批量同意已选择的 ${pendingAction?.taskIds.length ?? 0} 项待办。`}
+        handleConfirm={() => batchApproveMutation.mutate()}
+        confirmText='确认同意'
+        isLoading={batchApproveMutation.isPending}
+      />
+      <ConfirmDialog
+        open={pendingAction?.type === 'reject'}
+        onOpenChange={(open) => (open ? openPendingAction('reject') : closePendingAction())}
+        title='确认批量驳回'
+        desc={`将把已选择的 ${pendingAction?.taskIds.length ?? 0} 项待办统一驳回到发起人。`}
+        handleConfirm={() => batchRejectMutation.mutate()}
+        confirmText='确认驳回'
+        destructive
+        isLoading={batchRejectMutation.isPending}
+      />
+    </>
+  )
+}
+
 // 待办列表页承接任务查询和操作入口。
 export function WorkbenchTodoListPage() {
   const search = normalizeListQuerySearch(workbenchTodoListRoute.useSearch())
@@ -1530,6 +1707,18 @@ export function WorkbenchTodoListPage() {
             />
           </>
         }
+        onRefresh={() => {
+          void tasksQuery.refetch()
+        }}
+        isRefreshing={tasksQuery.isFetching}
+        enableRowSelection
+        getRowId={(row) => row.taskId}
+        renderBulkActions={({ selectedRows, clearSelection }) => (
+          <WorkbenchTodoBatchActions
+            selectedRows={selectedRows}
+            clearSelection={clearSelection}
+          />
+        )}
       />
     </>
   )

@@ -472,6 +472,48 @@ export type HandoverWorkbenchTasksResponse = {
   status: string
 }
 
+export type BatchWorkbenchTaskPayload = {
+  taskIds: string[]
+  action?: string | null
+  operatorUserId?: string | null
+  comment?: string | null
+  taskFormData?: Record<string, unknown> | null
+  targetStrategy?: 'PREVIOUS_USER_TASK' | 'INITIATOR' | 'ANY_USER_TASK' | null
+  targetTaskId?: string | null
+  targetNodeId?: string | null
+  reapproveStrategy?: 'CONTINUE' | 'RETURN_TO_REJECTED_NODE' | null
+}
+
+export type BatchWorkbenchTaskResponse = {
+  action: string
+  totalCount: number
+  successCount: number
+  failureCount: number
+  items: Array<{
+    taskId: string
+    instanceId: string | null
+    success: boolean
+    code: string
+    status: string
+    message: string
+    completedTaskId?: string | null
+    assigneeUserId?: string | null
+    targetStrategy?: string | null
+    targetNodeId?: string | null
+    reapproveStrategy?: string | null
+    nextTasks: Array<{
+      taskId: string
+      nodeId: string
+      nodeName: string
+      status: string
+      assignmentMode: string | null
+      candidateUserIds: string[]
+      candidateGroupIds?: string[]
+      assigneeUserId?: string | null
+    }>
+  }>
+}
+
 export type StartWorkbenchProcessPayload = {
   processKey: string
   businessKey?: string | null
@@ -672,6 +714,16 @@ export async function claimWorkbenchTask(
   return unwrapResponse(response)
 }
 
+export async function batchClaimWorkbenchTasks(
+  payload: BatchWorkbenchTaskPayload
+): Promise<BatchWorkbenchTaskResponse> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<BatchWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', 'batch', 'claim'), payload)
+
+  return unwrapResponse(response)
+}
+
 export async function transferWorkbenchTask(
   taskId: string,
   payload: TransferWorkbenchTaskPayload
@@ -783,6 +835,16 @@ export async function readWorkbenchTask(
   return unwrapResponse(response)
 }
 
+export async function batchReadWorkbenchTasks(
+  payload: BatchWorkbenchTaskPayload
+): Promise<BatchWorkbenchTaskResponse> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<BatchWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', 'batch', 'read'), payload)
+
+  return unwrapResponse(response)
+}
+
 export async function rejectWorkbenchTask(
   taskId: string,
   payload: RejectWorkbenchTaskPayload
@@ -790,6 +852,16 @@ export async function rejectWorkbenchTask(
   const response = await apiClient.post<
     WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
   >(resolveWorkbenchRuntimePath('tasks', taskId, 'reject'), payload)
+
+  return unwrapResponse(response)
+}
+
+export async function batchRejectWorkbenchTasks(
+  payload: BatchWorkbenchTaskPayload
+): Promise<BatchWorkbenchTaskResponse> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<BatchWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', 'batch', 'reject'), payload)
 
   return unwrapResponse(response)
 }
@@ -834,6 +906,16 @@ export async function completeWorkbenchTask(
   const response = await apiClient.post<
     WorkbenchApiSuccess<CompleteWorkbenchTaskResponse>
   >(resolveWorkbenchRuntimePath('tasks', taskId, 'complete'), payload)
+
+  return unwrapResponse(response)
+}
+
+export async function batchCompleteWorkbenchTasks(
+  payload: BatchWorkbenchTaskPayload
+): Promise<BatchWorkbenchTaskResponse> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<BatchWorkbenchTaskResponse>
+  >(resolveWorkbenchRuntimePath('tasks', 'batch', 'complete'), payload)
 
   return unwrapResponse(response)
 }

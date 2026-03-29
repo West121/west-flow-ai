@@ -452,15 +452,10 @@ export function ProTable<TData extends object>({
     }
     return resolveBoardColumns(tableData)
   }, [resolveBoardColumns, tableData])
-  const currentRows = useMemo(
-    () => table.getRowModel().rows.map((row) => row.original as TData),
-    [table]
-  )
-  const selectedRows = useMemo(
-    () =>
-      table.getFilteredSelectedRowModel().rows.map((row) => row.original as TData),
-    [table]
-  )
+  const currentRows = table.getRowModel().rows.map((row) => row.original as TData)
+  const selectedRows = table
+    .getFilteredSelectedRowModel()
+    .rows.map((row) => row.original as TData)
   const visibleColumnCount = table.getVisibleLeafColumns().length
   const groupedRows = useMemo(() => {
     if (!activeGroupOption || viewMode !== 'table') {

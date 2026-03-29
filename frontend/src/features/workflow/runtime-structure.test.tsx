@@ -207,4 +207,44 @@ describe('runtime structure section', () => {
     fireEvent.click(screen.getByRole('button', { name: '父流程确认恢复' }))
     expect(confirmedLinkIds).toEqual(['subprocess_wait_confirm_001'])
   })
+
+  it('still renders subprocess links when current instance is the child instance', () => {
+    render(
+      <RuntimeStructureSection
+        currentInstanceId='pi_sub_001'
+        links={[
+          {
+            linkId: 'subprocess_child_focus_001',
+            rootInstanceId: 'pi_root',
+            parentInstanceId: 'pi_root',
+            childInstanceId: 'pi_sub_001',
+            parentNodeId: 'subprocess_review',
+            calledProcessKey: 'oa_sub_review',
+            calledDefinitionId: 'oa_sub_review:1:1004',
+            calledVersionPolicy: 'LATEST_PUBLISHED',
+            calledVersion: null,
+            linkType: 'CALL_ACTIVITY',
+            status: 'RUNNING',
+            callScope: 'CHILD_ONLY',
+            joinMode: 'WAIT_PARENT_CONFIRM',
+            childStartStrategy: 'LATEST_PUBLISHED',
+            parentResumeStrategy: 'WAIT_PARENT_CONFIRM',
+            resumeDecisionReason: 'PARENT_CONFIRM_RESUMED',
+            terminatePolicy: 'TERMINATE_SUBPROCESS_ONLY',
+            childFinishPolicy: 'RETURN_TO_PARENT',
+            createdAt: '2026-03-24T10:10:00+08:00',
+            finishedAt: null,
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getByText('根流程实例：pi_root')).toBeInTheDocument()
+    expect(
+      screen.getByText((_, element) =>
+        element?.textContent?.replace(/\s+/g, '') === '子流程实例：pi_sub_001'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText('子流程编码：oa_sub_review')).toBeInTheDocument()
+  })
 })
