@@ -8,10 +8,13 @@ import com.westflow.identity.response.CurrentUserResponse;
 import com.westflow.identity.service.IdentityAuthService;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import com.westflow.processdef.service.ProcessRuleMetadataService;
+import com.westflow.processdef.service.ProcessRuleValidationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ProcessDefinitionController {
 
     private final ProcessDefinitionService processDefinitionService;
+    private final ProcessRuleMetadataService processRuleMetadataService;
+    private final ProcessRuleValidationService processRuleValidationService;
     private final IdentityAuthService identityAuthService;
 
     // 保存或覆盖草稿。
@@ -45,6 +50,23 @@ public class ProcessDefinitionController {
     @SaCheckLogin
     public ApiResponse<ProcessDefinitionDetailResponse> detail(@PathVariable String processDefinitionId) {
         return ApiResponse.success(processDefinitionService.detail(processDefinitionId));
+    }
+
+    // 查询流程分支规则元数据。
+    @GetMapping("/rule-metadata")
+    @SaCheckLogin
+    public ApiResponse<ProcessRuleMetadataResponse> ruleMetadata(
+            @RequestParam(name = "processDefinitionId", required = false) String processDefinitionId,
+            @RequestParam(name = "nodeId", required = false) String nodeId
+    ) {
+        return ApiResponse.success(processRuleMetadataService.build(processDefinitionId, nodeId));
+    }
+
+    // 校验流程分支规则表达式。
+    @PostMapping("/rule-validate")
+    @SaCheckLogin
+    public ApiResponse<ProcessRuleValidationResponse> ruleValidate(@RequestBody ProcessRuleValidationRequest request) {
+        return ApiResponse.success(processRuleValidationService.validate(request));
     }
 
     // 校验协同房间并返回授权信息。

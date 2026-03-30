@@ -212,6 +212,73 @@ class ProcessDefinitionControllerTest {
         });
     }
 
+    @Test
+    void shouldExposeRuleMetadataForDesignerEditor() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/draft")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDslWithFields("oa_leave", "请假审批", "OA")))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(get("/api/v1/process-definitions/rule-metadata")
+                        .header("Authorization", "Bearer " + token)
+                        .param("processDefinitionId", "oa_leave:draft")
+                        .param("nodeId", "approve_manager"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        JsonNode variables = data.path("variables");
+        JsonNode functions = data.path("functions");
+        JsonNode snippets = data.path("snippets");
+
+        assertThat(variables.isArray()).isTrue();
+        assertThat(findVariable(variables, "form").path("children").toString()).contains("days");
+        assertThat(findVariable(variables, "process").path("children").toString()).contains("processKey");
+        assertThat(findVariable(variables, "node").path("children").toString()).contains("currentNodeId");
+        assertThat(findVariable(variables, "system").path("children").toString()).contains("currentUserId");
+        assertThat(functions.toString()).contains("ifElse");
+        assertThat(snippets.toString()).contains("boolean-template");
+    }
+
+    @Test
+    void shouldValidateRuleExpressionThroughControllerContract() throws Exception {
+        String token = login();
+
+        mockMvc.perform(post("/api/v1/process-definitions/draft")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validProcessDslWithFields("oa_leave", "请假审批", "OA")))
+                .andExpect(status().isOk());
+
+        String response = mockMvc.perform(post("/api/v1/process-definitions/rule-validate")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processDefinitionId": "oa_leave:draft",
+                                  "nodeId": "approve_manager",
+                                  "expression": "ifElse(days > 3, true, false)"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode data = objectMapper.readTree(response).path("data");
+        assertThat(data.path("valid").asBoolean()).isTrue();
+        assertThat(data.path("normalizedExpression").asText()).isEqualTo("ifElse(days > 3, true, false)");
+        assertThat(data.path("summary").asText()).contains("试算结果");
+        assertThat(data.path("errors").isArray()).isTrue();
+        assertThat(data.path("errors").size()).isEqualTo(0);
+        assertThat(data.path("availableFunctions").toString()).contains("ifElse");
+    }
+
     private String login() throws Exception {
         String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -304,5 +371,102 @@ class ProcessDefinitionControllerTest {
                   ]
                 }
                 """.formatted(processKey, processName, category, processKey);
+    }
+
+    private String validProcessDslWithFields(String processKey, String processName, String category) {
+        return """
+                {
+                  "dslVersion": "1.0.0",
+                  "processKey": "%s",
+                  "processName": "%s",
+                  "category": "%s",
+                  "processFormKey": "%s-form",
+                  "processFormVersion": "1.0.0",
+                  "formFields": [
+                    {
+                      "fieldKey": "days",
+                      "label": "请假天数",
+                      "valueType": "number",
+                      "required": true
+                    },
+                    {
+                      "fieldKey": "reason",
+                      "label": "请假原因",
+                      "valueType": "string",
+                      "required": true
+                    }
+                  ],
+                  "settings": {
+                    "allowWithdraw": true,
+                    "allowUrge": true,
+                    "allowTransfer": true
+                  },
+                  "nodes": [
+                    {
+                      "id": "start_1",
+                      "type": "start",
+                      "name": "开始",
+                      "position": {"x": 100, "y": 100},
+                      "config": {"initiatorEditable": true},
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "approve_manager",
+                      "type": "approver",
+                      "name": "部门负责人审批",
+                      "position": {"x": 320, "y": 100},
+                      "config": {
+                        "assignment": {
+                          "mode": "USER",
+                          "userIds": ["usr_002"],
+                          "roleCodes": [],
+                          "departmentRef": "",
+                          "formFieldKey": ""
+                        },
+                        "approvalPolicy": {
+                          "type": "SEQUENTIAL",
+                          "voteThreshold": null
+                        },
+                        "operations": ["APPROVE", "REJECT", "RETURN"],
+                        "commentRequired": false
+                      },
+                      "ui": {"width": 240, "height": 88}
+                    },
+                    {
+                      "id": "end_1",
+                      "type": "end",
+                      "name": "结束",
+                      "position": {"x": 540, "y": 100},
+                      "config": {},
+                      "ui": {"width": 240, "height": 88}
+                    }
+                  ],
+                  "edges": [
+                    {
+                      "id": "edge_1",
+                      "source": "start_1",
+                      "target": "approve_manager",
+                      "priority": 10,
+                      "label": "提交"
+                    },
+                    {
+                      "id": "edge_2",
+                      "source": "approve_manager",
+                      "target": "end_1",
+                      "priority": 10,
+                      "label": "通过"
+                    }
+                  ]
+                }
+                """.formatted(processKey, processName, category, processKey);
+    }
+
+    private JsonNode findVariable(JsonNode variables, String key) {
+        for (JsonNode variable : variables) {
+            if (key.equals(variable.path("key").asText())) {
+                return variable;
+            }
+        }
+        throw new AssertionError("未找到变量：" + key);
     }
 }

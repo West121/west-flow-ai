@@ -1,6 +1,7 @@
 package com.westflow.processruntime.support;
 
 import com.googlecode.aviator.AviatorEvaluator;
+import com.googlecode.aviator.Expression;
 import com.googlecode.aviator.runtime.function.AbstractFunction;
 import com.googlecode.aviator.runtime.function.FunctionUtils;
 import com.googlecode.aviator.runtime.type.AviatorBoolean;
@@ -10,6 +11,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,6 +22,44 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class WorkflowFormulaEvaluator {
 
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
+    private static final List<FunctionMetadata> FUNCTION_METADATA = List.of(
+            new FunctionMetadata(
+                    "ifElse",
+                    "条件分支函数，条件为真时返回第二个参数，否则返回第三个参数。",
+                    List.of(
+                            new FunctionParameterMetadata("condition", "条件表达式", "boolean", true),
+                            new FunctionParameterMetadata("whenTrue", "条件为真时返回的值", "any", true),
+                            new FunctionParameterMetadata("whenFalse", "条件为假时返回的值", "any", true)
+                    ),
+                    "ifElse(days > 3, true, false)"
+            ),
+            new FunctionMetadata(
+                    "contains",
+                    "判断字符串或集合中是否包含目标值。",
+                    List.of(
+                            new FunctionParameterMetadata("target", "被判断的字符串或集合", "string|collection", true),
+                            new FunctionParameterMetadata("needle", "待查找的值", "any", true)
+                    ),
+                    "contains(roleNames, 'HR')"
+            ),
+            new FunctionMetadata(
+                    "daysBetween",
+                    "计算两个日期之间相差的天数。",
+                    List.of(
+                            new FunctionParameterMetadata("left", "左侧日期", "date|string", true),
+                            new FunctionParameterMetadata("right", "右侧日期", "date|string", true)
+                    ),
+                    "daysBetween(startDate, endDate)"
+            ),
+            new FunctionMetadata(
+                    "isBlank",
+                    "判断值是否为空白。",
+                    List.of(
+                            new FunctionParameterMetadata("value", "待判断的值", "any", true)
+                    ),
+                    "isBlank(comment)"
+            )
+    );
 
     private WorkflowFormulaEvaluator() {
     }
@@ -32,7 +72,28 @@ public final class WorkflowFormulaEvaluator {
         return AviatorEvaluator.execute(normalizeExpression(expression), variables, true);
     }
 
-    private static String normalizeExpression(String expression) {
+    public static Expression compile(String expression) {
+        registerFunctionsIfNeeded();
+        return AviatorEvaluator.compile(normalizeExpression(expression), true);
+    }
+
+    public static void validateExpression(String expression) {
+        compile(expression);
+    }
+
+    public static List<FunctionMetadata> functionMetadata() {
+        return FUNCTION_METADATA;
+    }
+
+    public static String engineName() {
+        return "Aviator";
+    }
+
+    public static String engineVersion() {
+        return AviatorEvaluator.VERSION;
+    }
+
+    public static String normalizeExpression(String expression) {
         String normalized = expression.trim();
         if (normalized.startsWith("${") && normalized.endsWith("}")) {
             return normalized.substring(2, normalized.length() - 1).trim();
@@ -143,5 +204,21 @@ public final class WorkflowFormulaEvaluator {
             boolean blank = resolved == null || String.valueOf(resolved).isBlank();
             return AviatorBoolean.valueOf(blank);
         }
+    }
+
+    public record FunctionMetadata(
+            String name,
+            String description,
+            List<FunctionParameterMetadata> parameters,
+            String example
+    ) {
+    }
+
+    public record FunctionParameterMetadata(
+            String name,
+            String description,
+            String type,
+            boolean required
+    ) {
     }
 }
