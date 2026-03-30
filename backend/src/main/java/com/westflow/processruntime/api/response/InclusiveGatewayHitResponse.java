@@ -7,32 +7,46 @@ import java.util.List;
  * 包容分支命中摘要。
  */
 public record InclusiveGatewayHitResponse(
+        // 分支节点标识
         String splitNodeId,
         String splitNodeName,
+        // 汇聚节点标识
         String joinNodeId,
         String joinNodeName,
+        // 默认分支标识
         String defaultBranchId,
         Integer requiredBranchCount,
+        // 分支汇聚策略
         String branchMergePolicy,
         String gatewayStatus,
+        // 目标总数
         int totalTargetCount,
         int eligibleTargetCount,
+        // 已激活目标数
         int activatedTargetCount,
         List<String> activatedTargetNodeIds,
+        // 已激活节点名称列表
         List<String> activatedTargetNodeNames,
         List<String> skippedTargetNodeIds,
+        // 已跳过节点名称列表
         List<String> skippedTargetNodeNames,
         List<Integer> branchPriorities,
+        // 分支标签列表
         List<String> branchLabels,
         List<String> branchExpressions,
+        // 已完成选中目标数
         int completedSelectedTargetCount,
         int pendingSelectedTargetCount,
+        // 选中连线标识列表
         List<String> selectedEdgeIds,
         List<String> selectedBranchLabels,
+        // 选中分支优先级列表
         List<Integer> selectedBranchPriorities,
         List<String> selectedDecisionReasons,
+        // 是否选择默认分支
         boolean defaultBranchSelected,
         String decisionSummary,
+        // 首次激活时间
         OffsetDateTime firstActivatedAt,
         OffsetDateTime finishedAt
 ) {

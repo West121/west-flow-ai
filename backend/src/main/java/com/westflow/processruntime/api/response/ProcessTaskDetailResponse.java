@@ -9,68 +9,100 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.ALWAYS)
 // 任务详情返回值，包含流程、任务、轨迹和表单数据。
 public record ProcessTaskDetailResponse(
+        // 任务标识
         String taskId,
         String instanceId,
+        // 流程定义标识
         String processDefinitionId,
         String processKey,
+        // 流程名称
         String processName,
         String businessKey,
+        // 业务类型
         String businessType,
         String applicantUserId,
+        // 发起人岗位标识
         String initiatorPostId,
         String initiatorPostName,
+        // 发起人部门标识
         String initiatorDepartmentId,
         String initiatorDepartmentName,
+        // 业务数据
         Map<String, Object> businessData,
         String automationStatus,
+        // 流程节点列表
         List<ProcessDslPayload.Node> flowNodes,
         List<ProcessDslPayload.Edge> flowEdges,
+        // 流程事件列表
         List<ProcessInstanceEventResponse> instanceEvents,
         List<ProcessTaskTraceItemResponse> taskTrace,
+        // 自动化动作轨迹列表
         List<ProcessAutomationTraceItemResponse> automationActionTrace,
         List<ProcessNotificationSendRecordResponse> notificationSendRecords,
+        // 节点标识
         String nodeId,
         String nodeName,
+        // 任务类型
         String taskKind,
         String taskSemanticMode,
+        // 状态
         String status,
         String assignmentMode,
+        // 候选人用户列表
         List<String> candidateUserIds,
         List<String> candidateGroupIds,
+        // 处理人用户标识
         String assigneeUserId,
         String action,
+        // 操作人用户标识
         String operatorUserId,
         String comment,
+        // 接收时间
         OffsetDateTime receiveTime,
         OffsetDateTime readTime,
+        // 处理开始时间
         OffsetDateTime handleStartTime,
         OffsetDateTime handleEndTime,
+        // 处理耗时秒数
         Long handleDurationSeconds,
         String targetStrategy,
+        // 目标节点标识
         String targetNodeId,
         String targetNodeName,
+        // 重审策略
         String reapproveStrategy,
         String actingMode,
+        // 被代办人标识
         String actingForUserId,
         String delegatedByUserId,
+        // 转办来源人标识
         String handoverFromUserId,
         OffsetDateTime createdAt,
+        // 更新时间
         OffsetDateTime updatedAt,
         OffsetDateTime completedAt,
+        // 实例状态
         String instanceStatus,
         String processFormKey,
+        // 流程表单版本
         String processFormVersion,
         String nodeFormKey,
+        // 节点表单版本
         String nodeFormVersion,
         String effectiveFormKey,
+        // 生效表单版本
         String effectiveFormVersion,
         List<WorkflowFieldBinding> fieldBindings,
+        // 表单数据
         Map<String, Object> formData,
         Map<String, Object> taskFormData,
+        // 会签分组列表
         List<CountersignTaskGroupResponse> countersignGroups,
         List<InclusiveGatewayHitResponse> inclusiveGatewayHits,
+        // 流程关联列表
         List<ProcessInstanceLinkResponse> processLinks,
         List<RuntimeAppendLinkResponse> appendLinks,
+        // 当前激活任务标识列表
         List<String> activeTaskIds,
         Map<String, String> userDisplayNames,
         Map<String, String> groupDisplayNames

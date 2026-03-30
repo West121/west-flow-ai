@@ -7,8 +7,10 @@ import jakarta.validation.constraints.NotNull;
  * 公司保存请求，供新建和编辑复用。
  */
 public record SaveSystemCompanyRequest(
+        // 公司名称。
         @NotBlank(message = "请输入公司名称")
         String companyName,
+        // 是否启用。
         @NotNull(message = "请选择启用状态")
         Boolean enabled
 ) {

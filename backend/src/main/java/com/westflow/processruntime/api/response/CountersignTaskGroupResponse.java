@@ -8,18 +8,25 @@ import java.util.List;
  */
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record CountersignTaskGroupResponse(
+        // 用户组标识
         String groupId,
         String instanceId,
+        // 节点标识
         String nodeId,
         String nodeName,
+        // 审批模式
         String approvalMode,
         String groupStatus,
+        // 总数
         int totalCount,
         int completedCount,
+        // active数量。
         int activeCount,
         int waitingCount,
+        // voteThresholdPercent。
         Integer voteThresholdPercent,
         Integer approvedWeight,
+        // rejectedWeight。
         Integer rejectedWeight,
         String decisionStatus,
         List<CountersignTaskGroupMemberResponse> members

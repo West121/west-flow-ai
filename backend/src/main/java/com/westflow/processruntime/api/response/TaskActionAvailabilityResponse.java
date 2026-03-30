@@ -2,22 +2,39 @@ package com.westflow.processruntime.api.response;
 
 // 任务动作可用性返回值。
 public record TaskActionAvailabilityResponse(
+        // 是否可认领。
         boolean canClaim,
+        // 是否可同意。
         boolean canApprove,
+        // 是否可驳回。
         boolean canReject,
+        // 是否可转办。
         boolean canTransfer,
+        // 是否可退回。
         boolean canReturn,
+        // 是否可加签。
         boolean canAddSign,
+        // 是否可减签。
         boolean canRemoveSign,
+        // 是否可撤销。
         boolean canRevoke,
+        // 是否可催办。
         boolean canUrge,
+        // 是否可已阅。
         boolean canRead,
+        // 是否可走驳回路由。
         boolean canRejectRoute,
+        // 是否可跳转。
         boolean canJump,
+        // 是否可拿回。
         boolean canTakeBack,
+        // 是否可唤醒。
         boolean canWakeUp,
+        // 是否可委派。
         boolean canDelegate,
+        // 是否可离职转办。
         boolean canHandover,
+        // 是否可签章。
         boolean canSign
 ) {
 }
