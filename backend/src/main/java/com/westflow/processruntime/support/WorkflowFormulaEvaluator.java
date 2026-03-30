@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 /**
  * 流程设计器受控公式的统一执行入口，避免不同运行态各自维护一套函数表。
@@ -22,42 +23,57 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class WorkflowFormulaEvaluator {
 
     private static final AtomicBoolean INITIALIZED = new AtomicBoolean(false);
+    private static final Pattern VARIABLE_REFERENCE_PATTERN =
+            Pattern.compile("(?<![\\w\"'])\\$([A-Za-z_][\\w.]*)(?![\\w\"])");
     private static final List<FunctionMetadata> FUNCTION_METADATA = List.of(
             new FunctionMetadata(
                     "ifElse",
+                    "基础函数",
                     "条件分支函数，条件为真时返回第二个参数，否则返回第三个参数。",
                     List.of(
                             new FunctionParameterMetadata("condition", "条件表达式", "boolean", true),
                             new FunctionParameterMetadata("whenTrue", "条件为真时返回的值", "any", true),
                             new FunctionParameterMetadata("whenFalse", "条件为假时返回的值", "any", true)
                     ),
-                    "ifElse(days > 3, true, false)"
+                    "ifElse($days > 3, true, false)"
             ),
             new FunctionMetadata(
                     "contains",
+                    "基础函数",
                     "判断字符串或集合中是否包含目标值。",
                     List.of(
                             new FunctionParameterMetadata("target", "被判断的字符串或集合", "string|collection", true),
                             new FunctionParameterMetadata("needle", "待查找的值", "any", true)
                     ),
-                    "contains(roleNames, 'HR')"
+                    "contains($roleNames, 'HR')"
             ),
             new FunctionMetadata(
                     "daysBetween",
+                    "基础函数",
                     "计算两个日期之间相差的天数。",
                     List.of(
                             new FunctionParameterMetadata("left", "左侧日期", "date|string", true),
                             new FunctionParameterMetadata("right", "右侧日期", "date|string", true)
                     ),
-                    "daysBetween(startDate, endDate)"
+                    "daysBetween($startDate, $endDate)"
             ),
             new FunctionMetadata(
                     "isBlank",
+                    "基础函数",
                     "判断值是否为空白。",
                     List.of(
                             new FunctionParameterMetadata("value", "待判断的值", "any", true)
                     ),
-                    "isBlank(comment)"
+                    "isBlank($comment)"
+            ),
+            new FunctionMetadata(
+                    "isLongLeave",
+                    "业务函数",
+                    "根据请假天数判断是否属于长假，默认阈值为 3 天及以上。",
+                    List.of(
+                            new FunctionParameterMetadata("days", "请假天数", "number", true)
+                    ),
+                    "isLongLeave($days)"
             )
     );
 
@@ -96,9 +112,9 @@ public final class WorkflowFormulaEvaluator {
     public static String normalizeExpression(String expression) {
         String normalized = expression.trim();
         if (normalized.startsWith("${") && normalized.endsWith("}")) {
-            return normalized.substring(2, normalized.length() - 1).trim();
+            normalized = normalized.substring(2, normalized.length() - 1).trim();
         }
-        return normalized;
+        return VARIABLE_REFERENCE_PATTERN.matcher(normalized).replaceAll("$1");
     }
 
     private static void registerFunctionsIfNeeded() {
@@ -109,6 +125,7 @@ public final class WorkflowFormulaEvaluator {
         AviatorEvaluator.addFunction(new ContainsFunction());
         AviatorEvaluator.addFunction(new DaysBetweenFunction());
         AviatorEvaluator.addFunction(new IsBlankFunction());
+        AviatorEvaluator.addFunction(new IsLongLeaveFunction());
     }
 
     private static final class IfElseFunction extends AbstractFunction {
@@ -206,8 +223,26 @@ public final class WorkflowFormulaEvaluator {
         }
     }
 
+    private static final class IsLongLeaveFunction extends AbstractFunction {
+
+        @Override
+        public String getName() {
+            return "isLongLeave";
+        }
+
+        @Override
+        public AviatorObject call(Map<String, Object> env, AviatorObject days) {
+            Number resolved = FunctionUtils.getNumberValue(days, env);
+            if (resolved == null) {
+                return AviatorBoolean.FALSE;
+            }
+            return AviatorBoolean.valueOf(resolved.doubleValue() >= 3D);
+        }
+    }
+
     public record FunctionMetadata(
             String name,
+            String category,
             String description,
             List<FunctionParameterMetadata> parameters,
             String example

@@ -40,6 +40,7 @@ export function WorkflowFieldSelector({
   onChange,
   options,
   placeholder,
+  compact = false,
 }: {
   label: string
   description?: string
@@ -47,6 +48,7 @@ export function WorkflowFieldSelector({
   onChange: (value: string) => void
   options?: WorkflowFieldOption[]
   placeholder?: string
+  compact?: boolean
 }) {
   const fieldOptions = options?.length ? options : fallbackFieldOptions
   const datalistId = useMemo(
@@ -57,7 +59,7 @@ export function WorkflowFieldSelector({
   return (
     <div className='grid gap-2'>
       <Label>{label}</Label>
-      {description ? <p className='text-xs text-muted-foreground'>{description}</p> : null}
+      {!compact && description ? <p className='text-xs text-muted-foreground'>{description}</p> : null}
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -71,19 +73,21 @@ export function WorkflowFieldSelector({
           </option>
         ))}
       </datalist>
-      <div className='flex flex-wrap gap-2'>
-        {fieldOptions.slice(0, 6).map((item) => (
-          <Button
-            key={item.fieldKey}
-            type='button'
-            variant='secondary'
-            size='sm'
-            onClick={() => onChange(item.fieldKey)}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </div>
+      {!compact ? (
+        <div className='flex flex-wrap gap-2'>
+          {fieldOptions.slice(0, 6).map((item) => (
+            <Button
+              key={item.fieldKey}
+              type='button'
+              variant='secondary'
+              size='sm'
+              onClick={() => onChange(item.fieldKey)}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

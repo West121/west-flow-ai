@@ -94,6 +94,7 @@ import { useWorkflowDesignerStore } from './designer/store'
 import {
   type WorkflowEdge,
   type WorkflowHelperLines,
+  type WorkflowInclusiveGatewayNodeConfig,
   type WorkflowNode,
 } from './designer/types'
 import { WorkflowNodeCard } from './designer/workflow-node'
@@ -171,6 +172,32 @@ const workflowEdgeTypes = {
   quickInsert: WorkflowQuickInsertEdge,
 }
 
+function supportsBranchCreation(node: WorkflowNode) {
+  const inclusiveConfig =
+    node.data.kind === 'inclusive'
+      ? (node.data.config as WorkflowInclusiveGatewayNodeConfig)
+      : null
+  return (
+    node.data.kind === 'condition' ||
+    (node.data.kind === 'inclusive' && inclusiveConfig?.gatewayDirection === 'SPLIT')
+  )
+}
+
+function allowsQuickInsertOnEdge(
+  edge: WorkflowEdge,
+  nodes: WorkflowNode[],
+  _edges: WorkflowEdge[]
+) {
+  const sourceNode = nodes.find((node) => node.id === edge.source)
+  const targetNode = nodes.find((node) => node.id === edge.target)
+
+  if (!sourceNode || !targetNode) {
+    return true
+  }
+
+  return true
+}
+
 const helperLineThreshold = 16
 // 默认先挂一套请假流程表单，保证设计器打开后就能直接预览和发布。
 const defaultProcessForm = findProcessRuntimeFormByProcessKey('oa_leave')
@@ -215,6 +242,7 @@ type PersistedDesignerDraft = {
     nodes: WorkflowNode[]
     edges: WorkflowEdge[]
     selectedNodeId: string | null
+    selectedEdgeId: string | null
   }
   viewport: {
     x: number
@@ -262,6 +290,27 @@ function resolveStatusLabel(status: string): DefinitionRow['status'] {
   return status === 'PUBLISHED' ? '已发布' : '草稿'
 }
 
+function formatDateTime(value: string | null | undefined) {
+  if (!value) {
+    return '-'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
 const definitionColumns: ColumnDef<DefinitionRow>[] = [
   {
     accessorKey: 'processName',
@@ -305,9 +354,9 @@ const definitionColumns: ColumnDef<DefinitionRow>[] = [
     accessorKey: 'createdAt',
     header: '发布时间',
     cell: ({ row }) => (
-      <span className='text-sm text-muted-foreground'>
-        {row.original.createdAt}
-      </span>
+      <LongText className='max-w-full text-sm text-muted-foreground'>
+        {formatDateTime(row.original.createdAt)}
+      </LongText>
     ),
   },
   {
@@ -640,6 +689,9 @@ function WorkflowDesignerWorkspace({
   const selectedNodeId = useWorkflowDesignerStore(
     (state) => state.history.present.selectedNodeId
   )
+  const selectedEdgeId = useWorkflowDesignerStore(
+    (state) => state.history.present.selectedEdgeId
+  )
   const snapshot = useWorkflowDesignerStore((state) => state.history.present)
   const helperLines = useWorkflowDesignerStore((state) => state.helperLines)
   const canUndo = useWorkflowDesignerStore(
@@ -651,8 +703,17 @@ function WorkflowDesignerWorkspace({
   const setSelectedNodeId = useWorkflowDesignerStore(
     (state) => state.setSelectedNodeId
   )
+  const setSelectedEdgeId = useWorkflowDesignerStore(
+    (state) => state.setSelectedEdgeId
+  )
   const updateNodeDraft = useWorkflowDesignerStore(
     (state) => state.updateNodeDraft
+  )
+  const updateEdgeDraft = useWorkflowDesignerStore(
+    (state) => state.updateEdgeDraft
+  )
+  const addBranchOnGateway = useWorkflowDesignerStore(
+    (state) => state.addBranchOnGateway
   )
   const setHelperLines = useWorkflowDesignerStore(
     (state) => state.setHelperLines
@@ -740,6 +801,10 @@ function WorkflowDesignerWorkspace({
           ...node,
           data: {
             ...node.data,
+            designerUi: {
+              canAddBranch: supportsBranchCreation(node),
+              readOnly: isReadOnly,
+            },
             collaboration: {
               selectedBy,
               editingBy,
@@ -747,11 +812,20 @@ function WorkflowDesignerWorkspace({
           },
         }
       }),
-    [collaborationPeers, nodes]
+    [collaborationPeers, isReadOnly, nodes]
   )
   const canvasEdges = useMemo(
-    () => edges.map((edge) => ({ ...edge, type: 'quickInsert' })),
-    [edges]
+    () =>
+      edges.map((edge) => ({
+          ...edge,
+          type: 'quickInsert',
+          selected: edge.id === selectedEdgeId,
+          data: {
+            ...edge.data,
+            quickInsertEnabled: allowsQuickInsertOnEdge(edge, nodes, edges),
+          },
+        })),
+    [edges, nodes, selectedEdgeId]
   )
 
   const definitionMeta = useMemo<ProcessDefinitionMeta>(() => {
@@ -1023,6 +1097,10 @@ function WorkflowDesignerWorkspace({
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId]
   )
+  const selectedEdge = useMemo(
+    () => edges.find((edge) => edge.id === selectedEdgeId) ?? null,
+    [edges, selectedEdgeId]
+  )
 
   useLayoutEffect(() => {
     designerHydratedRef.current = false
@@ -1047,13 +1125,14 @@ function WorkflowDesignerWorkspace({
     }
 
     if (!detailQuery.data) {
-      hydrateSnapshot({
-        nodes: [],
-        edges: [],
-        selectedNodeId: null,
-      })
-      return
-    }
+        hydrateSnapshot({
+          nodes: [],
+          edges: [],
+          selectedNodeId: null,
+          selectedEdgeId: null,
+        })
+        return
+      }
 
     hydrateSnapshot(processDefinitionDetailToWorkflowSnapshot(detailQuery.data))
     designerHydratedRef.current = true
@@ -1284,8 +1363,13 @@ function WorkflowDesignerWorkspace({
                     setSelectedNodeId(node.id)
                     setActivePropertyTab('node')
                   }}
+                  onEdgeClick={(_, edge) => {
+                    setSelectedEdgeId(edge.id)
+                    setActivePropertyTab('node')
+                  }}
                   onPaneClick={() => {
                     setSelectedNodeId(null)
+                    setSelectedEdgeId(null)
                   }}
                   onNodeDrag={(_, node) => {
                     setHelperLines(findHelperLines(node, nodes))
@@ -1410,9 +1494,15 @@ function WorkflowDesignerWorkspace({
             ) : null}
             <NodeConfigPanel
               node={selectedNode}
+              edge={selectedEdge}
+              nodes={nodes}
               edges={edges}
+              processDefinitionId={processDefinitionId}
+              processMeta={definitionMeta}
               processFormFields={definitionMeta.formFields}
               onApply={isReadOnly ? () => undefined : updateNodeDraft}
+              onApplyEdge={isReadOnly ? () => undefined : updateEdgeDraft}
+              onAddBranch={isReadOnly ? undefined : addBranchOnGateway}
             />
           </div>
         }

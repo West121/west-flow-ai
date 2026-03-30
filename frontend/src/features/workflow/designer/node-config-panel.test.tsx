@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { NodeConfigPanel } from './node-config-panel'
 import { workflowNodeTemplates } from './palette'
@@ -8,6 +9,84 @@ import {
   type WorkflowNode,
   type WorkflowReminderChannel,
 } from './types'
+
+vi.mock('@monaco-editor/react', () => ({
+  default: ({
+    value,
+    onChange,
+  }: {
+    value?: string
+    onChange?: (value: string) => void
+  }) => (
+    <textarea
+      data-testid='workflow-rule-editor'
+      value={value ?? ''}
+      onChange={(event) => onChange?.(event.target.value)}
+    />
+  ),
+}))
+
+vi.mock('@/lib/api/workflow', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/workflow')>('@/lib/api/workflow')
+  return {
+    ...actual,
+    getProcessRuleMetadata: vi.fn(async () => ({
+      variables: [
+        {
+          key: 'days',
+          label: '请假天数',
+          scope: 'FORM',
+          valueType: 'number',
+          description: '流程表单字段：请假天数',
+        },
+      ],
+      functions: [
+        {
+          name: 'ifElse',
+          label: '条件函数',
+          signature: 'ifElse(condition, whenTrue, whenFalse)',
+          description: '按条件返回不同结果',
+          category: '条件',
+          snippet: 'ifElse(condition, whenTrue, whenFalse)',
+        },
+      ],
+      snippets: [
+        {
+          key: 'and',
+          label: '并且',
+          description: '组合两个条件',
+          template: '(leftCondition) && (rightCondition)',
+        },
+      ],
+    })),
+    validateProcessRule: vi.fn(async ({ expression }: { expression: string }) => ({
+      valid: Boolean(expression?.trim()),
+      normalizedExpression: expression?.trim() || null,
+      summary: expression?.trim() ? '规则校验通过' : null,
+      errors: expression?.trim()
+        ? []
+        : [{ message: '请输入规则表达式', line: 1, column: 1 }],
+    })),
+  }
+})
+
+function renderWithQueryClient(node: React.ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+
+  return rtlRender(
+    <QueryClientProvider client={queryClient}>
+      {node}
+    </QueryClientProvider>
+  )
+}
+
+const render = renderWithQueryClient
 
 const defaultEscalationPolicy = {
   enabled: false,
@@ -293,6 +372,26 @@ function buildInclusiveNode(
       tone: 'warning',
       config: {
         gatewayDirection: direction,
+        ...config,
+      } as never,
+    },
+  }
+}
+
+function buildConditionNode(config: Record<string, unknown> = {}): WorkflowNode {
+  return {
+    id: 'condition_1',
+    type: 'workflow',
+    position: { x: 100, y: 100 },
+    data: {
+      kind: 'condition',
+      label: '排他网关',
+      description: '条件分支',
+      tone: 'warning',
+      config: {
+        defaultEdgeId: 'edge_yes',
+        expressionMode: 'FORMULA',
+        expressionFieldKey: '',
         ...config,
       } as never,
     },
@@ -978,53 +1077,71 @@ describe('workflow designer node config panel', () => {
     )
   })
 
-  it('submits inclusive split branch conditions back to the canvas edges', async () => {
-    const onApply = vi.fn()
-
+  it('keeps inclusive split node panel focused on gateway-level settings', () => {
     render(
       <NodeConfigPanel
         node={buildInclusiveNode('SPLIT')}
         edges={inclusiveSplitEdges}
-        onApply={onApply}
+        onApply={vi.fn()}
+        onAddBranch={vi.fn()}
       />
     )
 
     expect(screen.getByText('包容网关')).toBeInTheDocument()
-    fireEvent.change(screen.getAllByRole('textbox', { name: '分支名称' })[0]!, {
+    expect(screen.getByText('分支汇聚策略')).toBeInTheDocument()
+    expect(
+      screen.getByText('当前共有 2 条包容分支。请直接点击画布中的分支连线编辑条件和优先级；选中网关卡片底部按钮可继续新增条件分支。')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新增条件分支' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: '分支名称' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('分支优先级')).not.toBeInTheDocument()
+  })
+
+  it('submits inclusive split branch conditions from edge config panel', async () => {
+    const onApplyEdge = vi.fn()
+
+    render(
+      <NodeConfigPanel
+        node={null}
+        edge={inclusiveSplitEdges[0]}
+        nodes={[
+          buildInclusiveNode('SPLIT', {
+            defaultBranchId: 'edge_urgent',
+          }),
+        ]}
+        edges={inclusiveSplitEdges}
+        onApply={vi.fn()}
+        onApplyEdge={onApplyEdge}
+      />
+    )
+
+    expect(screen.getByText('分支配置')).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: '分支名称' }), {
       target: { value: '金额超标并会签' },
     })
-    fireEvent.change(screen.getByDisplayValue('amount > 10000'), {
+    fireEvent.change(screen.getByLabelText('分支优先级'), {
+      target: { value: '3' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '编辑规则' }))
+    fireEvent.change(screen.getByTestId('workflow-rule-editor'), {
       target: { value: 'amount >= 20000' },
     })
+    fireEvent.click(screen.getByRole('button', { name: '应用规则' }))
 
-    await waitFor(() => expect(onApply).toHaveBeenCalled())
-    expect(onApply).toHaveBeenCalledWith(
-      'inclusive_1',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          gatewayDirection: 'SPLIT',
-        }),
-      }),
-      [
-        {
-          edgeId: 'edge_yes',
-          label: '金额超标并会签',
-          priority: 1,
-          condition: {
-            type: 'EXPRESSION',
-            expression: 'amount >= 20000',
-          },
+    await waitFor(() =>
+      expect(onApplyEdge).toHaveBeenCalledWith('edge_yes', {
+        condition: {
+          type: 'FORMULA',
+          expression: 'amount >= 20000',
+          formulaExpression: 'amount >= 20000',
         },
-        {
-          edgeId: 'edge_urgent',
-          label: '紧急场景',
-          priority: 2,
-          condition: {
-            type: 'EXPRESSION',
-            expression: 'urgent == true',
-          },
-        },
-      ]
+      })
+    )
+    await waitFor(() =>
+      expect(onApplyEdge).toHaveBeenCalledWith('edge_yes', {
+        label: '金额超标并会签',
+        priority: 3,
+      })
     )
   })
 
@@ -1045,16 +1162,9 @@ describe('workflow designer node config panel', () => {
 
     expect(screen.getByText('分支汇聚策略')).toBeInTheDocument()
     expect(screen.getByText('必选分支数')).toBeInTheDocument()
-    expect(screen.getAllByLabelText('分支优先级')).toHaveLength(2)
     expect(screen.getAllByLabelText('必选分支数')[0]).toHaveValue('2')
 
     fireEvent.change(screen.getAllByLabelText('必选分支数')[0]!, { target: { value: '1' } })
-    fireEvent.change(screen.getAllByLabelText('分支优先级')[0]!, {
-      target: { value: '3' },
-    })
-    fireEvent.change(screen.getAllByLabelText('分支优先级')[1]!, {
-      target: { value: '4' },
-    })
     await waitFor(() => expect(onApply).toHaveBeenCalled())
     expect(onApply).toHaveBeenCalledWith(
       'inclusive_1',
@@ -1069,14 +1179,33 @@ describe('workflow designer node config panel', () => {
       [
         expect.objectContaining({
           edgeId: 'edge_yes',
-          priority: 3,
+          priority: 1,
         }),
         expect.objectContaining({
           edgeId: 'edge_urgent',
-          priority: 4,
+          priority: 2,
         }),
       ]
     )
+  })
+
+  it('shows default branch guidance when editing the default condition edge', () => {
+    render(
+      <NodeConfigPanel
+        node={null}
+        edge={conditionEdges[0]}
+        nodes={[buildConditionNode({ defaultEdgeId: 'edge_yes' })]}
+        edges={conditionEdges}
+        onApply={vi.fn()}
+        onApplyEdge={vi.fn()}
+      />
+    )
+
+    expect(screen.getByText('分支配置')).toBeInTheDocument()
+    expect(
+      screen.getByText('默认分支不配置规则，当前面所有分支都未命中时会自动进入。')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('编辑规则')).not.toBeInTheDocument()
   })
 
   it('keeps parallel gateway simple without branch strategy fields', () => {
@@ -1107,67 +1236,70 @@ describe('workflow designer node config panel', () => {
     expect(screen.queryByText('必选分支数')).not.toBeInTheDocument()
   })
 
-  it('supports formula mode for condition branches', async () => {
-    const onApply = vi.fn()
+  it('edits condition edge rules through the unified rule dialog', async () => {
+    const onApplyEdge = vi.fn()
 
     render(
       <NodeConfigPanel
-        node={{
-          id: 'condition_1',
-          type: 'workflow',
-          position: { x: 100, y: 100 },
-          data: {
-            kind: 'condition',
-            label: '排他网关',
-            description: '条件分支',
-            tone: 'warning',
-            config: {
-              defaultEdgeId: 'edge_yes',
-              expressionMode: 'FORMULA',
-              expressionFieldKey: '',
-            },
-          },
-        }}
+        node={null}
+        edge={conditionEdges[1]}
+        nodes={[buildConditionNode()]}
         edges={conditionEdges}
-        onApply={onApply}
+        onApply={vi.fn()}
+        onApplyEdge={onApplyEdge}
       />
     )
 
-    fireEvent.click(screen.getAllByRole('combobox')[1]!)
-    fireEvent.click(screen.getByRole('option', { name: '安全公式' }))
-
-    const formulaInputs = screen.getAllByPlaceholderText(
-      '请输入受控公式表达式，例如：ifElse(amount > 10000, "A", "B")'
-    )
-    fireEvent.change(formulaInputs[formulaInputs.length - 1]!, {
+    fireEvent.click(screen.getByRole('button', { name: '编辑规则' }))
+    fireEvent.change(screen.getByTestId('workflow-rule-editor'), {
       target: { value: 'ifElse(amount > 20000, "A", "B")' },
     })
+    fireEvent.click(screen.getByRole('button', { name: '应用规则' }))
 
-    await waitFor(() => expect(onApply).toHaveBeenCalled())
-    expect(onApply).toHaveBeenCalledWith(
-      'condition_1',
-      expect.objectContaining({
-        config: expect.objectContaining({
-          defaultEdgeId: 'edge_yes',
-          expressionMode: 'FORMULA',
-        }),
-      }),
-      [
-        {
-          edgeId: 'edge_yes',
-          label: '正常审批',
-          condition: undefined,
+    await waitFor(() =>
+      expect(onApplyEdge).toHaveBeenCalledWith('edge_formula', {
+        condition: {
+          type: 'FORMULA',
+          expression: 'ifElse(amount > 20000, "A", "B")',
+          formulaExpression: 'ifElse(amount > 20000, "A", "B")',
         },
-        {
-          edgeId: 'edge_formula',
-          label: '公式审批',
-          condition: {
-            type: 'FORMULA',
-            expression: 'ifElse(amount > 20000, "A", "B")',
-            formulaExpression: 'ifElse(amount > 20000, "A", "B")',
-          },
-        },
-      ]
+      })
+    )
+  })
+
+  it('re-hydrates condition type when switching between different branch edges', async () => {
+    const branchGatewayNode = buildConditionNode({ defaultEdgeId: 'edge_fallback' })
+    const initialRender = render(
+      <NodeConfigPanel
+        node={null}
+        edge={conditionEdges[0]}
+        nodes={[branchGatewayNode]}
+        edges={conditionEdges}
+        onApply={vi.fn()}
+        onApplyEdge={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑规则' }))
+    expect(screen.getByTestId('workflow-rule-editor')).toHaveValue('amount > 10000')
+
+    initialRender.unmount()
+    render(
+      <NodeConfigPanel
+        node={null}
+        edge={conditionEdges[1]}
+        nodes={[branchGatewayNode]}
+        edges={conditionEdges}
+        onApply={vi.fn()}
+        onApplyEdge={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑规则' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('workflow-rule-editor')).toHaveValue(
+        'ifElse(amount > 10000, "A", "B")'
+      )
     )
   })
 })

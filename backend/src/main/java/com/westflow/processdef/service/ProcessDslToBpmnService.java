@@ -314,6 +314,7 @@ public class ProcessDslToBpmnService {
         flow.setTargetRef(edge.target());
         flow.setName(edge.label());
         Map<String, Object> condition = mapValue(edge.condition());
+        String conditionType = stringValue(condition.get("type"));
         String expression = resolveConditionExpression(condition);
         addExtensionAttribute(flow, "priority", edge.priority() == null ? null : String.valueOf(edge.priority()));
         addExtensionAttribute(flow, "branchPriority", edge.priority() == null ? null : String.valueOf(edge.priority()));
@@ -330,9 +331,8 @@ public class ProcessDslToBpmnService {
             addExtensionElement(flow, "branchMergePolicy", stringValue(sourceConfig.get("branchMergePolicy")));
             addExtensionElement(flow, "branchConditionExpression", expression);
         } else if (expression != null) {
-            flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression));
+            flow.setConditionExpression(normalizeSequenceFlowConditionExpression(expression, conditionType));
         }
-        String conditionType = stringValue(condition.get("type"));
         if (conditionType != null) {
             addExtensionAttribute(flow, "conditionType", conditionType);
         }
@@ -387,8 +387,17 @@ public class ProcessDslToBpmnService {
         return "${" + fieldKey + " " + mappedOperator + " " + stringifyConditionValue(value) + "}";
     }
 
-    private String normalizeSequenceFlowConditionExpression(String expression) {
+    private String normalizeSequenceFlowConditionExpression(String expression, String conditionType) {
+        if ("FORMULA".equals(conditionType)) {
+            return formulaSequenceFlowConditionExpression(expression);
+        }
         return wrapExpression(expression);
+    }
+
+    private String formulaSequenceFlowConditionExpression(String expression) {
+        return "${workflowFormulaConditionBridge.evaluate(execution, '"
+                + escapeForJuelLiteral(expression.trim())
+                + "')}";
     }
 
     private String inclusiveSelectionExpression(String edgeId) {
@@ -405,6 +414,10 @@ public class ProcessDslToBpmnService {
             return trimmed;
         }
         return "${" + trimmed + "}";
+    }
+
+    private String escapeForJuelLiteral(String expression) {
+        return expression.replace("\\", "\\\\").replace("'", "\\'");
     }
 
     // 将 DSL 节点元数据和配置写成扩展属性，供运行态读取。

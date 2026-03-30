@@ -262,5 +262,6 @@ export function processDefinitionDetailToWorkflowSnapshot(
       },
     })),
     selectedNodeId: null,
+    selectedEdgeId: null,
   }
 }

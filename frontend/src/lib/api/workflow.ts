@@ -27,6 +27,53 @@ export type ProcessDefinitionPageResponse = {
   }>
 }
 
+export type ProcessRuleMetadataVariable = {
+  key: string
+  label: string
+  scope: 'FORM' | 'SUBFORM_AGGREGATE' | 'PROCESS' | 'NODE' | 'SYSTEM'
+  valueType: string
+  description?: string | null
+  expression?: string | null
+}
+
+export type ProcessRuleMetadataFunction = {
+  name: string
+  label: string
+  signature: string
+  description?: string | null
+  category?: string | null
+  snippet?: string | null
+}
+
+export type ProcessRuleMetadataSnippet = {
+  key: string
+  label: string
+  description?: string | null
+  template: string
+}
+
+export type ProcessRuleMetadataResponse = {
+  variables: ProcessRuleMetadataVariable[]
+  functions: ProcessRuleMetadataFunction[]
+  snippets: ProcessRuleMetadataSnippet[]
+}
+
+export type ProcessRuleValidationIssue = {
+  message: string
+  line?: number | null
+  column?: number | null
+  startOffset?: number | null
+  endOffset?: number | null
+}
+
+export type ProcessRuleValidationResponse = {
+  valid: boolean
+  normalizedExpression: string | null
+  summary: string | null
+  errors: ProcessRuleValidationIssue[]
+  availableFunctions?: string[]
+}
+
 // 分页读取流程定义列表，用于列表页和设计器入口选择。
 export async function listProcessDefinitions(
   search: ListQuerySearch
@@ -67,6 +114,33 @@ export async function publishProcessDefinition(
   const response = await apiClient.post<
     ApiSuccessResponse<ProcessDefinitionDetailResponse>
   >('/process-definitions/publish', payload)
+
+  return unwrapResponse(response)
+}
+
+export async function getProcessRuleMetadata(params: {
+  processDefinitionId?: string
+  nodeId?: string
+}) {
+  const response = await apiClient.get<ApiSuccessResponse<ProcessRuleMetadataResponse>>(
+    '/process-definitions/rule-metadata',
+    {
+      params,
+    }
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function validateProcessRule(payload: {
+  processDefinitionId?: string
+  nodeId?: string
+  expression: string
+}) {
+  const response = await apiClient.post<ApiSuccessResponse<ProcessRuleValidationResponse>>(
+    '/process-definitions/rule-validate',
+    payload
+  )
 
   return unwrapResponse(response)
 }

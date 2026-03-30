@@ -31,6 +31,7 @@ import {
   type WorkflowEdgeConditionType,
   type WorkflowEdge,
   type WorkflowHelperLines,
+  type WorkflowInclusiveGatewayNodeConfig,
   type WorkflowNode,
   type WorkflowSnapshot,
 } from './types'
@@ -266,6 +267,7 @@ function createInitialSnapshot(): WorkflowSnapshot {
       },
     ],
     selectedNodeId: condition.id,
+    selectedEdgeId: null,
   }
 }
 
@@ -294,6 +296,20 @@ function resolveSelectedNodeId(
 
   // 如果节点被删掉了，就退回到最新的可见节点。
   return nextNodes[nextNodes.length - 1]?.id ?? null
+}
+
+function resolveSelectedEdgeId(
+  previousSnapshot: WorkflowSnapshot,
+  nextEdges: WorkflowEdge[]
+) {
+  if (
+    previousSnapshot.selectedEdgeId &&
+    nextEdges.some((edge) => edge.id === previousSnapshot.selectedEdgeId)
+  ) {
+    return previousSnapshot.selectedEdgeId
+  }
+
+  return null
 }
 
 // 新增节点时用当前节点列表推导下一个序号。
@@ -330,6 +346,7 @@ type WorkflowDesignerState = {
   hydrateSnapshot: (snapshot: WorkflowSnapshot) => void
   applyRemoteSnapshot: (snapshot: Pick<WorkflowSnapshot, 'nodes' | 'edges'>) => void
   setSelectedNodeId: (selectedNodeId: string | null) => void
+  setSelectedEdgeId: (selectedEdgeId: string | null) => void
   updateNodeData: (
     nodeId: string,
     updater: (data: WorkflowNode['data']) => WorkflowNode['data']
@@ -346,7 +363,15 @@ type WorkflowDesignerState = {
       label?: string
       condition?: unknown
       priority?: number
-    }>
+      }>
+  ) => void
+  updateEdgeDraft: (
+    edgeId: string,
+    patch: {
+      label?: string
+      condition?: unknown
+      priority?: number
+    }
   ) => void
   setHelperLines: (helperLines: WorkflowHelperLines) => void
   applyNodeChanges: (changes: NodeChange<WorkflowNode>[]) => void
@@ -357,6 +382,7 @@ type WorkflowDesignerState = {
     position: { x: number; y: number }
   ) => void
   insertNodeOnEdge: (edgeId: string, template: WorkflowNodeTemplate) => void
+  addBranchOnGateway: (gatewayNodeId: string) => void
   addStructurePreset: (
     preset: 'SUBPROCESS_CHAIN' | 'DYNAMIC_BUILDER_CHAIN' | 'INCLUSIVE_BRANCH'
   ) => void
@@ -611,6 +637,10 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             state.history.present,
             snapshot.nodes
           ),
+          selectedEdgeId: resolveSelectedEdgeId(
+            state.history.present,
+            snapshot.edges
+          ),
         }
 
         return {
@@ -624,6 +654,15 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
         history: replaceWorkflowSnapshot(state.history, {
           ...state.history.present,
           selectedNodeId,
+          selectedEdgeId: null,
+        }),
+      })),
+    setSelectedEdgeId: (selectedEdgeId) =>
+      set((state) => ({
+        history: replaceWorkflowSnapshot(state.history, {
+          ...state.history.present,
+          selectedNodeId: null,
+          selectedEdgeId,
         }),
       })),
     updateNodeData: (nodeId, updater) =>
@@ -694,6 +733,38 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             }
           }),
           selectedNodeId: nodeId,
+          selectedEdgeId: null,
+        }),
+      })),
+    updateEdgeDraft: (edgeId, patch) =>
+      set((state) => ({
+        history: commitWorkflowSnapshot(state.history, {
+          ...state.history.present,
+          edges: state.history.present.edges.map((edge) =>
+            edge.id === edgeId
+              ? {
+                  ...edge,
+                  label: patch.label ?? edge.label,
+                  data: {
+                    ...edge.data,
+                    condition: Object.prototype.hasOwnProperty.call(
+                      patch,
+                      'condition'
+                    )
+                      ? normalizeEdgeCondition(patch.condition)
+                      : edge.data?.condition,
+                    priority: Object.prototype.hasOwnProperty.call(
+                      patch,
+                      'priority'
+                    )
+                      ? patch.priority
+                      : edge.data?.priority,
+                  },
+                }
+              : edge
+          ),
+          selectedNodeId: null,
+          selectedEdgeId: edgeId,
         }),
       })),
     setHelperLines: (helperLines) => set({ helperLines }),
@@ -711,6 +782,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
           ...state.history.present,
           nodes: nextNodes,
           selectedNodeId: resolveSelectedNodeId(state.history.present, nextNodes),
+          selectedEdgeId: state.history.present.selectedEdgeId,
         }
 
         return {
@@ -731,27 +803,34 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             {
               ...state.history.present,
               edges: nextEdges,
+              selectedEdgeId: resolveSelectedEdgeId(state.history.present, nextEdges),
             },
             shouldCommit
           ),
         }
       }),
     connectNodes: (connection) =>
-      set((state) => ({
-        // 连线属于结构调整，直接写入历史栈。
-        history: commitWorkflowSnapshot(state.history, {
-          ...state.history.present,
-          edges: addEdge(
-            {
-              ...connection,
-              id: `edge-${connection.source}-${connection.target}-${Date.now()}`,
-              type: 'smoothstep',
-              animated: false,
-            },
-            state.history.present.edges
-          ),
-        }),
-      })),
+      set((state) => {
+        const nextEdgeId = `edge-${connection.source}-${connection.target}-${Date.now()}`
+        const nextEdges = addEdge(
+          {
+            ...connection,
+            id: nextEdgeId,
+            type: 'smoothstep',
+            animated: false,
+          },
+          state.history.present.edges
+        )
+
+        return {
+          history: commitWorkflowSnapshot(state.history, {
+            ...state.history.present,
+            edges: nextEdges,
+            selectedNodeId: null,
+            selectedEdgeId: nextEdgeId,
+          }),
+        }
+      }),
     addNodeFromTemplate: (template, position) =>
       set((state) => {
         const nodeId = `node-${template.kind}-${state.nextNodeSequence + 1}`
@@ -763,6 +842,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             ...state.history.present,
             nodes: [...state.history.present.nodes, nextNode],
             selectedNodeId: nextNode.id,
+            selectedEdgeId: null,
           }),
         }
       }),
@@ -810,6 +890,73 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
               },
             ],
             selectedNodeId: insertedNode.id,
+            selectedEdgeId: null,
+          }),
+        }
+      }),
+    addBranchOnGateway: (gatewayNodeId) =>
+      set((state) => {
+        const gatewayNode = state.history.present.nodes.find(
+          (node) => node.id === gatewayNodeId
+        )
+        if (!gatewayNode) {
+          return state
+        }
+
+        const isConditionGateway = gatewayNode.data.kind === 'condition'
+        const isInclusiveSplit =
+          gatewayNode.data.kind === 'inclusive' &&
+          (gatewayNode.data.config as WorkflowInclusiveGatewayNodeConfig).gatewayDirection ===
+            'SPLIT'
+        if (!isConditionGateway && !isInclusiveSplit) {
+          return state
+        }
+
+        const outgoingEdges = state.history.present.edges.filter(
+          (edge) => edge.source === gatewayNodeId
+        )
+        const outgoingTargets = outgoingEdges
+          .map((edge) =>
+            state.history.present.nodes.find((node) => node.id === edge.target)
+          )
+          .filter((node): node is WorkflowNode => Boolean(node))
+        const nextNodeSequence = state.nextNodeSequence + 1
+        const newNodeId = `node-approver-${nextNodeSequence}`
+        const nextBranchIndex = outgoingEdges.length + 1
+        const nextTargetY =
+          outgoingTargets.length > 0
+            ? Math.max(...outgoingTargets.map((node) => node.position.y)) + 170
+            : gatewayNode.position.y + 170
+        const insertedNode = createWorkflowNode(
+          findTemplate('approver'),
+          newNodeId,
+          {
+            x: gatewayNode.position.x + 300,
+            y: nextTargetY,
+          }
+        )
+        insertedNode.data.label = `条件分支 ${nextBranchIndex}`
+        insertedNode.data.description = '新增分支后的默认审批节点'
+        const newEdgeId = `edge-${gatewayNodeId}-${newNodeId}-${Date.now()}`
+
+        return {
+          nextNodeSequence,
+          history: commitWorkflowSnapshot(state.history, {
+            ...state.history.present,
+            nodes: [...state.history.present.nodes, insertedNode],
+            edges: [
+              ...state.history.present.edges,
+              {
+                id: newEdgeId,
+                source: gatewayNodeId,
+                target: newNodeId,
+                type: 'smoothstep',
+                animated: false,
+                label: `条件分支 ${nextBranchIndex}`,
+              },
+            ],
+            selectedNodeId: null,
+            selectedEdgeId: newEdgeId,
           }),
         }
       }),
@@ -829,6 +976,7 @@ export const useWorkflowDesignerStore = create<WorkflowDesignerState>()(
             nodes: [...state.history.present.nodes, ...presetSnapshot.nodes],
             edges: [...state.history.present.edges, ...presetSnapshot.edges],
             selectedNodeId: presetSnapshot.selectedNodeId,
+            selectedEdgeId: null,
           }),
         }
       }),

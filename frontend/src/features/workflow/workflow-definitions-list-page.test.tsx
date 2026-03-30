@@ -117,8 +117,19 @@ describe('WorkflowDefinitionsListPage', () => {
         },
       },
     })
+    const createdAtCell = columns?.[4]?.cell?.({
+      row: {
+        original: {
+          processDefinitionId: 'oa_collaboration_modes_e2e_1774776497433:1',
+          processKey: 'oa_collaboration_modes_e2e_1774776497433',
+          processName: '协同审批模式前端E2E-1774776497433',
+          category: 'OA',
+          createdAt: '2026-03-29T21:37:07+08:00',
+        },
+      },
+    })
 
-    if (!processNameCell || !processKeyCell) {
+    if (!processNameCell || !processKeyCell || !createdAtCell) {
       throw new Error('workflow definition cells were not created')
     }
 
@@ -126,16 +137,32 @@ describe('WorkflowDefinitionsListPage', () => {
       <div>
         {processNameCell}
         {processKeyCell}
+        {createdAtCell}
       </div>
     )
 
     const wrappers = Array.from(container.querySelectorAll('div.truncate.max-w-full'))
-    expect(wrappers).toHaveLength(3)
+    expect(wrappers).toHaveLength(4)
     expect(wrappers.some((element) => element.textContent?.includes('协同审批模式前端E2E-1774776497433'))).toBe(
       true
     )
     expect(
       wrappers.some((element) => element.textContent?.includes('oa_collaboration_modes_e2e_1774776497433'))
+    ).toBe(true)
+    expect(
+      wrappers.some((element) =>
+        element.textContent?.includes(
+          new Intl.DateTimeFormat('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+          }).format(new Date('2026-03-29T21:37:07+08:00'))
+        )
+      )
     ).toBe(true)
   })
 })

@@ -90,4 +90,34 @@ describe('workflow designer store', () => {
       )
     ).toBe(true)
   })
+
+  it('selects edges independently from nodes', () => {
+    const store = useWorkflowDesignerStore.getState()
+
+    store.setSelectedNodeId('node-condition')
+    store.setSelectedEdgeId('edge-start-condition')
+
+    const snapshot = useWorkflowDesignerStore.getState().history.present
+    expect(snapshot.selectedNodeId).toBeNull()
+    expect(snapshot.selectedEdgeId).toBe('edge-start-condition')
+  })
+
+  it('adds a new branch from a condition gateway and selects the new edge', () => {
+    const store = useWorkflowDesignerStore.getState()
+
+    store.addBranchOnGateway('node-condition')
+
+    const snapshot = useWorkflowDesignerStore.getState().history.present
+    const newEdge = snapshot.edges.find(
+      (edge) => edge.id === snapshot.selectedEdgeId
+    )
+
+    expect(newEdge).toBeTruthy()
+    expect(newEdge?.source).toBe('node-condition')
+    expect(newEdge?.label).toContain('条件分支')
+    expect(snapshot.selectedNodeId).toBeNull()
+    expect(
+      snapshot.nodes.some((node) => node.id === newEdge?.target && node.data.kind === 'approver')
+    ).toBe(true)
+  })
 })

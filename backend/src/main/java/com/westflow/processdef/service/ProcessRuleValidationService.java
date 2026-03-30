@@ -122,7 +122,7 @@ public class ProcessRuleValidationService {
         if (type.contains("datetime") || type.contains("time")) {
             return "2026-03-30T10:00:00+08:00";
         }
-        return variable.expression() == null || variable.expression().isBlank() ? variable.label() : variable.expression();
+        return variable.label();
     }
 
     private ProcessRuleValidationResponse invalid(

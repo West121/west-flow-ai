@@ -629,7 +629,8 @@ class ProcessDslToBpmnServiceTest {
                 "flowable:assignee=\"${managerUserId}\"",
                 "westflow:formulaExpression=\"leaveDays &gt;= 5 ? 'usr_005' : managerUserId\"",
                 "leaveDays > 3",
-                "urgent == true || leaveDays >= 5"
+                "urgent == true || leaveDays >= 5",
+                "workflowFormulaConditionBridge.evaluate(execution, 'urgent == true || leaveDays >= 5')"
         );
     }
 

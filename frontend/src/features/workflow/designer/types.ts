@@ -310,6 +310,10 @@ export type WorkflowNodeData<K extends WorkflowNodeKind = WorkflowNodeKind> = {
   description: string
   tone: WorkflowNodeTone
   config: WorkflowNodeConfigMap[K]
+  designerUi?: {
+    canAddBranch?: boolean
+    readOnly?: boolean
+  }
   collaboration?: {
     selectedBy: Array<{
       userId: string
@@ -335,6 +339,7 @@ export type WorkflowEdgeData = {
     formulaExpression?: string
   }
   priority?: number
+  quickInsertEnabled?: boolean
 }
 
 export type WorkflowEdge = Edge<WorkflowEdgeData>
@@ -344,6 +349,7 @@ export type WorkflowSnapshot = {
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   selectedNodeId: string | null
+  selectedEdgeId: string | null
 }
 
 // 辅助线状态只保存横竖两条对齐线的位置。

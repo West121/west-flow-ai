@@ -126,6 +126,7 @@ function DialogDescription({
 
 function DialogContent({
   className,
+  bodyClassName,
   title,
   description,
   children,
@@ -134,6 +135,7 @@ function DialogContent({
   resizable = true,
   fullscreenable = true,
   minimizable = true,
+  bodyScrollable = true,
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -143,6 +145,8 @@ function DialogContent({
   resizable?: boolean
   fullscreenable?: boolean
   minimizable?: boolean
+  bodyScrollable?: boolean
+  bodyClassName?: string
   showCloseButton?: boolean
 }) {
   const [mode, setMode] = React.useState<DialogMode>('normal')
@@ -220,8 +224,8 @@ function DialogContent({
     if (mode === 'fullscreen') {
       return {
         inset: '1rem',
-        width: 'auto',
-        height: 'auto',
+        width: 'calc(100vw - 2rem)',
+        height: 'calc(100vh - 2rem)',
         transform: 'none',
       }
     }
@@ -341,7 +345,15 @@ function DialogContent({
 
         {mode !== 'minimized' ? (
           <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
-            <div className='min-h-0 flex-1 overflow-auto p-4'>{children}</div>
+            <div
+              className={cn(
+                'flex min-h-0 flex-1 flex-col p-4',
+                bodyScrollable ? 'overflow-auto' : 'overflow-hidden',
+                bodyClassName
+              )}
+            >
+              {children}
+            </div>
           </div>
         ) : null}
       </DialogPrimitive.Content>

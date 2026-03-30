@@ -26,6 +26,7 @@ const initialSnapshot: WorkflowSnapshot = {
   ],
   edges: [],
   selectedNodeId: 'start',
+  selectedEdgeId: null,
 }
 
 describe('workflow designer history', () => {

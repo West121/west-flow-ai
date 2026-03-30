@@ -41,7 +41,26 @@ class ProcessRuleValidationServiceTest {
         assertThat(response.normalizedExpression()).isEqualTo("ifElse(days > 3, true, false)");
         assertThat(response.summary()).contains("试算结果");
         assertThat(response.errors()).isEmpty();
-        assertThat(response.availableFunctions()).contains("ifElse", "contains", "daysBetween", "isBlank");
+        assertThat(response.availableFunctions()).contains("ifElse", "contains", "daysBetween", "isBlank", "isLongLeave");
+    }
+
+    @Test
+    void shouldValidateCustomBusinessFormulaFunction() {
+        when(processRuleMetadataService.build("oa_leave:draft", "approve_manager"))
+                .thenReturn(metadata());
+
+        ProcessRuleValidationResponse response = processRuleValidationService.validate(
+                new ProcessRuleValidationRequest(
+                        "oa_leave:draft",
+                        "approve_manager",
+                        "isLongLeave($days)"
+                )
+        );
+
+        assertThat(response.valid()).isTrue();
+        assertThat(response.normalizedExpression()).isEqualTo("isLongLeave(days)");
+        assertThat(response.summary()).contains("试算结果");
+        assertThat(response.availableFunctions()).contains("isLongLeave");
     }
 
     @Test
@@ -104,6 +123,14 @@ class ProcessRuleValidationServiceTest {
                                 "条件分支函数。",
                                 "基础函数",
                                 "ifElse(days > 3, true, false)"
+                        ),
+                        new ProcessRuleMetadataResponse.RuleFunction(
+                                "isLongLeave",
+                                "长假判断",
+                                "isLongLeave(days)",
+                                "根据请假天数判断是否属于长假。",
+                                "业务函数",
+                                "isLongLeave($days)"
                         )
                 ),
                 List.of()

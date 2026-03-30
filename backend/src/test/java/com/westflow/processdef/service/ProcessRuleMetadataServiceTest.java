@@ -31,7 +31,7 @@ class ProcessRuleMetadataServiceTest {
         assertThat(response.variables()).extracting(ProcessRuleMetadataResponse.RuleVariable::key)
                 .contains("form", "subtable", "process", "node", "system");
         assertThat(response.functions()).extracting(ProcessRuleMetadataResponse.RuleFunction::name)
-                .contains("ifElse", "contains", "daysBetween", "isBlank");
+                .contains("ifElse", "contains", "daysBetween", "isBlank", "isLongLeave");
         assertThat(response.snippets()).extracting(ProcessRuleMetadataResponse.RuleSnippet::key)
                 .contains("boolean-template", "if-else", "contains", "days-between", "is-blank");
     }
@@ -87,6 +87,13 @@ class ProcessRuleMetadataServiceTest {
                 .contains("currentUserId", "now", "today");
         assertThat(response.functions()).extracting(ProcessRuleMetadataResponse.RuleFunction::signature)
                 .contains("ifElse(condition, whenTrue, whenFalse)");
+        assertThat(response.functions())
+                .filteredOn(item -> "isLongLeave".equals(item.name()))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.category()).isEqualTo("业务函数");
+                    assertThat(item.snippet()).isEqualTo("isLongLeave($days)");
+                });
     }
 
     private ProcessRuleMetadataResponse.RuleVariable findVariable(

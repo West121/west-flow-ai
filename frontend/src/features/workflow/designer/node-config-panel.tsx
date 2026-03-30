@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm, useWatch } from 'react-hook-form'
@@ -25,15 +25,23 @@ import {
   parseListValue,
 } from './config'
 import { WorkflowFieldSelector, WorkflowFormulaEditor } from './expression-tools'
+import { RuleEditorDialog } from './rule-editor-dialog'
+import {
+  buildFormulaCondition,
+  conditionToRuleExpression,
+  edgeRuleSummary,
+} from './branch-rule'
 import { WorkflowPrincipalPickerField } from './selection-picker'
 import {
   isWorkflowCollaborationNodeKind,
   resolveWorkflowCollaborationNodeLabel,
 } from './collaboration'
+import type { ProcessDefinitionMeta } from './dsl'
 import {
   type WorkflowFieldBinding,
-  type WorkflowConditionOperator,
+  type WorkflowConditionNodeConfig,
   type WorkflowGatewayDirection,
+  type WorkflowInclusiveGatewayNodeConfig,
   type WorkflowInclusiveBranchMergePolicy,
   type WorkflowApproverApprovalPolicyType,
   type WorkflowApproverAssignmentMode,
@@ -217,12 +225,6 @@ const operationOptions = [
   { key: 'TRANSFER', label: '转办' },
 ] as const
 
-const conditionTypeOptions = [
-  { value: 'EXPRESSION', label: '手写表达式' },
-  { value: 'FIELD', label: '字段比较' },
-  { value: 'FORMULA', label: '安全公式' },
-] satisfies Array<{ value: 'EXPRESSION' | 'FIELD' | 'FORMULA'; label: string }>
-
 const branchSchema = z.object({
   edgeId: z.string(),
   label: z.string(),
@@ -235,14 +237,12 @@ const branchSchema = z.object({
   formulaExpression: z.string(),
 })
 
-const conditionOperators = [
-  { value: 'EQ', label: '等于' },
-  { value: 'NE', label: '不等于' },
-  { value: 'GT', label: '大于' },
-  { value: 'GE', label: '大于等于' },
-  { value: 'LT', label: '小于' },
-  { value: 'LE', label: '小于等于' },
-] satisfies Array<{ value: WorkflowConditionOperator; label: string }>
+const edgeConfigFormSchema = z.object({
+  label: z.string().trim().min(1, '分支名称不能为空'),
+  branchPriority: z.string(),
+})
+
+type EdgeConfigFormValues = z.infer<typeof edgeConfigFormSchema>
 
 // 节点配置表单使用一个大 schema 统一兜住校验。
 const nodeConfigFormSchema = z
@@ -1598,6 +1598,222 @@ function buildFormValues(node: WorkflowNode, edges: WorkflowEdge[]): NodeConfigF
   }
 }
 
+function isBranchGatewayNode(node: WorkflowNode | null) {
+  const inclusiveConfig =
+    node?.data.kind === 'inclusive'
+      ? (node.data.config as WorkflowInclusiveGatewayNodeConfig)
+      : null
+  return (
+    node?.data.kind === 'condition' ||
+    (node?.data.kind === 'inclusive' && inclusiveConfig?.gatewayDirection === 'SPLIT')
+  )
+}
+
+function buildEdgeFormValues(
+  edge: WorkflowEdge,
+  _gatewayNode: WorkflowNode,
+  _isDefaultBranch: boolean
+): EdgeConfigFormValues {
+  return {
+    label: typeof edge.label === 'string' ? edge.label : edge.id,
+    branchPriority:
+      edge.data?.priority === null || edge.data?.priority === undefined
+        ? ''
+        : String(edge.data.priority),
+  }
+}
+
+function BranchEdgeConfigPanel({
+  edge,
+  gatewayNode,
+  processDefinitionId,
+  processMeta,
+  onApplyEdge,
+}: {
+  edge: WorkflowEdge
+  gatewayNode: WorkflowNode
+  processDefinitionId?: string
+  processMeta: ProcessDefinitionMeta
+  onApplyEdge: (
+    edgeId: string,
+    patch: {
+      label?: string
+      condition?: unknown
+      priority?: number
+    }
+  ) => void
+}) {
+  const isInclusiveBranch = gatewayNode.data.kind === 'inclusive'
+  const conditionConfig =
+    gatewayNode.data.kind === 'condition'
+      ? (gatewayNode.data.config as WorkflowConditionNodeConfig)
+      : null
+  const inclusiveConfig =
+    gatewayNode.data.kind === 'inclusive'
+      ? (gatewayNode.data.config as WorkflowInclusiveGatewayNodeConfig)
+      : null
+  const defaultBranchId =
+    gatewayNode.data.kind === 'condition'
+      ? conditionConfig?.defaultEdgeId ?? ''
+      : gatewayNode.data.kind === 'inclusive'
+        ? inclusiveConfig?.defaultBranchId ?? ''
+        : ''
+  const isDefaultBranch = edge.id === defaultBranchId
+  const [editorOpen, setEditorOpen] = useState(false)
+  const form = useForm<EdgeConfigFormValues>({
+    resolver: zodResolver(edgeConfigFormSchema),
+    defaultValues: buildEdgeFormValues(edge, gatewayNode, isDefaultBranch),
+  })
+  const watchedValues = useWatch({ control: form.control })
+  const lastAppliedSignatureRef = useRef('')
+
+  useEffect(() => {
+    const nextValues = buildEdgeFormValues(edge, gatewayNode, isDefaultBranch)
+    form.reset(nextValues)
+    lastAppliedSignatureRef.current = JSON.stringify(nextValues)
+  }, [edge, form, gatewayNode, isDefaultBranch])
+
+  const applyValues = useCallback(
+    (values: EdgeConfigFormValues) => {
+      const patch = {
+        label: values.label.trim(),
+        priority: isInclusiveBranch
+          ? parseNumber(values.branchPriority) ?? undefined
+          : undefined,
+      }
+
+      onApplyEdge(edge.id, patch)
+    },
+    [edge.id, isInclusiveBranch, onApplyEdge]
+  )
+
+  useEffect(() => {
+    if (!watchedValues || !form.formState.isDirty) {
+      return
+    }
+
+    const nextSignature = JSON.stringify(watchedValues)
+    if (nextSignature === lastAppliedSignatureRef.current) {
+      return
+    }
+
+    const timer = window.setTimeout(async () => {
+      const valid = await form.trigger(undefined, { shouldFocus: false })
+      if (!valid) {
+        return
+      }
+      const values = form.getValues()
+      const signature = JSON.stringify(values)
+      if (signature === lastAppliedSignatureRef.current) {
+        return
+      }
+      applyValues(values)
+      lastAppliedSignatureRef.current = signature
+    }, 180)
+
+    return () => window.clearTimeout(timer)
+  }, [applyValues, form, watchedValues])
+
+  return (
+    <Form {...form}>
+      <form className='flex flex-col gap-4'>
+        <section className='space-y-3'>
+          <div className='flex items-center justify-between gap-3'>
+            <div>
+              <p className='text-sm font-semibold'>分支配置</p>
+              <p className='text-xs text-muted-foreground'>连线编码：{edge.id}</p>
+            </div>
+            <span className='rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary'>
+              {gatewayNode.data.kind === 'condition' ? '排他分支' : '包容分支'}
+            </span>
+          </div>
+          <div className='rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground'>
+            {isDefaultBranch && gatewayNode.data.kind === 'condition'
+              ? '这是默认分支，未命中其他分支时会自动进入这条路径。'
+              : '点击连线即可编辑该分支的名称、条件和优先级。'}
+          </div>
+        </section>
+
+        <FormField
+          control={form.control}
+          name='label'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>分支名称</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder='例如：请假天数大于 3 天' />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {isInclusiveBranch ? (
+          <FormField
+            control={form.control}
+            name='branchPriority'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>分支优先级</FormLabel>
+                <FormControl>
+                  <Input {...field} inputMode='numeric' placeholder='1' />
+                </FormControl>
+                <p className='text-xs text-muted-foreground'>
+                  包容分支命中多条路径时按优先级参与汇聚计算。
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : null}
+
+        {isDefaultBranch && gatewayNode.data.kind === 'condition' ? (
+          <div className='rounded-2xl border border-dashed bg-muted/20 px-4 py-3 text-sm text-muted-foreground'>
+            默认分支不配置规则，当前面所有分支都未命中时会自动进入。
+          </div>
+        ) : (
+          <div className='space-y-3'>
+            <div className='space-y-1'>
+              <FormLabel>分支规则</FormLabel>
+              <p className='text-xs text-muted-foreground'>
+                当前所有条件统一使用规则表达式，由后端公式引擎校验和执行。
+              </p>
+            </div>
+            <div className='rounded-2xl border border-border/70 bg-muted/[0.16] p-4'>
+              <div className='flex items-start justify-between gap-4'>
+                <div className='space-y-2'>
+                  <p className='text-sm font-medium'>当前摘要</p>
+                  <code className='block rounded-xl bg-background px-3 py-2 font-mono text-xs leading-5 text-foreground'>
+                    {edgeRuleSummary(edge)}
+                  </code>
+                </div>
+                <Button type='button' onClick={() => setEditorOpen(true)}>
+                  编辑规则
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </form>
+      <RuleEditorDialog
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+        processDefinitionId={processDefinitionId}
+        processMeta={processMeta}
+        nodeId={gatewayNode.id}
+        nodeLabel={gatewayNode.data.label}
+        edgeLabel={form.getValues('label') || edge.id}
+        initialExpression={conditionToRuleExpression(edge.data?.condition)}
+        onSave={(expression) => {
+          onApplyEdge(edge.id, {
+            condition: buildFormulaCondition(expression),
+          })
+        }}
+      />
+    </Form>
+  )
+}
+
 function buildNodePatch(values: NodeConfigFormValues) {
   function parseVoteWeights(json: string): WorkflowVoteWeight[] {
     try {
@@ -1836,28 +2052,59 @@ function buildNodePatch(values: NodeConfigFormValues) {
 
 export function NodeConfigPanel({
   node,
+  edge,
+  nodes,
   edges,
   onApply,
+  onApplyEdge,
+  onAddBranch,
+  processDefinitionId,
+  processMeta = {
+    processKey: '',
+    processName: '',
+    category: '',
+    processFormKey: '',
+    processFormVersion: '',
+    formFields: [],
+  },
   processFormFields = [],
 }: {
   node: WorkflowNode | null
+  edge?: WorkflowEdge | null
+  nodes?: WorkflowNode[]
   edges: WorkflowEdge[]
-    onApply: (
-      nodeId: string,
-      patch: {
-        label: string
-        description: string
-        config: unknown
-      },
-      edgePatches?: Array<{
-        edgeId: string
-        label?: string
-        condition?: unknown
-        priority?: number
-      }>
-    ) => void
+  onApply: (
+    nodeId: string,
+    patch: {
+      label: string
+      description: string
+      config: unknown
+    },
+    edgePatches?: Array<{
+      edgeId: string
+      label?: string
+      condition?: unknown
+      priority?: number
+    }>
+  ) => void
+  onApplyEdge?: (
+    edgeId: string,
+    patch: {
+      label?: string
+      condition?: unknown
+      priority?: number
+    }
+  ) => void
+  onAddBranch?: (gatewayNodeId: string) => void
+  processDefinitionId?: string
+  processMeta?: ProcessDefinitionMeta
   processFormFields?: WorkflowProcessFormField[]
 }) {
+  const edgeSourceNode = useMemo(
+    () => (edge ? (nodes ?? []).find((item) => item.id === edge.source) ?? null : null),
+    [edge, nodes]
+  )
+
   const outgoingEdges = useMemo(
     () => edges.filter((edge) => edge.source === node?.id),
     [edges, node?.id]
@@ -2188,6 +2435,27 @@ export function NodeConfigPanel({
     return () => window.clearTimeout(timer)
   }, [applyValues, form, node, watchedValues])
 
+  if (edge && edgeSourceNode && isBranchGatewayNode(edgeSourceNode) && onApplyEdge) {
+    return (
+      <BranchEdgeConfigPanel
+        key={`${edge.id}:${edge.data?.condition?.type ?? 'DEFAULT'}`}
+        edge={edge}
+        gatewayNode={edgeSourceNode}
+        processDefinitionId={processDefinitionId}
+        processMeta={processMeta}
+        onApplyEdge={onApplyEdge}
+      />
+    )
+  }
+
+  if (edge) {
+    return (
+      <div className='rounded-2xl border border-dashed p-4 text-sm text-muted-foreground'>
+        当前连线只负责结构连接，不需要单独配置属性。
+      </div>
+    )
+  }
+
   if (!node) {
     return <div className='py-6' />
   }
@@ -2201,6 +2469,17 @@ export function NodeConfigPanel({
               <p className='text-sm font-semibold'>{node.data.label}</p>
               <p className='text-xs text-muted-foreground'>节点编码：{node.id}</p>
             </div>
+            {isBranchGatewayNode(node) && onAddBranch ? (
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => onAddBranch(node.id)}
+              >
+                <Plus className='size-4' />
+                新增条件分支
+              </Button>
+            ) : null}
           </div>
 
           <FormField
@@ -3719,7 +3998,7 @@ export function NodeConfigPanel({
             </div>
 
             <div className='rounded-xl border bg-muted/20 px-3 py-2 text-xs text-muted-foreground'>
-              排他网关支持按分支分别配置手写表达式、字段比较和安全公式，默认分支不需要填写条件。
+              点击分支连线可直接编辑条件。这里仅保留默认分支等网关级设置。
             </div>
 
             <FormField
@@ -3749,176 +4028,15 @@ export function NodeConfigPanel({
 
             <Separator />
 
-            <div className='flex flex-col gap-4'>
-              {selectedBranches.map((branch, index) => (
-                <div key={branch.edgeId} className='flex flex-col gap-3 rounded-xl border p-3'>
-                  <div className='flex items-center justify-between gap-3'>
-                    <div>
-                      <p className='text-sm font-medium'>
-                        {branch.edgeId === form.getValues('condition.defaultEdgeId')
-                          ? '默认分支'
-                          : '条件分支'}
-                      </p>
-                      <p className='text-xs text-muted-foreground'>连线：{branch.edgeId}</p>
-                    </div>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='sm'
-                      onClick={() =>
-                        form.setValue(
-                          'condition.defaultEdgeId',
-                          branch.edgeId,
-                          { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                        )
-                      }
-                    >
-                      设为默认
-                    </Button>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name={`condition.branches.${index}.label`}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>分支名称</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder='例如：金额大于 1 万' />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  {branch.edgeId !== form.getValues('condition.defaultEdgeId') ? (
-                    <FormField
-                      control={form.control}
-                      name={`condition.branches.${index}.conditionType`}
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>条件类型</FormLabel>
-                          <FormControl>
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <SelectTrigger className='w-full'>
-                                <SelectValue placeholder='请选择条件类型' />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {conditionTypeOptions.map((item) => (
-                                  <SelectItem key={item.value} value={item.value}>
-                                    {item.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  ) : null}
-
-                  <FormField
-                    control={form.control}
-                    name={`condition.branches.${index}.conditionExpression`}
-                    render={({ field }) => (
-                      <FormItem>
-                        {branch.edgeId === form.getValues('condition.defaultEdgeId') ? (
-                          <div className='rounded-xl border border-dashed p-3 text-xs text-muted-foreground'>
-                            默认分支不需要配置条件，未命中其他分支时会自动进入这条路径。
-                          </div>
-                        ) : branch.conditionType === 'FIELD' ? (
-                          <div className='grid gap-3'>
-                            <FormLabel>比较值</FormLabel>
-                            <Input
-                              value={branch.conditionValue}
-                              onChange={(event) =>
-                                form.setValue(
-                                  `condition.branches.${index}.conditionValue`,
-                                  event.target.value,
-                                  { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                                )
-                              }
-                              placeholder='例如：10000'
-                            />
-                            <div className='grid gap-2 md:grid-cols-[1fr_160px]'>
-                              <WorkflowFieldSelector
-                                label='字段覆盖'
-                                description='如需覆盖全局字段，可在这里重新选择。'
-                                value={branch.conditionFieldKey}
-                                onChange={(next) =>
-                                  form.setValue(
-                                    `condition.branches.${index}.conditionFieldKey`,
-                                    next,
-                                    { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                                  )
-                                }
-                                options={processFieldOptions}
-                              />
-                              <FormField
-                                control={form.control}
-                                name={`condition.branches.${index}.conditionOperator`}
-                                render={({ field: operatorField }) => (
-                                  <FormItem>
-                                    <FormLabel>比较符</FormLabel>
-                                    <FormControl>
-                                      <Select
-                                        value={operatorField.value}
-                                        onValueChange={operatorField.onChange}
-                                      >
-                                        <SelectTrigger className='w-full'>
-                                          <SelectValue placeholder='请选择比较符' />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {conditionOperators.map((item) => (
-                                            <SelectItem key={item.value} value={item.value}>
-                                              {item.label}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                          </div>
-                        ) : branch.conditionType === 'FORMULA' ? (
-                          <WorkflowFormulaEditor
-                            label='安全公式'
-                            description='支持字段引用、常量、比较/逻辑运算以及内置函数提示。'
-                            value={branch.formulaExpression}
-                            onChange={(next) =>
-                              form.setValue(
-                                `condition.branches.${index}.formulaExpression`,
-                                next,
-                                { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                              )
-                            }
-                            fieldOptions={processFieldOptions}
-                          />
-                        ) : (
-                          <FormControl>
-                            <Textarea
-                              {...field}
-                              rows={3}
-                              placeholder='例如：amount > 10000 && department == "FINANCE"'
-                            />
-                          </FormControl>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              ))}
-              {selectedBranches.length === 0 ? (
-                <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
-                  当前排他网关没有出边，请先在画布上连出至少两条分支。
-                </div>
-              ) : null}
-            </div>
+            {selectedBranches.length > 0 ? (
+              <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
+                当前共有 {selectedBranches.length} 条分支。请点击画布中的分支连线配置名称与条件；选中网关卡片底部按钮可直接新增条件分支。
+              </div>
+            ) : (
+              <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
+                当前排他网关没有出边，请先在画布上连出至少两条分支。
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -4305,171 +4423,15 @@ export function NodeConfigPanel({
                       ) : null}
                     </div>
 
-                    <div className='flex flex-col gap-4'>
-                      {selectedInclusiveBranches.map((branch, index) => (
-                        <div
-                          key={branch.edgeId}
-                          className='flex flex-col gap-3 rounded-xl border p-3 text-foreground'
-                        >
-                          <div className='flex items-start justify-between gap-3'>
-                            <div>
-                              <p className='text-sm font-medium'>条件分支</p>
-                              <p className='text-xs text-muted-foreground'>连线：{branch.edgeId}</p>
-                            </div>
-                            <FormField
-                              control={form.control}
-                              name={`inclusive.branches.${index}.branchPriority`}
-                              render={({ field }) => (
-                                <FormItem className='w-32'>
-                                  <FormLabel>分支优先级</FormLabel>
-                                  <FormControl>
-                                    <Input {...field} inputMode='numeric' placeholder='1' />
-                                  </FormControl>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
-                            />
-                          </div>
-
-                          <FormField
-                            control={form.control}
-                            name={`inclusive.branches.${index}.label`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>分支名称</FormLabel>
-                                <FormControl>
-                                  <Input {...field} placeholder='例如：金额超标且需要会签' />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`inclusive.branches.${index}.conditionType`}
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>条件类型</FormLabel>
-                                <FormControl>
-                                  <Select value={field.value} onValueChange={field.onChange}>
-                                    <SelectTrigger className='w-full'>
-                                      <SelectValue placeholder='请选择条件类型' />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {conditionTypeOptions.map((item) => (
-                                        <SelectItem key={item.value} value={item.value}>
-                                          {item.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name={`inclusive.branches.${index}.conditionExpression`}
-                            render={({ field }) => (
-                              <FormItem>
-                                {branch.conditionType === 'FIELD' ? (
-                                  <div className='grid gap-3'>
-                                    <FormLabel>字段比较</FormLabel>
-                                    <Input
-                                      value={branch.conditionValue}
-                                      onChange={(event) =>
-                                        form.setValue(
-                                          `inclusive.branches.${index}.conditionValue`,
-                                          event.target.value,
-                                          { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                                        )
-                                      }
-                                      placeholder='例如：10000'
-                                    />
-                                    <div className='grid gap-2 md:grid-cols-[1fr_160px]'>
-                                      <WorkflowFieldSelector
-                                        label='表单字段'
-                                        description='从流程表单里选择一个条件字段。'
-                                        value={branch.conditionFieldKey}
-                                        onChange={(next) =>
-                                          form.setValue(
-                                            `inclusive.branches.${index}.conditionFieldKey`,
-                                            next,
-                                            { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                                          )
-                                        }
-                                        options={processFieldOptions}
-                                      />
-                                      <FormField
-                                        control={form.control}
-                                        name={`inclusive.branches.${index}.conditionOperator`}
-                                        render={({ field: operatorField }) => (
-                                          <FormItem>
-                                            <FormLabel>比较符</FormLabel>
-                                            <FormControl>
-                                              <Select
-                                                value={operatorField.value}
-                                                onValueChange={operatorField.onChange}
-                                              >
-                                                <SelectTrigger className='w-full'>
-                                                  <SelectValue placeholder='请选择比较符' />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  {conditionOperators.map((item) => (
-                                                    <SelectItem key={item.value} value={item.value}>
-                                                      {item.label}
-                                                    </SelectItem>
-                                                  ))}
-                                                </SelectContent>
-                                              </Select>
-                                            </FormControl>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
-                                    </div>
-                                  </div>
-                                ) : branch.conditionType === 'FORMULA' ? (
-                                  <WorkflowFormulaEditor
-                                    label='安全公式'
-                                    description='支持字段引用、常量、比较/逻辑运算以及内置函数提示。'
-                                    value={branch.formulaExpression}
-                                    onChange={(next) =>
-                                      form.setValue(
-                                        `inclusive.branches.${index}.formulaExpression`,
-                                        next,
-                                        { shouldDirty: true, shouldTouch: true, shouldValidate: true }
-                                      )
-                                    }
-                                    fieldOptions={processFieldOptions}
-                                  />
-                                ) : (
-                                  <>
-                                    <FormLabel>条件表达式</FormLabel>
-                                    <FormControl>
-                                      <Textarea
-                                        {...field}
-                                        rows={3}
-                                        placeholder='例如：amount > 10000 || urgent == true'
-                                      />
-                                    </FormControl>
-                                  </>
-                                )}
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      ))}
-                      {selectedInclusiveBranches.length === 0 ? (
-                        <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
-                          当前包容网关没有出边，请先在画布上连出至少两条分支。
-                        </div>
-                      ) : null}
-                    </div>
+                    {selectedInclusiveBranches.length > 0 ? (
+                      <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
+                        当前共有 {selectedInclusiveBranches.length} 条包容分支。请直接点击画布中的分支连线编辑条件和优先级；选中网关卡片底部按钮可继续新增条件分支。
+                      </div>
+                    ) : (
+                      <div className='rounded-xl border border-dashed p-4 text-sm text-muted-foreground'>
+                        当前包容网关没有出边，请先在画布上连出至少两条分支。
+                      </div>
+                    )}
                   </>
                 ) : null}
               </div>

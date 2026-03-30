@@ -104,6 +104,7 @@ const snapshot: WorkflowSnapshot = {
     },
   ],
   selectedNodeId: 'approve_1',
+  selectedEdgeId: null,
 }
 
 function buildDynamicBuilderNode(): WorkflowNode {
@@ -640,6 +641,7 @@ describe('workflow designer dsl mapping', () => {
         { id: 'edge_2', source: 'inclusive_split', target: 'end_1', type: 'smoothstep' },
       ],
       selectedNodeId: 'inclusive_split',
+      selectedEdgeId: null,
     }
     const joinSnapshot: WorkflowSnapshot = {
       ...snapshot,
@@ -649,6 +651,7 @@ describe('workflow designer dsl mapping', () => {
         { id: 'edge_2', source: 'inclusive_join', target: 'end_1', type: 'smoothstep' },
       ],
       selectedNodeId: 'inclusive_join',
+      selectedEdgeId: null,
     }
 
     const splitDsl = workflowSnapshotToProcessDefinitionDsl(splitSnapshot, {
@@ -733,6 +736,7 @@ describe('workflow designer dsl mapping', () => {
         { id: 'edge_end', source: 'inclusive_join', target: 'end_1', type: 'smoothstep' },
       ],
       selectedNodeId: 'inclusive_split',
+      selectedEdgeId: null,
     }
 
     const dsl = workflowSnapshotToProcessDefinitionDsl(inclusiveSnapshot, {
@@ -817,6 +821,7 @@ describe('workflow designer dsl mapping', () => {
         },
       ],
       selectedNodeId: 'condition_1',
+      selectedEdgeId: null,
     }
 
     const dsl = workflowSnapshotToProcessDefinitionDsl(formulaSnapshot, {
@@ -985,6 +990,7 @@ describe('workflow designer dsl mapping', () => {
         },
       ],
       selectedNodeId: 'subprocess_1',
+      selectedEdgeId: null,
     }
 
     const dsl = workflowSnapshotToProcessDefinitionDsl(snapshotWithSubprocess, {
@@ -1224,6 +1230,7 @@ describe('workflow designer dsl mapping', () => {
         { id: 'edge_end_2', source: 'approve_2', target: 'end_1', type: 'smoothstep' },
       ],
       selectedNodeId: 'condition_1',
+      selectedEdgeId: null,
     }
 
     const dsl = workflowSnapshotToProcessDefinitionDsl(conditionSnapshot, {
@@ -1416,6 +1423,7 @@ describe('workflow designer dsl mapping', () => {
       ],
       edges: [],
       selectedNodeId: 'timer_1',
+      selectedEdgeId: null,
     }
 
     const dsl = workflowSnapshotToProcessDefinitionDsl(automationSnapshot, {

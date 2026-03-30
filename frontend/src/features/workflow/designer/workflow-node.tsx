@@ -6,6 +6,7 @@ import {
   GitBranch,
   GitMerge,
   Play,
+  Plus,
   SendHorizontal,
   ShieldAlert,
   Zap,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '@/lib/utils'
+import { useWorkflowDesignerStore } from './store'
 import {
   type WorkflowApproverNodeConfig,
   type WorkflowNode,
@@ -138,9 +140,13 @@ function renderIcon(kind: WorkflowNodeData['kind']) {
 
 // 画布节点只负责渲染节点外观和连接点。
 export function WorkflowNodeCard({
+  id,
   data,
   selected,
 }: NodeProps<WorkflowNode>) {
+  const addBranchOnGateway = useWorkflowDesignerStore(
+    (state) => state.addBranchOnGateway
+  )
   const workflowData = data as WorkflowNodeData
   const classes =
     toneClassNames[workflowData.tone as keyof typeof toneClassNames]
@@ -160,6 +166,10 @@ export function WorkflowNodeCard({
   const collaboration = workflowData.collaboration
   const editingPeer = collaboration?.editingBy[0] ?? null
   const selectedPeers = collaboration?.selectedBy ?? []
+  const showAddBranchAction =
+    selected &&
+    workflowData.designerUi?.canAddBranch &&
+    !workflowData.designerUi?.readOnly
 
   return (
     <div
@@ -261,6 +271,22 @@ export function WorkflowNodeCard({
           position={Position.Bottom}
           isConnectableEnd={false}
         />
+      ) : null}
+
+      {showAddBranchAction ? (
+        <button
+          type='button'
+          className='absolute left-1/2 top-full z-20 mt-3 inline-flex min-h-11 min-w-11 -translate-x-1/2 items-center justify-center rounded-full border border-primary/25 bg-background/95 px-3 text-xs font-medium text-foreground shadow-sm transition hover:border-primary/45 hover:bg-primary/[0.04]'
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            addBranchOnGateway(id)
+          }}
+          aria-label='新增条件分支'
+        >
+          <Plus className='mr-1 size-4' />
+          新增分支
+        </button>
       ) : null}
     </div>
   )

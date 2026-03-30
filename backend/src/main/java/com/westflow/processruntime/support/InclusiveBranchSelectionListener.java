@@ -268,11 +268,7 @@ public class InclusiveBranchSelectionListener implements ExecutionListener {
     }
 
     private String normalizeExpression(String expression) {
-        String trimmed = expression.trim();
-        if (trimmed.startsWith("${") && trimmed.endsWith("}")) {
-            return trimmed.substring(2, trimmed.length() - 1).trim();
-        }
-        return trimmed;
+        return WorkflowFormulaEvaluator.normalizeExpression(expression);
     }
 
     private boolean toBoolean(Object value) {

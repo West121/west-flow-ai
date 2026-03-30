@@ -146,57 +146,51 @@ public class ProcessRuleMetadataService {
     }
 
     private List<RuleVariable> buildProcessContextVariables(ProcessDslPayload dsl) {
-        String processKey = dsl == null ? "processKey" : dsl.processKey();
-        String processName = dsl == null ? "processName" : dsl.processName();
-        String category = dsl == null ? "processCategory" : defaultIfBlank(dsl.category(), "processCategory");
         return List.of(
-                toLeafVariable("processDefinitionId", "流程定义标识", "string", "process", "当前流程定义的主键。", "oa_leave:1"),
-                toLeafVariable("processKey", "流程键", "string", "process", "当前流程的业务键。", processKey),
-                toLeafVariable("processName", "流程名称", "string", "process", "当前流程的展示名称。", processName),
-                toLeafVariable("processVersion", "流程版本", "number", "process", "当前流程定义版本号。", "1"),
-                toLeafVariable("processCategory", "流程分类", "string", "process", "当前流程的分类。", category),
-                toLeafVariable("processInstanceId", "流程实例标识", "string", "process", "运行时流程实例标识。", "proc_001"),
-                toLeafVariable("businessType", "业务类型", "string", "process", "运行态业务类型。", "OA_LEAVE"),
-                toLeafVariable("businessId", "业务标识", "string", "process", "运行态业务主键。", "leave_001"),
-                toLeafVariable("initiatorId", "发起人标识", "string", "process", "流程发起人的用户标识。", "usr_001"),
-                toLeafVariable("initiatorName", "发起人姓名", "string", "process", "流程发起人的显示名。", "张三"),
-                toLeafVariable("initiatorPostId", "发起岗位标识", "string", "process", "流程发起时的任职标识。", "post_001"),
-                toLeafVariable("initiatorPostName", "发起岗位名称", "string", "process", "流程发起时的岗位名称。", "PLM产品经理"),
-                toLeafVariable("initiatorDepartmentId", "发起部门标识", "string", "process", "流程发起时的部门标识。", "dept_001"),
-                toLeafVariable("initiatorDepartmentName", "发起部门名称", "string", "process", "流程发起时的部门名称。", "PLM产品组")
+                toLeafVariable("processDefinitionId", "流程定义标识", "string", "process", "当前流程定义的主键。", "processDefinitionId"),
+                toLeafVariable("processKey", "流程键", "string", "process", "当前流程的业务键。", "processKey"),
+                toLeafVariable("processName", "流程名称", "string", "process", "当前流程的展示名称。", "processName"),
+                toLeafVariable("processVersion", "流程版本", "number", "process", "当前流程定义版本号。", "processVersion"),
+                toLeafVariable("processCategory", "流程分类", "string", "process", "当前流程的分类。", "processCategory"),
+                toLeafVariable("processInstanceId", "流程实例标识", "string", "process", "运行时流程实例标识。", "processInstanceId"),
+                toLeafVariable("businessType", "业务类型", "string", "process", "运行态业务类型。", "businessType"),
+                toLeafVariable("businessId", "业务标识", "string", "process", "运行态业务主键。", "businessId"),
+                toLeafVariable("initiatorId", "发起人标识", "string", "process", "流程发起人的用户标识。", "initiatorId"),
+                toLeafVariable("initiatorName", "发起人姓名", "string", "process", "流程发起人的显示名。", "initiatorName"),
+                toLeafVariable("initiatorPostId", "发起岗位标识", "string", "process", "流程发起时的任职标识。", "initiatorPostId"),
+                toLeafVariable("initiatorPostName", "发起岗位名称", "string", "process", "流程发起时的岗位名称。", "initiatorPostName"),
+                toLeafVariable("initiatorDepartmentId", "发起部门标识", "string", "process", "流程发起时的部门标识。", "initiatorDepartmentId"),
+                toLeafVariable("initiatorDepartmentName", "发起部门名称", "string", "process", "流程发起时的部门名称。", "initiatorDepartmentName")
         );
     }
 
     private List<RuleVariable> buildNodeContextVariables(ProcessDslPayload dsl, String nodeId) {
         ProcessDslPayload.Node node = resolveNode(dsl, nodeId);
-        String nodeName = node == null ? "当前节点名称" : node.name();
-        String nodeType = node == null ? "nodeType" : node.type();
-        String nodeKey = node == null ? nodeId : node.id();
         return List.of(
-                toLeafVariable("taskId", "任务标识", "string", "node", "当前待办任务标识。", "task_001"),
-                toLeafVariable("taskName", "任务名称", "string", "node", "当前待办任务名称。", nodeName),
-                toLeafVariable("taskDefinitionKey", "任务定义键", "string", "node", "当前任务定义键。", nodeKey),
-                toLeafVariable("currentNodeId", "当前节点标识", "string", "node", "当前流程节点标识。", nodeKey),
-                toLeafVariable("currentNodeKey", "当前节点键", "string", "node", "当前节点业务键。", nodeKey),
-                toLeafVariable("currentNodeName", "当前节点名称", "string", "node", "当前节点显示名。", nodeName),
-                toLeafVariable("currentNodeType", "当前节点类型", "string", "node", "当前节点类型。", nodeType),
-                toLeafVariable("assigneeId", "处理人标识", "string", "node", "当前处理人标识。", "usr_002"),
-                toLeafVariable("assigneeName", "处理人姓名", "string", "node", "当前处理人姓名。", "李四"),
-                toLeafVariable("candidateUserId", "候选用户标识", "string", "node", "当前候选用户标识。", "usr_003"),
-                toLeafVariable("candidateGroupId", "候选组标识", "string", "node", "当前候选组标识。", "dept_leader")
+                toLeafVariable("taskId", "任务标识", "string", "node", "当前待办任务标识。", "taskId"),
+                toLeafVariable("taskName", "任务名称", "string", "node", "当前待办任务名称。", "taskName"),
+                toLeafVariable("taskDefinitionKey", "任务定义键", "string", "node", "当前任务定义键。", "taskDefinitionKey"),
+                toLeafVariable("currentNodeId", "当前节点标识", "string", "node", "当前流程节点标识。", "currentNodeId"),
+                toLeafVariable("currentNodeKey", "当前节点键", "string", "node", "当前节点业务键。", "currentNodeKey"),
+                toLeafVariable("currentNodeName", "当前节点名称", "string", "node", "当前节点显示名。", "currentNodeName"),
+                toLeafVariable("currentNodeType", "当前节点类型", "string", "node", "当前节点类型。", "currentNodeType"),
+                toLeafVariable("assigneeId", "处理人标识", "string", "node", "当前处理人标识。", "assigneeId"),
+                toLeafVariable("assigneeName", "处理人姓名", "string", "node", "当前处理人姓名。", "assigneeName"),
+                toLeafVariable("candidateUserId", "候选用户标识", "string", "node", "当前候选用户标识。", "candidateUserId"),
+                toLeafVariable("candidateGroupId", "候选组标识", "string", "node", "当前候选组标识。", "candidateGroupId")
         );
     }
 
     private List<RuleVariable> buildSystemContextVariables() {
         return List.of(
-                toLeafVariable("currentUserId", "当前用户标识", "string", "system", "登录用户的用户标识。", "usr_001"),
-                toLeafVariable("currentUserName", "当前用户姓名", "string", "system", "登录用户的显示名。", "张三"),
-                toLeafVariable("currentDepartmentId", "当前部门标识", "string", "system", "登录用户当前任职的部门标识。", "dept_001"),
-                toLeafVariable("currentDepartmentName", "当前部门名称", "string", "system", "登录用户当前任职的部门名称。", "PLM产品组"),
-                toLeafVariable("currentPostId", "当前岗位标识", "string", "system", "登录用户当前任职的岗位标识。", "post_001"),
-                toLeafVariable("currentPostName", "当前岗位名称", "string", "system", "登录用户当前任职的岗位名称。", "PLM产品经理"),
-                toLeafVariable("now", "当前时间", "datetime", "system", "规则执行时的当前时间。", "2026-03-30T10:00:00+08:00"),
-                toLeafVariable("today", "当天日期", "date", "system", "规则执行时的当天日期。", "2026-03-30")
+                toLeafVariable("currentUserId", "当前用户标识", "string", "system", "登录用户的用户标识。", "currentUserId"),
+                toLeafVariable("currentUserName", "当前用户姓名", "string", "system", "登录用户的显示名。", "currentUserName"),
+                toLeafVariable("currentDepartmentId", "当前部门标识", "string", "system", "登录用户当前任职的部门标识。", "currentDepartmentId"),
+                toLeafVariable("currentDepartmentName", "当前部门名称", "string", "system", "登录用户当前任职的部门名称。", "currentDepartmentName"),
+                toLeafVariable("currentPostId", "当前岗位标识", "string", "system", "登录用户当前任职的岗位标识。", "currentPostId"),
+                toLeafVariable("currentPostName", "当前岗位名称", "string", "system", "登录用户当前任职的岗位名称。", "currentPostName"),
+                toLeafVariable("now", "当前时间", "datetime", "system", "规则执行时的当前时间。", "now"),
+                toLeafVariable("today", "当天日期", "date", "system", "规则执行时的当天日期。", "today")
         );
     }
 
@@ -212,31 +206,31 @@ public class ProcessRuleMetadataService {
                         "boolean-template",
                         "布尔条件模板",
                         "最常见的条件判断模板。",
-                        "${days > 3}"
+                        "${$days > 3}"
                 ),
                 new RuleSnippet(
                         "if-else",
                         "条件分支模板",
                         "当条件成立时返回真值，否则返回假值。",
-                        "${ifElse(days > 3, true, false)}"
+                        "${ifElse($days > 3, true, false)}"
                 ),
                 new RuleSnippet(
                         "contains",
                         "包含判断模板",
                         "判断字符串或集合是否包含目标值。",
-                        "${contains(roleNames, 'HR')}"
+                        "${contains($roleNames, 'HR')}"
                 ),
                 new RuleSnippet(
                         "days-between",
                         "日期差值模板",
                         "计算两个日期之间的天数。",
-                        "${daysBetween(startDate, endDate)}"
+                        "${daysBetween($startDate, $endDate)}"
                 ),
                 new RuleSnippet(
                         "is-blank",
                         "空值判断模板",
                         "判断字段或表达式是否为空白。",
-                        "${isBlank(comment)}"
+                        "${isBlank($comment)}"
                 )
         );
     }
@@ -259,6 +253,7 @@ public class ProcessRuleMetadataService {
             case "contains" -> "包含判断";
             case "daysBetween" -> "日期差值";
             case "isBlank" -> "空值判断";
+            case "isLongLeave" -> "长假判断";
             default -> metadata.name();
         };
         return new ProcessRuleMetadataResponse.RuleFunction(
@@ -266,7 +261,7 @@ public class ProcessRuleMetadataService {
                 label,
                 signature,
                 metadata.description(),
-                "基础函数",
+                metadata.category(),
                 metadata.example()
         );
     }
