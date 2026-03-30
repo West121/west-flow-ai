@@ -46,8 +46,10 @@
 5. 启动协同服务：
 
    ```bash
-   ./scripts/start-workflow-collab.sh
+   docker compose -f infra/docker-compose.yml up -d workflow-collab
    ```
+
+推荐把协同服务交给 Docker 守护运行，不再使用临时终端会话直接执行 `node server.mjs`。这样即使本地终端关闭或会话被回收，协同服务也会按 `restart: unless-stopped` 自动保活。
 
 ## 环境变量
 
@@ -62,7 +64,8 @@
 - `HOST`
 - `PORT`
 - `WORKFLOW_COLLAB_AUTH_API`
-  - 默认：`http://127.0.0.1:8080/api/v1/process-definitions/collaboration`
+  - Docker 默认：`http://host.docker.internal:8080/api/v1/process-definitions/collaboration`
+  - 直接本机运行时可用：`http://127.0.0.1:8080/api/v1/process-definitions/collaboration`
 - `WORKFLOW_COLLAB_HEARTBEAT_INTERVAL_MS`
 - `WORKFLOW_COLLAB_HEARTBEAT_TIMEOUT_MS`
 - `WORKFLOW_COLLAB_ROOM_IDLE_TTL_MS`
@@ -123,6 +126,8 @@ pnpm -C frontend test:e2e --project=chromium
 
 1. 协同状态一直断开
    - 检查 `http://127.0.0.1:1235/health`
+   - 检查 `docker compose -f infra/docker-compose.yml ps workflow-collab`
+   - 检查 `docker compose -f infra/docker-compose.yml logs --tail=200 workflow-collab`
    - 检查后端 `8080` 是否可达
    - 检查 token 是否过期
 

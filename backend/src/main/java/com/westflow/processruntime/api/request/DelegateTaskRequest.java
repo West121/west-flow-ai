@@ -7,6 +7,7 @@ public record DelegateTaskRequest(
         @NotBlank(message = "targetUserId 不能为空")
         // 目标用户标识
         String targetUserId,
+        // 备注。
         String comment
 ) {
 }

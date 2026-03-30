@@ -8,43 +8,57 @@ public record ProcessInstanceLinkResponse(
         @JsonProperty("linkId") String id,
         // 根流程实例标识
         String rootInstanceId,
+        // 上级流程实例标识
         String parentInstanceId,
         // 子流程实例标识
         String childInstanceId,
+        // 上级节点标识
         String parentNodeId,
         // 上级节点名称
         String parentNodeName,
+        // 上级节点类型
         String parentNodeType,
         // 调用流程键
         String calledProcessKey,
+        // 调用流程定义标识
         String calledDefinitionId,
         // 调用版本策略
         String calledVersionPolicy,
+        // 调用版本号
         Integer calledVersion,
         // 子流程名称
         String childProcessName,
+        // 子流程版本号
         Integer childProcessVersion,
         // 关联类型
         String linkType,
+        // 状态
         String status,
         // 终止策略
         String terminatePolicy,
+        // 子流程完成策略
         String childFinishPolicy,
         // 调用范围
         String callScope,
+        // 汇聚模式
         String joinMode,
         // 子流程启动策略
         String childStartStrategy,
+        // 子流程启动决策原因
         String childStartDecisionReason,
         // 父流程恢复策略
         String parentResumeStrategy,
+        // 恢复决策原因
         String resumeDecisionReason,
         // 是否需要父流程确认
         boolean parentConfirmationRequired,
+        // 后代实例数量
         Integer descendantCount,
         // 运行中后代实例数量
         Integer runningDescendantCount,
+        // 创建时间
         OffsetDateTime createdAt,
+        // 完成时间
         OffsetDateTime finishedAt
 ) {
 }

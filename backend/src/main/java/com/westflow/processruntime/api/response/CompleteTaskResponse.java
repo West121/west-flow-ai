@@ -6,9 +6,11 @@ import java.util.List;
 public record CompleteTaskResponse(
         // 流程实例标识
         String instanceId,
+        // 完成任务Id。
         String completedTaskId,
         // 状态
         String status,
+        // 后续任务列表
         List<ProcessTaskSnapshot> nextTasks
 ) {
 }

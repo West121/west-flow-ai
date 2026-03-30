@@ -7,33 +7,43 @@ import java.time.OffsetDateTime;
 public record HandoverExecutionTaskItemResponse(
         // 源任务标识
         String sourceTaskId,
+        // 目标任务标识
         String targetTaskId,
         // 流程实例标识
         String instanceId,
+        // 流程定义标识
         String processDefinitionId,
         // 流程键
         String processKey,
+        // 流程名称
         String processName,
         // 业务主键
         String businessKey,
+        // 业务类型
         String businessType,
         // 业务标题
         String businessTitle,
+        // 单据编号
         String billNo,
         // 当前节点标识
         String currentNodeId,
+        // 当前节点名称
         String currentNodeName,
         // 目标用户标识
         String targetUserId,
+        // 状态
         String status,
         // 处理人用户标识
         String assigneeUserId,
+        // 操作人用户标识
         String operatorUserId,
         // 备注
         String comment,
+        // 执行时间
         OffsetDateTime executedAt,
         // 是否可转办
         boolean canTransfer,
+        // 说明。
         String reason
 ) {
 }

@@ -56,7 +56,7 @@ Monorepo for the AIBPMN approval platform.
    ```bash
    pnpm --dir frontend dev
    mvn -f backend/pom.xml spring-boot:run
-   ./scripts/start-workflow-collab.sh
+   docker compose -f infra/docker-compose.yml up -d workflow-collab
    ```
 
 7. Optional: run workflow designer collaboration E2E:

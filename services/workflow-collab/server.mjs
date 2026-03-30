@@ -39,6 +39,41 @@ const messageAwareness = 1
 const wsReadyStateConnecting = 0
 const wsReadyStateOpen = 1
 
+function serializeError(error) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    }
+  }
+  return {
+    message: String(error),
+  }
+}
+
+function log(level, message, details = undefined) {
+  const payload = {
+    ts: new Date().toISOString(),
+    pid: process.pid,
+    level,
+    message,
+  }
+  if (details !== undefined) {
+    payload.details = details
+  }
+  const line = `[workflow-collab] ${JSON.stringify(payload)}`
+  if (level === 'error') {
+    console.error(line)
+    return
+  }
+  if (level === 'warn') {
+    console.warn(line)
+    return
+  }
+  console.log(line)
+}
+
 /**
  * 协同房间的内存态文档和连接集合。
  *
@@ -136,9 +171,11 @@ function scheduleRoomCleanup(room) {
     }
     if (docs.delete(room.name)) {
       room.doc.destroy()
-      console.info(
-        `[workflow-collab] room-cleanup room=${room.name} rooms=${docs.size} connections=${activeConnections}`
-      )
+      log('info', 'room-cleanup', {
+        room: room.name,
+        rooms: docs.size,
+        connections: activeConnections,
+      })
     }
   }, roomIdleTtlMs)
 }
@@ -226,9 +263,12 @@ function closeConnection(room, conn, reason = 'unknown') {
     conn.heartbeatTimer = undefined
   }
   if (removed) {
-    console.info(
-      `[workflow-collab] connection-close room=${room.name} reason=${reason} rooms=${docs.size} connections=${activeConnections}`
-    )
+    log('info', 'connection-close', {
+      room: room.name,
+      reason,
+      rooms: docs.size,
+      connections: activeConnections,
+    })
   }
   if (conn.readyState === wsReadyStateConnecting || conn.readyState === wsReadyStateOpen) {
     try {
@@ -280,7 +320,7 @@ function handleMessage(conn, doc, message) {
         closeConnection(doc, conn, 'unsupported-message')
     }
   } catch (error) {
-    console.error('[workflow-collab] message handling failed', error)
+    log('error', 'message-handling-failed', serializeError(error))
     closeConnection(doc, conn, 'message-error')
   }
 }
@@ -344,6 +384,11 @@ async function authorizeUpgrade(request) {
     const json = await response.json().catch(() => ({}))
     return { ok: true, roomName, auth: json?.data || null }
   } catch (error) {
+    log('warn', 'authorize-upgrade-failed', {
+      roomName,
+      authApiBaseUrl,
+      error: serializeError(error),
+    })
     return {
       ok: false,
       statusCode: 502,
@@ -370,7 +415,7 @@ async function postCollaborationAuditEvent(authToken, payload) {
       body: JSON.stringify(payload),
     })
   } catch (error) {
-    console.error('[workflow-collab] audit failed', error)
+    log('warn', 'audit-failed', serializeError(error))
   }
 }
 
@@ -395,9 +440,15 @@ function setupWsConnection(conn, request, roomName, auth = null) {
   conn.lastPongAt = Date.now()
 
   if (auth) {
-    console.info(
-      `[workflow-collab] join room=${roomName} user=${auth.userId} name=${auth.displayName} processDefinitionId=${auth.processDefinitionId || '-'} rooms=${docs.size} connections=${activeConnections}`
-    )
+    log('info', 'join', {
+      room: roomName,
+      userId: auth.userId,
+      displayName: auth.displayName,
+      processDefinitionId: auth.processDefinitionId || null,
+      rooms: docs.size,
+      connections: activeConnections,
+      connectionId: conn.connectionId,
+    })
     void postCollaborationAuditEvent(conn.authToken, {
       roomName,
       eventType: 'DESIGNER_COLLAB_JOIN',
@@ -436,9 +487,14 @@ function setupWsConnection(conn, request, roomName, auth = null) {
 
   conn.on('close', () => {
     if (conn.auth) {
-      console.info(
-        `[workflow-collab] leave room=${roomName} user=${conn.auth.userId} name=${conn.auth.displayName} rooms=${docs.size} connections=${activeConnections}`
-      )
+      log('info', 'leave', {
+        room: roomName,
+        userId: conn.auth.userId,
+        displayName: conn.auth.displayName,
+        rooms: docs.size,
+        connections: activeConnections,
+        connectionId: conn.connectionId,
+      })
       void postCollaborationAuditEvent(conn.authToken, {
         roomName,
         eventType: 'DESIGNER_COLLAB_LEAVE',
@@ -469,6 +525,33 @@ function setupWsConnection(conn, request, roomName, auth = null) {
 }
 
 const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false })
+process.on('warning', (warning) => {
+  log('warn', 'process-warning', {
+    name: warning.name,
+    message: warning.message,
+    stack: warning.stack,
+  })
+})
+process.on('unhandledRejection', (reason) => {
+  log('error', 'unhandled-rejection', serializeError(reason))
+})
+process.on('uncaughtException', (error) => {
+  log('error', 'uncaught-exception', serializeError(error))
+})
+process.on('beforeExit', (code) => {
+  log('warn', 'before-exit', { code, ...getServerStats() })
+})
+process.on('exit', (code) => {
+  log('warn', 'exit', { code, ...getServerStats() })
+})
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    log('warn', 'signal-received', { signal, ...getServerStats() })
+  })
+}
+wss.on('error', (error) => {
+  log('error', 'websocket-server-error', serializeError(error))
+})
 
 const server = http.createServer((request, response) => {
   if ((request.url || '').startsWith('/health')) {
@@ -489,6 +572,13 @@ const server = http.createServer((request, response) => {
     ...getServerStats(),
   })
 })
+server.on('error', (error) => {
+  log('error', 'http-server-error', serializeError(error))
+})
+server.on('clientError', (error, socket) => {
+  log('warn', 'http-client-error', serializeError(error))
+  socket.destroy()
+})
 
 wss.on('connection', (conn, request, roomName, auth) => {
   setupWsConnection(conn, request, roomName, auth)
@@ -497,6 +587,11 @@ wss.on('connection', (conn, request, roomName, auth) => {
 server.on('upgrade', async (request, socket, head) => {
   const authResult = await authorizeUpgrade(request)
   if (!authResult.ok) {
+    log('warn', 'upgrade-rejected', {
+      roomName: extractRoomName(request),
+      statusCode: authResult.statusCode,
+      body: authResult.body,
+    })
     writeUpgradeReject(socket, authResult.statusCode, authResult.body)
     return
   }
@@ -507,7 +602,9 @@ server.on('upgrade', async (request, socket, head) => {
 })
 
 server.listen(port, host, () => {
-  console.log(
-    `[workflow-collab] listening on ws://${host}:${port} (auth) rooms=${docs.size} connections=${activeConnections}`
-  )
+  log('info', 'listening', {
+    url: `ws://${host}:${port}`,
+    mode: 'auth',
+    ...getServerStats(),
+  })
 })

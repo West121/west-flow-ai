@@ -8,67 +8,89 @@ public record RuntimeAppendLinkResponse(
         @JsonProperty("linkId") String id,
         // 根流程实例标识
         String rootInstanceId,
+        // 上级流程实例标识
         String parentInstanceId,
         // 源任务标识
         String sourceTaskId,
+        // 源节点标识
         String sourceNodeId,
         // 源节点名称
         String sourceNodeName,
+        // 源节点类型
         String sourceNodeType,
         // append类型。
         String appendType,
+        // runtimeLink类型。
         String runtimeLinkType,
         // 策略。
         String policy,
+        // 目标任务标识
         String targetTaskId,
         // 目标任务名称
         String targetTaskName,
+        // 目标流程实例标识
         String targetInstanceId,
         // 目标用户标识
         String targetUserId,
+        // 调用流程键
         String calledProcessKey,
         // 调用流程定义标识
         String calledDefinitionId,
+        // 调用版本策略
         String calledVersionPolicy,
         // 调用版本号
         Integer calledVersion,
+        // 目标流程名称。
         String targetProcessName,
         // 目标流程Version。
         Integer targetProcessVersion,
+        // 状态
         String status,
         // trigger模式。
         String triggerMode,
+        // build模式。
         String buildMode,
         // 来源模式。
         String sourceMode,
+        // resolved目标模式。
         String resolvedTargetMode,
         // 目标业务类型。
         String targetBusinessType,
+        // 目标Scene编码。
         String targetSceneCode,
         // ruleExpression。
         String ruleExpression,
+        // manual模板编码。
         String manualTemplateCode,
         // scene编码。
         String sceneCode,
+        // executionStrategy。
         String executionStrategy,
         // fallbackStrategy。
         String fallbackStrategy,
+        // maxGenerated数量。
         Integer maxGeneratedCount,
         // generated数量。
         Integer generatedCount,
+        // generationTruncated。
         Boolean generationTruncated,
         // resolved来源模式。
         String resolvedSourceMode,
+        // resolution路径。
         String resolutionPath,
         // 模板来源。
         String templateSource,
+        // 操作人用户标识
         String operatorUserId,
         // 备注内容
         String commentText,
+        // resolution状态。
         String resolutionStatus,
         // resolution原因。
         String resolutionReason,
+        // 创建时间
         OffsetDateTime createdAt,
+        // 完成时间
         OffsetDateTime finishedAt
 ) {
 

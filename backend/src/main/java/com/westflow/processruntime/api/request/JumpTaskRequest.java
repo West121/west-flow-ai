@@ -7,6 +7,7 @@ public record JumpTaskRequest(
         @NotBlank(message = "targetNodeId 不能为空")
         // 目标节点标识
         String targetNodeId,
+        // 备注。
         String comment
 ) {
 }

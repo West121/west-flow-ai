@@ -4,6 +4,7 @@ package com.westflow.processruntime.api.response;
 public record WorkbenchDashboardSummaryResponse(
         // 今日待办数
         long todoTodayCount,
+        // 已办审批数
         long doneApprovalCount
 ) {
 }

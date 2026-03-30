@@ -7,6 +7,7 @@ public record RemoveSignTaskRequest(
         @NotBlank(message = "targetTaskId 不能为空")
         // 目标任务标识
         String targetTaskId,
+        // 备注。
         String comment
 ) {
 }

@@ -11,100 +11,133 @@ import java.util.Map;
 public record ProcessTaskDetailResponse(
         // 任务标识
         String taskId,
+        // 流程实例标识
         String instanceId,
         // 流程定义标识
         String processDefinitionId,
+        // 流程键
         String processKey,
         // 流程名称
         String processName,
+        // 业务主键
         String businessKey,
         // 业务类型
         String businessType,
+        // 发起人用户标识
         String applicantUserId,
         // 发起人岗位标识
         String initiatorPostId,
+        // 发起人岗位名称
         String initiatorPostName,
         // 发起人部门标识
         String initiatorDepartmentId,
+        // 发起人部门名称
         String initiatorDepartmentName,
         // 业务数据
         Map<String, Object> businessData,
+        // 自动化状态
         String automationStatus,
         // 流程节点列表
         List<ProcessDslPayload.Node> flowNodes,
+        // 流程连线列表
         List<ProcessDslPayload.Edge> flowEdges,
         // 流程事件列表
         List<ProcessInstanceEventResponse> instanceEvents,
+        // 任务轨迹列表
         List<ProcessTaskTraceItemResponse> taskTrace,
         // 自动化动作轨迹列表
         List<ProcessAutomationTraceItemResponse> automationActionTrace,
+        // 通知发送记录列表
         List<ProcessNotificationSendRecordResponse> notificationSendRecords,
         // 节点标识
         String nodeId,
+        // 节点名称
         String nodeName,
         // 任务类型
         String taskKind,
+        // 任务语义模式
         String taskSemanticMode,
         // 状态
         String status,
+        // 分配模式
         String assignmentMode,
         // 候选人用户列表
         List<String> candidateUserIds,
+        // 候选人用户组列表
         List<String> candidateGroupIds,
         // 处理人用户标识
         String assigneeUserId,
+        // 动作
         String action,
         // 操作人用户标识
         String operatorUserId,
+        // 备注
         String comment,
         // 接收时间
         OffsetDateTime receiveTime,
+        // 已读时间
         OffsetDateTime readTime,
         // 处理开始时间
         OffsetDateTime handleStartTime,
+        // 处理结束时间
         OffsetDateTime handleEndTime,
         // 处理耗时秒数
         Long handleDurationSeconds,
+        // 目标策略
         String targetStrategy,
         // 目标节点标识
         String targetNodeId,
+        // 目标节点名称
         String targetNodeName,
         // 重审策略
         String reapproveStrategy,
+        // 代办模式
         String actingMode,
         // 被代办人标识
         String actingForUserId,
+        // 委派人标识
         String delegatedByUserId,
         // 转办来源人标识
         String handoverFromUserId,
+        // 创建时间
         OffsetDateTime createdAt,
         // 更新时间
         OffsetDateTime updatedAt,
+        // 完成时间
         OffsetDateTime completedAt,
         // 实例状态
         String instanceStatus,
+        // 流程表单键
         String processFormKey,
         // 流程表单版本
         String processFormVersion,
+        // 节点表单键
         String nodeFormKey,
         // 节点表单版本
         String nodeFormVersion,
+        // 生效表单键
         String effectiveFormKey,
         // 生效表单版本
         String effectiveFormVersion,
+        // 字段绑定列表
         List<WorkflowFieldBinding> fieldBindings,
         // 表单数据
         Map<String, Object> formData,
+        // 任务表单数据
         Map<String, Object> taskFormData,
         // 会签分组列表
         List<CountersignTaskGroupResponse> countersignGroups,
+        // 包容网关命中列表
         List<InclusiveGatewayHitResponse> inclusiveGatewayHits,
         // 流程关联列表
         List<ProcessInstanceLinkResponse> processLinks,
+        // 追加关联列表
         List<RuntimeAppendLinkResponse> appendLinks,
         // 当前激活任务标识列表
         List<String> activeTaskIds,
+        // 用户名称映射
         Map<String, String> userDisplayNames,
+        // 用户组名称映射
         Map<String, String> groupDisplayNames
 ) {
 }

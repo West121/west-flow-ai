@@ -4,7 +4,9 @@ package com.westflow.processruntime.api.response;
 public record WorkflowFieldBinding(
         // 来源
         String source,
+        // 来源字段键
         String sourceFieldKey,
+        // 目标字段键
         String targetFieldKey
 ) {
 }
