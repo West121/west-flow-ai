@@ -2,7 +2,9 @@ package com.westflow.notification.model;
 
 import java.time.Instant;
 
-// 通知发送结果。
+/**
+ * 通知发送结果。
+ */
 public record NotificationDispatchResult(
         String logId,
         String channelId,

@@ -34,7 +34,7 @@ import org.springframework.stereotype.Service;
 import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 
 /**
- * 基于真实 Flowable 引擎发起流程实例，并回填最小活动任务快照。
+ * 基于真实 Flowable 引擎发起流程实例，并回填活动任务快照。
  */
 @Service
 @RequiredArgsConstructor
@@ -50,9 +50,7 @@ public class FlowableRuntimeStartService {
     private final BusinessProcessBindingService businessProcessBindingService;
     private final IdentityAuthService identityAuthService;
 
-    /**
-     * 启动指定流程定义的最新发布版本。
-     */
+    // 启动指定流程定义的最新发布版本。
     public StartProcessResponse start(StartProcessRequest request) {
         PublishedProcessDefinition definition = processDefinitionService.getLatestByProcessKey(request.processKey());
         String effectiveBusinessType = resolveEffectiveBusinessType(definition.processKey(), request.businessType());
@@ -97,9 +95,7 @@ public class FlowableRuntimeStartService {
         return new StartProcessResponse(definition.processDefinitionId(), instance.getProcessInstanceId(), status, activeTasks);
     }
 
-    /**
-     * 主流程发起后扫描即时创建的 callActivity 子流程，并落平台关联表。
-     */
+    // 主流程启动后同步刚创建的 callActivity 子流程关联。
     private void persistSubprocessLinks(PublishedProcessDefinition definition, ProcessInstance parentInstance) {
         String rootInstanceId = java.util.Optional.ofNullable(processLinkService.getByChildInstanceId(parentInstance.getProcessInstanceId()))
                 .map(ProcessLinkRecord::rootInstanceId)
@@ -165,9 +161,7 @@ public class FlowableRuntimeStartService {
         }
     }
 
-    /**
-     * 预先按子流程 key 建立节点队列，便于一对多 callActivity 场景顺序匹配。
-     */
+    // 预先按子流程 key 建立队列，便于一对多 callActivity 顺序匹配。
     private Map<String, Deque<com.westflow.processdef.model.ProcessDslPayload.Node>> buildSubprocessNodesByKey(
             PublishedProcessDefinition definition,
             String parentInstanceId
@@ -187,9 +181,7 @@ public class FlowableRuntimeStartService {
         return nodesByKey;
     }
 
-    /**
-     * 把平台上下文和表单数据统一写入流程变量，供后续运行态与详情查询复用。
-     */
+    // 将平台上下文和表单数据写入流程变量，供运行态和详情查询复用。
     private Map<String, Object> buildStartVariables(PublishedProcessDefinition definition, StartProcessRequest request) {
         Map<String, Object> variables = new LinkedHashMap<>();
         CurrentUserResponse currentUser = identityAuthService.currentUser();
@@ -358,7 +350,7 @@ public class FlowableRuntimeStartService {
     }
 
     /**
-     * 从 BPMN 扩展属性中读取平台任务类型，保证 CC 等节点语义不丢。
+     * 从 BPMN 扩展属性读取平台任务类型，保留 CC 等节点语义。
      */
     private String resolveTaskKind(Task task) {
         BpmnModel model = flowableEngineFacade.repositoryService().getBpmnModel(task.getProcessDefinitionId());

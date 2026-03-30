@@ -18,7 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 @Service
-// 校验流程 DSL 的结构、引用关系和节点配置完整性。
+// 校验流程 DSL 的结构、引用关系和节点配置。
 public class ProcessDslValidator {
 
     private static final Set<String> COLLABORATION_NODE_TYPES = Set.of(
@@ -276,7 +276,7 @@ public class ProcessDslValidator {
         }
     }
 
-    // 至少要有一个 end 节点，保证流程可闭合。
+    // 至少要有一个 end 节点，保证流程能闭合。
     private void validateAtLeastOneEnd(Collection<ProcessDslPayload.Node> nodes) {
         long endCount = nodes.stream().filter(node -> "end".equals(node.type())).count();
         if (endCount < 1) {
@@ -844,7 +844,7 @@ public class ProcessDslValidator {
         }
     }
 
-    // 校验包容分支的第一批策略配置，保证分支优先级、默认分支和汇聚规则可被稳定识别。
+    // 校验包容分支的优先级、默认分支和汇聚规则配置。
     private void validateInclusiveSplitConfig(ProcessDslPayload.Node split, List<ProcessDslPayload.Edge> outgoingEdges) {
         Map<String, Object> config = safeConfig(split);
 
@@ -898,7 +898,7 @@ public class ProcessDslValidator {
         }
     }
 
-    // 校验条件分支的表达式类型，支持表达式、字段与公式三类第一批增强。
+    // 校验条件分支的表达式类型。
     private void validateBranchCondition(ProcessDslPayload.Node node, ProcessDslPayload.Edge edge, String branchNodeType) {
         Map<String, Object> condition = mapValue(edge.condition());
         String type = asString(condition.get("type"));
@@ -1080,8 +1080,6 @@ public class ProcessDslValidator {
                 .comparing(ProcessDslPayload.Edge::priority, Comparator.nullsLast(Integer::compareTo))
                 .thenComparing(ProcessDslPayload.Edge::id);
     }
-
-    // 统一把节点配置转成可读写的 Map。
 
     private Map<String, Object> details(Object... keyValues) {
         Map<String, Object> details = new LinkedHashMap<>();

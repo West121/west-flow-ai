@@ -37,7 +37,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
-// 日志管理聚合服务，统一提供审计、登录与通知发送日志列表与详情。
+/**
+ * 日志管理聚合服务，统一提供审计、登录与通知发送日志列表与详情。
+ */
 public class SystemLogService {
 
     private static final List<String> AUDIT_FILTER_FIELDS = List.of("status", "method", "module", "loginId", "path", "createdAt");
@@ -59,6 +61,9 @@ public class SystemLogService {
     private final IdentityAuthService fixtureAuthService;
     private final IpRegionService ipRegionService;
 
+    /**
+     * 分页查询审计日志。
+     */
     public PageResponse<AuditLogListItemResponse> pageAudit(PageRequest request) {
         ensureAccess();
         AuditFilters filters = parseAuditFilters(request.filters());
@@ -91,6 +96,9 @@ public class SystemLogService {
         );
     }
 
+    /**
+     * 查询审计日志详情。
+     */
     public AuditLogDetailResponse detailAudit(String logId) {
         ensureAccess();
         AuditLogRecord record = requireAudit(logId);
@@ -113,6 +121,9 @@ public class SystemLogService {
         );
     }
 
+    /**
+     * 分页查询登录日志。
+     */
     public PageResponse<LoginLogListItemResponse> pageLogin(PageRequest request) {
         ensureAccess();
         LoginFilters filters = parseLoginFilters(request.filters());
@@ -142,6 +153,9 @@ public class SystemLogService {
         );
     }
 
+    /**
+     * 查询登录日志详情。
+     */
     public LoginLogDetailResponse detailLogin(String logId) {
         ensureAccess();
         LoginLogRecord record = requireLogin(logId);
@@ -162,6 +176,9 @@ public class SystemLogService {
         );
     }
 
+    /**
+     * 分页查询通知发送日志。
+     */
     public PageResponse<SystemNotificationLogListItemResponse> pageNotification(PageRequest request) {
         ensureAccess();
         NotificationFilters filters = parseNotificationFilters(request.filters());
@@ -191,6 +208,9 @@ public class SystemLogService {
         );
     }
 
+    /**
+     * 查询通知发送日志详情。
+     */
     public SystemNotificationLogDetailResponse detailNotification(String recordId) {
         ensureAccess();
         NotificationLogRecord record = requireNotification(recordId);

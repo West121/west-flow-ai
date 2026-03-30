@@ -29,7 +29,6 @@ public class OAController {
      */
     @PostMapping("/leaves")
     public ApiResponse<OALaunchResponse> createLeave(@Valid @RequestBody CreateOALeaveBillRequest request) {
-        // 请假、报销、通用申请都走同一套发起服务。
         return ApiResponse.success(oaLaunchService.createLeaveBill(request));
     }
 

@@ -2,11 +2,17 @@ package com.westflow.processruntime.termination.model;
 
 // 终止命令，供主线程或控制器后续接入。
 public record ProcessTerminationCommand(
+        // 根流程实例标识。
         String rootInstanceId,
+        // 目标流程实例标识。
         String targetInstanceId,
+        // 终止作用域。
         ProcessTerminationScope scope,
+        // 传播策略。
         ProcessTerminationPropagationPolicy propagationPolicy,
+        // 终止原因。
         String reason,
+        // 操作人标识。
         String operatorUserId
 ) {
     public ProcessTerminationCommand {

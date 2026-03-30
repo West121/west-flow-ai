@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+// 任务取回、撤回和催办的控制服务。
 public class RuntimeTaskControlService {
 
     private final FlowableEngineFacade flowableEngineFacade;
@@ -28,6 +29,7 @@ public class RuntimeTaskControlService {
     private final RuntimeBusinessLinkService runtimeBusinessLinkService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
 
+    // 将当前任务取回到上一处理人。
     public CompleteTaskResponse takeBack(String taskId, TakeBackTaskRequest request) {
         Task task = taskActionSupportService.requireActiveTask(taskId);
         if (!canTakeBack(task)) {
@@ -82,6 +84,7 @@ public class RuntimeTaskControlService {
         return taskActionSupportService.nextTaskResponse(task.getProcessInstanceId(), taskId);
     }
 
+    // 由发起人撤销当前流程实例。
     public CompleteTaskResponse revoke(String taskId, RevokeTaskRequest request) {
         Task task = taskActionSupportService.requireActiveTask(taskId);
         String comment = request == null ? null : request.comment();
@@ -138,6 +141,7 @@ public class RuntimeTaskControlService {
         return new CompleteTaskResponse(processInstanceId, task.getId(), "REVOKED", List.of());
     }
 
+    // 由发起人催办当前任务。
     public CompleteTaskResponse urge(String taskId, UrgeTaskRequest request) {
         Task task = taskActionSupportService.requireActiveTask(taskId);
         String comment = request == null ? null : request.comment();
@@ -194,6 +198,7 @@ public class RuntimeTaskControlService {
         );
     }
 
+    // 只有满足状态、节点和历史条件时才允许取回。
     private boolean canTakeBack(Task task) {
         if (task == null || !"NORMAL".equals(taskActionSupportService.resolveTaskKind(task)) || taskActionSupportService.hasActiveAddSignChild(task.getId())) {
             return false;

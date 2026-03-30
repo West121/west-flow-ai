@@ -8,16 +8,23 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/**
+ * 根据业务类型和场景码解析对应的流程键。
+ */
 @Service
 @RequiredArgsConstructor
-// 根据业务类型和场景码解析对应的流程键。
 public class BusinessProcessBindingService {
 
     private final BusinessProcessBindingMapper businessProcessBindingMapper;
 
-    // 解析业务场景对应的流程键，找不到时直接报错。
+    /**
+     * 解析业务场景对应的流程键。
+     *
+     * @param businessType 业务类型
+     * @param sceneCode 场景码
+     * @return 流程键
+     */
     public String resolveProcessKey(String businessType, String sceneCode) {
-        // 业务类型和场景码共同决定流程绑定，不在业务层硬编码流程键。
         String normalizedSceneCode = sceneCode == null || sceneCode.isBlank() ? "default" : sceneCode.trim();
         BusinessProcessBindingRecord record = businessProcessBindingMapper.selectEnabledBinding(businessType, normalizedSceneCode);
         if (record == null || record.processKey() == null || record.processKey().isBlank()) {

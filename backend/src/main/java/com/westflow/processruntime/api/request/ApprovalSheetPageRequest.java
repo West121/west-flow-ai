@@ -13,18 +13,26 @@ import java.util.List;
 
 // 审批单分页查询请求。
 public record ApprovalSheetPageRequest(
+        // 查询视图类型。
         @NotNull(message = "view 不能为空")
         ApprovalSheetListView view,
+        // 业务类型过滤。
         List<String> businessTypes,
+        // 页码，从 1 开始。
         @Min(value = 1, message = "page must be greater than or equal to 1")
         int page,
+        // 每页条数。
         @AllowedPageSize
         int pageSize,
+        // 关键字。
         String keyword,
+        // 过滤条件。
         @Valid
         List<FilterItem> filters,
+        // 排序条件。
         @Valid
         List<SortItem> sorts,
+        // 分组条件。
         @Valid
         List<GroupItem> groups
 ) {

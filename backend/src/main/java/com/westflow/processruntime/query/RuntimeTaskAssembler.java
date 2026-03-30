@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+// 将 Flowable 任务组装为运行态列表和详情摘要。
 public class RuntimeTaskAssembler {
 
     private final FlowableEngineFacade flowableEngineFacade;
@@ -28,6 +29,7 @@ public class RuntimeTaskAssembler {
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
 
+    // 将单个任务转换为列表项。
     public ProcessTaskListItemResponse toTaskListItem(
             Task task,
             RuntimeTaskProjectionContext projectionContext,
@@ -72,10 +74,12 @@ public class RuntimeTaskAssembler {
         );
     }
 
+    // 按流程实例解析对应的已发布流程定义。
     public Optional<PublishedProcessDefinition> resolvePublishedDefinitionByInstance(String processInstanceId) {
         return doResolvePublishedDefinitionByInstance(processInstanceId);
     }
 
+    // 判断任务是否匹配关键字。
     public boolean matchesTaskKeyword(ProcessTaskListItemResponse item, String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return true;
@@ -99,7 +103,7 @@ public class RuntimeTaskAssembler {
             try {
                 return Optional.of(processDefinitionService.getByFlowableDefinitionId(flowableDefinitionId));
             } catch (RuntimeException ignored) {
-                // Fall through.
+                // 继续回退到流程实例级解析。
             }
         }
         if (processKey == null || processKey.isBlank()) {
@@ -122,7 +126,7 @@ public class RuntimeTaskAssembler {
             try {
                 return Optional.of(processDefinitionService.getByFlowableDefinitionId(flowableDefinitionId));
             } catch (RuntimeException ignored) {
-                // Fall through to the slower instance-level resolution.
+                // 回退到更慢的流程实例级解析。
             }
         }
         return Optional.empty();
@@ -158,7 +162,7 @@ public class RuntimeTaskAssembler {
                 return runtimeValues;
             }
         } catch (FlowableObjectNotFoundException exception) {
-            // Continue to history fallback.
+            // 继续使用历史变量兜底。
         }
         return historicVariables(processInstanceId);
     }

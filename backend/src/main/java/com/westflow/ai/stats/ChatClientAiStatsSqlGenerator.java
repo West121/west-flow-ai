@@ -72,9 +72,9 @@ public class ChatClientAiStatsSqlGenerator implements AiStatsSqlGenerator {
                         text(jsonNode, "description")
                 );
             } catch (RuntimeException exception) {
-                // 重试一次，兼容模型偶发 EOF/空响应。
+                // 重试一次，兼容模型偶发 EOF 或空响应。
             } catch (Exception exception) {
-                // 重试一次，兼容模型偶发返回 markdown 包裹或非完整 JSON。
+                // 重试一次，兼容模型返回 Markdown 包裹或不完整 JSON。
             }
         }
         throw new ContractException("AI.STATS_SQL_INVALID", HttpStatus.BAD_REQUEST, "统计 SQL 生成失败");

@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+// 将运行态任务、历史任务和业务链接投影为审批单列表项。
 public class RuntimeApprovalSheetProjectionService {
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
@@ -38,10 +39,12 @@ public class RuntimeApprovalSheetProjectionService {
     private final ApprovalSheetQueryService approvalSheetQueryService;
     private final RuntimeParticipantDirectoryService runtimeParticipantDirectoryService;
 
+    // 创建一次查询内共享的投影上下文。
     public ApprovalSheetProjectionContext createProjectionContext() {
         return new ApprovalSheetProjectionContext(new HashMap<>(), new HashMap<>());
     }
 
+    // 从运行中的复制任务构造审批单列表项。
     public ApprovalSheetListItemResponse fromCopiedTask(Task task) {
         Map<String, Object> variables = runtimeVariables(task.getProcessInstanceId());
         PublishedProcessDefinition definition = resolvePublishedDefinition(
@@ -82,6 +85,7 @@ public class RuntimeApprovalSheetProjectionService {
         );
     }
 
+    // 从历史复制任务构造审批单列表项。
     public ApprovalSheetListItemResponse fromCopiedHistoricTask(HistoricTaskInstance task) {
         Map<String, Object> variables = historicVariables(task.getProcessInstanceId());
         PublishedProcessDefinition definition = resolvePublishedDefinition(
@@ -121,6 +125,7 @@ public class RuntimeApprovalSheetProjectionService {
         );
     }
 
+    // 从运行态任务摘要构造审批单列表项。
     public ApprovalSheetListItemResponse fromTask(ProcessTaskListItemResponse task, ApprovalSheetProjectionContext projectionContext) {
         Map<String, Object> businessData = projectionContext.businessDataByKey().computeIfAbsent(
                 task.businessType() + "::" + task.businessKey(),
@@ -155,6 +160,7 @@ public class RuntimeApprovalSheetProjectionService {
         );
     }
 
+    // 从业务关联记录构造审批单列表项。
     public ApprovalSheetListItemResponse fromLink(BusinessLinkSnapshot link) {
         HistoricProcessInstance historicProcessInstance = requireHistoricProcessInstance(link.processInstanceId());
         Map<String, Object> variables = runtimeOrHistoricVariables(link.processInstanceId());
@@ -219,6 +225,7 @@ public class RuntimeApprovalSheetProjectionService {
         );
     }
 
+    // 判断审批单是否命中关键字。
     public boolean matchesKeyword(ApprovalSheetListItemResponse item, String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return true;
@@ -231,6 +238,7 @@ public class RuntimeApprovalSheetProjectionService {
                 || contains(item.businessType(), normalized);
     }
 
+    // 解析历史任务类型，优先用运行时写回的类型。
     public String resolveHistoricTaskKind(HistoricTaskInstance task) {
         String historicTaskKind = stringValue(historicTaskLocalVariables(task.getId()).get("westflowTaskKind"));
         if (historicTaskKind != null) {
@@ -329,7 +337,7 @@ public class RuntimeApprovalSheetProjectionService {
                 return runtimeValues;
             }
         } catch (FlowableObjectNotFoundException ignored) {
-            // Fall through to history fallback.
+            // 继续回退到历史变量。
         }
         return historicVariables(processInstanceId);
     }

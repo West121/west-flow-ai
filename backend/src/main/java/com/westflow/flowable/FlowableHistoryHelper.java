@@ -7,11 +7,17 @@ import java.util.Map;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.springframework.stereotype.Component;
 
+/**
+ * Flowable 历史数据转换辅助类。
+ */
 @Component
 public class FlowableHistoryHelper {
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
 
+    /**
+     * 转换为历史流程实例摘要。
+     */
     public FlowableHistoricProcessInstanceSummary toHistoricProcessInstanceSummary(
             HistoricProcessInstance historicProcessInstance
     ) {
@@ -35,6 +41,9 @@ public class FlowableHistoryHelper {
         );
     }
 
+    /**
+     * 计算历史实例状态。
+     */
     private String resolveStatus(HistoricProcessInstance historicProcessInstance) {
         if (historicProcessInstance.getDeleteReason() != null) {
             return "DELETED";
@@ -42,6 +51,9 @@ public class FlowableHistoryHelper {
         return historicProcessInstance.getEndTime() == null ? "RUNNING" : "COMPLETED";
     }
 
+    /**
+     * 将日期转换为上海时区时间。
+     */
     private OffsetDateTime toOffsetDateTime(java.util.Date value) {
         if (value == null) {
             return null;

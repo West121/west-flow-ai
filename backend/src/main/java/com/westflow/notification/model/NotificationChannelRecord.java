@@ -3,7 +3,9 @@ package com.westflow.notification.model;
 import java.time.Instant;
 import java.util.Map;
 
-// 通知渠道的持久化记录。
+/**
+ * 通知渠道的持久化记录。
+ */
 public record NotificationChannelRecord(
         String channelId,
         String channelCode,
@@ -17,7 +19,9 @@ public record NotificationChannelRecord(
         Instant updatedAt,
         Instant lastSentAt
 ) {
-    // 内存态记录直接用 record，更新时返回新对象。
+    /**
+     * 返回更新时间更新后的新对象。
+     */
     public NotificationChannelRecord withUpdatedAt(Instant updatedAt) {
         return new NotificationChannelRecord(
                 channelId,
@@ -34,6 +38,9 @@ public record NotificationChannelRecord(
         );
     }
 
+    /**
+     * 返回最近发送时间更新后的新对象。
+     */
     public NotificationChannelRecord withLastSentAt(Instant lastSentAt) {
         return new NotificationChannelRecord(
                 channelId,

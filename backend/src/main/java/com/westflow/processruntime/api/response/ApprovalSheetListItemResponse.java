@@ -4,30 +4,55 @@ import java.time.OffsetDateTime;
 
 // 审批单列表项摘要。
 public record ApprovalSheetListItemResponse(
+        // 流程实例标识。
         String instanceId,
+        // 流程定义标识。
         String processDefinitionId,
+        // 流程键。
         String processKey,
+        // 流程名称。
         String processName,
+        // 业务主键。
         String businessId,
+        // 业务类型。
         String businessType,
+        // 单据编号。
         String billNo,
+        // 业务标题。
         String businessTitle,
+        // 发起人用户标识。
         String initiatorUserId,
+        // 发起人姓名。
         String initiatorDisplayName,
+        // 发起人岗位标识。
         String initiatorPostId,
+        // 发起人岗位名称。
         String initiatorPostName,
+        // 发起人部门标识。
         String initiatorDepartmentId,
+        // 发起人部门名称。
         String initiatorDepartmentName,
+        // 当前节点名称。
         String currentNodeName,
+        // 当前任务标识。
         String currentTaskId,
+        // 当前任务状态。
         String currentTaskStatus,
+        // 当前处理人用户标识。
         String currentAssigneeUserId,
+        // 实例状态。
         String instanceStatus,
+        // 最近动作。
         String latestAction,
+        // 最近操作人。
         String latestOperatorUserId,
+        // 自动化状态。
         String automationStatus,
+        // 创建时间。
         OffsetDateTime createdAt,
+        // 更新时间。
         OffsetDateTime updatedAt,
+        // 完成时间。
         OffsetDateTime completedAt
 ) {
 }

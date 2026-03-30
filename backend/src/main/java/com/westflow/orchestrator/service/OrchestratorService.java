@@ -12,14 +12,20 @@ import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+/**
+ * 执行编排器的手动扫描与自动化动作。
+ */
 @Service
 @RequiredArgsConstructor
-// 执行编排器的手动扫描与自动化动作。
 public class OrchestratorService {
 
     private final OrchestratorRuntimeBridge orchestratorRuntimeBridge;
 
-    // 手动扫描当前运行时目标并生成执行结果。
+    /**
+     * 手动扫描当前运行时目标并生成执行结果。
+     *
+     * @return 扫描结果汇总
+     */
     public OrchestratorManualScanResponse manualScan() {
         String runId = buildId("orc_scan_");
         Instant scannedAt = Instant.now();
@@ -37,7 +43,9 @@ public class OrchestratorService {
         return new OrchestratorManualScanResponse(runId, scannedAt, results);
     }
 
-    // 把扫描目标和执行结果组装成接口返回模型。
+    /**
+     * 把扫描目标和执行结果组装成接口返回模型。
+     */
     private OrchestratorScanResultResponse toResult(
             OrchestratorScanTargetRecord target,
             OrchestratorScanExecutionRecord executionRecord
@@ -71,7 +79,9 @@ public class OrchestratorService {
         }
     }
 
-    // 生成扫描和执行记录主键。
+    /**
+     * 生成扫描和执行记录主键。
+     */
     private String buildId(String prefix) {
         return prefix + UUID.randomUUID().toString().replace("-", "");
     }

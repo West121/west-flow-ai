@@ -20,6 +20,12 @@ public record ApiErrorResponse(
 
     /**
      * 构造错误响应。
+     *
+     * @param code 错误码
+     * @param message 错误消息
+     * @param details 扩展信息
+     * @param fieldErrors 字段校验错误
+     * @return 错误响应
      */
     public static ApiErrorResponse of(
             String code,

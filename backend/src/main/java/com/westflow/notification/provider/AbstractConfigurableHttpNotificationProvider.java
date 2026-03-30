@@ -15,6 +15,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 
+/**
+ * 可配置 HTTP 通知适配器的公共实现。
+ */
 abstract class AbstractConfigurableHttpNotificationProvider implements NotificationProvider {
 
     private final ObjectMapper objectMapper;
@@ -29,6 +32,7 @@ abstract class AbstractConfigurableHttpNotificationProvider implements Notificat
 
     @Override
     public NotificationSendResult send(NotificationChannelRecord channel, NotificationDispatchRequest request) {
+        // 先检查本地诊断 mock，再走真实 HTTP 请求。
         Map<String, Object> config = channel.config() == null ? Map.of() : channel.config();
         if (allowDiagnosticMock(channel, config)) {
             return new NotificationSendResult(
@@ -78,6 +82,9 @@ abstract class AbstractConfigurableHttpNotificationProvider implements Notificat
         }
     }
 
+    /**
+     * 读取字符串配置，必要时允许使用别名字段。
+     */
     protected String requireString(Map<String, Object> config, String key, String message, boolean allowAlternateUrl) {
         Object value = config.get(key);
         if (allowAlternateUrl && (value == null || String.valueOf(value).isBlank()) && "endpoint".equals(key)) {
@@ -94,6 +101,9 @@ abstract class AbstractConfigurableHttpNotificationProvider implements Notificat
         return String.valueOf(value);
     }
 
+    /**
+     * 返回请求端点字段名。
+     */
     protected String endpointField() {
         return "endpoint";
     }

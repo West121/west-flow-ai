@@ -21,7 +21,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Component
 @Aspect
-// 记录 /api/v1/ 下 REST 接口的审计日志。
+/**
+ * 记录 /api/v1/ 下 REST 接口的审计日志。
+ */
 public class ApiRequestAuditAspect {
 
     private final AuditLogMapper auditLogMapper;
@@ -35,6 +37,9 @@ public class ApiRequestAuditAspect {
     }
 
     @Around("anyRestController()")
+    /**
+     * 包装 REST 请求并落审计日志。
+     */
     public Object aroundApi(ProceedingJoinPoint point) throws Throwable {
         long startAt = System.currentTimeMillis();
         ServletRequestAttributes attributes = currentRequestAttributes();

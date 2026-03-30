@@ -1217,7 +1217,7 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     /**
-     * legacy fallback / validated write preflight helper.
+     * 读取链路下的写操作预检辅助方法。
      */
     private AiToolCallRequest buildWriteToolCall(String content, String domain, String routePath) {
         if (isExplicitProcessStartIntent(content, routePath)) {
@@ -1421,7 +1421,7 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     /**
-     * legacy fallback helper.
+     * 读取链路下的只读意图判断辅助方法。
      */
     private boolean isReadOnlyIntent(String content, String routePath) {
         String normalized = content == null ? "" : content.trim();
@@ -1447,7 +1447,7 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     /**
-     * legacy fallback / validated write preflight helper.
+     * 读取链路下的流程发起意图判断辅助方法。
      */
     private boolean isExplicitProcessStartIntent(String content, String routePath) {
         String normalized = content == null ? "" : content.trim();
@@ -1483,7 +1483,7 @@ public class DbAiCopilotService implements AiCopilotService {
     }
 
     /**
-     * legacy fallback / validated write preflight helper.
+     * 读取链路下的待办处理意图判断辅助方法。
      */
     private boolean hasExplicitTaskHandleIntent(String content) {
         String normalized = content == null ? "" : content.trim();

@@ -9,10 +9,10 @@ import java.util.Map;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
-@Component
 /**
  * 短信渠道适配器，默认走真实发送，仅允许本地诊断场景降级为 mock。
  */
+@Component
 public class SmsHttpNotificationProvider extends AbstractConfigurableHttpNotificationProvider {
 
     public SmsHttpNotificationProvider(ObjectMapper objectMapper, Environment environment) {

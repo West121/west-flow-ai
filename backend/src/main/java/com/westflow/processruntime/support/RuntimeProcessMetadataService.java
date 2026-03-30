@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
+// 运行态流程元数据解析服务，负责从实例、定义和关联记录中提取展示信息。
 public class RuntimeProcessMetadataService {
 
     public record NodeMetadata(String nodeName, String nodeType) {
@@ -45,6 +46,7 @@ public class RuntimeProcessMetadataService {
     private final ProcessLinkService processLinkService;
     private final RuntimeAppendLinkService runtimeAppendLinkService;
 
+    // 解析流程实例对应的已发布流程定义。
     public PublishedProcessDefinition resolvePublishedDefinition(
             String preferredPlatformDefinitionId,
             String variablePlatformDefinitionId,
@@ -63,6 +65,7 @@ public class RuntimeProcessMetadataService {
         return processDefinitionService.getLatestByProcessKey(processKey);
     }
 
+    // 按流程实例解析已发布流程定义，失败时返回空。
     public Optional<PublishedProcessDefinition> resolvePublishedDefinitionByInstance(String processInstanceId) {
         Map<String, Object> variables = runtimeOrHistoricVariables(processInstanceId);
         String platformDefinitionId = stringValue(variables.get("westflowProcessDefinitionId"));
@@ -74,7 +77,7 @@ public class RuntimeProcessMetadataService {
             try {
                 return Optional.of(processDefinitionService.getByFlowableDefinitionId(flowableDefinitionId));
             } catch (RuntimeException ignored) {
-                // Fall through to process key resolution below.
+                // 继续回退到流程 key 解析。
             }
         }
         if (processKey == null || processKey.isBlank()) {
@@ -87,6 +90,7 @@ public class RuntimeProcessMetadataService {
         }
     }
 
+    // 解析节点名称和类型。
     public NodeMetadata resolveNodeMetadata(String processInstanceId, String nodeId) {
         if (nodeId == null || nodeId.isBlank()) {
             return new NodeMetadata(null, null);
@@ -103,6 +107,7 @@ public class RuntimeProcessMetadataService {
                 .orElse(new NodeMetadata(nodeId, null));
     }
 
+    // 解析节点配置。
     public Map<String, Object> resolveNodeConfig(String processInstanceId, String nodeId) {
         if (nodeId == null || nodeId.isBlank()) {
             return Map.of();
@@ -112,6 +117,7 @@ public class RuntimeProcessMetadataService {
                 .orElse(Map.of());
     }
 
+    // 解析流程定义名称和版本。
     public DefinitionMetadata resolveDefinitionMetadata(String processInstanceId, String definitionId, String processKey) {
         try {
             PublishedProcessDefinition definition;
@@ -136,6 +142,7 @@ public class RuntimeProcessMetadataService {
         }
     }
 
+    // 解析追加链路对应的目标流程定义。
     public DefinitionMetadata resolveTargetProcessDefinition(RuntimeAppendLinkRecord record) {
         if (record.targetInstanceId() != null && !record.targetInstanceId().isBlank()) {
             return resolveDefinitionMetadata(record.targetInstanceId(), record.calledDefinitionId(), record.calledProcessKey());
@@ -143,6 +150,7 @@ public class RuntimeProcessMetadataService {
         return resolveDefinitionMetadata(record.parentInstanceId(), record.calledDefinitionId(), record.calledProcessKey());
     }
 
+    // 解析子流程结构配置。
     public SubprocessStructureMetadata resolveSubprocessStructureMetadata(String processInstanceId, String nodeId) {
         Map<String, Object> config = resolveNodeConfig(processInstanceId, nodeId);
         return new SubprocessStructureMetadata(
@@ -153,6 +161,7 @@ public class RuntimeProcessMetadataService {
         );
     }
 
+    // 解析已有链路记录对应的子流程结构配置。
     public SubprocessStructureMetadata resolveSubprocessStructureMetadata(
             com.westflow.processruntime.model.ProcessLinkRecord record
     ) {
@@ -168,11 +177,13 @@ public class RuntimeProcessMetadataService {
         );
     }
 
+    // 判断父流程是否需要确认后再恢复。
     public boolean requiresParentConfirmation(SubprocessStructureMetadata structureMetadata) {
         return "WAIT_PARENT_CONFIRM".equals(structureMetadata.parentResumeStrategy())
                 || "WAIT_PARENT_CONFIRM".equals(structureMetadata.joinMode());
     }
 
+    // 解析任务名称。
     public String resolveTaskName(String taskId) {
         if (taskId == null || taskId.isBlank()) {
             return null;
@@ -191,6 +202,7 @@ public class RuntimeProcessMetadataService {
         return historicTask == null ? null : historicTask.getName();
     }
 
+    // 读取运行时变量。
     public Map<String, Object> runtimeVariables(String processInstanceId) {
         Map<String, Object> variables = new LinkedHashMap<>();
         flowableEngineFacade.runtimeService().getVariables(processInstanceId).forEach((key, value) -> {
@@ -201,6 +213,7 @@ public class RuntimeProcessMetadataService {
         return variables;
     }
 
+    // 优先读取运行时变量，读不到时回退到历史变量。
     public Map<String, Object> runtimeOrHistoricVariables(String processInstanceId) {
         try {
             Map<String, Object> runtimeValues = runtimeVariables(processInstanceId);
@@ -208,11 +221,12 @@ public class RuntimeProcessMetadataService {
                 return runtimeValues;
             }
         } catch (FlowableObjectNotFoundException ignored) {
-            // Fall through to historic variables.
+            // 继续回退到历史变量。
         }
         return historicVariables(processInstanceId);
     }
 
+    // 解析当前实例对应的 Flowable 流程定义标识。
     public String activeFlowableDefinitionId(String processInstanceId) {
         try {
             HistoricProcessInstance historic = flowableEngineFacade.historyService()
@@ -231,6 +245,7 @@ public class RuntimeProcessMetadataService {
         return runtime == null ? null : runtime.getProcessDefinitionId();
     }
 
+    // 解析当前实例对应的流程键。
     public String activeProcessKey(String processInstanceId) {
         String definitionId = activeFlowableDefinitionId(processInstanceId);
         if (definitionId == null || definitionId.isBlank()) {

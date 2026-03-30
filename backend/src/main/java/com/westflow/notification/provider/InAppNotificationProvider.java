@@ -14,19 +14,25 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-// 站内通知的发送适配器。
+/**
+ * 站内通知的发送适配器。
+ */
 public class InAppNotificationProvider implements NotificationProvider {
 
     private final SystemMessageMapper systemMessageMapper;
 
     @Override
-    // 返回站内通知渠道类型。
+    /**
+     * 返回站内通知渠道类型。
+     */
     public NotificationChannelType type() {
         return NotificationChannelType.IN_APP;
     }
 
     @Override
-    // 站内通知直接落站内消息表，供消息管理页查询。
+    /**
+     * 站内通知直接落站内消息表，供消息管理页查询。
+     */
     public NotificationSendResult send(NotificationChannelRecord channel, NotificationDispatchRequest request) {
         Instant now = Instant.now();
         String senderUserId = resolveSenderUserId(channel);

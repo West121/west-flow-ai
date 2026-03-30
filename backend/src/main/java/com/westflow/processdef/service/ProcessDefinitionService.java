@@ -33,7 +33,7 @@ import com.westflow.workflowadmin.service.WorkflowOperationLogService;
 
 @Service
 @RequiredArgsConstructor
-// 负责流程定义的草稿保存、发布、查询和分页检索。
+// 流程定义的草稿、发布、详情和分页查询服务。
 public class ProcessDefinitionService {
 
     private static final String STATUS_DRAFT = "DRAFT";
@@ -55,9 +55,10 @@ public class ProcessDefinitionService {
     private final RepositoryService repositoryService;
     private final WorkflowOperationLogService workflowOperationLogService;
 
+    // 保存或覆盖草稿版本。
     @Transactional
     public synchronized ProcessDefinitionDetailResponse saveDraft(ProcessDslPayload payload) {
-        // 草稿只更新当前流程键对应的最后一个草稿版本。
+        // 草稿始终覆盖同一流程键的最后一个版本。
         String processDefinitionId = draftProcessDefinitionId(payload.processKey());
         LocalDateTime now = now();
         ProcessDefinitionRecord existingDraft = processDefinitionMapper.selectDraftByProcessKey(payload.processKey());
@@ -87,9 +88,10 @@ public class ProcessDefinitionService {
         return toDetailResponse(draftRecord, payload);
     }
 
+    // 校验 DSL 后发布为正式版本，并同步部署到 Flowable。
     @Transactional
     public synchronized ProcessDefinitionDetailResponse publish(ProcessDslPayload payload) {
-        // 发布前先做 DSL 校验，再生成新的正式版本和 BPMN。
+        // 先校验 DSL，再生成正式版本和 BPMN。
         processDslValidator.validate(payload);
 
         int version = nextPublishedVersion(payload.processKey());
@@ -146,11 +148,12 @@ public class ProcessDefinitionService {
         return toDetailResponse(publishedRecord, payload);
     }
 
-    // 返回流程定义详情，包含 DSL 和 BPMN 片段。
+    // 按流程定义标识读取详情。
     public ProcessDefinitionDetailResponse detail(String processDefinitionId) {
         return toDetailResponse(getRecordById(processDefinitionId));
     }
 
+    // 解析协同房间名对应的流程定义标识。
     public String resolveCollaborationProcessDefinitionId(String roomName) {
         if (roomName == null || roomName.isBlank()) {
             throw new ContractException(
@@ -183,6 +186,7 @@ public class ProcessDefinitionService {
         return processDefinitionId;
     }
 
+    // 记录设计器协同审计事件。
     public void recordCollaborationAudit(
             ProcessDefinitionCollaborationAuditRequest request,
             CurrentUserResponse currentUser
@@ -219,7 +223,7 @@ public class ProcessDefinitionService {
         ));
     }
 
-    // 按流程键获取最近一次已发布版本，供运行时启动流程使用。
+    // 运行时按流程键取最新已发布版本。
     public PublishedProcessDefinition getLatestByProcessKey(String processKey) {
         ProcessDefinitionRecord record = processDefinitionMapper.selectLatestPublishedByProcessKey(processKey);
         if (record == null) {
@@ -228,7 +232,7 @@ public class ProcessDefinitionService {
         return toPublishedProcessDefinition(record);
     }
 
-    // 按流程键和版本获取已发布定义，供运行时附属子流程按版本启动。
+    // 运行时按流程键和版本取已发布定义。
     public PublishedProcessDefinition getPublishedByProcessKeyAndVersion(String processKey, Integer version) {
         if (version == null) {
             return getLatestByProcessKey(processKey);
@@ -240,12 +244,12 @@ public class ProcessDefinitionService {
         return toPublishedProcessDefinition(record);
     }
 
-    // 按主键获取已保存的流程定义，发布后和草稿态都适用。
+    // 按主键读取已保存的流程定义。
     public PublishedProcessDefinition getById(String processDefinitionId) {
         return toPublishedProcessDefinition(getRecordById(processDefinitionId));
     }
 
-    // 按 Flowable 定义主键反查平台侧已发布定义。
+    // 按 Flowable 定义主键反查平台记录。
     public PublishedProcessDefinition getByFlowableDefinitionId(String flowableDefinitionId) {
         ProcessDefinitionRecord record = processDefinitionMapper.selectByFlowableDefinitionId(flowableDefinitionId);
         if (record == null) {
@@ -254,9 +258,9 @@ public class ProcessDefinitionService {
         return toPublishedProcessDefinition(record);
     }
 
-    // 按关键字、状态和分类组合分页查询流程定义列表。
+    // 分页查询流程定义列表。
     public PageResponse<ProcessDefinitionListItemResponse> page(PageRequest request) {
-        // 流程定义列表同时支持关键词、状态和分类筛选。
+        // 列表支持关键词、状态和分类筛选。
         QueryCriteria criteria = resolveCriteria(request.filters());
         String orderBy = resolveOrderBy(request.sorts());
         String orderDirection = resolveOrderDirection(request.sorts());
@@ -313,7 +317,7 @@ public class ProcessDefinitionService {
         );
     }
 
-    // 把数据库记录转换成运行时可直接使用的已发布定义对象。
+    // 把数据库记录转换成运行时可用的已发布定义对象。
     private PublishedProcessDefinition toPublishedProcessDefinition(ProcessDefinitionRecord record) {
         return new PublishedProcessDefinition(
                 record.processDefinitionId(),
@@ -360,7 +364,7 @@ public class ProcessDefinitionService {
         );
     }
 
-    // 解析分页筛选条件，当前只支持状态和分类。
+    // 解析分页筛选条件，目前只支持状态和分类。
     private QueryCriteria resolveCriteria(List<FilterItem> filters) {
         String status = null;
         String category = null;
@@ -413,7 +417,7 @@ public class ProcessDefinitionService {
         return "asc".equalsIgnoreCase(sorts.get(0).direction()) ? "ASC" : "DESC";
     }
 
-    // 计算下一个正式版本号，保证同一流程键下版本递增。
+    // 计算下一个正式版本号，确保同一流程键下递增。
     private int nextPublishedVersion(String processKey) {
         Integer currentMaxVersion = processDefinitionMapper.selectMaxVersionByProcessKey(processKey);
         return (currentMaxVersion == null ? 0 : currentMaxVersion) + 1;

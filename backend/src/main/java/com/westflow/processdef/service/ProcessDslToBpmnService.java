@@ -34,7 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
-// 把设计器 DSL 转成可由 Flowable 真实部署的 BPMN XML。
+// 将设计器 DSL 转成可部署的 BPMN XML。
 public class ProcessDslToBpmnService {
 
     private static final String WESTFLOW_NS = "https://westflow.dev/schema/bpmn";
@@ -80,7 +80,7 @@ public class ProcessDslToBpmnService {
         return new String(xmlBytes, StandardCharsets.UTF_8);
     }
 
-    // 把 DSL 节点转换为真实 BPMN 流程元素。
+    // 将 DSL 节点转换为 BPMN 流程元素。
     private FlowElement toFlowElement(ProcessDslPayload.Node node) {
         Map<String, Object> config = mapValue(node.config());
         FlowElement element = switch (node.type()) {
@@ -142,7 +142,7 @@ public class ProcessDslToBpmnService {
         return task;
     }
 
-    // 抄送节点先落成候选人用户任务，后续运行态按 CC 语义处理。
+    // 抄送节点先映射为候选人用户任务，运行态再按 CC 语义处理。
     private UserTask buildCcTask(ProcessDslPayload.Node node, Map<String, Object> config) {
         UserTask task = new UserTask();
         task.setId(node.id());
@@ -266,7 +266,7 @@ public class ProcessDslToBpmnService {
         return event;
     }
 
-    // 触发节点先映射为 ServiceTask，并统一走平台 delegate。
+    // 触发节点映射为 ServiceTask，并统一走平台 delegate。
     private ServiceTask buildTriggerTask(ProcessDslPayload.Node node, Map<String, Object> config) {
         ServiceTask task = new ServiceTask();
         task.setId(node.id());
@@ -276,7 +276,7 @@ public class ProcessDslToBpmnService {
         return task;
     }
 
-    // 动态构建节点先映射为平台钩子的占位服务任务，后续由运行态服务补充附属结构。
+    // 动态构建节点映射为占位服务任务，运行态再补充附属结构。
     private ServiceTask buildDynamicBuilderPlaceholder(ProcessDslPayload.Node node, Map<String, Object> config) {
         ServiceTask task = new ServiceTask();
         task.setId(node.id());
@@ -407,7 +407,7 @@ public class ProcessDslToBpmnService {
         return "${" + trimmed + "}";
     }
 
-    // 把 DSL 节点元数据和配置统一写成扩展属性，供运行态读取。
+    // 将 DSL 节点元数据和配置写成扩展属性，供运行态读取。
     private void attachNodeMetadata(BaseElement element, ProcessDslPayload.Node node, Map<String, Object> config) {
         addExtensionAttribute(element, "dslNodeId", node.id());
         addExtensionAttribute(element, "dslNodeType", node.type());
@@ -418,7 +418,7 @@ public class ProcessDslToBpmnService {
         }
     }
 
-    // 展平嵌套配置，保留旧实现里测试依赖的关键字段名。
+    // 展平嵌套配置，保留兼容字段名。
     private Map<String, String> flattenConfig(Map<String, Object> config) {
         Map<String, String> attrs = new LinkedHashMap<>();
 

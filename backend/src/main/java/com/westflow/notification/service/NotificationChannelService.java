@@ -31,7 +31,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-// 管理通知渠道的查询、配置校验和保存。
+/**
+ * 管理通知渠道的查询、配置校验和保存。
+ */
 public class NotificationChannelService {
 
     private static final List<String> SUPPORTED_FILTER_FIELDS = List.of("status", "channelType");
@@ -41,7 +43,9 @@ public class NotificationChannelService {
     private final NotificationLogMapper notificationLogMapper;
     private final Environment environment;
 
-    // 通知渠道列表支持关键字、状态和渠道类型筛选。
+    /**
+     * 分页查询通知渠道，支持关键字、状态和渠道类型筛选。
+     */
     public PageResponse<NotificationChannelListItemResponse> page(PageRequest request) {
         // 渠道列表先走内存过滤，后续接数据库时只替换 mapper 即可。
         Filters filters = resolveFilters(request.filters());
@@ -66,14 +70,17 @@ public class NotificationChannelService {
         return new PageResponse<>(request.page(), pageSize, total, pages, pageRecords, List.of());
     }
 
-    // 返回渠道详情，供编辑页直接回填。
+    /**
+     * 返回渠道详情，供编辑页直接回填。
+     */
     public NotificationChannelDetailResponse detail(String channelId) {
-        // 详情页直接返回完整配置，方便编辑页一次性回填。
         NotificationChannelRecord record = requireChannel(channelId);
         return toDetail(record);
     }
 
-    // 聚合配置与最近发送结果，供诊断页直接展示。
+    /**
+     * 聚合配置与最近发送结果，供诊断页直接展示。
+     */
     public NotificationChannelDiagnosticResponse diagnostic(String channelId) {
         NotificationChannelRecord channel = requireChannel(channelId);
         NotificationChannelType type = resolveType(channel.channelType());
@@ -104,7 +111,9 @@ public class NotificationChannelService {
         );
     }
 
-    // 返回可用渠道类型枚举，供表单下拉框使用。
+    /**
+     * 返回可用渠道类型枚举，供表单下拉框使用。
+     */
     public NotificationChannelFormOptionsResponse formOptions() {
         return new NotificationChannelFormOptionsResponse(
                 NotificationChannelType.orderedValues().stream()
@@ -118,7 +127,9 @@ public class NotificationChannelService {
     }
 
     @Transactional
-    // 新建通知渠道并返回新主键。
+    /**
+     * 新建通知渠道并返回新主键。
+     */
     public NotificationChannelMutationResponse create(SaveNotificationChannelRequest request) {
         validateChannelCode(request.channelCode(), null);
         NotificationChannelType type = resolveType(request.channelType());
@@ -131,7 +142,9 @@ public class NotificationChannelService {
     }
 
     @Transactional
-    // 更新通知渠道并保留原始创建时间。
+    /**
+     * 更新通知渠道并保留原始创建时间。
+     */
     public NotificationChannelMutationResponse update(String channelId, SaveNotificationChannelRequest request) {
         requireChannel(channelId);
         validateChannelCode(request.channelCode(), channelId);
@@ -156,7 +169,9 @@ public class NotificationChannelService {
         return new NotificationChannelMutationResponse(channelId);
     }
 
-    // 按主键读取通知渠道，不存在时抛出资源不存在异常。
+    /**
+     * 按主键读取通知渠道，不存在时抛出资源不存在异常。
+     */
     public NotificationChannelRecord requireChannel(String channelId) {
         NotificationChannelRecord record = notificationChannelMapper.selectById(channelId);
         if (record == null) {

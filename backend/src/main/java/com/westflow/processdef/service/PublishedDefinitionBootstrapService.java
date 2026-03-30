@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 应用启动后把平台表里已发布的流程定义补同步到真实 Flowable 引擎。
+ * 启动后同步已发布流程定义到 Flowable 引擎。
  */
 @Service
 @RequiredArgsConstructor
@@ -27,7 +27,7 @@ public class PublishedDefinitionBootstrapService {
     private final FlowableEngineFacade flowableEngineFacade;
 
     /**
-     * 启动完成后自动同步一次已发布定义，保证 SQL 种子可直接测试。
+     * 启动完成后自动同步一次已发布定义。
      */
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrapPublishedDefinitions() {
@@ -35,7 +35,7 @@ public class PublishedDefinitionBootstrapService {
     }
 
     /**
-     * 扫描已发布定义，缺失部署信息或引擎中定义不存在时自动补部署。
+     * 扫描已发布定义，缺少部署信息或引擎中不存在时补部署。
      */
     @Transactional
     public void syncPublishedDefinitions() {

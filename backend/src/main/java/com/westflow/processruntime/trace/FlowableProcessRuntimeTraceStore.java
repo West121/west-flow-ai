@@ -27,7 +27,7 @@ import org.springframework.stereotype.Component;
 /**
  * Flowable 运行态轨迹存储。
  *
- * <p>优先读取真实持久化历史、通知日志和自动化执行记录；只有在数据库尚未形成完整链路时，才回退到运行期缓存和 DSL 推导。</p>
+ * <p>优先读取真实持久化历史、通知日志和自动化执行记录；必要时再回退到运行期缓存和 DSL 推导。</p>
  */
 @Component
 @Primary
@@ -37,7 +37,7 @@ public class FlowableProcessRuntimeTraceStore implements ProcessRuntimeTraceStor
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
-    // 运行期短暂缓存，仅兜底“事件刚追加但持久化链路尚未可读”的窗口与单元测试场景。
+    // 运行期短暂缓存，仅兜底事件刚追加但持久化链路尚未可读的窗口。
     private final Map<String, List<ProcessInstanceEventResponse>> eventsByInstance = new ConcurrentHashMap<>();
     private final OrchestratorRuntimeBridge orchestratorRuntimeBridge;
     private final WorkflowOperationLogMapper workflowOperationLogMapper;

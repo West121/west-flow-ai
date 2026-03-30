@@ -7,6 +7,9 @@ import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.springframework.stereotype.Component;
 
+/**
+ * Flowable 查询辅助类。
+ */
 @Component
 public class FlowableQueryHelper {
 
@@ -16,6 +19,9 @@ public class FlowableQueryHelper {
         this.engineFacade = engineFacade;
     }
 
+    /**
+     * 查询当前运行中的流程实例。
+     */
     public Optional<ProcessInstance> findProcessInstance(String processInstanceId) {
         return Optional.ofNullable(engineFacade.runtimeService()
                 .createProcessInstanceQuery()
@@ -23,6 +29,9 @@ public class FlowableQueryHelper {
                 .singleResult());
     }
 
+    /**
+     * 查询历史流程实例。
+     */
     public Optional<HistoricProcessInstance> findHistoricProcessInstance(String processInstanceId) {
         return Optional.ofNullable(engineFacade.historyService()
                 .createHistoricProcessInstanceQuery()
@@ -30,6 +39,9 @@ public class FlowableQueryHelper {
                 .singleResult());
     }
 
+    /**
+     * 查询历史活动节点。
+     */
     public List<HistoricActivityInstance> listHistoricActivities(String processInstanceId) {
         return engineFacade.historyService()
                 .createHistoricActivityInstanceQuery()

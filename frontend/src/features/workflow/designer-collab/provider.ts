@@ -188,40 +188,75 @@ function createWebsocketWorkflowDesignerCollaborationProvider(
   let status: WorkflowDesignerCollaborationStatus = 'connecting'
   let hasConnected = false
   let isDestroyed = false
+  let transportGeneration = 0
+  let provider: WebsocketProvider | null = null
+  let currentLocalState: WorkflowDesignerCollaborationAwarenessState | null = null
 
   const params: Record<string, string> = {}
   if (options.authToken) {
     params.token = options.authToken
   }
 
-  const provider = new WebsocketProvider(options.serverUrl, roomName, doc, {
-    awareness,
-    params,
-    maxBackoffTime: 2_500,
-  })
-
   const notifyStatus = (nextStatus: WorkflowDesignerCollaborationStatus) => {
+    if (status === nextStatus) {
+      return
+    }
     status = nextStatus
     for (const listener of statusListeners) {
       listener(nextStatus)
     }
   }
 
-  provider.on('status', (event: { status: 'connected' | 'disconnected' | 'connecting' }) => {
-    if (event.status === 'connected') {
-      hasConnected = true
-      notifyStatus('connected')
-      return
-    }
-    if (event.status === 'connecting') {
-      notifyStatus(hasConnected ? 'reconnecting' : 'connecting')
-      return
-    }
-    notifyStatus(isDestroyed ? 'disconnected' : hasConnected ? 'reconnecting' : 'disconnected')
-  })
-  provider.on('connection-error', () => {
-    notifyStatus(hasConnected ? 'reconnecting' : 'disconnected')
-  })
+  const attachTransportHandlers = (nextProvider: WebsocketProvider, generation: number) => {
+    nextProvider.on(
+      'status',
+      (event: { status: 'connected' | 'disconnected' | 'connecting' }) => {
+        if (isDestroyed || generation !== transportGeneration) {
+          return
+        }
+        if (event.status === 'connected') {
+          hasConnected = true
+          notifyStatus('connected')
+          return
+        }
+        if (event.status === 'connecting') {
+          notifyStatus(hasConnected ? 'reconnecting' : 'connecting')
+          return
+        }
+        notifyStatus(hasConnected ? 'reconnecting' : 'disconnected')
+      }
+    )
+    nextProvider.on('connection-error', () => {
+      if (isDestroyed || generation !== transportGeneration) {
+        return
+      }
+      notifyStatus(hasConnected ? 'reconnecting' : 'disconnected')
+    })
+    nextProvider.on('connection-close', () => {
+      if (isDestroyed || generation !== transportGeneration) {
+        return
+      }
+      notifyStatus(hasConnected ? 'reconnecting' : 'disconnected')
+    })
+  }
+
+  const createTransport = (generation: number) => {
+    const nextProvider = new WebsocketProvider(options.serverUrl, roomName, doc, {
+      awareness,
+      params,
+      maxBackoffTime: 2_500,
+      resyncInterval: 20_000,
+    })
+    attachTransportHandlers(nextProvider, generation)
+    return nextProvider
+  }
+
+  const startTransport = () => {
+    transportGeneration += 1
+    return createTransport(transportGeneration)
+  }
+
+  provider = startTransport()
 
   return {
     awareness,
@@ -230,6 +265,7 @@ function createWebsocketWorkflowDesignerCollaborationProvider(
       return status
     },
     setLocalState: (state) => {
+      currentLocalState = state
       awareness.setLocalState(state)
     },
     onStatusChange: (listener) => {
@@ -240,13 +276,25 @@ function createWebsocketWorkflowDesignerCollaborationProvider(
       }
     },
     reconnect: () => {
-      provider.connect()
+      if (isDestroyed) {
+        return
+      }
       notifyStatus(hasConnected ? 'reconnecting' : 'connecting')
+      currentLocalState = awareness.getLocalState() as WorkflowDesignerCollaborationAwarenessState | null
+      transportGeneration += 1
+      provider?.destroy()
+      provider = createTransport(transportGeneration)
+      if (currentLocalState) {
+        awareness.setLocalState(currentLocalState)
+      }
     },
     destroy: () => {
       isDestroyed = true
+      transportGeneration += 1
+      currentLocalState = null
       awareness.setLocalState(null)
-      provider.destroy()
+      provider?.destroy()
+      provider = null
       notifyStatus('disconnected')
     },
   }

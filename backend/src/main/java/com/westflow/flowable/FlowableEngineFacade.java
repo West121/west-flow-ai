@@ -8,6 +8,9 @@ import org.flowable.engine.TaskService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+/**
+ * Flowable 引擎对象门面，统一处理可选依赖获取。
+ */
 @Component
 public class FlowableEngineFacade {
 
@@ -31,22 +34,37 @@ public class FlowableEngineFacade {
         this.historyServiceProvider = historyServiceProvider;
     }
 
+    /**
+     * 获取流程引擎。
+     */
     public ProcessEngine processEngine() {
         return processEngineProvider.getIfAvailable();
     }
 
+    /**
+     * 获取仓储服务。
+     */
     public RepositoryService repositoryService() {
         return repositoryServiceProvider.getIfAvailable();
     }
 
+    /**
+     * 获取运行时服务。
+     */
     public RuntimeService runtimeService() {
         return runtimeServiceProvider.getIfAvailable();
     }
 
+    /**
+     * 获取任务服务。
+     */
     public TaskService taskService() {
         return taskServiceProvider.getIfAvailable();
     }
 
+    /**
+     * 获取历史服务。
+     */
     public HistoryService historyService() {
         return historyServiceProvider.getIfAvailable();
     }

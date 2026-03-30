@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "collab:dev": "node ./scripts/workflow-collab-server.mjs",
+    "collab:dev": "pnpm --dir ../services/workflow-collab dev",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

@@ -9,7 +9,7 @@
 - 前端应用：`frontend`
 - 后端鉴权接口：`/api/v1/process-definitions/collaboration/authorize`
 - 后端审计接口：`/api/v1/process-definitions/collaboration/audit`
-- 协同服务：`frontend/scripts/workflow-collab-server.mjs`
+- 协同服务：`services/workflow-collab/server.mjs`
 
 ## 默认端口
 
@@ -37,7 +37,13 @@
    pnpm --dir frontend dev --host 127.0.0.1 --port 5174
    ```
 
-4. 启动协同服务：
+4. 安装协同服务依赖：
+
+   ```bash
+   pnpm --dir services/workflow-collab install
+   ```
+
+5. 启动协同服务：
 
    ```bash
    ./scripts/start-workflow-collab.sh
@@ -57,6 +63,11 @@
 - `PORT`
 - `WORKFLOW_COLLAB_AUTH_API`
   - 默认：`http://127.0.0.1:8080/api/v1/process-definitions/collaboration`
+- `WORKFLOW_COLLAB_HEARTBEAT_INTERVAL_MS`
+- `WORKFLOW_COLLAB_HEARTBEAT_TIMEOUT_MS`
+- `WORKFLOW_COLLAB_ROOM_IDLE_TTL_MS`
+- `WORKFLOW_COLLAB_MAX_CONNECTIONS_PER_ROOM`
+- `WORKFLOW_COLLAB_MAX_TOTAL_CONNECTIONS`
 
 ## 健康检查
 
@@ -69,7 +80,7 @@ curl http://127.0.0.1:1235/health
 期望返回：
 
 ```json
-{"status":"UP","mode":"auth"}
+{"status":"UP","mode":"auth","rooms":0,"connections":0}
 ```
 
 ## 鉴权与审计
@@ -118,6 +129,7 @@ pnpm -C frontend test:e2e --project=chromium
 2. websocket 连接失败
    - 检查 `VITE_WORKFLOW_COLLAB_URL`
    - 检查浏览器控制台 websocket 地址是否正确
+   - 检查协同服务是否命中单房间或全局连接上限
 
 3. 协同无权限
    - 检查登录态

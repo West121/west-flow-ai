@@ -5,27 +5,49 @@ import java.util.List;
 
 // 终止树中的一个节点。
 public record ProcessTerminationNodeResponse(
+        // 节点标识。
         String nodeId,
+        // 目标标识。
         String targetId,
+        // 父实例标识。
         String parentInstanceId,
+        // 父节点标识。
         String parentNodeId,
+        // 目标类型。
         String targetKind,
+        // 关联类型。
         String linkType,
+        // 运行时关联类型。
         String runtimeLinkType,
+        // 触发模式。
         String triggerMode,
+        // 追加类型。
         String appendType,
+        // 状态。
         String status,
+        // 终止策略。
         String terminatePolicy,
+        // 子流程结束策略。
         String childFinishPolicy,
+        // 源任务标识。
         String sourceTaskId,
+        // 源节点标识。
         String sourceNodeId,
+        // 被调起流程键。
         String calledProcessKey,
+        // 被调起流程定义标识。
         String calledDefinitionId,
+        // 目标用户标识。
         String targetUserId,
+        // 操作人标识。
         String operatorUserId,
+        // 备注。
         String commentText,
+        // 创建时间。
         Instant createdAt,
+        // 完成时间。
         Instant finishedAt,
+        // 子节点。
         List<ProcessTerminationNodeResponse> children
 ) {
 }

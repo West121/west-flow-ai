@@ -8,7 +8,6 @@ import java.util.List;
 
 /**
  * AI 编排规划器。
- * 说明：当前仅作为 planner 主链失败时的 legacy fallback，后续不再扩展新能力。
  */
 @Deprecated(forRemoval = false)
 public class AiOrchestrationPlanner {

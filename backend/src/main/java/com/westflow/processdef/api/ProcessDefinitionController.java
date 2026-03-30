@@ -26,24 +26,28 @@ public class ProcessDefinitionController {
     private final ProcessDefinitionService processDefinitionService;
     private final IdentityAuthService identityAuthService;
 
+    // 保存或覆盖草稿。
     @PostMapping("/draft")
     @SaCheckLogin
     public ApiResponse<ProcessDefinitionDetailResponse> saveDraft(@Valid @RequestBody ProcessDslPayload payload) {
         return ApiResponse.success(processDefinitionService.saveDraft(payload));
     }
 
+    // 发布流程定义。
     @PostMapping("/publish")
     @SaCheckLogin
     public ApiResponse<ProcessDefinitionDetailResponse> publish(@Valid @RequestBody ProcessDslPayload payload) {
         return ApiResponse.success(processDefinitionService.publish(payload));
     }
 
+    // 查询流程定义详情。
     @GetMapping("/{processDefinitionId}")
     @SaCheckLogin
     public ApiResponse<ProcessDefinitionDetailResponse> detail(@PathVariable String processDefinitionId) {
         return ApiResponse.success(processDefinitionService.detail(processDefinitionId));
     }
 
+    // 校验协同房间并返回授权信息。
     @GetMapping("/collaboration/authorize")
     @SaCheckLogin
     public ApiResponse<ProcessDefinitionCollaborationAuthorizeResponse> authorizeCollaborationRoom(String roomName) {
@@ -63,6 +67,7 @@ public class ProcessDefinitionController {
         ));
     }
 
+    // 记录协同事件审计日志。
     @PostMapping("/collaboration/audit")
     @SaCheckLogin
     public ApiResponse<Void> auditCollaborationEvent(
@@ -72,6 +77,7 @@ public class ProcessDefinitionController {
         return ApiResponse.success(null);
     }
 
+    // 分页查询流程定义。
     @PostMapping("/page")
     @SaCheckLogin
     public ApiResponse<PageResponse<ProcessDefinitionListItemResponse>> page(@Valid @RequestBody PageRequest request) {

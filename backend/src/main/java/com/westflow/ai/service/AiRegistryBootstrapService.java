@@ -7,7 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * AI 注册表启动同步服务，保证本地数据库里具备可直接测试的 Agent、Tool、MCP、Skill 记录。
+ * AI 注册表启动同步服务，用于补齐默认注册数据。
  */
 @Service
 public class AiRegistryBootstrapService {

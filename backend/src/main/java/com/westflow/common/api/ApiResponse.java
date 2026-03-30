@@ -12,6 +12,10 @@ public record ApiResponse<T>(
 
     /**
      * 构造默认成功响应。
+     *
+     * @param data 响应数据
+     * @param <T> 响应体类型
+     * @return 成功响应
      */
     public static <T> ApiResponse<T> success(T data) {
         return new ApiResponse<>("OK", "success", data, RequestContext.getOrCreateRequestId());

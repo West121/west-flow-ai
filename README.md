@@ -6,6 +6,7 @@ Monorepo for the AIBPMN approval platform.
 
 - `frontend/`: direct secondary build on top of `shadcn-admin`
 - `backend/`: single Spring Boot application, split by domain packages
+- `services/`: standalone side services such as workflow collaboration
 - `docs/`: frozen contracts, specs, and implementation plans
 - `infra/`: local services and environment templates
 - `scripts/`: bootstrap and validation helpers
@@ -38,13 +39,19 @@ Monorepo for the AIBPMN approval platform.
    ./scripts/bootstrap-frontend.sh
    ```
 
-4. Start local dependencies:
+4. Install workflow collaboration service dependencies:
+
+   ```bash
+   pnpm --dir services/workflow-collab install
+   ```
+
+5. Start local dependencies:
 
    ```bash
    docker compose -f infra/docker-compose.yml up -d
    ```
 
-5. Run the applications:
+6. Run the applications:
 
    ```bash
    pnpm --dir frontend dev
@@ -52,7 +59,7 @@ Monorepo for the AIBPMN approval platform.
    ./scripts/start-workflow-collab.sh
    ```
 
-6. Optional: run workflow designer collaboration E2E:
+7. Optional: run workflow designer collaboration E2E:
 
    ```bash
    pnpm -C frontend exec playwright install chromium

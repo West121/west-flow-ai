@@ -5,8 +5,7 @@ import com.westflow.ai.orchestration.AiOrchestrationPlanner;
 import java.util.List;
 
 /**
- * AI 网关路由服务。
- * 说明：当前仅作为 planner 主链失败时的 legacy fallback，后续不再扩展新能力。
+ * AI 网关路由服务，保留给旧入口使用。
  */
 @Deprecated(forRemoval = false)
 public class AiGatewayService {

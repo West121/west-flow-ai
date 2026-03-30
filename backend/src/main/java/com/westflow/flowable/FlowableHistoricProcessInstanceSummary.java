@@ -3,6 +3,9 @@ package com.westflow.flowable;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
+/**
+ * 历史流程实例摘要。
+ */
 public record FlowableHistoricProcessInstanceSummary(
         String processInstanceId,
         String processDefinitionId,

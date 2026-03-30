@@ -19,19 +19,25 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-// Webhook 通知的发送适配器。
+/**
+ * Webhook 通知的发送适配器。
+ */
 public class WebhookNotificationProvider implements NotificationProvider {
 
     private final ObjectMapper objectMapper;
 
     @Override
-    // 返回 Webhook 渠道类型。
+    /**
+     * 返回 Webhook 渠道类型。
+     */
     public NotificationChannelType type() {
         return NotificationChannelType.WEBHOOK;
     }
 
     @Override
-    // 通过 JDK HttpClient 向配置的 URL 发送 JSON 回调。
+    /**
+     * 通过 JDK HttpClient 向配置的 URL 发送 JSON 回调。
+     */
     public NotificationSendResult send(NotificationChannelRecord channel, NotificationDispatchRequest request) {
         // Webhook 直接使用 JDK HttpClient，方便后续接真实外部回调。
         Map<String, Object> config = channel.config();
@@ -80,7 +86,9 @@ public class WebhookNotificationProvider implements NotificationProvider {
         }
     }
 
-    // 读取并校验 Webhook 配置中的必填字符串。
+    /**
+     * 读取并校验 Webhook 配置中的必填字符串。
+     */
     private String requireString(Map<String, Object> config, String key) {
         Object value = config.get(key);
         if (value == null || String.valueOf(value).isBlank()) {

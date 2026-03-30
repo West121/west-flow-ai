@@ -22,16 +22,19 @@ public class ProcessTimeTravelController {
 
     private final ProcessTimeTravelService processTimeTravelService;
 
+    // 执行一次时空回溯或跳转。
     @PostMapping("/execute")
     public ApiResponse<ProcessTimeTravelExecutionResponse> execute(@RequestBody ExecuteProcessTimeTravelRequest request) {
         return ApiResponse.success(processTimeTravelService.execute(request));
     }
 
+    // 分页查询执行记录。
     @PostMapping("/executions/page")
     public ApiResponse<?> page(@RequestBody ProcessTimeTravelQueryRequest request) {
         return ApiResponse.success(processTimeTravelService.page(request));
     }
 
+    // 查询某个实例的时空轨迹。
     @GetMapping("/instances/{instanceId}/trace")
     public ApiResponse<?> trace(@PathVariable String instanceId) {
         return ApiResponse.success(processTimeTravelService.trace(instanceId));

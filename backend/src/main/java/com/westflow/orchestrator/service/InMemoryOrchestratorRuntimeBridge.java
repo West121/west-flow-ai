@@ -10,6 +10,9 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 
 @Component
+/**
+ * 仅用于本地或降级场景的内存版编排器运行时桥。
+ */
 public class InMemoryOrchestratorRuntimeBridge implements OrchestratorRuntimeBridge {
 
     @Override
@@ -38,6 +41,9 @@ public class InMemoryOrchestratorRuntimeBridge implements OrchestratorRuntimeBri
         );
     }
 
+    /**
+     * 生成执行记录标识。
+     */
     private String buildId(String prefix) {
         return prefix + UUID.randomUUID().toString().replace("-", "");
     }

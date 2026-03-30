@@ -785,19 +785,17 @@ function WorkflowDesignerWorkspace({
   }, [collaborationPeers])
 
   useEffect(() => {
-    if (collaborationMode !== 'websocket') {
-      setCollaborationOfflineNoticeVisible(false)
-      return
-    }
+    const shouldDelayShow =
+      collaborationMode === 'websocket' &&
+      collaborationStatus !== 'connected' &&
+      collaborationStatus !== 'connecting'
 
-    if (collaborationStatus === 'connected' || collaborationStatus === 'connecting') {
-      setCollaborationOfflineNoticeVisible(false)
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      setCollaborationOfflineNoticeVisible(true)
-    }, 1500)
+    const timer = window.setTimeout(
+      () => {
+        setCollaborationOfflineNoticeVisible(shouldDelayShow)
+      },
+      shouldDelayShow ? 1500 : 0
+    )
 
     return () => window.clearTimeout(timer)
   }, [collaborationMode, collaborationStatus])

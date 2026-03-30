@@ -5,28 +5,51 @@ import java.util.List;
 
 // 任务列表项摘要。
 public record ProcessTaskListItemResponse(
+        // 任务标识。
         String taskId,
+        // 流程实例标识。
         String instanceId,
+        // 流程定义标识。
         String processDefinitionId,
+        // 流程键。
         String processKey,
+        // 流程名称。
         String processName,
+        // 业务主键。
         String businessKey,
+        // 业务类型。
         String businessType,
+        // 发起人用户标识。
         String applicantUserId,
+        // 发起人岗位标识。
         String initiatorPostId,
+        // 发起人岗位名称。
         String initiatorPostName,
+        // 发起人部门标识。
         String initiatorDepartmentId,
+        // 发起人部门名称。
         String initiatorDepartmentName,
+        // 节点标识。
         String nodeId,
+        // 节点名称。
         String nodeName,
+        // 任务类型。
         String taskKind,
+        // 任务状态。
         String status,
+        // 分配模式。
         String assignmentMode,
+        // 候选人用户列表。
         List<String> candidateUserIds,
+        // 候选人用户组列表。
         List<String> candidateGroupIds,
+        // 当前处理人用户标识。
         String assigneeUserId,
+        // 创建时间。
         OffsetDateTime createdAt,
+        // 更新时间。
         OffsetDateTime updatedAt,
+        // 完成时间。
         OffsetDateTime completedAt
 ) {
 }
