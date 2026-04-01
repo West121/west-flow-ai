@@ -1,0 +1,14 @@
+{
+  "name": "@westflow/shared-types",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ai": "./src/ai.ts",
+    "./workbench": "./src/workbench.ts",
+    "./workflow": "./src/workflow.ts"
+  }
+}

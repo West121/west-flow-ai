@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "West Flow Mobile",
+    "slug": "west-flow-mobile",
+    "scheme": "westflow",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
