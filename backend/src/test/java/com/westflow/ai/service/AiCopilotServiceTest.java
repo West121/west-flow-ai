@@ -98,6 +98,7 @@ class AiCopilotServiceTest {
     private AiExecutionRouter aiExecutionRouter;
     private AiAgentRegistry aiAgentRegistry;
     private AiSkillRegistry aiSkillRegistry;
+    private AiUserReferenceResolver aiUserReferenceResolver;
 
     @BeforeEach
     void setUp() {
@@ -294,46 +295,96 @@ class AiCopilotServiceTest {
                         "feature.catalog.query",
                         AiToolSource.PLATFORM,
                         "已返回功能目录",
-                        context -> Map.of(
-                                "title", "当前页面功能目录",
-                                "summary", "当前页面可用 2 个工具、1 个技能、1 个 MCP。",
-                                "domain", String.valueOf(context.request().arguments().getOrDefault("domain", "GENERAL")),
-                                "pageRoute", String.valueOf(context.request().arguments().getOrDefault("pageRoute", "/")),
-                                "tools", List.of(
-                                        Map.of("toolCode", "stats.query", "toolName", "查询统计"),
-                                        Map.of("toolCode", "task.query", "toolName", "查询待办")
-                                ),
-                                "skills", List.of(
-                                        Map.of("skillCode", "system-feature-skill", "skillName", "系统功能说明")
-                                ),
-                                "mcps", List.of(
-                                        Map.of("mcpCode", "westflow-internal-mcp", "mcpName", "内部 MCP")
-                                )
-                        )
+                        context -> {
+                            String keyword = String.valueOf(context.request().arguments().getOrDefault("keyword", ""));
+                            String pageRoute = String.valueOf(context.request().arguments().getOrDefault("pageRoute", "/"));
+                            List<Map<String, Object>> pageFeatures = pageRoute.startsWith("/workbench/")
+                                    ? List.of(
+                                            Map.of(
+                                                    "code", "collaboration",
+                                                    "title", "审批协同",
+                                                    "summary", "支持会办、阅办、传阅、督办和批注提醒，适合多人共同处理审批事项。",
+                                                    "keywords", List.of("协同", "会办", "阅办", "传阅", "督办")
+                                            )
+                                    )
+                                    : List.of();
+                            List<Map<String, Object>> highlights = keyword.contains("协同")
+                                    ? pageFeatures
+                                    : List.of();
+                            return Map.of(
+                                    "title", "当前页面功能目录",
+                                    "summary", "当前页面可用 2 个工具、1 个技能、1 个 MCP。",
+                                    "keyword", keyword,
+                                    "domain", String.valueOf(context.request().arguments().getOrDefault("domain", "GENERAL")),
+                                    "pageRoute", pageRoute,
+                                    "pageFeatures", pageFeatures,
+                                    "highlights", highlights,
+                                    "tools", List.of(
+                                            Map.of("toolCode", "stats.query", "toolName", "查询统计", "summary", "适合数量统计与图表分析。"),
+                                            Map.of("toolCode", "task.query", "toolName", "查询待办", "summary", "适合查看待办、已发起和审批进度。")
+                                    ),
+                                    "skills", List.of(
+                                            Map.of("skillCode", "system-feature-skill", "skillName", "系统功能说明", "summary", "负责解释当前页面功能用途和使用方式。")
+                                    ),
+                                    "mcps", List.of(
+                                            Map.of("mcpCode", "westflow-internal-mcp", "mcpName", "内部 MCP")
+                                    )
+                            );
+                        }
+                ),
+                AiToolDefinition.read(
+                        "user.profile.query",
+                        AiToolSource.PLATFORM,
+                        "已返回用户资料",
+                        context -> {
+                            String requestedUserId = String.valueOf(context.request().arguments().getOrDefault("userId", ""));
+                            String requestedUserDisplayName = String.valueOf(context.request().arguments().getOrDefault("targetUserDisplayName", ""));
+                            if ("usr_001".equals(requestedUserId)) {
+                                return Map.of(
+                                        "found", true,
+                                        "requestedUserId", "usr_001",
+                                        "requestedUserDisplayName", requestedUserDisplayName,
+                                        "displayName", "张三",
+                                        "departmentName", "PLM 产品组",
+                                        "postName", "产品经理",
+                                        "companyName", "西流科技",
+                                        "mobile", "13800138000",
+                                        "email", "zhangsan@example.com",
+                                        "primaryRoleNames", List.of("平台管理员")
+                                );
+                            }
+                            if ("usr_002".equals(requestedUserId)) {
+                                return Map.of(
+                                        "found", true,
+                                        "requestedUserId", "usr_002",
+                                        "requestedUserDisplayName", requestedUserDisplayName,
+                                        "displayName", "李四",
+                                        "departmentName", "人力资源部",
+                                        "postName", "人力资源专员",
+                                        "companyName", "西流科技",
+                                        "mobile", "13800138001",
+                                        "email", "lisi@example.com",
+                                        "primaryRoleNames", List.of("部门经理")
+                                );
+                            }
+                            return Map.of(
+                                    "found", false,
+                                    "requestedUserId", "",
+                                    "requestedUserDisplayName", requestedUserDisplayName
+                            );
+                        }
                 ),
                 AiToolDefinition.read(
                         "plm.bill.query",
                         AiToolSource.PLATFORM,
                         "已返回 PLM 单据列表",
-                        context -> Map.of(
-                                "count", 2,
-                                "items", List.of(
-                                        Map.of("businessType", "PLM_ECR", "billId", "ecr_001", "billNo", "ECR-20260323-001", "title", "电机外壳 BOM 变更"),
-                                        Map.of("businessType", "PLM_MATERIAL", "billId", "mat_001", "billNo", "MAT-20260323-003", "title", "主数据属性调整")
-                                )
-                        )
+                        context -> plmBillV4Result()
                 ),
                 AiToolDefinition.read(
                         "plm.change.summary",
                         AiToolSource.SKILL,
                         "已返回 PLM 变更摘要",
-                        context -> Map.of(
-                                "count", 2,
-                                "items", List.of(
-                                        Map.of("businessType", "PLM_ECR", "billId", "ecr_001", "billNo", "ECR-20260323-001", "title", "电机外壳 BOM 变更"),
-                                        Map.of("businessType", "PLM_MATERIAL", "billId", "mat_001", "billNo", "MAT-20260323-003", "title", "主数据属性调整")
-                                )
-                        )
+                        context -> plmBillV4Result()
                 ),
                 AiToolDefinition.write(
                         "process.start",
@@ -477,7 +528,7 @@ class AiCopilotServiceTest {
                                 90,
                                 Map.of()
                         ));
-                        case "stats.query", "feature.catalog.query", "workflow.trace.summary", "plm.change.summary" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                        case "stats.query", "feature.catalog.query", "user.profile.query", "workflow.trace.summary", "plm.change.summary" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
                                 toolKey,
                                 toolKey,
                                 "workflow.trace.summary".equals(toolKey) || "plm.change.summary".equals(toolKey)
@@ -538,7 +589,16 @@ class AiCopilotServiceTest {
         lenient().when(aiRegistryCatalogService.listMcps(anyString(), anyString())).thenReturn(List.of());
         lenient().when(processDefinitionService.getLatestByProcessKey(anyString()))
                 .thenAnswer(invocation -> publishedProcessDefinition(invocation.getArgument(0, String.class)));
-        AiPlanAgentService planAgentService = new AiPlanAgentService(prompt -> "", objectMapper, aiRegistryCatalogService);
+        aiUserReferenceResolver = mock(AiUserReferenceResolver.class);
+        lenient().when(aiUserReferenceResolver.resolveManagerUserId("帮我发起3天的事假给张三")).thenReturn("usr_001");
+        lenient().when(aiUserReferenceResolver.resolveTodoTargetUserId("张三目前有几个待办")).thenReturn("usr_003");
+        lenient().when(aiUserReferenceResolver.resolveTodoTargetDisplayName("张三目前有几个待办")).thenReturn("张三");
+        lenient().when(aiUserReferenceResolver.resolveProfileTargetUserId("张三是什么部门 岗位", "usr_001")).thenReturn("usr_001");
+        lenient().when(aiUserReferenceResolver.resolveProfileTargetDisplayName("张三是什么部门 岗位")).thenReturn("张三");
+        lenient().when(aiUserReferenceResolver.resolveProfileTargetUserId("李四是什么部门 岗位", "usr_001")).thenReturn("usr_002");
+        lenient().when(aiUserReferenceResolver.resolveProfileTargetDisplayName("李四是什么部门 岗位")).thenReturn("李四");
+        lenient().when(aiUserReferenceResolver.resolveFollowUpDisplayName("李四呢")).thenReturn("李四");
+        AiPlanAgentService planAgentService = new AiPlanAgentService(prompt -> "", objectMapper, aiRegistryCatalogService, aiUserReferenceResolver);
         aiExecutionRouter = new AiExecutionRouter(List.of(
                 new AiKnowledgeExecutor(),
                 new AiWorkflowExecutor(),
@@ -561,7 +621,9 @@ class AiCopilotServiceTest {
                 aiRegistryCatalogService,
                 processDefinitionService,
                 planAgentService,
-                aiExecutionRouter
+                aiExecutionRouter,
+                null,
+                aiUserReferenceResolver
         ) {
             @Override
             protected String currentUserId() {
@@ -731,7 +793,9 @@ class AiCopilotServiceTest {
                 .contains("业务域", "来源页面", "工具名称", "工具类型", "确认单编号");
         assertThat(previewBlock.fields()).isEmpty();
         assertThat(previewBlock.metrics()).isEmpty();
-        assertThat(previewBlock.trace()).isNullOrEmpty();
+        assertThat(previewBlock.trace())
+                .extracting(AiMessageBlockResponse.TraceStep::label)
+                .contains("规划耗时", "执行器耗时", "生成耗时");
         verify(aiToolCallMapper).insertToolCall(any());
         verify(aiAuditMapper, times(2)).insertAudit(any());
     }
@@ -831,6 +895,43 @@ class AiCopilotServiceTest {
                 .containsEntry("days", 5)
                 .containsEntry("reason", "家里有事")
                 .containsEntry("managerUserId", "usr_002");
+    }
+
+    @Test
+    void shouldPreferStructuredLeaveReasonFromAttachmentRecognitionContext() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/oa/leave/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("""
+                        帮我发起对应申请
+
+                        附件识别结果：
+                        附件《leave-request-test-zh-clean.png》识别结果：
+                        识别文本：
+                        1. 请假申请单
+                        2. 申请人：张三
+                        - 请假类型：事假
+                        - 请假天数：5 天
+                        - 请假原因：家中有事，需要请 5 天事假处理个人事务。
+                        """)
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        AiMessageBlockResponse previewBlock = assistantMessage.blocks().stream()
+                .filter(block -> "form-preview".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> formData = (Map<String, Object>) previewBlock.result().get("formData");
+        assertThat(formData)
+                .containsEntry("days", 5)
+                .containsEntry("leaveType", "PERSONAL")
+                .containsEntry("reason", "家中有事，需要请 5 天事假处理个人事务。");
     }
 
     @Test
@@ -1136,6 +1237,248 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldExplainMatchedFeatureCatalogQuestionWithoutModelFallbackText() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("WORKBENCH", "route:/workbench/todos/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("系统里审批协同是做什么的")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content())
+                .contains("审批协同")
+                .contains("会办", "阅办", "传阅")
+                .doesNotContain("Routing 智能体");
+        AiMessageBlockResponse resultBlock = assistantMessage.blocks().stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("推荐说明");
+        AiMessageBlockResponse traceBlock = assistantMessage.blocks().stream()
+                .filter(block -> "trace".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(traceBlock.trace())
+                .extracting(AiMessageBlockResponse.TraceStep::label)
+                .contains("规划耗时", "执行器耗时", "工具执行耗时", "生成耗时");
+    }
+
+    @Test
+    void shouldReplyGreetingWithoutRoutingFallbackText() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("GENERAL", "route:/ai"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("你好")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).containsAnyOf("你好", "嗨");
+        assertThat(assistantMessage.content()).doesNotContain("Routing 智能体");
+        assertThat(assistantMessage.blocks())
+                .extracting(AiMessageBlockResponse::type)
+                .contains("text")
+                .doesNotContain("trace", "result");
+        verify(aiToolCallMapper, never()).insertToolCall(any());
+        verify(aiConfirmationMapper, never()).insertConfirmation(any());
+    }
+
+    @Test
+    void shouldAnswerCapabilityQuestionWithoutRoutingFallbackText() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/oa/leave/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("你具备哪些功能")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content())
+                .contains("普通问答", "系统功能说明", "统计分析", "审批与待办查询")
+                .doesNotContain("Routing 智能体");
+        verify(aiToolCallMapper).insertToolCall(any());
+    }
+
+    @Test
+    void shouldAnswerUserProfileQuestionWithoutRoutingFallbackText() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("GENERAL", "route:/ai"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("张三是什么部门 岗位")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content())
+                .isEqualTo("张三当前在PLM 产品组，岗位是 产品经理。");
+        assertThat(assistantMessage.content()).doesNotContain("Routing 智能体");
+        verify(aiToolCallMapper).insertToolCall(any());
+    }
+
+    @Test
+    void shouldInheritProfileQueryIntentForShortFollowUpQuestion() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("GENERAL", "route:/ai"));
+        mockStoredMessages(
+                new AiMessageRecord(
+                        "msg_prev_user",
+                        "conv_001",
+                        "user",
+                        "你",
+                        "张三是什么部门 岗位",
+                        "[]",
+                        "usr_001",
+                        LocalDateTime.of(2026, 4, 1, 10, 48, 20),
+                        LocalDateTime.of(2026, 4, 1, 10, 48, 20)
+                ),
+                new AiMessageRecord(
+                        "msg_prev_assistant",
+                        "conv_001",
+                        "assistant",
+                        "AI Copilot",
+                        "张三当前在 PLM 产品组，岗位是 产品经理。",
+                        "[]",
+                        "usr_001",
+                        LocalDateTime.of(2026, 4, 1, 10, 48, 21),
+                        LocalDateTime.of(2026, 4, 1, 10, 48, 21)
+                )
+        );
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiCopilotService privilegedService = new DbAiCopilotService(
+                aiConversationMapper,
+                aiMessageMapper,
+                aiToolCallMapper,
+                aiConfirmationMapper,
+                aiAuditMapper,
+                objectMapper,
+                aiGatewayService,
+                aiToolExecutionService,
+                runtimeService,
+                aiRegistryCatalogService,
+                processDefinitionService,
+                new AiPlanAgentService(prompt -> "", objectMapper, aiRegistryCatalogService, aiUserReferenceResolver),
+                aiExecutionRouter,
+                null,
+                aiUserReferenceResolver
+        ) {
+            @Override
+            protected String currentUserId() {
+                return "usr_001";
+            }
+
+            @Override
+            protected boolean hasPermission(String permissionCode) {
+                return true;
+            }
+        };
+
+        AiConversationDetailResponse detail = privilegedService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("李四呢")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content())
+                .isEqualTo("李四当前在人力资源部，岗位是 人力资源专员。");
+        assertThat(assistantMessage.content()).doesNotContain("Routing 智能体");
+        verify(aiToolCallMapper).insertToolCall(any());
+    }
+
+    @Test
+    void shouldAnswerOpenKnowledgeQuestionWithoutExecutorSummaryLeak() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("GENERAL", "route:/ai"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我概括一下这个系统对制造企业的价值")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content())
+                .contains("业务价值", "流程协同", "效率提升")
+                .doesNotContain("进入功能问答与使用说明链路")
+                .doesNotContain("Routing 智能体");
+        AiMessageBlockResponse traceBlock = assistantMessage.blocks().stream()
+                .filter(block -> "trace".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(traceBlock.trace())
+                .extracting(AiMessageBlockResponse.TraceStep::label)
+                .contains("规划耗时", "执行器耗时", "生成耗时");
+    }
+
+    @Test
+    void shouldBlockCrossUserTodoQueryWithoutPermission() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("OA", "route:/workbench/todos/list"));
+        mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiCopilotService restrictedService = new DbAiCopilotService(
+                aiConversationMapper,
+                aiMessageMapper,
+                aiToolCallMapper,
+                aiConfirmationMapper,
+                aiAuditMapper,
+                objectMapper,
+                aiGatewayService,
+                aiToolExecutionService,
+                runtimeService,
+                aiRegistryCatalogService,
+                processDefinitionService,
+                new AiPlanAgentService(prompt -> "", objectMapper, aiRegistryCatalogService, aiUserReferenceResolver),
+                aiExecutionRouter,
+                null,
+                aiUserReferenceResolver
+        ) {
+            @Override
+            protected String currentUserId() {
+                return "usr_001";
+            }
+
+            @Override
+            protected boolean hasPermission(String permissionCode) {
+                return false;
+            }
+        };
+
+        AiConversationDetailResponse detail = restrictedService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("张三目前有几个待办")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content()).contains("当前无权查询 张三 的待办");
+        verify(aiToolCallMapper, never()).insertToolCall(any());
+    }
+
+    @Test
     void shouldFallbackToLegacyGatewayWhenPlannerMainlineFails() {
         when(aiConversationMapper.selectById("conv_001"))
                 .thenReturn(conversationWithTags("GENERAL", "route:/"));
@@ -1307,9 +1650,14 @@ class AiCopilotServiceTest {
         );
 
         AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
-        assertThat(assistantMessage.content()).isEqualTo(
-                "当前命中 2 条 PLM 单据，重点包括：PLM_ECR · ECR-20260323-001 · 电机外壳 BOM 变更；PLM_MATERIAL · MAT-20260323-003 · 主数据属性调整。"
-        );
+        assertThat(assistantMessage.content())
+                .contains("对象类型：BOM、图纸、物料")
+                .contains("版本差异：ATTRIBUTE · 关键参数调整")
+                .contains("任务进度：共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1")
+                .contains("阻塞任务：TASK-003 · 评审图纸 · 等待图纸冻结")
+                .contains("关闭准备度：不可关闭：存在阻塞任务")
+                .contains("ECR · ECR-20260323-001 · 电机外壳 BOM 变更")
+                .contains("物料主数据变更 · MAT-20260323-003 · 主数据属性调整");
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
         assertThat(blocks)
                 .extracting(AiMessageBlockResponse::type)
@@ -1325,13 +1673,16 @@ class AiCopilotServiceTest {
         assertThat(resultBlock.sourceKey()).isEqualTo("plm.bill.query");
         assertThat(resultBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
-                .contains("来源页面", "工具调用编号", "命中业务类型", "首条单据", "命中摘要");
+                .contains("来源页面", "工具调用编号", "查询关键词", "命中业务类型", "首条单据", "类型分布", "状态分布", "对象类型", "版本差异", "任务进度", "阻塞任务", "关闭准备度", "命中摘要");
         assertThat(resultBlock.metrics())
                 .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("命中单据数", "业务域");
+                .contains("命中单据数", "类型数", "对象类型数", "版本差异数", "任务进度", "阻塞任务", "可关闭单据", "业务域");
         assertThat(statsBlock.metrics())
                 .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("命中单据数", "业务域");
+                .contains("命中单据数", "类型数", "对象类型数", "版本差异数", "任务进度", "阻塞任务", "可关闭单据", "业务域");
+        assertThat(statsBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("摘要", "类型分布", "状态分布", "对象类型", "版本差异", "任务进度", "阻塞任务", "关闭准备度");
     }
 
     @Test
@@ -1495,6 +1846,79 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldRenderPlmBusinessSummaryWhenConfirmingStartToolCall() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("PLM", "发起", "route:/plm/ecr/create"));
+        java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>();
+        doAnswer(invocation -> {
+            storedMessages.add(invocation.getArgument(0, AiMessageRecord.class));
+            return null;
+        }).when(aiMessageMapper).insertMessage(any());
+        when(aiMessageMapper.countByConversationId("conv_001")).thenReturn(0L);
+
+        AiToolCallResultResponse pending = aiCopilotService.executeToolCall(
+                "conv_001",
+                new AiToolCallRequest(
+                        "process.start",
+                        AiToolType.WRITE,
+                        AiToolSource.PLATFORM,
+                        Map.of(
+                                "processKey", "plm_ecr_change",
+                                "businessType", "PLM_ECR",
+                                "sceneCode", "default",
+                                "routePath", "/plm/ecr/create",
+                                "domain", "PLM",
+                                "formData", Map.of(
+                                        "affectedProductCode", "P-1001",
+                                        "changeTitle", "电机外壳 BOM 变更",
+                                        "priorityLevel", "高",
+                                        "changeReason", "替换原材料规格"
+                                )
+                        )
+                )
+        );
+        when(aiToolCallMapper.selectById(pending.toolCallId())).thenReturn(new AiToolCallRecord(
+                pending.toolCallId(),
+                "conv_001",
+                "process.start",
+                AiToolType.WRITE,
+                AiToolSource.PLATFORM,
+                "PENDING_CONFIRMATION",
+                true,
+                "{\"processKey\":\"plm_ecr_change\",\"businessType\":\"PLM_ECR\",\"sceneCode\":\"default\",\"routePath\":\"/plm/ecr/create\",\"domain\":\"PLM\",\"formData\":{\"affectedProductCode\":\"P-1001\",\"changeTitle\":\"电机外壳 BOM 变更\",\"priorityLevel\":\"高\",\"changeReason\":\"替换原材料规格\"}}",
+                "{}",
+                "请确认是否发起流程",
+                pending.confirmationId(),
+                "usr_001",
+                LocalDateTime.of(2026, 3, 23, 10, 10),
+                LocalDateTime.of(2026, 3, 23, 10, 10)
+        ));
+
+        AiToolCallResultResponse confirmed = aiCopilotService.confirmToolCall(
+                pending.toolCallId(),
+                new AiConfirmToolCallRequest(true, "确认发起", Map.of())
+        );
+
+        assertThat(confirmed.status()).isEqualTo("CONFIRMED");
+        assertThat(storedMessages).isNotEmpty();
+        List<AiMessageBlockResponse> blocks = parseBlocks(storedMessages.get(storedMessages.size() - 1));
+        AiMessageBlockResponse resultBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("业务类型", "流程编码", "来源页面", "业务摘要", "单据编号", "流程实例", "首个待办", "发起后动作", "执行状态");
+        assertThat(resultBlock.trace())
+                .extracting(AiMessageBlockResponse.TraceStep::label)
+                .contains("来源页面", "业务摘要", "执行说明");
+        assertThat(resultBlock.fields())
+                .filteredOn(field -> "业务摘要".equals(field.label()))
+                .extracting(AiMessageBlockResponse.Field::value)
+                .anyMatch(value -> value != null && value.contains("影响产品 P-1001") && value.contains("优先级 高"));
+    }
+
+    @Test
     void shouldMergeArgumentsOverrideWhenConfirmingWriteToolCall() {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
 
@@ -1609,6 +2033,153 @@ class AiCopilotServiceTest {
                 LocalDateTime.of(2026, 3, 23, 10, 0),
                 LocalDateTime.of(2026, 3, 23, 10, 0)
         );
+    }
+
+    private Map<String, Object> plmBill(
+            String businessType,
+            String billId,
+            String billNo,
+            String title,
+            String status,
+            String detailSummary,
+            String approvalSummary
+    ) {
+        java.util.LinkedHashMap<String, Object> bill = new java.util.LinkedHashMap<>();
+        bill.put("businessType", businessType);
+        bill.put("businessTypeLabel", "PLM_ECR".equals(businessType)
+                ? "ECR"
+                : ("PLM_ECO".equals(businessType) ? "ECO" : "物料主数据变更"));
+        bill.put("billId", billId);
+        bill.put("billNo", billNo);
+        bill.put("title", title);
+        bill.put("status", status);
+        bill.put("statusLabel", switch (status) {
+            case "DRAFT" -> "草稿";
+            case "COMPLETED" -> "已完成";
+            default -> status;
+        });
+        bill.put("detailSummary", detailSummary);
+        bill.put("approvalSummary", approvalSummary);
+        bill.put("sceneCode", "default");
+        bill.put("createdAt", "2026-03-23T09:00:00+08:00");
+        bill.put("updatedAt", "2026-03-23T10:00:00+08:00");
+        bill.put("businessSummary", title + " · " + detailSummary + " · " + approvalSummary);
+        return Map.copyOf(bill);
+    }
+
+    private Map<String, Object> plmBill(
+            String businessType,
+            String billId,
+            String billNo,
+            String title,
+            String status,
+            String detailSummary,
+            String approvalSummary,
+            Map<String, Object> extras
+    ) {
+        java.util.LinkedHashMap<String, Object> bill = new java.util.LinkedHashMap<>(plmBill(
+                businessType,
+                billId,
+                billNo,
+                title,
+                status,
+                detailSummary,
+                approvalSummary
+        ));
+        if (extras != null && !extras.isEmpty()) {
+            bill.putAll(extras);
+        }
+        return Map.copyOf(bill);
+    }
+
+    private Map<String, Object> plmBillV4DraftExtras() {
+        java.util.LinkedHashMap<String, Object> extras = new java.util.LinkedHashMap<>();
+        extras.put("objectTypeCount", 2);
+        extras.put("objectTypesSummary", "BOM、图纸");
+        extras.put("revisionDiffCount", 2);
+        extras.put("revisionDiffSummary", "ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结");
+        extras.put("taskTotalCount", 4);
+        extras.put("taskCompletedCount", 2);
+        extras.put("taskRunningCount", 1);
+        extras.put("taskBlockedCount", 1);
+        extras.put("taskPendingCount", 1);
+        extras.put("taskOverdueCount", 1);
+        extras.put("taskRequiredOpenCount", 1);
+        extras.put("taskProgressSummary", "共 4 条任务，已完成 2，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1");
+        extras.put("blockedTaskCount", 1);
+        extras.put("blockedTaskSummary", "TASK-003 · 评审图纸 · 等待图纸冻结");
+        extras.put("closeReadyCount", 0);
+        extras.put("closeReadinessSummary", "不可关闭：存在阻塞任务");
+        return Map.copyOf(extras);
+    }
+
+    private Map<String, Object> plmBillV4ReadyExtras() {
+        java.util.LinkedHashMap<String, Object> extras = new java.util.LinkedHashMap<>();
+        extras.put("objectTypeCount", 1);
+        extras.put("objectTypesSummary", "物料");
+        extras.put("revisionDiffCount", 1);
+        extras.put("revisionDiffSummary", "ATTRIBUTE · 物料编码与名称同步");
+        extras.put("taskTotalCount", 2);
+        extras.put("taskCompletedCount", 2);
+        extras.put("taskRunningCount", 0);
+        extras.put("taskBlockedCount", 0);
+        extras.put("taskPendingCount", 0);
+        extras.put("taskOverdueCount", 0);
+        extras.put("taskRequiredOpenCount", 0);
+        extras.put("taskProgressSummary", "共 2 条任务，已完成 2，进行中 0，阻塞 0，待处理 0，超期 0，必做未完 0");
+        extras.put("blockedTaskCount", 0);
+        extras.put("blockedTaskSummary", "");
+        extras.put("closeReadyCount", 1);
+        extras.put("closeReadinessSummary", "可关闭");
+        return Map.copyOf(extras);
+    }
+
+    private Map<String, Object> plmBillV4Result() {
+        java.util.LinkedHashMap<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("count", 2);
+        result.put("items", List.of(
+                plmBill(
+                        "PLM_ECR",
+                        "ecr_001",
+                        "ECR-20260323-001",
+                        "电机外壳 BOM 变更",
+                        "DRAFT",
+                        "影响产品 P-1001 · 优先级 高",
+                        "草稿 · 当前节点 待同步",
+                        plmBillV4DraftExtras()
+                ),
+                plmBill(
+                        "PLM_MATERIAL",
+                        "mat_001",
+                        "MAT-20260323-003",
+                        "主数据属性调整",
+                        "COMPLETED",
+                        "物料 MAT-7788 / 电机外壳",
+                        "已完成 · 当前节点 proc_mat_001",
+                        plmBillV4ReadyExtras()
+                )
+        ));
+        result.put("typeBreakdown", List.of(
+                Map.of("key", "PLM_ECR", "label", "ECR", "count", 1),
+                Map.of("key", "PLM_MATERIAL", "label", "物料主数据变更", "count", 1)
+        ));
+        result.put("statusBreakdown", List.of(
+                Map.of("key", "DRAFT", "label", "草稿", "count", 1),
+                Map.of("key", "COMPLETED", "label", "已完成", "count", 1)
+        ));
+        result.put("objectTypeCount", 3);
+        result.put("revisionDiffCount", 3);
+        result.put("taskTotalCount", 6);
+        result.put("taskCompletedCount", 4);
+        result.put("taskBlockedCount", 1);
+        result.put("closeReadyCount", 1);
+        result.put("objectTypesSummary", "BOM、图纸、物料");
+        result.put("revisionDiffSummary", "ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结；ATTRIBUTE · 物料编码与名称同步");
+        result.put("taskProgressSummary", "共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1");
+        result.put("blockedTaskSummary", "TASK-003 · 评审图纸 · 等待图纸冻结");
+        result.put("closeReadinessSummary", "不可关闭：存在阻塞任务");
+        result.put("summary", "当前命中 2 条 PLM 单据，类型分布：ECR 1 条、物料主数据变更 1 条，状态分布：草稿 1 条、已完成 1 条，受影响对象共 3 个，对象类型：BOM、图纸、物料，版本差异：ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结；ATTRIBUTE · 物料编码与名称同步，任务进度：共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1；阻塞任务：TASK-003 · 评审图纸 · 等待图纸冻结，关闭准备度：不可关闭：存在阻塞任务；重点包括：ECR · ECR-20260323-001 · 电机外壳 BOM 变更（影响产品 P-1001 · 优先级 高 · 草稿 · 当前节点 待同步）；物料主数据变更 · MAT-20260323-003 · 主数据属性调整（物料 MAT-7788 / 电机外壳 · 已完成 · 当前节点 proc_mat_001）。");
+        return Map.copyOf(result);
     }
 
     private String toJson(String... tags) {

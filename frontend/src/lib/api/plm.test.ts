@@ -111,12 +111,16 @@ describe('plm api', () => {
       effectiveDate: '2026-04-01',
       changeReason: '量产切换',
     })
-    expect(postMock).toHaveBeenNthCalledWith(3, '/plm/material-master-changes', {
-      materialCode: 'MAT-001',
-      materialName: '主板总成',
-      changeReason: '替换物料编码',
-      changeType: 'ATTRIBUTE_UPDATE',
-    })
+    expect(postMock).toHaveBeenNthCalledWith(
+      3,
+      '/plm/material-master-changes',
+      {
+        materialCode: 'MAT-001',
+        materialName: '主板总成',
+        changeReason: '替换物料编码',
+        changeType: 'ATTRIBUTE_UPDATE',
+      }
+    )
   })
 
   it('loads PLM detail records from dedicated endpoints', async () => {
@@ -149,9 +153,7 @@ describe('plm api', () => {
     await expect(getPLMECRRequestDetail('ecr_001')).resolves.toMatchObject({
       billNo: 'PLM-ECR-001',
     })
-    await expect(
-      getPLMECOExecutionDetail('eco_001')
-    ).resolves.toMatchObject({
+    await expect(getPLMECOExecutionDetail('eco_001')).resolves.toMatchObject({
       billNo: 'PLM-ECO-001',
     })
     await expect(
@@ -244,8 +246,11 @@ describe('plm api', () => {
         })
       )
 
-    const { listPLMECRRequests, listPLMECOExecutions, listPLMMaterialChangeRequests } =
-      await import('./plm')
+    const {
+      listPLMECRRequests,
+      listPLMECOExecutions,
+      listPLMMaterialChangeRequests,
+    } = await import('./plm')
 
     await expect(
       listPLMECRRequests({
@@ -305,14 +310,18 @@ describe('plm api', () => {
       sorts: [],
       groups: [],
     })
-    expect(postMock).toHaveBeenNthCalledWith(3, '/plm/material-master-changes/page', {
-      page: 1,
-      pageSize: 20,
-      keyword: 'MAT-001',
-      filters: [],
-      sorts: [],
-      groups: [],
-    })
+    expect(postMock).toHaveBeenNthCalledWith(
+      3,
+      '/plm/material-master-changes/page',
+      {
+        page: 1,
+        pageSize: 20,
+        keyword: 'MAT-001',
+        filters: [],
+        sorts: [],
+        groups: [],
+      }
+    )
   })
 
   it('loads PLM approval sheet records from dedicated endpoint', async () => {
@@ -374,5 +383,80 @@ describe('plm api', () => {
         groups: [],
       },
     })
+  })
+
+  it('loads PLM dashboard analytics from the summary endpoint', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        totalCount: 12,
+        draftCount: 2,
+        runningCount: 5,
+        completedCount: 4,
+        rejectedCount: 1,
+        cancelledCount: 0,
+        implementingCount: 3,
+        validatingCount: 1,
+        closedCount: 4,
+        summary: {
+          totalCount: 12,
+          draftCount: 2,
+          runningCount: 5,
+          completedCount: 4,
+          rejectedCount: 1,
+          cancelledCount: 0,
+          implementingCount: 3,
+          validatingCount: 1,
+          closedCount: 4,
+        },
+        typeDistribution: [],
+        stageDistribution: [],
+        trendSeries: [],
+        taskAlerts: [],
+        ownerRanking: [],
+        recentBills: [],
+        byBusinessType: [],
+      })
+    )
+
+    const { getPLMDashboardSummary } = await import('./plm')
+
+    await expect(getPLMDashboardSummary()).resolves.toMatchObject({
+      summary: {
+        totalCount: 12,
+        implementingCount: 3,
+      },
+      closedCount: 4,
+    })
+
+    expect(getMock).toHaveBeenCalledWith('/plm/dashboard/summary')
+  })
+
+  it('posts implementation task actions to the v4 task endpoint', async () => {
+    postMock.mockResolvedValueOnce(
+      okResponse({
+        billId: 'eco_001',
+        billNo: 'ECO-20260407-0001',
+        status: 'IMPLEMENTING',
+        processInstanceId: 'pi_eco_001',
+      })
+    )
+
+    const { performPLMImplementationTaskAction } = await import('./plm')
+
+    await expect(
+      performPLMImplementationTaskAction(
+        'PLM_ECO',
+        'eco_001',
+        'task_001',
+        'COMPLETE'
+      )
+    ).resolves.toMatchObject({
+      billNo: 'ECO-20260407-0001',
+    })
+
+    expect(postMock).toHaveBeenCalledWith(
+      '/plm/ecos/eco_001/implementation-tasks/task_001/complete',
+      {}
+    )
   })
 })

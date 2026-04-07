@@ -39,6 +39,14 @@ class BusinessProcessBindingServiceTest {
     }
 
     @Test
+    void shouldFallbackToDefaultBindingWhenSceneSpecificBindingMissing() {
+        insertBinding("bind_001", "PLM_ECR", "default", "plm_ecr_default", true, 10);
+
+        assertThat(businessProcessBindingService.resolveProcessKey("PLM_ECR", "pilot"))
+                .isEqualTo("plm_ecr_default");
+    }
+
+    @Test
     void shouldRejectMissingBindingWithBusinessError() {
         assertThatThrownBy(() -> businessProcessBindingService.resolveProcessKey("OA_COMMON", "default"))
                 .isInstanceOf(ContractException.class)

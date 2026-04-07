@@ -13,6 +13,8 @@ public record PlmEcoBillListItemResponse(
         String executionTitle,
         LocalDate effectiveDate,
         String changeReason,
+        String implementationOwner,
+        String targetVersion,
         String processInstanceId,
         String status,
         String detailSummary,

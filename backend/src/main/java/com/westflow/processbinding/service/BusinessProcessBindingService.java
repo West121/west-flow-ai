@@ -27,6 +27,12 @@ public class BusinessProcessBindingService {
     public String resolveProcessKey(String businessType, String sceneCode) {
         String normalizedSceneCode = sceneCode == null || sceneCode.isBlank() ? "default" : sceneCode.trim();
         BusinessProcessBindingRecord record = businessProcessBindingMapper.selectEnabledBinding(businessType, normalizedSceneCode);
+        // Prefer a scene-specific binding, but let default remain the global fallback so
+        // draft edits can safely move across scenes without breaking submit.
+        if ((record == null || record.processKey() == null || record.processKey().isBlank())
+                && !"default".equalsIgnoreCase(normalizedSceneCode)) {
+            record = businessProcessBindingMapper.selectEnabledBinding(businessType, "default");
+        }
         if (record == null || record.processKey() == null || record.processKey().isBlank()) {
             throw new ContractException(
                     "BIZ.BUSINESS_PROCESS_BINDING_NOT_FOUND",

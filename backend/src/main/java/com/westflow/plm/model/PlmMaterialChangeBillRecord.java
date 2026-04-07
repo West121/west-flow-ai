@@ -11,6 +11,11 @@ public record PlmMaterialChangeBillRecord(
         String materialName,
         String changeReason,
         String changeType,
+        String specificationChange,
+        String oldValue,
+        String newValue,
+        String uom,
+        String affectedSystemsText,
         String processInstanceId,
         String status,
         String creatorUserId

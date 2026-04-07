@@ -13,6 +13,8 @@ public record PlmMaterialChangeBillListItemResponse(
         String materialName,
         String changeType,
         String changeReason,
+        String specificationChange,
+        String uom,
         String processInstanceId,
         String status,
         String detailSummary,

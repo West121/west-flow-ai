@@ -11,6 +11,11 @@ public record PlmEcrBillRecord(
         String changeReason,
         String affectedProductCode,
         String priorityLevel,
+        String changeCategory,
+        String targetVersion,
+        String affectedObjectsText,
+        String impactScope,
+        String riskLevel,
         String processInstanceId,
         String status,
         String creatorUserId

@@ -13,6 +13,11 @@ public record PlmEcoBillRecord(
         String executionPlan,
         LocalDate effectiveDate,
         String changeReason,
+        String implementationOwner,
+        String targetVersion,
+        String rolloutScope,
+        String validationPlan,
+        String rollbackPlan,
         String processInstanceId,
         String status,
         String creatorUserId
