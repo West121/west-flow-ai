@@ -37,7 +37,6 @@ type RuleEditorDialogProps = {
   processMeta: ProcessDefinitionMeta
   nodeId: string
   nodeLabel: string
-  edgeLabel: string
   initialExpression: string
   onSave: (expression: string) => void
 }
@@ -386,7 +385,6 @@ export function RuleEditorDialog({
   processMeta,
   nodeId,
   nodeLabel,
-  edgeLabel,
   initialExpression,
   onSave,
 }: RuleEditorDialogProps) {

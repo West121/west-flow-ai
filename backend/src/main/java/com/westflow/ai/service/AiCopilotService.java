@@ -36,6 +36,11 @@ public interface AiCopilotService {
     void deleteConversation(String conversationId);
 
     /**
+     * 清空当前用户的全部会话及关联记录。
+     */
+    void clearConversations();
+
+    /**
      * 追加会话消息。
      */
     AiConversationDetailResponse appendMessage(String conversationId, AiMessageAppendRequest request);

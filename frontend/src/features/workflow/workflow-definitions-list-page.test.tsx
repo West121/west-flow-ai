@@ -92,6 +92,7 @@ describe('WorkflowDefinitionsListPage', () => {
             processKey: string
             processName: string
             category: string
+            createdAt?: string
           }
         }
       }) => React.ReactElement

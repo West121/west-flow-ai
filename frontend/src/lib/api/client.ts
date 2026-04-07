@@ -30,9 +30,6 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim() || '/api/v1'
 
 export const apiClient = axios.create({
   baseURL: apiBaseUrl,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 })
 
 // 请求前自动补上当前登录态的访问令牌。
@@ -45,6 +42,30 @@ apiClient.interceptors.request.use((config) => {
     } else {
       config.headers.Authorization = `Bearer ${accessToken}`
     }
+  }
+
+  const isFormData =
+    typeof FormData !== 'undefined' && config.data instanceof FormData
+
+  if (isFormData) {
+    if (typeof config.headers.delete === 'function') {
+      config.headers.delete('Content-Type')
+    } else {
+      delete config.headers['Content-Type']
+    }
+  } else if (
+    config.data !== undefined &&
+    config.data !== null &&
+    typeof config.headers.get === 'function' &&
+    !config.headers.get('Content-Type')
+  ) {
+    config.headers.set('Content-Type', 'application/json')
+  } else if (
+    config.data !== undefined &&
+    config.data !== null &&
+    !config.headers['Content-Type']
+  ) {
+    config.headers['Content-Type'] = 'application/json'
   }
 
   return config

@@ -26,32 +26,33 @@ export function SectionCard({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
+    borderRadius: 30,
     borderWidth: 1,
-    borderColor: '#E5DDD1',
-    backgroundColor: '#FFFCF7',
+    borderColor: 'rgba(255,255,255,0.66)',
+    backgroundColor: 'rgba(255,255,255,0.58)',
     padding: 18,
-    shadowColor: '#3D2E21',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 1,
+    shadowColor: '#6470A9',
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 4,
   },
   compactCard: {
     padding: 14,
   },
   title: {
-    color: '#171312',
+    color: '#1B2132',
     fontSize: 18,
     fontWeight: '700',
+    letterSpacing: -0.3,
   },
   description: {
-    color: '#75695E',
-    marginTop: 6,
+    color: '#777287',
+    marginTop: 8,
     lineHeight: 20,
   },
   body: {
-    marginTop: 14,
+    marginTop: 16,
     gap: 12,
   },
 })

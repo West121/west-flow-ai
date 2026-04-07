@@ -18,6 +18,19 @@ export type AICopilotTextBlock = {
   body: string
 }
 
+export type AICopilotAttachmentItem = {
+  fileId: string
+  displayName: string
+  contentType: string
+  previewUrl?: string
+}
+
+export type AICopilotAttachmentsBlock = {
+  type: 'attachments'
+  title?: string
+  items: AICopilotAttachmentItem[]
+}
+
 export type AICopilotConfirmBlock = {
   type: 'confirm'
   confirmationId: string
@@ -206,6 +219,7 @@ export type AICopilotTraceBlock = {
 
 export type AICopilotMessageBlock =
   | AICopilotTextBlock
+  | AICopilotAttachmentsBlock
   | AICopilotConfirmBlock
   | AICopilotFormPreviewBlock
   | AICopilotStatsBlock
@@ -270,6 +284,13 @@ export type AICopilotSessionCreationInput = {
 export type AICopilotSendMessageInput = {
   sessionId: string
   content: string
+  attachments?: AICopilotAttachmentItem[]
+}
+
+export type AICopilotAssetUploadResponse = AICopilotAttachmentItem
+
+export type AICopilotAudioTranscriptionResponse = {
+  text: string
 }
 
 export type AICopilotConfirmationDecision = 'confirm' | 'cancel'
@@ -438,6 +459,33 @@ function mapConversationDetailToSession(
 function enrichBusinessMessageBlock(
   block: BackendAICopilotMessageBlock
 ): BackendAICopilotMessageBlock {
+  if (block.type === 'attachments') {
+    const rawItems = Array.isArray(block.items)
+      ? block.items
+      : Array.isArray(block.result?.items)
+        ? (block.result.items as unknown[])
+        : []
+    const items = rawItems.length
+      ? (rawItems as Record<string, unknown>[])
+          .map((item) => ({
+            fileId: String(item.fileId ?? '').trim(),
+            displayName: String(item.displayName ?? '').trim(),
+            contentType: String(item.contentType ?? 'application/octet-stream').trim(),
+            previewUrl:
+              typeof item.previewUrl === 'string' && item.previewUrl.trim()
+                ? item.previewUrl
+                : undefined,
+          }))
+          .filter((item) => item.fileId && item.displayName)
+      : []
+
+    return {
+      type: 'attachments',
+      title: block.title ?? undefined,
+      items,
+    }
+  }
+
   if (
     block.type !== 'result' &&
     block.type !== 'failure' &&
@@ -637,17 +685,61 @@ export async function deleteAICopilotSession(
   )
 }
 
+export async function clearAICopilotSessions(): Promise<void> {
+  await apiClient.delete<AICopilotApiResponse<{ cleared: number }>>(
+    '/ai/copilot/conversations'
+  )
+}
+
 export async function sendAICopilotMessage(
   input: AICopilotSendMessageInput
 ): Promise<AICopilotSession> {
   const detail = await postAICopilotResource<
-    Pick<AICopilotSendMessageInput, 'content'>,
+    Pick<AICopilotSendMessageInput, 'content' | 'attachments'>,
     BackendAICopilotConversationDetail
   >(`/ai/copilot/conversations/${input.sessionId}/messages`, {
     content: input.content,
+    attachments: input.attachments ?? [],
   })
 
   return mapConversationDetailToSession(detail)
+}
+
+export async function uploadAICopilotAsset(
+  file: File
+): Promise<AICopilotAssetUploadResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('displayName', file.name)
+
+  const response = await apiClient.postForm<
+    AICopilotApiResponse<AICopilotAssetUploadResponse>
+  >('/ai/copilot/assets', formData)
+
+  return unwrapResponse(response)
+}
+
+export async function downloadAICopilotAssetPreview(
+  fileId: string
+): Promise<Blob> {
+  const response = await apiClient.get<Blob>(`/ai/copilot/assets/${fileId}/preview`, {
+    responseType: 'blob',
+  })
+
+  return response.data
+}
+
+export async function transcribeAICopilotAudio(
+  file: File
+): Promise<AICopilotAudioTranscriptionResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await apiClient.postForm<
+    AICopilotApiResponse<AICopilotAudioTranscriptionResponse>
+  >('/ai/copilot/audio/transcriptions', formData)
+
+  return unwrapResponse(response)
 }
 
 export async function confirmAICopilotConfirmation(

@@ -22,7 +22,7 @@ function ScreenHeader({
 }: Omit<ScreenShellProps, 'children' | 'scrollable'>) {
   return (
     <>
-      <Text style={styles.kicker}>West Flow Mobile</Text>
+      <View style={styles.headerAccent} />
       <Text style={styles.title}>{title}</Text>
       {description ? <Text style={styles.description}>{description}</Text> : null}
 
@@ -64,43 +64,83 @@ export function ScreenShell({
     </View>
   )
 
-  return <SafeAreaView style={styles.safeArea}>{content}</SafeAreaView>
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <View pointerEvents="none" style={styles.background}>
+        <View style={[styles.glow, styles.glowPrimary]} />
+        <View style={[styles.glow, styles.glowSecondary]} />
+        <View style={[styles.glow, styles.glowTertiary]} />
+      </View>
+      {content}
+    </SafeAreaView>
+  )
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F6F4EF',
+    backgroundColor: '#F4F3F8',
+  },
+  background: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  glow: {
+    position: 'absolute',
+    borderRadius: 999,
+    opacity: 0.9,
+  },
+  glowPrimary: {
+    top: -90,
+    right: -10,
+    width: 260,
+    height: 260,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  glowSecondary: {
+    top: 180,
+    left: -80,
+    width: 240,
+    height: 240,
+    backgroundColor: 'rgba(213,227,255,0.32)',
+  },
+  glowTertiary: {
+    bottom: 120,
+    right: -70,
+    width: 220,
+    height: 220,
+    backgroundColor: 'rgba(255,223,233,0.24)',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 120,
   },
   container: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 12,
   },
-  kicker: {
-    color: '#7B6F63',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  headerAccent: {
+    width: 42,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    marginBottom: 14,
   },
   title: {
-    color: '#171312',
-    fontSize: 34,
+    color: '#171A27',
+    fontSize: 36,
     fontWeight: '800',
-    marginTop: 8,
+    letterSpacing: -1.1,
   },
   description: {
-    color: '#5C524A',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
+    color: '#6E6A7E',
+    fontSize: 16,
+    lineHeight: 24,
+    marginTop: 8,
+    maxWidth: 300,
   },
   actions: {
     flexDirection: 'row',
@@ -109,10 +149,14 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   actionButton: {
-    backgroundColor: '#171312',
-    borderRadius: 14,
-    paddingHorizontal: 16,
+    backgroundColor: 'rgba(23,26,39,0.92)',
+    borderRadius: 18,
+    paddingHorizontal: 18,
     paddingVertical: 12,
+    shadowColor: '#161A25',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
   },
   actionText: {
     color: '#FFFFFF',
@@ -121,6 +165,6 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    marginTop: 20,
+    marginTop: 24,
   },
 })

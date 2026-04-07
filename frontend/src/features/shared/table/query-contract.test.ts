@@ -15,7 +15,7 @@ describe('listQuerySearchSchema', () => {
 
     expect(parsed).toEqual({
       page: 1,
-      pageSize: 20,
+      pageSize: 10,
       keyword: '',
       filters: [{ field: 'status', operator: 'eq', value: 'ENABLED' }],
       sorts: [{ field: 'createdAt', direction: 'desc' }],
@@ -47,7 +47,7 @@ describe('listQuerySearchSchema', () => {
       stripDefaultListQuerySearchValues(
         listQuerySearchSchema.parse({
           page: 1,
-          pageSize: 20,
+          pageSize: 10,
           keyword: '',
           filters: [],
           sorts: [],

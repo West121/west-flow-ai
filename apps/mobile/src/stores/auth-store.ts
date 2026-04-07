@@ -1,7 +1,11 @@
 import { create } from 'zustand'
-import * as SecureStore from 'expo-secure-store'
 import type { CurrentUser } from '@/types/auth'
 import { getCurrentUser, login } from '@/lib/api/auth'
+import {
+  deleteSecureItem,
+  getSecureItem,
+  setSecureItem,
+} from '@/lib/storage/secure-storage'
 
 const TOKEN_KEY = 'westflow_mobile_access_token'
 const USER_KEY = 'westflow_mobile_current_user'
@@ -24,8 +28,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isSigningIn: false,
   hydrate: async () => {
     const [accessToken, currentUserRaw] = await Promise.all([
-      SecureStore.getItemAsync(TOKEN_KEY),
-      SecureStore.getItemAsync(USER_KEY),
+      getSecureItem(TOKEN_KEY),
+      getSecureItem(USER_KEY),
     ])
 
     set({
@@ -46,10 +50,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isSigningIn: true })
     try {
       const auth = await login({ username, password })
-      await SecureStore.setItemAsync(TOKEN_KEY, auth.accessToken)
+      await setSecureItem(TOKEN_KEY, auth.accessToken)
       set({ accessToken: auth.accessToken })
       const currentUser = await getCurrentUser()
-      await SecureStore.setItemAsync(USER_KEY, JSON.stringify(currentUser))
+      await setSecureItem(USER_KEY, JSON.stringify(currentUser))
       set({ currentUser, isSigningIn: false })
     } catch (error) {
       set({ isSigningIn: false })
@@ -58,8 +62,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   signOut: async () => {
     await Promise.all([
-      SecureStore.deleteItemAsync(TOKEN_KEY),
-      SecureStore.deleteItemAsync(USER_KEY),
+      deleteSecureItem(TOKEN_KEY),
+      deleteSecureItem(USER_KEY),
     ])
     set({
       accessToken: null,
@@ -70,7 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
   refreshCurrentUser: async () => {
     const currentUser = await getCurrentUser()
-    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(currentUser))
+    await setSecureItem(USER_KEY, JSON.stringify(currentUser))
     set({ currentUser })
   },
 }))

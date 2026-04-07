@@ -2,6 +2,7 @@ package com.westflow.ai.api;
 
 import com.westflow.ai.model.AiAuditEntryResponse;
 import com.westflow.ai.model.AiConfirmToolCallRequest;
+import com.westflow.ai.model.AiCopilotAudioTranscriptionResponse;
 import com.westflow.ai.model.AiConversationDetailResponse;
 import com.westflow.ai.model.AiConversationSummaryResponse;
 import com.westflow.ai.model.AiMessageAppendRequest;
@@ -12,6 +13,7 @@ import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.model.AiToolSource;
 import com.westflow.ai.model.AiToolType;
 import com.westflow.ai.service.AiCopilotService;
+import com.westflow.ai.service.AiCopilotMultimodalService;
 import com.westflow.common.api.ApiResponse;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +41,9 @@ class AiCopilotControllerTest {
 
     @Mock
     private AiCopilotService aiCopilotService;
+
+    @Mock
+    private AiCopilotMultimodalService aiCopilotMultimodalService;
 
     @InjectMocks
     private AiCopilotController aiCopilotController;
@@ -248,5 +254,21 @@ class AiCopilotControllerTest {
         );
         assertThat(response.data().messageCount()).isEqualTo(4);
         assertThat(response.data().history().get(0).content()).isEqualTo("请继续给我审批建议");
+    }
+
+    @Test
+    void shouldTranscribeAudio() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "voice.wav",
+                "audio/wav",
+                new byte[]{1, 2, 3}
+        );
+        when(aiCopilotMultimodalService.transcribeAudio(file)).thenReturn("请帮我发起一个 5 天的事假");
+
+        ApiResponse<AiCopilotAudioTranscriptionResponse> response = aiCopilotController.transcribeAudio(file);
+
+        assertThat(response.code()).isEqualTo("OK");
+        assertThat(response.data().text()).isEqualTo("请帮我发起一个 5 天的事假");
     }
 }

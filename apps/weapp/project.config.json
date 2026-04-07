@@ -1,0 +1,14 @@
+{
+  "miniprogramRoot": "./dist",
+  "projectname": "west-flow-ai-weapp",
+  "description": "West Flow AI 微信小程序端",
+  "appid": "touristappid",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": false
+  },
+  "compileType": "miniprogram"
+}

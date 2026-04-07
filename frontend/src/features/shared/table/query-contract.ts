@@ -34,7 +34,7 @@ export const groupItemSchema = z.object({
 
 export const listQuerySearchSchema = z.object({
   page: z.coerce.number().catch(1).default(1),
-  pageSize: z.coerce.number().catch(20).default(20),
+  pageSize: z.coerce.number().catch(10).default(10),
   keyword: z.string().catch('').default(''),
   filters: z.array(filterItemSchema).catch([]).default([]),
   sorts: z.array(sortItemSchema).catch([]).default([]),
@@ -68,7 +68,7 @@ export function normalizeListQuerySearch(
 ): ListQuerySearch {
   return {
     page: search?.page ?? 1,
-    pageSize: search?.pageSize ?? 20,
+    pageSize: search?.pageSize ?? 10,
     keyword: search?.keyword ?? '',
     filters: search?.filters ?? [],
     sorts: search?.sorts ?? [],
@@ -79,7 +79,7 @@ export function normalizeListQuerySearch(
 export function stripDefaultListQuerySearchValues(search: ListQuerySearch) {
   return {
     page: search.page > 1 ? search.page : undefined,
-    pageSize: search.pageSize !== 20 ? search.pageSize : undefined,
+    pageSize: search.pageSize !== 10 ? search.pageSize : undefined,
     keyword: search.keyword.trim() !== '' ? search.keyword : undefined,
     filters: search.filters.length > 0 ? search.filters : undefined,
     sorts: search.sorts.length > 0 ? search.sorts : undefined,

@@ -192,6 +192,16 @@ public interface SystemUserMapper {
     List<SystemUserFormOptionsResponse.CompanyOption> selectCompanyOptions();
 
     @Select("""
+            SELECT id
+            FROM wf_user
+            WHERE enabled = TRUE
+              AND display_name = #{displayName}
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1
+            """)
+    String selectEnabledUserIdByDisplayName(@Param("displayName") String displayName);
+
+    @Select("""
             SELECT
               p.id,
               p.post_name AS name,

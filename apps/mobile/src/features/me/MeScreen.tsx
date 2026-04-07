@@ -8,8 +8,8 @@ export function MeScreen() {
   const signOut = useAuthStore((state) => state.signOut)
 
   return (
-    <ScreenShell title="我的" description="当前登录态、岗位信息与移动端配置。">
-      <SectionCard title={currentUser?.displayName ?? '未登录'}>
+    <ScreenShell title="我的" description="登录态、当前岗位与移动端偏好收在一个轻量玻璃面板里。">
+      <SectionCard title={currentUser?.displayName ?? '未登录'} description={currentUser?.activePostName ?? '当前未激活岗位'}>
         <Row label="账号" value={currentUser?.username ?? '--'} />
         <Row label="部门" value={currentUser?.activeDepartmentName ?? '--'} />
         <Row label="岗位" value={currentUser?.activePostName ?? '--'} />
@@ -37,12 +37,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 16,
+    paddingVertical: 4,
   },
   rowLabel: {
-    color: '#7B6F63',
+    color: '#757086',
+    fontWeight: '600',
   },
   rowValue: {
-    color: '#171312',
+    color: '#181C2B',
     fontWeight: '600',
     flexShrink: 1,
     textAlign: 'right',
@@ -50,9 +52,13 @@ const styles = StyleSheet.create({
   signOutButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
-    backgroundColor: '#171312',
+    borderRadius: 20,
+    backgroundColor: '#1A2030',
     paddingVertical: 16,
+    shadowColor: '#1A2030',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
   },
   signOutLabel: {
     color: '#FFFFFF',

@@ -33,6 +33,7 @@ public class RuntimeTaskActionAvailabilityService {
         boolean isAssignee = actionSupportService.currentUserId().equals(task.getAssignee());
         boolean canClaim = task.getAssignee() == null && isCandidate;
         boolean canHandle = isAssignee;
+        boolean canUrge = taskActionSupportService.hasInitiatorPermission(task) && !isAssignee && !isCandidate;
         boolean blockedByAddSign = isNormalTask && taskActionSupportService.hasActiveAddSignChild(task.getId());
         boolean blockedByAppendPolicy = isNormalTask && taskActionSupportService.isBlockedByPendingAppendStructures(task);
         boolean canTakeBack = isNormalTask && canTakeBack(task);
@@ -53,7 +54,7 @@ public class RuntimeTaskActionAvailabilityService {
                 canAddSign,
                 canRemoveSign,
                 taskActionSupportService.hasInitiatorPermission(task),
-                taskActionSupportService.hasInitiatorPermission(task),
+                canUrge,
                 canRead,
                 isNormalTask && canHandle && !blockedByAddSign && !blockedByAppendPolicy,
                 isNormalTask && canHandle,

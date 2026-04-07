@@ -314,7 +314,7 @@ export function ProTable<TData extends object>({
   } = useTableUrlState({
     search,
     navigate,
-    pagination: { defaultPage: 1, defaultPageSize: 20 },
+    pagination: { defaultPage: 1, defaultPageSize: 10 },
     globalFilter: { enabled: true, key: 'keyword' },
   })
   const treeExpandedState = useMemo(() => {
@@ -420,7 +420,7 @@ export function ProTable<TData extends object>({
     }
 
     removeIfDefault('page', search.page <= 1)
-    removeIfDefault('pageSize', search.pageSize === 20)
+    removeIfDefault('pageSize', search.pageSize === 10)
     removeIfDefault('keyword', search.keyword.trim() === '')
     removeIfDefault('filters', search.filters.length === 0)
     removeIfDefault('sorts', search.sorts.length === 0)
@@ -480,7 +480,8 @@ export function ProTable<TData extends object>({
     <PageShell
       title={title}
       description={description}
-      contentClassName='gap-4 sm:gap-6'
+      fixed
+      contentClassName='min-h-0 gap-4 sm:gap-6'
     >
       {summaries.length > 0 ? (
         <div className='grid gap-4 lg:grid-cols-3'>
@@ -500,8 +501,8 @@ export function ProTable<TData extends object>({
 
       {topContent ? <div className='space-y-4'>{topContent}</div> : null}
 
-      <Card>
-        <CardContent className='flex flex-col gap-4'>
+      <Card className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+        <CardContent className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden'>
           <ProTableToolbar
             table={table}
             searchPlaceholder={searchPlaceholder}
@@ -554,11 +555,19 @@ export function ProTable<TData extends object>({
             </DataTableBulkActions>
           ) : null}
 
-          {viewMode === 'board' && supportsBoard && renderBoardCard && resolveBoardColumns ? (
-            <ProTableBoard columns={boardColumns} renderCard={renderBoardCard} />
-          ) : (
-            <>
-              <div className={cn('overflow-hidden rounded-lg border', resolveDensityClassName(density))}>
+          <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+            {viewMode === 'board' && supportsBoard && renderBoardCard && resolveBoardColumns ? (
+              <div className='min-h-0 flex-1 overflow-auto'>
+                <ProTableBoard columns={boardColumns} renderCard={renderBoardCard} />
+              </div>
+            ) : (
+              <>
+                <div
+                  className={cn(
+                    'min-h-0 flex-1 overflow-auto rounded-lg border',
+                    resolveDensityClassName(density)
+                  )}
+                >
                 <Table
                   className='min-w-full table-fixed'
                   style={{ width: table.getTotalSize() }}
@@ -677,10 +686,11 @@ export function ProTable<TData extends object>({
                     )}
                   </TableBody>
                 </Table>
-              </div>
-              {!isTreeMode ? <DataTablePagination table={table} total={total} /> : null}
-            </>
-          )}
+                </div>
+                {!isTreeMode ? <DataTablePagination table={table} total={total} className='shrink-0' /> : null}
+              </>
+            )}
+          </div>
         </CardContent>
       </Card>
     </PageShell>

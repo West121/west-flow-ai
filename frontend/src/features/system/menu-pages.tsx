@@ -402,6 +402,8 @@ export function MenusListPage() {
     <PageShell
       title='菜单管理'
       description='菜单树是左侧导航与权限标识的唯一来源，创建/编辑/详情类子页面以权限节点方式入库但不展示到侧边栏。'
+      fixed
+      contentClassName='min-h-0'
       actions={
         <div className='flex items-center gap-2'>
           <Button asChild>
@@ -410,128 +412,130 @@ export function MenusListPage() {
         </div>
       }
     >
-      <div className='grid gap-4 md:grid-cols-3'>
-        {summaries.map((summary) => (
-          <Card key={summary.label}>
-            <CardHeader className='pb-2'>
-              <CardDescription>{summary.label}</CardDescription>
-              <CardTitle className='text-2xl'>{summary.value}</CardTitle>
-            </CardHeader>
-            <CardContent className='text-sm text-muted-foreground'>
-              {summary.hint}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <div className='flex min-h-0 flex-1 flex-col gap-4'>
+        <div className='grid shrink-0 gap-4 md:grid-cols-3'>
+          {summaries.map((summary) => (
+            <Card key={summary.label}>
+              <CardHeader className='pb-2'>
+                <CardDescription>{summary.label}</CardDescription>
+                <CardTitle className='text-2xl'>{summary.value}</CardTitle>
+              </CardHeader>
+              <CardContent className='text-sm text-muted-foreground'>
+                {summary.hint}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-      <Card>
-        <CardHeader className='gap-3 md:flex-row md:items-end md:justify-between'>
-          <div className='space-y-1'>
-            <CardTitle>菜单树</CardTitle>
-            <CardDescription>
-              只展示树形结构，不再把创建、修改、详情、执行页混入左侧导航。
-            </CardDescription>
-          </div>
-          <div className='flex w-full max-w-sm items-center gap-2'>
-            <Input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder='搜索菜单名称、路由路径或权限标识'
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>菜单名称</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>路由路径</TableHead>
-                <TableHead>权限标识</TableHead>
-                <TableHead>排序</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead className='text-right'>操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.menuId}>
-                  <TableCell>
-                    <div
-                      className='flex items-center gap-2'
-                      style={{ paddingLeft: `${row.depth * 20}px` }}
-                    >
-                      {row.hasChildren ? (
-                        <Button
-                          type='button'
-                          variant='ghost'
-                          size='icon'
-                          className='size-7'
-                          onClick={() => toggleExpand(row.menuId)}
-                        >
-                          {effectiveExpandedIds.has(row.menuId) ? (
-                            <ChevronDown className='size-4' />
-                          ) : (
-                            <ChevronRight className='size-4' />
-                          )}
-                        </Button>
-                      ) : (
-                        <span className='inline-flex size-7 items-center justify-center text-muted-foreground'>
-                          ·
-                        </span>
-                      )}
-                      <div className='flex flex-col gap-1'>
-                        <span className='font-medium'>{row.menuName}</span>
-                        <span className='text-xs text-muted-foreground'>
-                          {row.menuId}
-                        </span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={resolveMenuTypeVariant(row.menuType)}>
-                      {resolveMenuTypeLabel(row.menuType)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{row.routePath ?? '-'}</TableCell>
-                  <TableCell>{row.permissionCode ?? '-'}</TableCell>
-                  <TableCell>{row.sortOrder}</TableCell>
-                  <TableCell>
-                    <div className='flex items-center gap-2'>
-                      <Badge variant={row.enabled ? 'secondary' : 'outline'}>
-                        {row.enabled ? '启用' : '停用'}
-                      </Badge>
-                      <Badge variant='outline'>
-                        {row.visible ? '显示' : '隐藏'}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell className='text-right'>
-                    <div className='flex justify-end gap-2'>
-                      <Button asChild variant='ghost' className='h-8 px-2'>
-                        <Link
-                          to='/system/menus/$menuId'
-                          params={{ menuId: row.menuId }}
-                        >
-                          详情
-                        </Link>
-                      </Button>
-                      <Button asChild variant='ghost' className='h-8 px-2'>
-                        <Link
-                          to='/system/menus/$menuId/edit'
-                          params={{ menuId: row.menuId }}
-                        >
-                          编辑
-                        </Link>
-                      </Button>
-                    </div>
-                  </TableCell>
+        <Card className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+          <CardHeader className='shrink-0 gap-3 md:flex-row md:items-end md:justify-between'>
+            <div className='space-y-1'>
+              <CardTitle>菜单树</CardTitle>
+              <CardDescription>
+                只展示树形结构，不再把创建、修改、详情、执行页混入左侧导航。
+              </CardDescription>
+            </div>
+            <div className='flex w-full max-w-sm items-center gap-2'>
+              <Input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder='搜索菜单名称、路由路径或权限标识'
+              />
+            </div>
+          </CardHeader>
+          <CardContent className='min-h-0 flex-1 overflow-auto'>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>菜单名称</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>路由路径</TableHead>
+                  <TableHead>权限标识</TableHead>
+                  <TableHead>排序</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead className='text-right'>操作</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.menuId}>
+                    <TableCell>
+                      <div
+                        className='flex items-center gap-2'
+                        style={{ paddingLeft: `${row.depth * 20}px` }}
+                      >
+                        {row.hasChildren ? (
+                          <Button
+                            type='button'
+                            variant='ghost'
+                            size='icon'
+                            className='size-7'
+                            onClick={() => toggleExpand(row.menuId)}
+                          >
+                            {effectiveExpandedIds.has(row.menuId) ? (
+                              <ChevronDown className='size-4' />
+                            ) : (
+                              <ChevronRight className='size-4' />
+                            )}
+                          </Button>
+                        ) : (
+                          <span className='inline-flex size-7 items-center justify-center text-muted-foreground'>
+                            ·
+                          </span>
+                        )}
+                        <div className='flex flex-col gap-1'>
+                          <span className='font-medium'>{row.menuName}</span>
+                          <span className='text-xs text-muted-foreground'>
+                            {row.menuId}
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={resolveMenuTypeVariant(row.menuType)}>
+                        {resolveMenuTypeLabel(row.menuType)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{row.routePath ?? '-'}</TableCell>
+                    <TableCell>{row.permissionCode ?? '-'}</TableCell>
+                    <TableCell>{row.sortOrder}</TableCell>
+                    <TableCell>
+                      <div className='flex items-center gap-2'>
+                        <Badge variant={row.enabled ? 'secondary' : 'outline'}>
+                          {row.enabled ? '启用' : '停用'}
+                        </Badge>
+                        <Badge variant='outline'>
+                          {row.visible ? '显示' : '隐藏'}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell className='text-right'>
+                      <div className='flex justify-end gap-2'>
+                        <Button asChild variant='ghost' className='h-8 px-2'>
+                          <Link
+                            to='/system/menus/$menuId'
+                            params={{ menuId: row.menuId }}
+                          >
+                            详情
+                          </Link>
+                        </Button>
+                        <Button asChild variant='ghost' className='h-8 px-2'>
+                          <Link
+                            to='/system/menus/$menuId/edit'
+                            params={{ menuId: row.menuId }}
+                          >
+                            编辑
+                          </Link>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     </PageShell>
   )
 }

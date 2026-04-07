@@ -31,7 +31,7 @@ public class AiActionExecutor extends AbstractAiExecutor {
 
     @Override
     protected AiToolCallRequest toolCallRequest(AiExecutionPlan plan, AiExecutionContext context) {
-        String toolKey = plan.toolCandidates().isEmpty() ? "process.start" : plan.toolCandidates().getFirst();
+        String toolKey = resolveToolKey(plan);
         Map<String, Object> arguments = new LinkedHashMap<>(plan.arguments());
         arguments.putIfAbsent("domain", plan.domain());
         arguments.putIfAbsent("routePath", context.pageRoute());
@@ -41,5 +41,38 @@ public class AiActionExecutor extends AbstractAiExecutor {
                 AiToolSource.PLATFORM,
                 arguments
         );
+    }
+
+    private String resolveToolKey(AiExecutionPlan plan) {
+        if (!plan.toolCandidates().isEmpty()) {
+            String candidate = normalize(plan.toolCandidates().getFirst());
+            if (isRegisteredStyleToolKey(candidate)) {
+                return candidate;
+            }
+            String lowered = candidate.toLowerCase();
+            if (lowered.contains("task")) {
+                return "task.handle";
+            }
+            if (
+                    lowered.contains("process")
+                            || lowered.contains("workflow")
+                            || lowered.contains("instance")
+                            || lowered.contains("start")
+                            || lowered.contains("create")
+            ) {
+                return "process.start";
+            }
+        }
+        return plan.arguments().containsKey("taskId") ? "task.handle" : "process.start";
+    }
+
+    private boolean isRegisteredStyleToolKey(String candidate) {
+        return "process.start".equals(candidate)
+                || "task.handle".equals(candidate)
+                || candidate.startsWith("workflow.task.");
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 }

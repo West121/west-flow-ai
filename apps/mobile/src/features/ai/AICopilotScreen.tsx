@@ -6,7 +6,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
   ActivityIndicator,
-  LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -125,19 +124,27 @@ export function AICopilotScreen() {
   return (
     <ScreenShell
       title="AI Copilot"
-      description="移动端先接文本问答和图片/PDF 附件入口，复用现有后端 planner 与工具链。"
+      description="让问答、图片识别和表单发起都收进一个更轻的移动端对话器里。"
       scrollable={false}
     >
       <View style={styles.container}>
+        <View style={styles.heroBar}>
+          <Text style={styles.heroLabel}>Conversation</Text>
+          <Text style={styles.heroHint}>图片、PDF、语音都可以直接发进来</Text>
+        </View>
         <ScrollView style={styles.messages} contentContainerStyle={styles.messagesContent}>
           {sessionQuery.isLoading ? (
             <AppLoader message="正在加载会话…" />
           ) : (
             messages.map((message) => (
-              <SectionCard
+              <View
                 key={message.messageId}
-                compact
-                title={`${message.authorName} · ${formatTime(message.createdAt)}`}
+                style={[
+                  styles.messageCard,
+                  message.authorName === 'AI Copilot'
+                    ? styles.messageCardAssistant
+                    : styles.messageCardUser,
+                ]}
                 onLayout={(event) => {
                   const width = event.nativeEvent.layout.width
                   if (width > 0 && width !== messageWidth) {
@@ -145,6 +152,10 @@ export function AICopilotScreen() {
                   }
                 }}
               >
+                <View style={styles.messageMetaRow}>
+                  <Text style={styles.messageAuthor}>{message.authorName}</Text>
+                  <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
+                </View>
                 <Text style={styles.messageText}>{message.content}</Text>
                 {message.blocks?.map((block, index) => (
                   <View key={`${message.messageId}:${block.type}:${index}`} style={styles.block}>
@@ -170,12 +181,12 @@ export function AICopilotScreen() {
                       : null}
                   </View>
                 ))}
-              </SectionCard>
+              </View>
             ))
           )}
         </ScrollView>
 
-        <SectionCard compact title="发送消息">
+        <SectionCard compact style={styles.composerCard}>
           {attachments.length > 0 ? (
             <View style={styles.attachmentsRow}>
               {attachments.map((item) => (
@@ -191,7 +202,7 @@ export function AICopilotScreen() {
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="输入问题，或先上传图片/PDF"
+            placeholder="问点什么，或者先发图片、PDF。"
             multiline
             style={styles.input}
           />
@@ -227,7 +238,7 @@ export function AICopilotScreen() {
                 }
               }}
             >
-              <Text style={styles.secondaryButtonLabel}>上传图片/PDF</Text>
+              <Text style={styles.secondaryButtonLabel}>图片 / PDF</Text>
             </Pressable>
             <Pressable
               style={styles.secondaryButton}
@@ -259,7 +270,7 @@ export function AICopilotScreen() {
                 }
               }}
             >
-              <Text style={styles.secondaryButtonLabel}>转写音频</Text>
+              <Text style={styles.secondaryButtonLabel}>音频文件</Text>
             </Pressable>
             <Pressable
               style={[
@@ -320,7 +331,7 @@ export function AICopilotScreen() {
               }}
             >
               <Text style={styles.secondaryButtonLabel}>
-                {isRecording ? '结束录音' : '录音转写'}
+                {isRecording ? '结束录音' : '录音'}
               </Text>
             </Pressable>
             <Pressable
@@ -411,6 +422,29 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 16,
   },
+  heroBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.42)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  heroLabel: {
+    color: '#222739',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  heroHint: {
+    color: '#7A7690',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   messages: {
     flex: 1,
   },
@@ -418,15 +452,52 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 12,
   },
+  messageCard: {
+    borderRadius: 26,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+    shadowColor: '#7B88BF',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  messageCardAssistant: {
+    marginRight: 22,
+    borderColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.74)',
+  },
+  messageCardUser: {
+    marginLeft: 22,
+    borderColor: 'rgba(255,255,255,0.78)',
+    backgroundColor: 'rgba(228,233,255,0.72)',
+  },
+  messageMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  messageAuthor: {
+    color: '#1E2435',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  messageTime: {
+    color: '#838098',
+    fontSize: 12,
+  },
   messageText: {
-    color: '#171312',
+    color: '#171B29',
     lineHeight: 22,
   },
   block: {
-    gap: 6,
+    gap: 8,
   },
   blockText: {
-    color: '#473E37',
+    color: '#5A566D',
     lineHeight: 20,
   },
   attachmentText: {
@@ -444,24 +515,24 @@ const styles = StyleSheet.create({
   },
   attachmentCard: {
     gap: 8,
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E3D8CA',
-    backgroundColor: '#FFFDF9',
+    borderColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: 'rgba(255,255,255,0.76)',
     padding: 10,
   },
   attachmentPreview: {
     width: '100%',
     height: 132,
     borderRadius: 14,
-    backgroundColor: '#F6F1E7',
+    backgroundColor: 'rgba(240,240,248,0.9)',
   },
   attachmentPreviewFallback: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   attachmentCaption: {
-    color: '#4C433D',
+    color: '#4F4A60',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -472,38 +543,43 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F1E8',
   },
   attachmentFileIcon: {
-    color: '#7B6E61',
+    color: '#756E88',
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
   attachmentFileName: {
-    color: '#3C332D',
+    color: '#373245',
     fontSize: 13,
     fontWeight: '600',
     marginTop: 8,
     textAlign: 'center',
   },
+  composerCard: {
+    marginBottom: 92,
+  },
   input: {
-    minHeight: 96,
+    minHeight: 88,
     borderWidth: 1,
-    borderColor: '#D9CFBF',
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     padding: 14,
+    color: '#171B29',
     textAlignVertical: 'top',
   },
   composerActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 10,
   },
   primaryButton: {
-    flex: 1,
+    minWidth: 96,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
-    backgroundColor: '#171312',
+    borderRadius: 18,
+    backgroundColor: '#1B2031',
+    paddingHorizontal: 20,
     paddingVertical: 14,
   },
   primaryButtonDisabled: {
@@ -516,22 +592,23 @@ const styles = StyleSheet.create({
   secondaryButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#D5CABC',
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.56)',
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
   secondaryButtonLabel: {
-    color: '#2A231F',
+    color: '#252B3D',
     fontWeight: '700',
   },
   recordingButton: {
-    borderColor: '#D46A46',
-    backgroundColor: '#FFF2ED',
+    borderColor: 'rgba(221,120,91,0.34)',
+    backgroundColor: 'rgba(255,233,226,0.82)',
   },
   emptyText: {
-    color: '#75695E',
+    color: '#757086',
     lineHeight: 20,
   },
 })

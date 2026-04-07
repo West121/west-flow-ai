@@ -23,9 +23,15 @@ import {
   BarChart3,
   Bot,
   CheckCircle2,
+  Check,
   CircleAlert,
   Clock3,
+  Copy,
+  FileText,
   GitBranch,
+  ImagePlus,
+  Mic,
+  MicOff,
   Plus,
   RefreshCw,
   Search,
@@ -35,6 +41,7 @@ import {
   TriangleAlert,
   UserRound,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +54,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
@@ -59,12 +72,17 @@ import { ProcessFormRenderer } from '@/features/forms/runtime/process-form-rende
 import { getApiErrorMessage } from '@/lib/api/client'
 import { cn } from '@/lib/utils'
 import {
+  clearAICopilotSessions,
   confirmAICopilotConfirmation,
   createAICopilotSession,
+  downloadAICopilotAssetPreview,
   deleteAICopilotSession,
   getAICopilotSession,
   listAICopilotSessions,
   sendAICopilotMessage,
+  transcribeAICopilotAudio,
+  uploadAICopilotAsset,
+  type AICopilotAttachmentItem,
   type AICopilotChartBlock,
   type AICopilotConfirmationDecision,
   type AICopilotMessage,
@@ -75,6 +93,7 @@ import {
 } from '@/lib/api/ai-copilot'
 
 const aiCopilotSessionsKey = ['ai-copilot', 'sessions'] as const
+const attachmentPreviewUrlCache = new Map<string, string>()
 
 const aiCopilotSessionKey = (sessionId: string) =>
   ['ai-copilot', 'sessions', sessionId] as const
@@ -103,6 +122,8 @@ export function AICopilotWorkspace({
   const [activeSessionId, setActiveSessionId] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [draft, setDraft] = useState('')
+  const [draftAttachments, setDraftAttachments] = useState<AICopilotAttachmentItem[]>([])
+  const [optimisticMessages, setOptimisticMessages] = useState<AICopilotMessage[]>([])
   const [pendingConfirmationId, setPendingConfirmationId] = useState<string | null>(
     null
   )
@@ -112,9 +133,21 @@ export function AICopilotWorkspace({
     y: number
   } | null>(null)
   const [deleteTargetSessionId, setDeleteTargetSessionId] = useState<string | null>(null)
+  const [clearSessionsOpen, setClearSessionsOpen] = useState(false)
+  const [previewAttachment, setPreviewAttachment] =
+    useState<AICopilotAttachmentItem | null>(null)
   const bootstrappedRouteRef = useRef('')
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const messageEndRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null)
+  const audioProcessorRef = useRef<ScriptProcessorNode | null>(null)
+  const audioBuffersRef = useRef<Float32Array[]>([])
+  const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false)
 
   const sessionsQuery = useQuery({
     queryKey: aiCopilotSessionsKey,
@@ -160,8 +193,22 @@ export function AICopilotWorkspace({
 
   const sendMessageMutation = useMutation({
     mutationFn: sendAICopilotMessage,
-    onSuccess: (updatedSession) => {
+    onMutate: async (input) => {
+      const optimisticMessage = buildOptimisticUserMessage(
+        input.content,
+        input.attachments ?? []
+      )
+      setOptimisticMessages((previous) => [...previous, optimisticMessage])
       setDraft('')
+      setDraftAttachments([])
+      return {
+        draft,
+        attachments: draftAttachments,
+        optimisticMessageId: optimisticMessage.messageId,
+      }
+    },
+    onSuccess: (updatedSession) => {
+      setOptimisticMessages([])
       queryClient.setQueryData(
         aiCopilotSessionKey(updatedSession.sessionId),
         updatedSession
@@ -171,6 +218,14 @@ export function AICopilotWorkspace({
         (previous?: AICopilotSessionSummary[]) =>
           upsertSessionSummary(previous ?? [], updatedSession)
       )
+    },
+    onError: (error, _input, context) => {
+      setOptimisticMessages((previous) =>
+        previous.filter((message) => message.messageId !== context?.optimisticMessageId)
+      )
+      setDraft(context?.draft ?? '')
+      setDraftAttachments(context?.attachments ?? [])
+      toast.error(getApiErrorMessage(error, '消息发送失败，请稍后重试。'))
     },
   })
 
@@ -216,6 +271,19 @@ export function AICopilotWorkspace({
     },
   })
 
+  const clearSessionsMutation = useMutation({
+    mutationFn: clearAICopilotSessions,
+    onSuccess: async () => {
+      setClearSessionsOpen(false)
+      setDeleteTargetSessionId(null)
+      setContextMenuState(null)
+      setActiveSessionId('')
+      setOptimisticMessages([])
+      queryClient.setQueryData(aiCopilotSessionsKey, [] as AICopilotSessionSummary[])
+      await queryClient.invalidateQueries({ queryKey: aiCopilotSessionsKey })
+    },
+  })
+
   useEffect(() => {
     if (!sourceRoute || sessionsQuery.isLoading || isCreatingSession) {
       return
@@ -244,8 +312,8 @@ export function AICopilotWorkspace({
   ])
 
   const activeSession = activeSessionQuery.data ?? null
-  const orderedHistory = activeSession?.history?.length
-    ? [...activeSession.history].sort((left, right) => {
+  const orderedHistory = activeSession?.history?.length || optimisticMessages.length
+    ? [...(activeSession?.history ?? []), ...optimisticMessages].sort((left, right) => {
         const leftTime = Date.parse(left.createdAt)
         const rightTime = Date.parse(right.createdAt)
         if (leftTime !== rightTime) {
@@ -309,7 +377,15 @@ export function AICopilotWorkspace({
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [activeSession?.history, sendMessageMutation.isPending])
+  }, [activeSession?.history, optimisticMessages, sendMessageMutation.isPending])
+
+  useEffect(
+    () => () => {
+      void stopAudioRecording(true)
+      recognitionRef.current?.stop()
+    },
+    []
+  )
 
   useEffect(() => {
     if (!contextMenuState) {
@@ -351,7 +427,7 @@ export function AICopilotWorkspace({
     const content = draft.trim()
 
     if (
-      !content ||
+      (!content && !draftAttachments.length) ||
       !effectiveActiveSessionId ||
       sendMessageMutation.isPending
     ) {
@@ -361,7 +437,181 @@ export function AICopilotWorkspace({
     sendMessageMutation.mutate({
       sessionId: effectiveActiveSessionId,
       content,
+      attachments: draftAttachments,
     })
+  }
+
+  const handlePickAttachment = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) {
+      return
+    }
+    const isImage = file.type.startsWith('image/')
+    const isPdf =
+      file.type === 'application/pdf' ||
+      file.name.toLowerCase().endsWith('.pdf')
+    if (!isImage && !isPdf) {
+      toast.error('当前仅支持上传图片或 PDF')
+      return
+    }
+    try {
+      const uploaded = await uploadAICopilotAsset(file)
+      const localPreviewUrl = URL.createObjectURL(file)
+      attachmentPreviewUrlCache.set(uploaded.fileId, localPreviewUrl)
+      setDraftAttachments((previous) => [
+        ...previous,
+        {
+          ...uploaded,
+          previewUrl: localPreviewUrl,
+        },
+      ])
+      toast.success(isPdf ? 'PDF 已上传' : '图片已上传', {
+        position: 'top-right',
+        closeButton: true,
+      })
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, '图片上传失败，请稍后重试。'), {
+        position: 'top-right',
+        closeButton: true,
+      })
+    }
+  }
+
+  const startBrowserSpeechRecognitionFallback = () => {
+    const RecognitionConstructor =
+      window.SpeechRecognition ?? window.webkitSpeechRecognition
+    if (!RecognitionConstructor) {
+      toast.error('当前环境不支持语音输入')
+      return
+    }
+    const recognition = new RecognitionConstructor()
+    recognition.lang = 'zh-CN'
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.onstart = () => setIsRecording(true)
+    recognition.onend = () => setIsRecording(false)
+    recognition.onerror = () => {
+      setIsRecording(false)
+      toast.error('语音识别失败，请重试')
+    }
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((result) => result[0]?.transcript ?? '')
+        .join('')
+        .trim()
+      if (transcript) {
+        setDraft((previous) =>
+          previous.trim() ? `${previous.trim()} ${transcript}` : transcript
+        )
+      }
+    }
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
+  const stopAudioRecording = async (silent = false) => {
+    const stream = audioStreamRef.current
+    const processor = audioProcessorRef.current
+    const sourceNode = audioSourceRef.current
+    const audioContext = audioContextRef.current
+
+    audioProcessorRef.current = null
+    audioSourceRef.current = null
+    audioStreamRef.current = null
+    audioContextRef.current = null
+
+    processor?.disconnect()
+    sourceNode?.disconnect()
+    stream?.getTracks().forEach((track) => track.stop())
+    if (audioContext) {
+      await audioContext.close()
+    }
+
+    const recordedBuffer = mergeAudioBuffers(audioBuffersRef.current)
+    audioBuffersRef.current = []
+    setIsRecording(false)
+
+    if (!recordedBuffer.length || silent) {
+      return
+    }
+
+    const wavBlob = encodeWavAudio(recordedBuffer, 16000)
+    const audioFile = new File([wavBlob], `copilot-recording-${Date.now()}.wav`, {
+      type: 'audio/wav',
+    })
+
+    try {
+      setIsTranscribingAudio(true)
+      const result = await transcribeAICopilotAudio(audioFile)
+      const transcript = result.text.trim()
+      if (!transcript) {
+        toast.error('未识别到有效语音内容')
+        return
+      }
+      setDraft((previous) =>
+        previous.trim() ? `${previous.trim()} ${transcript}` : transcript
+      )
+      toast.success('语音已转写')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, '语音转写失败，请稍后重试。'))
+    } finally {
+      setIsTranscribingAudio(false)
+    }
+  }
+
+  const startAudioRecording = async () => {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.AudioContext === 'undefined' ||
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      startBrowserSpeechRecognitionFallback()
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const AudioContextConstructor =
+        window.AudioContext ?? window.webkitAudioContext
+      if (!AudioContextConstructor) {
+        stream.getTracks().forEach((track) => track.stop())
+        startBrowserSpeechRecognitionFallback()
+        return
+      }
+      const audioContext = new AudioContextConstructor({ sampleRate: 16000 })
+      const sourceNode = audioContext.createMediaStreamSource(stream)
+      const processorNode = audioContext.createScriptProcessor(4096, 1, 1)
+      audioBuffersRef.current = []
+      processorNode.onaudioprocess = (event) => {
+        const channel = event.inputBuffer.getChannelData(0)
+        audioBuffersRef.current.push(new Float32Array(channel))
+      }
+      sourceNode.connect(processorNode)
+      processorNode.connect(audioContext.destination)
+      audioStreamRef.current = stream
+      audioContextRef.current = audioContext
+      audioSourceRef.current = sourceNode
+      audioProcessorRef.current = processorNode
+      setIsRecording(true)
+      toast.info('开始录音，再点一次结束')
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, '无法开始录音，请检查麦克风权限。'))
+    }
+  }
+
+  const handleToggleRecording = () => {
+    if (isTranscribingAudio) {
+      return
+    }
+    if (isRecording) {
+      void stopAudioRecording(false)
+      return
+    }
+    void startAudioRecording()
   }
 
   const handleComposerKeyDown = (
@@ -417,7 +667,7 @@ export function AICopilotWorkspace({
       >
         <aside className='flex min-h-0 flex-col overflow-hidden rounded-[1.5rem] border border-border bg-card/80 shadow-sm'>
           <div className='border-b border-border px-4 py-4'>
-            <div className='flex items-start justify-between gap-3'>
+              <div className='flex items-start justify-between gap-3'>
               <div>
                 <p className='text-xs uppercase tracking-[0.28em] text-primary/70'>
                   AI Copilot
@@ -427,15 +677,29 @@ export function AICopilotWorkspace({
                   选择会话，继续当前页面上下文。
                 </p>
               </div>
-              <Button
-                type='button'
-                size='icon'
-                variant='outline'
-                className='border-border bg-background/80 text-foreground hover:bg-muted'
-                onClick={handleCreateSession}
-              >
-                <Plus />
-              </Button>
+              <div className='flex items-center gap-2'>
+                <Button
+                  type='button'
+                  size='icon'
+                  variant='outline'
+                  className='border-border bg-background/80 text-destructive hover:bg-destructive/10 hover:text-destructive'
+                  onClick={() => setClearSessionsOpen(true)}
+                  disabled={!sessions.length || clearSessionsMutation.isPending}
+                  aria-label='清空我的会话'
+                  title='清空我的会话'
+                >
+                  <Trash2 className='size-4' />
+                </Button>
+                <Button
+                  type='button'
+                  size='icon'
+                  variant='outline'
+                  className='border-border bg-background/80 text-foreground hover:bg-muted'
+                  onClick={handleCreateSession}
+                >
+                  <Plus />
+                </Button>
+              </div>
             </div>
 
             <div className='mt-4 flex items-center gap-2 rounded-full border border-border bg-background/80 px-3 py-2'>
@@ -647,6 +911,56 @@ export function AICopilotWorkspace({
                     placeholder='输入你的问题或指令…'
                     className='min-h-32 resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-7 text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-0'
                   />
+                  {draftAttachments.length ? (
+                    <div className='mt-3 flex flex-wrap gap-2'>
+                      {draftAttachments.map((attachment) => (
+                        <div
+                          key={attachment.fileId}
+                          className='flex items-center gap-2 rounded-2xl border border-border bg-background/80 px-3 py-2'
+                        >
+                          <button
+                            type='button'
+                            className='flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted/40 p-1'
+                            onClick={() =>
+                              canPreviewAttachment(attachment)
+                                ? setPreviewAttachment(attachment)
+                                : undefined
+                            }
+                          >
+                            {canPreviewAttachment(attachment) ? (
+                              <AttachmentPreviewMedia
+                                attachment={attachment}
+                                className='rounded-lg border-0'
+                              />
+                            ) : (
+                              <FileText className='size-5 text-muted-foreground' />
+                            )}
+                          </button>
+                          <div className='min-w-0'>
+                            <p className='max-w-40 truncate text-xs font-medium text-foreground'>
+                              {attachment.displayName}
+                            </p>
+                            <p className='text-[11px] text-muted-foreground'>
+                              {attachment.contentType}
+                            </p>
+                          </div>
+                          <Button
+                            type='button'
+                            size='icon'
+                            variant='ghost'
+                            className='size-7 rounded-full'
+                            onClick={() =>
+                              setDraftAttachments((previous) =>
+                                previous.filter((item) => item.fileId !== attachment.fileId)
+                              )
+                            }
+                          >
+                            <Trash2 className='size-3.5' />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className='mt-4 flex items-center justify-between gap-3'>
                     <div className='flex min-w-0 items-center gap-2 text-xs text-muted-foreground'>
                       <div className='flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary'>
@@ -661,20 +975,67 @@ export function AICopilotWorkspace({
                         <p>Enter 发送，Shift+Enter 换行</p>
                       </div>
                     </div>
-                    <Button
-                      type='button'
-                      size='icon'
-                      aria-label='发送消息'
-                      className='size-12 rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
-                      disabled={
-                        !draft.trim() ||
-                        sendMessageMutation.isPending ||
-                        !effectiveActiveSessionId
-                      }
-                      onClick={() => void handleSendMessage()}
-                    >
-                      <SendHorizontal className='size-4.5' />
-                    </Button>
+                    <div className='flex items-center gap-2'>
+                      <input
+                        ref={fileInputRef}
+                        type='file'
+                        accept='image/*,application/pdf'
+                        className='hidden'
+                        onChange={handlePickAttachment}
+                      />
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='outline'
+                        aria-label='上传图片'
+                        className='size-11 rounded-full border-border bg-background/80 text-foreground hover:bg-muted'
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <ImagePlus className='size-4.5' />
+                      </Button>
+                      <Button
+                        type='button'
+                        size='icon'
+                        variant='outline'
+                        aria-label={
+                          isTranscribingAudio
+                            ? '语音转写中'
+                            : isRecording
+                              ? '停止语音输入'
+                              : '开始语音输入'
+                        }
+                        className={cn(
+                          'size-11 rounded-full border-border bg-background/80 text-foreground hover:bg-muted',
+                          isRecording || isTranscribingAudio
+                            ? 'border-primary/40 text-primary'
+                            : ''
+                        )}
+                        onClick={handleToggleRecording}
+                        disabled={isTranscribingAudio}
+                      >
+                        {isTranscribingAudio ? (
+                          <RefreshCw className='size-4.5 animate-spin' />
+                        ) : isRecording ? (
+                          <MicOff className='size-4.5' />
+                        ) : (
+                          <Mic className='size-4.5' />
+                        )}
+                      </Button>
+                      <Button
+                        type='button'
+                        size='icon'
+                        aria-label='发送消息'
+                        className='size-12 rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        disabled={
+                          (!draft.trim() && !draftAttachments.length) ||
+                          sendMessageMutation.isPending ||
+                          !effectiveActiveSessionId
+                        }
+                        onClick={() => void handleSendMessage()}
+                      >
+                        <SendHorizontal className='size-4.5' />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -740,6 +1101,48 @@ export function AICopilotWorkspace({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog open={clearSessionsOpen} onOpenChange={setClearSessionsOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>清空我的会话</AlertDialogTitle>
+            <AlertDialogDescription>
+              仅清空当前登录账号创建的全部 AI 会话、消息、工具调用和审计记录，操作后无法恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearSessionsMutation.isPending}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
+              disabled={clearSessionsMutation.isPending || !sessions.length}
+              onClick={(event) => {
+                event.preventDefault()
+                clearSessionsMutation.mutate()
+              }}
+            >
+              {clearSessionsMutation.isPending ? '清空中…' : '确认清空'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog
+        open={Boolean(previewAttachment)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewAttachment(null)
+          }
+        }}
+      >
+        <DialogContent className='max-w-5xl overflow-hidden p-0 sm:max-w-[min(92vw,1100px)]'>
+          <DialogHeader className='border-b border-border px-6 py-4'>
+            <DialogTitle className='truncate text-base'>
+              {previewAttachment?.displayName ?? '附件预览'}
+            </DialogTitle>
+          </DialogHeader>
+          <AttachmentPreviewPanel attachment={previewAttachment} />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -761,6 +1164,92 @@ function buildContextualSessionTitle(sourceRoute: string) {
     return '当前系统管理 Copilot'
   }
   return '当前页面 Copilot'
+}
+
+function mergeAudioBuffers(buffers: Float32Array[]) {
+  const totalLength = buffers.reduce((sum, buffer) => sum + buffer.length, 0)
+  const merged = new Float32Array(totalLength)
+  let offset = 0
+  for (const buffer of buffers) {
+    merged.set(buffer, offset)
+    offset += buffer.length
+  }
+  return merged
+}
+
+function encodeWavAudio(samples: Float32Array, sampleRate: number) {
+  const wavBuffer = new ArrayBuffer(44 + samples.length * 2)
+  const view = new DataView(wavBuffer)
+  writeAsciiChunk(view, 0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * 2, true)
+  writeAsciiChunk(view, 8, 'WAVE')
+  writeAsciiChunk(view, 12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeAsciiChunk(view, 36, 'data')
+  view.setUint32(40, samples.length * 2, true)
+
+  let offset = 44
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index] ?? 0))
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
+    offset += 2
+  }
+
+  return new Blob([wavBuffer], { type: 'audio/wav' })
+}
+
+function writeAsciiChunk(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    view.setUint8(offset + index, value.charCodeAt(index))
+  }
+}
+
+type SpeechRecognitionResultLike = {
+  0?: {
+    transcript?: string
+  }
+}
+
+type SpeechRecognitionLike = {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  onstart: (() => void) | null
+  onend: (() => void) | null
+  onerror: (() => void) | null
+  onresult:
+    | ((event: { results: ArrayLike<SpeechRecognitionResultLike> }) => void)
+    | null
+  start: () => void
+  stop: () => void
+}
+
+type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike
+
+declare global {
+  interface AudioContext {
+    createScriptProcessor(
+      bufferSize: number,
+      numberOfInputChannels: number,
+      numberOfOutputChannels: number
+    ): ScriptProcessorNode
+  }
+
+  interface Window {
+    AudioContext?: typeof AudioContext
+    webkitAudioContext?: typeof AudioContext
+  }
+
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructorLike
+    webkitSpeechRecognition?: SpeechRecognitionConstructorLike
+  }
 }
 
 function extractRouteTagPath(contextTags: string[]) {
@@ -808,6 +1297,176 @@ function formatSourceRouteLabel(sourceRoute: string) {
   }
 
   return sourceRoute
+}
+
+function buildOptimisticUserMessage(
+  content: string,
+  attachments: AICopilotAttachmentItem[]
+): AICopilotMessage {
+  const normalizedContent = content.trim()
+  const summary =
+    normalizedContent || (attachments.length ? `已上传 ${attachments.length} 个附件` : '')
+
+  return {
+    messageId: `optimistic_${Date.now()}`,
+    role: 'user',
+    authorName: '你',
+    createdAt: new Date().toISOString(),
+    content: summary,
+    blocks: attachments.length
+      ? [
+          {
+            type: 'attachments',
+            items: attachments,
+          },
+        ]
+      : [],
+  }
+}
+
+function isImageAttachment(attachment: AICopilotAttachmentItem) {
+  return attachment.contentType.startsWith('image/')
+}
+
+function canPreviewAttachment(attachment: AICopilotAttachmentItem | null) {
+  if (!attachment?.fileId) {
+    return false
+  }
+  return (
+    isImageAttachment(attachment) ||
+    attachment.contentType === 'application/pdf' ||
+    attachment.displayName.toLowerCase().endsWith('.pdf')
+  )
+}
+
+function useResolvedAttachmentPreviewUrl(
+  attachment: AICopilotAttachmentItem | null
+) {
+  const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState('')
+
+  useEffect(() => {
+    if (!attachment) {
+      setResolvedPreviewUrl('')
+      return
+    }
+
+    const cachedPreviewUrl = attachmentPreviewUrlCache.get(attachment.fileId)
+    if (cachedPreviewUrl) {
+      setResolvedPreviewUrl(cachedPreviewUrl)
+      return
+    }
+
+    if (!canPreviewAttachment(attachment)) {
+      setResolvedPreviewUrl('')
+      return
+    }
+
+    if (
+      attachment.previewUrl?.startsWith('blob:') ||
+      attachment.previewUrl?.startsWith('data:')
+    ) {
+      attachmentPreviewUrlCache.set(attachment.fileId, attachment.previewUrl)
+      setResolvedPreviewUrl(attachment.previewUrl)
+      return
+    }
+
+    let disposed = false
+
+    downloadAICopilotAssetPreview(attachment.fileId)
+      .then((blob) => {
+        if (disposed) {
+          return
+        }
+        const objectUrl = URL.createObjectURL(blob)
+        attachmentPreviewUrlCache.set(attachment.fileId, objectUrl)
+        setResolvedPreviewUrl(objectUrl)
+      })
+      .catch(() => {
+        if (!disposed) {
+          setResolvedPreviewUrl('')
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [attachment])
+
+  return resolvedPreviewUrl
+}
+
+function AttachmentPreviewMedia({
+  attachment,
+  className,
+}: {
+  attachment: AICopilotAttachmentItem
+  className?: string
+}) {
+  const resolvedPreviewUrl = useResolvedAttachmentPreviewUrl(attachment)
+
+  if (isImageAttachment(attachment) && resolvedPreviewUrl) {
+    return (
+      <img
+        src={resolvedPreviewUrl}
+        alt={attachment.displayName}
+        className={cn(
+          'h-full w-full rounded-xl border border-slate-200 bg-slate-100 object-contain p-3 shadow-sm',
+          className
+        )}
+      />
+    )
+  }
+
+  return (
+    <div className='flex flex-col items-center gap-2 text-muted-foreground'>
+      <FileText className='size-10' />
+      <span className='text-xs'>点击预览</span>
+    </div>
+  )
+}
+
+function AttachmentPreviewPanel({
+  attachment,
+}: {
+  attachment: AICopilotAttachmentItem | null
+}) {
+  const resolvedPreviewUrl = useResolvedAttachmentPreviewUrl(attachment)
+
+  return (
+    <div className='flex max-h-[80vh] min-h-[50vh] items-center justify-center bg-muted/30 p-6'>
+      {attachment && isImageAttachment(attachment) && resolvedPreviewUrl ? (
+        <img
+          src={resolvedPreviewUrl}
+          alt={attachment.displayName}
+          className='max-h-[calc(80vh-6rem)] max-w-full rounded-xl border border-border bg-white object-contain shadow-sm'
+        />
+      ) : resolvedPreviewUrl ? (
+        <iframe
+          src={resolvedPreviewUrl}
+          title={attachment?.displayName}
+          className='h-[calc(80vh-6rem)] w-full rounded-xl border border-border bg-background'
+        />
+      ) : (
+        <div className='flex flex-col items-center gap-2 text-muted-foreground'>
+          <FileText className='size-12' />
+          <span className='text-sm'>附件预览加载失败</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function buildMessageCopyText(message: AICopilotMessage) {
+  const textBodies =
+    message.blocks
+      ?.filter(
+        (block): block is Extract<AICopilotMessageBlock, { type: 'text' }> =>
+          block.type === 'text'
+      )
+      .map((block) => block.body.trim())
+      .filter(Boolean) ?? []
+
+  return [message.content, ...textBodies].filter(Boolean).join('\n\n').trim()
 }
 
 function SectionLabel({
@@ -905,6 +1564,7 @@ function MessageBubble({
   onCancel: (confirmationId: string) => void
 }) {
   const isUser = message.role === 'user'
+  const [copied, setCopied] = useState(false)
   const visibleBlocks = useMemo(() => {
     const blocks = message.blocks?.filter(shouldRenderConversationBlock) ?? []
     const hasFormPreview = blocks.some((block) => block.type === 'form-preview')
@@ -938,10 +1598,27 @@ function MessageBubble({
             : 'border-border bg-card text-foreground'
         )}
       >
-        <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-          <span className='font-medium text-foreground'>{message.authorName}</span>
-          <span>·</span>
-          <span>{formatDate(message.createdAt)}</span>
+        <div className='flex items-center justify-between gap-3 text-xs text-muted-foreground'>
+          <div className='flex items-center gap-2'>
+            <span className='font-medium text-foreground'>{message.authorName}</span>
+            <span>·</span>
+            <span>{formatDate(message.createdAt)}</span>
+          </div>
+          <Button
+            type='button'
+            size='icon'
+            variant='ghost'
+            className='size-7 rounded-full text-muted-foreground'
+            onClick={async () => {
+              const text = buildMessageCopyText(message)
+              await navigator.clipboard.writeText(text)
+              setCopied(true)
+              window.setTimeout(() => setCopied(false), 1200)
+              toast.success('已复制消息')
+            }}
+          >
+            {copied ? <Check className='size-3.5' /> : <Copy className='size-3.5' />}
+          </Button>
         </div>
         <p className='mt-2 text-sm leading-6 text-foreground'>
           {message.content}
@@ -1130,6 +1807,72 @@ function EditableFormPreviewCard({
   )
 }
 
+function AttachmentBlockCard({
+  items,
+}: {
+  items: AICopilotAttachmentItem[]
+}) {
+  const [previewAttachment, setPreviewAttachment] =
+    useState<AICopilotAttachmentItem | null>(null)
+
+  return (
+    <>
+      <Card className='border-border bg-background/80 text-foreground shadow-none'>
+        <CardContent className='grid gap-3 pt-6 sm:grid-cols-2'>
+          {items.map((item) => (
+            <div
+              key={item.fileId}
+              className='overflow-hidden rounded-2xl border border-border bg-card'
+            >
+              <button
+                type='button'
+                className='flex h-40 w-full items-center justify-center bg-muted/30 p-3'
+                onClick={() =>
+                  canPreviewAttachment(item) ? setPreviewAttachment(item) : undefined
+                }
+              >
+                {canPreviewAttachment(item) ? (
+                  <AttachmentPreviewMedia attachment={item} />
+                ) : (
+                  <div className='flex flex-col items-center gap-2 text-muted-foreground'>
+                    <FileText className='size-10' />
+                    <span className='text-xs'>点击预览</span>
+                  </div>
+                )}
+              </button>
+              <div className='p-3'>
+                <p className='truncate text-sm font-medium text-foreground'>
+                  {item.displayName}
+                </p>
+                <p className='mt-1 text-xs text-muted-foreground'>
+                  {item.contentType}
+                </p>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+      <Dialog
+        open={Boolean(previewAttachment)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewAttachment(null)
+          }
+        }}
+      >
+        <DialogContent className='max-w-5xl overflow-hidden p-0 sm:max-w-[min(92vw,1100px)]'>
+          <DialogHeader className='border-b border-border px-6 py-4'>
+            <DialogTitle className='truncate text-base'>
+              {previewAttachment?.displayName ?? '附件预览'}
+            </DialogTitle>
+          </DialogHeader>
+          <AttachmentPreviewPanel attachment={previewAttachment} />
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 function BlockCard({
   block,
   isPending,
@@ -1146,6 +1889,8 @@ function BlockCard({
   linkedConfirmBlock?: Extract<AICopilotMessageBlock, { type: 'confirm' }>
 }) {
   switch (block.type) {
+    case 'attachments':
+      return <AttachmentBlockCard items={block.items} />
     case 'confirm': {
       const status = block.status ?? 'pending'
       const statusLabel = formatConfirmationStatus(status)
@@ -1617,6 +2362,7 @@ function resolveDisplaySourceLabel(
 
 function shouldRenderConversationBlock(block: AICopilotMessageBlock) {
   return (
+    block.type === 'attachments' ||
     (block.type === 'confirm' &&
       ((block.status ?? 'pending') === 'pending')) ||
     block.type === 'stats' ||

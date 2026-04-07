@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.ToolCallbackProvider;
 
 /**
@@ -39,13 +40,14 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
     private final AiRegistryCatalogService aiRegistryCatalogService;
     private final AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider;
     private final String modelName;
+    private final String fastModelName;
 
     public SpringAiAlibabaCopilotRuntimeService(
             ChatClient chatClient,
             SupervisorAgent supervisorAgent,
             LlmRoutingAgent routingAgent
     ) {
-        this(chatClient, supervisorAgent, routingAgent, null, null, "unknown");
+        this(chatClient, supervisorAgent, routingAgent, null, null, "unknown", "");
     }
 
     public SpringAiAlibabaCopilotRuntimeService(
@@ -54,7 +56,7 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             LlmRoutingAgent routingAgent,
             AiRegistryCatalogService aiRegistryCatalogService
     ) {
-        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, null, "unknown");
+        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, null, "unknown", "");
     }
 
     public SpringAiAlibabaCopilotRuntimeService(
@@ -64,7 +66,7 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             AiRegistryCatalogService aiRegistryCatalogService,
             AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider
     ) {
-        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, aiRuntimeToolCallbackProvider, "unknown");
+        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, aiRuntimeToolCallbackProvider, "unknown", "");
     }
 
     public SpringAiAlibabaCopilotRuntimeService(
@@ -75,12 +77,25 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
             AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider,
             String modelName
     ) {
+        this(chatClient, supervisorAgent, routingAgent, aiRegistryCatalogService, aiRuntimeToolCallbackProvider, modelName, "");
+    }
+
+    public SpringAiAlibabaCopilotRuntimeService(
+            ChatClient chatClient,
+            SupervisorAgent supervisorAgent,
+            LlmRoutingAgent routingAgent,
+            AiRegistryCatalogService aiRegistryCatalogService,
+            AiRuntimeToolCallbackProvider aiRuntimeToolCallbackProvider,
+            String modelName,
+            String fastModelName
+    ) {
         this.chatClient = chatClient;
         this.supervisorAgent = supervisorAgent;
         this.routingAgent = routingAgent;
         this.aiRegistryCatalogService = aiRegistryCatalogService;
         this.aiRuntimeToolCallbackProvider = aiRuntimeToolCallbackProvider;
         this.modelName = modelName == null || modelName.isBlank() ? "unknown" : modelName;
+        this.fastModelName = fastModelName == null ? "" : fastModelName.trim();
     }
 
     /**
@@ -129,7 +144,20 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
     ) {
         long start = System.currentTimeMillis();
         try {
-            String reply = chatClient.prompt()
+            ChatClient.ChatClientRequestSpec prompt = fastPromptOrNull();
+            if (prompt == null) {
+                log.info(
+                        "AI read summary skipped model={} mode={} toolKey={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason=no-fast-prompt",
+                        activeTextModelName(),
+                        response.routeMode(),
+                        toolKey,
+                        request.conversationId(),
+                        request.pageRoute(),
+                        System.currentTimeMillis() - start
+                );
+                return fallbackReply;
+            }
+            String reply = prompt
                     .system("""
                             你是 West Flow AI Copilot。
                             当前时间：%s（Asia/Shanghai）
@@ -161,7 +189,7 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
                     .content();
             log.info(
                     "AI read summary generated model={} mode={} toolKey={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=false",
-                    modelName,
+                    activeTextModelName(),
                     response.routeMode(),
                     toolKey,
                     request.conversationId(),
@@ -172,9 +200,147 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
         } catch (RuntimeException exception) {
             log.warn(
                     "AI read summary failed, falling back model={} mode={} toolKey={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason={}",
-                    modelName,
+                    activeTextModelName(),
                     response.routeMode(),
                     toolKey,
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start,
+                    exception.getMessage()
+            );
+            return fallbackReply;
+        }
+    }
+
+    @Override
+    public String generatePlannedReply(
+            AiGatewayRequest request,
+            AiGatewayResponse response,
+            String executor,
+            String payloadJson,
+            String fallbackReply
+    ) {
+        long start = System.currentTimeMillis();
+        try {
+            ChatClient.ChatClientRequestSpec prompt = fastPromptOrNull();
+            if (prompt == null) {
+                log.info(
+                        "AI planned reply skipped model={} mode={} executor={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason=no-fast-prompt",
+                        activeTextModelName(),
+                        response.routeMode(),
+                        executor,
+                        request.conversationId(),
+                        request.pageRoute(),
+                        System.currentTimeMillis() - start
+                );
+                return fallbackReply;
+            }
+            String reply = prompt
+                    .system("""
+                            你是 West Flow AI Copilot。
+                            当前时间：%s（Asia/Shanghai）
+                            planner 已经完成意图判断，你只需要直接生成最终中文回复。
+                            不要再复述路由、Agent、工具或内部推理。
+                            回复保持简洁，优先直接回答用户问题。
+                            """.formatted(OffsetDateTime.now(TIME_ZONE)))
+                    .user("""
+                            用户问题：%s
+                            当前路由模式：%s
+                            当前业务域：%s
+                            planner 选定执行器：%s
+                            执行器 payload：
+                            %s
+
+                            请直接输出最终中文回复，不要输出 JSON。
+                            """.formatted(
+                            request.content(),
+                            response.routeMode(),
+                            request.domain(),
+                            executor,
+                            payloadJson
+                    ))
+                    .call()
+                    .content();
+            log.info(
+                    "AI planned reply generated model={} mode={} executor={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=false",
+                    activeTextModelName(),
+                    response.routeMode(),
+                    executor,
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start
+            );
+            return reply;
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "AI planned reply failed, falling back model={} mode={} executor={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason={}",
+                    activeTextModelName(),
+                    response.routeMode(),
+                    executor,
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start,
+                    exception.getMessage()
+            );
+            return fallbackReply;
+        }
+    }
+
+    @Override
+    public String generateKnowledgeReply(
+            AiGatewayRequest request,
+            AiGatewayResponse response,
+            String fallbackReply
+    ) {
+        long start = System.currentTimeMillis();
+        try {
+            ChatClient.ChatClientRequestSpec prompt = fastPromptOrNull();
+            if (prompt == null) {
+                log.info(
+                        "AI knowledge reply skipped model={} mode={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason=no-fast-prompt",
+                        activeTextModelName(),
+                        response.routeMode(),
+                        request.conversationId(),
+                        request.pageRoute(),
+                        System.currentTimeMillis() - start
+                );
+                return fallbackReply;
+            }
+            String reply = prompt
+                    .system("""
+                            你是 West Flow AI Copilot。
+                            当前时间：%s（Asia/Shanghai）
+                            你正在处理普通问答。
+                            请直接回答用户问题，不要复述路由、智能体、执行链路、payload 或内部系统术语。
+                            如果问题比较泛，就用自然、简洁、明确的中文回答。
+                            """.formatted(OffsetDateTime.now(TIME_ZONE)))
+                    .user("""
+                            用户问题：%s
+                            当前业务域：%s
+                            当前页面：%s
+
+                            请直接输出最终中文回复，不要输出 JSON。
+                            """.formatted(
+                            request.content(),
+                            request.domain(),
+                            request.pageRoute() == null ? "" : request.pageRoute()
+                    ))
+                    .call()
+                    .content();
+            log.info(
+                    "AI knowledge reply generated model={} mode={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=false",
+                    activeTextModelName(),
+                    response.routeMode(),
+                    request.conversationId(),
+                    request.pageRoute(),
+                    System.currentTimeMillis() - start
+            );
+            return reply;
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "AI knowledge reply failed, falling back model={} mode={} conversationId={} pageRoute={} latencyMs={} fallbackUsed=true reason={}",
+                    activeTextModelName(),
+                    response.routeMode(),
                     request.conversationId(),
                     request.pageRoute(),
                     System.currentTimeMillis() - start,
@@ -263,9 +429,31 @@ public class SpringAiAlibabaCopilotRuntimeService implements AiCopilotRuntimeSer
                 || normalized.contains("assistant");
     }
 
+    private ChatClient.ChatClientRequestSpec fastPromptOrNull() {
+        if (chatClient == null) {
+            return null;
+        }
+        ChatClient.ChatClientRequestSpec requestSpec = chatClient.prompt();
+        if (requestSpec == null) {
+            return null;
+        }
+        if (!fastModelName.isBlank()) {
+            requestSpec = requestSpec.options(OpenAiChatOptions.builder().model(fastModelName).build());
+        }
+        return requestSpec;
+    }
+
+    private String activeTextModelName() {
+        return fastModelName.isBlank() ? modelName : fastModelName;
+    }
+
     private String fallbackByChatClient(AiGatewayRequest request, AiGatewayResponse response) {
         try {
-            var promptSpec = chatClient.prompt()
+            var promptSpec = fastPromptOrNull();
+            if (promptSpec == null) {
+                return "已收到你的问题，请补充更多上下文。";
+            }
+            promptSpec = promptSpec
                     .system("""
                             你是 West Flow AI Copilot。
                             当前路由模式是 %s，必须遵守“读直执、写必确认”。

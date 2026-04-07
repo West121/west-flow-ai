@@ -1802,7 +1802,6 @@ function BranchEdgeConfigPanel({
         processMeta={processMeta}
         nodeId={gatewayNode.id}
         nodeLabel={gatewayNode.data.label}
-        edgeLabel={form.getValues('label') || edge.id}
         initialExpression={conditionToRuleExpression(edge.data?.condition)}
         onSave={(expression) => {
           onApplyEdge(edge.id, {

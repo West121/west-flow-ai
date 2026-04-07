@@ -17,7 +17,7 @@ export function LoginScreen() {
   const signIn = useAuthStore((state) => state.signIn)
   const isSigningIn = useAuthStore((state) => state.isSigningIn)
   const [username, setUsername] = useState('admin')
-  const [password, setPassword] = useState('123456')
+  const [password, setPassword] = useState('admin123')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   if (hydrated && accessToken) {

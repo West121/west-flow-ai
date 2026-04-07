@@ -119,7 +119,7 @@ type DictPageErrorProps = {
 
 const EMPTY_PAGE: ListQuerySearch = {
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   keyword: '',
   filters: [],
   sorts: [],
@@ -941,7 +941,7 @@ export function DictManagementPage({
     useTableUrlState({
       search: itemSearch,
       navigate,
-      pagination: { defaultPage: 1, defaultPageSize: 20 },
+      pagination: { defaultPage: 1, defaultPageSize: 10 },
       globalFilter: { enabled: true, key: 'keyword' },
     })
 
@@ -985,6 +985,8 @@ export function DictManagementPage({
     <PageShell
       title='字典管理'
       description='左侧维护字典类型，点击后在右侧联动查看和维护对应字典项。'
+      fixed
+      contentClassName='min-h-0'
       actions={
         <>
           <Button variant='outline' onClick={() => setTypeDialog({ mode: 'create' })}>
@@ -1006,8 +1008,8 @@ export function DictManagementPage({
         </>
       }
     >
-      <div className='grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]'>
-        <Card className='overflow-hidden'>
+      <div className='grid min-h-0 flex-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]'>
+        <Card className='flex min-h-0 flex-col overflow-hidden'>
           <CardHeader className='space-y-3'>
             <div className='flex items-center justify-between gap-3'>
               <div>
@@ -1026,7 +1028,7 @@ export function DictManagementPage({
               />
             </div>
           </CardHeader>
-          <CardContent className='max-h-[70vh] space-y-3 overflow-y-auto'>
+          <CardContent className='min-h-0 flex-1 space-y-3 overflow-y-auto'>
             {types.filter((item) => typeMatchesKeyword(item, typeKeyword)).map((item) => (
               <TypeListItem
                 key={item.dictTypeId}
@@ -1054,7 +1056,7 @@ export function DictManagementPage({
           </CardContent>
         </Card>
 
-        <Card className='overflow-hidden'>
+        <Card className='flex min-h-0 flex-col overflow-hidden'>
           <CardHeader className='space-y-3'>
             <div className='flex items-start justify-between gap-3'>
               <div>
@@ -1116,7 +1118,7 @@ export function DictManagementPage({
               </Button>
             </div>
           </CardHeader>
-          <CardContent className='flex flex-col gap-4'>
+          <CardContent className='flex min-h-0 flex-1 flex-col gap-4 overflow-hidden'>
             {itemQuery.isLoading ? (
               <Skeleton className='h-80 w-full' />
             ) : itemQuery.isError ? (
@@ -1127,7 +1129,7 @@ export function DictManagementPage({
               </Alert>
             ) : (
               <>
-                <div className='overflow-hidden rounded-lg border'>
+                <div className='min-h-0 flex-1 overflow-auto rounded-lg border'>
                   <Table>
                     <TableHeader>
                       {table.getHeaderGroups().map((headerGroup) => (
@@ -1163,7 +1165,7 @@ export function DictManagementPage({
                     </TableBody>
                   </Table>
                 </div>
-                <DataTablePagination table={table} />
+                <DataTablePagination table={table} className='shrink-0' />
               </>
             )}
           </CardContent>

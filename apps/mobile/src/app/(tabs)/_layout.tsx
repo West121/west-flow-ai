@@ -5,12 +5,44 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#171312',
-        tabBarInactiveTintColor: '#8B8177',
+        tabBarActiveTintColor: '#171B29',
+        tabBarInactiveTintColor: '#807A90',
+        tabBarShowLabel: true,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '700',
+          marginBottom: 4,
+        },
+        tabBarItemStyle: {
+          borderRadius: 20,
+          marginHorizontal: 4,
+          marginVertical: 5,
+        },
+        tabBarActiveBackgroundColor: 'rgba(255,255,255,0.88)',
         tabBarStyle: {
-          borderTopColor: '#E7E1D7',
-          backgroundColor: '#FFFCF7'
-        }
+          position: 'absolute',
+          left: 18,
+          right: 18,
+          bottom: 20,
+          height: 70,
+          borderTopColor: 'rgba(255,255,255,0.5)',
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.52)',
+          borderRadius: 26,
+          backgroundColor: 'rgba(255,255,255,0.62)',
+          shadowColor: '#7680B0',
+          shadowOpacity: 0.14,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 8 },
+          paddingTop: 8,
+          paddingBottom: 8,
+        },
+        tabBarIconStyle: {
+          display: 'none',
+        },
+        sceneStyle: {
+          backgroundColor: 'transparent',
+        },
       }}
     >
       <Tabs.Screen

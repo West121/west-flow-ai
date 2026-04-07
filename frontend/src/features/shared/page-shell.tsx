@@ -16,6 +16,7 @@ type PageShellProps = {
   actions?: ReactNode
   children: ReactNode
   contentClassName?: string
+  fixed?: boolean
 }
 
 type BreadcrumbItem = {
@@ -59,6 +60,7 @@ export function PageShell({
   actions,
   children,
   contentClassName,
+  fixed = false,
 }: PageShellProps) {
   const pathname = useLocation({ select: (location) => location.pathname })
   const { data: menuTree } = useQuery({
@@ -103,7 +105,13 @@ export function PageShell({
         </div>
       </Header>
 
-      <Main className={cn('flex flex-1 flex-col gap-6 sm:gap-8', contentClassName)}>
+      <Main
+        fixed={fixed}
+        className={cn(
+          fixed ? 'flex min-h-0 flex-1 flex-col gap-6 sm:gap-8' : 'flex flex-col gap-6 sm:gap-8',
+          contentClassName
+        )}
+      >
         <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
           <div className='flex flex-col gap-2'>
             <h1 className='text-3xl font-semibold tracking-tight'>{title}</h1>

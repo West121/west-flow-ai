@@ -31,14 +31,22 @@ public interface AiConversationMapper {
               created_at AS createdAt,
               updated_at AS updatedAt
             FROM wf_ai_conversation
-            WHERE #{keyword} IS NULL OR #{keyword} = ''
-              OR LOWER(title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
-              OR LOWER(preview) LIKE CONCAT('%', LOWER(#{keyword}), '%')
-              OR LOWER(COALESCE(context_tags_json, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            WHERE operator_user_id = #{operatorUserId}
+              AND (
+                #{keyword} IS NULL OR #{keyword} = ''
+                OR LOWER(title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(preview) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(COALESCE(context_tags_json, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+              )
             ORDER BY updated_at DESC, created_at DESC, id DESC
             LIMIT #{limit} OFFSET #{offset}
             """)
-    List<AiConversationRecord> selectPage(@Param("keyword") String keyword, @Param("limit") long limit, @Param("offset") long offset);
+    List<AiConversationRecord> selectPage(
+            @Param("operatorUserId") String operatorUserId,
+            @Param("keyword") String keyword,
+            @Param("limit") long limit,
+            @Param("offset") long offset
+    );
 
     /**
      * 统计会话数量。
@@ -46,12 +54,15 @@ public interface AiConversationMapper {
     @Select("""
             SELECT COUNT(1)
             FROM wf_ai_conversation
-            WHERE #{keyword} IS NULL OR #{keyword} = ''
-              OR LOWER(title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
-              OR LOWER(preview) LIKE CONCAT('%', LOWER(#{keyword}), '%')
-              OR LOWER(COALESCE(context_tags_json, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+            WHERE operator_user_id = #{operatorUserId}
+              AND (
+                #{keyword} IS NULL OR #{keyword} = ''
+                OR LOWER(title) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(preview) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+                OR LOWER(COALESCE(context_tags_json, '')) LIKE CONCAT('%', LOWER(#{keyword}), '%')
+              )
             """)
-    long countPage(@Param("keyword") String keyword);
+    long countPage(@Param("operatorUserId") String operatorUserId, @Param("keyword") String keyword);
 
     /**
      * 按 ID 查询会话。
@@ -127,4 +138,33 @@ public interface AiConversationMapper {
             WHERE id = #{conversationId}
             """)
     int deleteConversation(@Param("conversationId") String conversationId);
+
+    /**
+     * 查询当前用户全部会话。
+     */
+    @Select("""
+            SELECT
+              id AS conversationId,
+              title,
+              preview,
+              status,
+              context_tags_json AS contextTagsJson,
+              message_count AS messageCount,
+              operator_user_id AS operatorUserId,
+              created_at AS createdAt,
+              updated_at AS updatedAt
+            FROM wf_ai_conversation
+            WHERE operator_user_id = #{operatorUserId}
+            ORDER BY updated_at DESC, created_at DESC, id DESC
+            """)
+    List<AiConversationRecord> selectByOperatorUserId(@Param("operatorUserId") String operatorUserId);
+
+    /**
+     * 删除当前用户的全部会话。
+     */
+    @Delete("""
+            DELETE FROM wf_ai_conversation
+            WHERE operator_user_id = #{operatorUserId}
+            """)
+    int deleteByOperatorUserId(@Param("operatorUserId") String operatorUserId);
 }

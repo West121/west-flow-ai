@@ -65,12 +65,20 @@ public class FlowableProcessRuntimeService {
         return queryFacadeService.pageApprovalSheets(request);
     }
 
+    public PageResponse<ApprovalSheetListItemResponse> pageApprovalSheets(ApprovalSheetPageRequest request, String userId) {
+        return queryFacadeService.pageApprovalSheets(request, userId);
+    }
+
     public WorkbenchDashboardSummaryResponse dashboardSummary() {
         return queryFacadeService.dashboardSummary();
     }
 
     public ProcessTaskDetailResponse detail(String taskId) {
         return queryFacadeService.detail(taskId);
+    }
+
+    public ProcessTaskDetailResponse detail(String taskId, String userId) {
+        return queryFacadeService.detail(taskId, userId);
     }
 
     public ProcessTaskDetailResponse detailByBusiness(String businessType, String businessId) {

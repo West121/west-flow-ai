@@ -891,9 +891,6 @@ describe('workbench pages', () => {
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_sign_001' />)
 
     expect(await screen.findByRole('button', { name: '签章' })).toBeInTheDocument()
-    const traceTab = await screen.findByRole('tab', { name: '轨迹' })
-    fireEvent.mouseDown(traceTab)
-    fireEvent.click(traceTab)
     expect(await screen.findByText('电子签章')).toBeInTheDocument()
     expect(screen.getByText('个人印章')).toBeInTheDocument()
     expect(screen.getByText('已签章')).toBeInTheDocument()
@@ -1380,11 +1377,8 @@ describe('workbench pages', () => {
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_history_001' />)
 
     await screen.findByText('业务正文')
-    const traceTab = await screen.findByRole('tab', { name: '轨迹' })
-    fireEvent.mouseDown(traceTab)
-    fireEvent.click(traceTab)
-
-    expect(await screen.findByText('审批过程')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '轨迹' })).not.toBeInTheDocument()
+    expect(await screen.findByText('回顾时间轴')).toBeInTheDocument()
     expect(screen.getAllByText('驳回到上一步人工节点').length).toBeGreaterThan(0)
     expect(screen.getAllByText('跳转').length).toBeGreaterThan(0)
     expect(screen.getAllByText('拿回').length).toBeGreaterThan(0)
@@ -2103,11 +2097,8 @@ describe('workbench pages', () => {
     renderWithQuery(<WorkbenchTodoDetailPage taskId='task_pending_005' />)
 
     await screen.findByText('业务正文')
-    const traceTab = await screen.findByRole('tab', { name: '轨迹' })
-    fireEvent.mouseDown(traceTab)
-    fireEvent.click(traceTab)
-
-    expect(await screen.findByText('审批过程')).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '轨迹' })).not.toBeInTheDocument()
+    expect(await screen.findByText('回顾时间轴')).toBeInTheDocument()
     expect(screen.getAllByText('部门负责人审批').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '加签' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '减签' })).toBeInTheDocument()

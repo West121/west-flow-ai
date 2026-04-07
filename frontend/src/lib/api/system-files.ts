@@ -82,7 +82,7 @@ export async function uploadSystemFile(
     formData.append('remark', payload.remark)
   }
 
-  const response = await apiClient.post<ApiSuccessResponse<{ fileId: string }>>(
+  const response = await apiClient.postForm<ApiSuccessResponse<{ fileId: string }>>(
     '/system/files',
     formData
   )

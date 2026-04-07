@@ -9,6 +9,7 @@ vi.mock('@/lib/api/client', () => ({
   apiClient: {
     get: getMock,
     post: postMock,
+    postForm: postMock,
   },
   unwrapResponse: <T>(response: { data: { data: T } }) => response.data.data,
 }))
@@ -310,6 +311,7 @@ describe('ai-copilot api', () => {
       '/ai/copilot/conversations/session_002/messages',
       {
         content: '请生成一个确认卡和统计卡',
+        attachments: [],
       }
     )
     expect(getMock).toHaveBeenNthCalledWith(
@@ -337,6 +339,20 @@ describe('ai-copilot api', () => {
       2,
       '/ai/copilot/conversations/session_002'
     )
+  })
+
+  it('downloads attachment previews as blobs through the authenticated client', async () => {
+    const previewBlob = new Blob(['preview'], { type: 'image/png' })
+    getMock.mockResolvedValueOnce({ data: previewBlob })
+
+    const { downloadAICopilotAssetPreview } = await import('./ai-copilot')
+
+    await expect(downloadAICopilotAssetPreview('aif_001')).resolves.toBe(
+      previewBlob
+    )
+    expect(getMock).toHaveBeenCalledWith('/ai/copilot/assets/aif_001/preview', {
+      responseType: 'blob',
+    })
   })
 
   it('maps result, failure, and trace blocks from the backend contract', async () => {
@@ -451,6 +467,66 @@ describe('ai-copilot api', () => {
               }),
             }),
           ]),
+        }),
+      ],
+    })
+  })
+
+  it('maps persisted attachment items from result payloads', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse({
+        conversationId: 'session_attachment_001',
+        title: '附件回放',
+        preview: '查看历史附件',
+        status: 'active',
+        updatedAt: '2026-03-31T22:42:07.000Z',
+        messageCount: 1,
+        contextTags: ['AI Copilot'],
+        history: [
+          {
+            messageId: 'msg_attachment_001',
+            role: 'user',
+            authorName: '你',
+            createdAt: '2026-03-31T22:42:06.000Z',
+            content: '已上传 1 张图片',
+            blocks: [
+              {
+                type: 'attachments',
+                result: {
+                  items: [
+                    {
+                      fileId: 'aif_001',
+                      displayName: 'leave-request-test-zh-clean.png',
+                      contentType: 'image/png',
+                      previewUrl: '/api/v1/ai/copilot/assets/aif_001/preview',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+        toolCalls: [],
+        audit: [],
+      })
+    )
+
+    const { getAICopilotSession } = await import('./ai-copilot')
+
+    await expect(getAICopilotSession('session_attachment_001')).resolves.toMatchObject({
+      history: [
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              type: 'attachments',
+              items: [
+                expect.objectContaining({
+                  fileId: 'aif_001',
+                  displayName: 'leave-request-test-zh-clean.png',
+                }),
+              ],
+            }),
+          ],
         }),
       ],
     })

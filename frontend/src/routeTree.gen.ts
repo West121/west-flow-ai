@@ -21,6 +21,8 @@ import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
+import { Route as ReviewWeappTicketRouteImport } from './routes/review/weapp/$ticket'
+import { Route as ReviewPlayerTicketRouteImport } from './routes/review/player/$ticket'
 import { Route as AuthenticatedWorkflowDesignerRouteImport } from './routes/_authenticated/workflow/designer'
 import { Route as AuthenticatedWorkbenchStartRouteImport } from './routes/_authenticated/workbench/start'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
@@ -29,6 +31,9 @@ import { Route as AuthenticatedPlmStartRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedPlmQueryRouteImport } from './routes/_authenticated/plm/query'
 import { Route as AuthenticatedOaQueryRouteImport } from './routes/_authenticated/oa/query'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedPlmMaterialMasterIndexRouteImport } from './routes/_authenticated/plm/material-master/index'
+import { Route as AuthenticatedPlmEcrIndexRouteImport } from './routes/_authenticated/plm/ecr/index'
+import { Route as AuthenticatedPlmEcoIndexRouteImport } from './routes/_authenticated/plm/eco/index'
 import { Route as AuthenticatedWorkflowVersionsListRouteImport } from './routes/_authenticated/workflow/versions/list'
 import { Route as AuthenticatedWorkflowPublishRecordsListRouteImport } from './routes/_authenticated/workflow/publish-records/list'
 import { Route as AuthenticatedWorkflowOpinionConfigsListRouteImport } from './routes/_authenticated/workflow/opinion-configs/list'
@@ -221,6 +226,16 @@ const AuthenticatedSettingsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const ReviewWeappTicketRoute = ReviewWeappTicketRouteImport.update({
+  id: '/review/weapp/$ticket',
+  path: '/review/weapp/$ticket',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReviewPlayerTicketRoute = ReviewPlayerTicketRouteImport.update({
+  id: '/review/player/$ticket',
+  path: '/review/player/$ticket',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedWorkflowDesignerRoute =
   AuthenticatedWorkflowDesignerRouteImport.update({
     id: '/workflow/designer',
@@ -264,6 +279,24 @@ const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
     path: '/errors/$error',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmMaterialMasterIndexRoute =
+  AuthenticatedPlmMaterialMasterIndexRouteImport.update({
+    id: '/plm/material-master/',
+    path: '/plm/material-master/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmEcrIndexRoute =
+  AuthenticatedPlmEcrIndexRouteImport.update({
+    id: '/plm/ecr/',
+    path: '/plm/ecr/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmEcoIndexRoute =
+  AuthenticatedPlmEcoIndexRouteImport.update({
+    id: '/plm/eco/',
+    path: '/plm/eco/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedWorkflowVersionsListRoute =
@@ -1056,6 +1089,7 @@ const AuthenticatedSystemMonitorNotificationChannelsHealthChannelIdIndexRoute =
   )
 
 export interface FileRoutesByFullPath {
+  '/': typeof AuthenticatedIndexRoute
   '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/sign-in': typeof authSignInRoute
   '/401': typeof errors401Route
@@ -1064,7 +1098,6 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/ai': typeof AuthenticatedAiRoute
-  '/': typeof AuthenticatedIndexRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/oa/query': typeof AuthenticatedOaQueryRoute
   '/plm/query': typeof AuthenticatedPlmQueryRoute
@@ -1073,8 +1106,10 @@ export interface FileRoutesByFullPath {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
+  '/review/player/$ticket': typeof ReviewPlayerTicketRoute
+  '/review/weapp/$ticket': typeof ReviewWeappTicketRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
-  '/users': typeof AuthenticatedUsersIndexRoute
+  '/users/': typeof AuthenticatedUsersIndexRoute
   '/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
   '/oa/common/create': typeof AuthenticatedOaCommonCreateRoute
   '/oa/common/list': typeof AuthenticatedOaCommonListRoute
@@ -1131,6 +1166,9 @@ export interface FileRoutesByFullPath {
   '/workflow/opinion-configs/list': typeof AuthenticatedWorkflowOpinionConfigsListRoute
   '/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
   '/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
+  '/plm/eco/': typeof AuthenticatedPlmEcoIndexRoute
+  '/plm/ecr/': typeof AuthenticatedPlmEcrIndexRoute
+  '/plm/material-master/': typeof AuthenticatedPlmMaterialMasterIndexRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
   '/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
@@ -1165,46 +1203,46 @@ export interface FileRoutesByFullPath {
   '/system/users/$userId/edit': typeof AuthenticatedSystemUsersUserIdEditRoute
   '/workflow/bindings/$bindingId/edit': typeof AuthenticatedWorkflowBindingsBindingIdEditRoute
   '/workflow/opinion-configs/$configId/edit': typeof AuthenticatedWorkflowOpinionConfigsConfigIdEditRoute
-  '/system/agents/$agentId': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
-  '/system/companies/$companyId': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
-  '/system/departments/$departmentId': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
-  '/system/dict-items/$dictItemId': typeof AuthenticatedSystemDictItemsDictItemIdIndexRoute
-  '/system/dict-types/$dictTypeId': typeof AuthenticatedSystemDictTypesDictTypeIdIndexRoute
-  '/system/files/$fileId': typeof AuthenticatedSystemFilesFileIdIndexRoute
-  '/system/menus/$menuId': typeof AuthenticatedSystemMenusMenuIdIndexRoute
-  '/system/messages/$messageId': typeof AuthenticatedSystemMessagesMessageIdIndexRoute
-  '/system/notification-channels/$channelId': typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRoute
-  '/system/posts/$postId': typeof AuthenticatedSystemPostsPostIdIndexRoute
-  '/system/roles/$roleId': typeof AuthenticatedSystemRolesRoleIdIndexRoute
-  '/system/triggers/$triggerId': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
-  '/system/users/$userId': typeof AuthenticatedSystemUsersUserIdIndexRoute
-  '/workflow/bindings/$bindingId': typeof AuthenticatedWorkflowBindingsBindingIdIndexRoute
-  '/workflow/instances/$instanceId': typeof AuthenticatedWorkflowInstancesInstanceIdIndexRoute
-  '/workflow/operation-logs/$logId': typeof AuthenticatedWorkflowOperationLogsLogIdIndexRoute
-  '/workflow/opinion-configs/$configId': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
-  '/workflow/publish-records/$processDefinitionId': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
-  '/workflow/versions/$processDefinitionId': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
+  '/system/agents/$agentId/': typeof AuthenticatedSystemAgentsAgentIdIndexRoute
+  '/system/companies/$companyId/': typeof AuthenticatedSystemCompaniesCompanyIdIndexRoute
+  '/system/departments/$departmentId/': typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRoute
+  '/system/dict-items/$dictItemId/': typeof AuthenticatedSystemDictItemsDictItemIdIndexRoute
+  '/system/dict-types/$dictTypeId/': typeof AuthenticatedSystemDictTypesDictTypeIdIndexRoute
+  '/system/files/$fileId/': typeof AuthenticatedSystemFilesFileIdIndexRoute
+  '/system/menus/$menuId/': typeof AuthenticatedSystemMenusMenuIdIndexRoute
+  '/system/messages/$messageId/': typeof AuthenticatedSystemMessagesMessageIdIndexRoute
+  '/system/notification-channels/$channelId/': typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRoute
+  '/system/posts/$postId/': typeof AuthenticatedSystemPostsPostIdIndexRoute
+  '/system/roles/$roleId/': typeof AuthenticatedSystemRolesRoleIdIndexRoute
+  '/system/triggers/$triggerId/': typeof AuthenticatedSystemTriggersTriggerIdIndexRoute
+  '/system/users/$userId/': typeof AuthenticatedSystemUsersUserIdIndexRoute
+  '/workflow/bindings/$bindingId/': typeof AuthenticatedWorkflowBindingsBindingIdIndexRoute
+  '/workflow/instances/$instanceId/': typeof AuthenticatedWorkflowInstancesInstanceIdIndexRoute
+  '/workflow/operation-logs/$logId/': typeof AuthenticatedWorkflowOperationLogsLogIdIndexRoute
+  '/workflow/opinion-configs/$configId/': typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRoute
+  '/workflow/publish-records/$processDefinitionId/': typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRoute
+  '/workflow/versions/$processDefinitionId/': typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRoute
   '/system/ai/agents/$agentId/edit': typeof AuthenticatedSystemAiAgentsAgentIdEditRoute
   '/system/ai/mcps/$mcpId/edit': typeof AuthenticatedSystemAiMcpsMcpIdEditRoute
   '/system/ai/skills/$skillId/edit': typeof AuthenticatedSystemAiSkillsSkillIdEditRoute
   '/system/ai/tools/$toolId/edit': typeof AuthenticatedSystemAiToolsToolIdEditRoute
   '/system/monitor/notification-channels/health/list': typeof AuthenticatedSystemMonitorNotificationChannelsHealthListRoute
   '/system/notifications/templates/$templateId/edit': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdEditRoute
-  '/system/ai/agents/$agentId': typeof AuthenticatedSystemAiAgentsAgentIdIndexRoute
-  '/system/ai/confirmations/$confirmationId': typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute
-  '/system/ai/conversations/$conversationId': typeof AuthenticatedSystemAiConversationsConversationIdIndexRoute
-  '/system/ai/mcps/$mcpId': typeof AuthenticatedSystemAiMcpsMcpIdIndexRoute
-  '/system/ai/skills/$skillId': typeof AuthenticatedSystemAiSkillsSkillIdIndexRoute
-  '/system/ai/tool-calls/$toolCallId': typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRoute
-  '/system/ai/tools/$toolId': typeof AuthenticatedSystemAiToolsToolIdIndexRoute
-  '/system/logs/audit/$logId': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
-  '/system/logs/login/$logId': typeof AuthenticatedSystemLogsLoginLogIdIndexRoute
-  '/system/logs/notifications/$recordId': typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRoute
-  '/system/monitor/orchestrator-scans/$executionId': typeof AuthenticatedSystemMonitorOrchestratorScansExecutionIdIndexRoute
-  '/system/monitor/trigger-executions/$executionId': typeof AuthenticatedSystemMonitorTriggerExecutionsExecutionIdIndexRoute
-  '/system/notifications/records/$recordId': typeof AuthenticatedSystemNotificationsRecordsRecordIdIndexRoute
-  '/system/notifications/templates/$templateId': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdIndexRoute
-  '/system/monitor/notification-channels/health/$channelId': typeof AuthenticatedSystemMonitorNotificationChannelsHealthChannelIdIndexRoute
+  '/system/ai/agents/$agentId/': typeof AuthenticatedSystemAiAgentsAgentIdIndexRoute
+  '/system/ai/confirmations/$confirmationId/': typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRoute
+  '/system/ai/conversations/$conversationId/': typeof AuthenticatedSystemAiConversationsConversationIdIndexRoute
+  '/system/ai/mcps/$mcpId/': typeof AuthenticatedSystemAiMcpsMcpIdIndexRoute
+  '/system/ai/skills/$skillId/': typeof AuthenticatedSystemAiSkillsSkillIdIndexRoute
+  '/system/ai/tool-calls/$toolCallId/': typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRoute
+  '/system/ai/tools/$toolId/': typeof AuthenticatedSystemAiToolsToolIdIndexRoute
+  '/system/logs/audit/$logId/': typeof AuthenticatedSystemLogsAuditLogIdIndexRoute
+  '/system/logs/login/$logId/': typeof AuthenticatedSystemLogsLoginLogIdIndexRoute
+  '/system/logs/notifications/$recordId/': typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRoute
+  '/system/monitor/orchestrator-scans/$executionId/': typeof AuthenticatedSystemMonitorOrchestratorScansExecutionIdIndexRoute
+  '/system/monitor/trigger-executions/$executionId/': typeof AuthenticatedSystemMonitorTriggerExecutionsExecutionIdIndexRoute
+  '/system/notifications/records/$recordId/': typeof AuthenticatedSystemNotificationsRecordsRecordIdIndexRoute
+  '/system/notifications/templates/$templateId/': typeof AuthenticatedSystemNotificationsTemplatesTemplateIdIndexRoute
+  '/system/monitor/notification-channels/health/$channelId/': typeof AuthenticatedSystemMonitorNotificationChannelsHealthChannelIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/sign-in': typeof authSignInRoute
@@ -1223,6 +1261,8 @@ export interface FileRoutesByTo {
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
+  '/review/player/$ticket': typeof ReviewPlayerTicketRoute
+  '/review/weapp/$ticket': typeof ReviewWeappTicketRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
@@ -1281,6 +1321,9 @@ export interface FileRoutesByTo {
   '/workflow/opinion-configs/list': typeof AuthenticatedWorkflowOpinionConfigsListRoute
   '/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
   '/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
+  '/plm/eco': typeof AuthenticatedPlmEcoIndexRoute
+  '/plm/ecr': typeof AuthenticatedPlmEcrIndexRoute
+  '/plm/material-master': typeof AuthenticatedPlmMaterialMasterIndexRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
   '/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
@@ -1376,6 +1419,8 @@ export interface FileRoutesById {
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/workbench/start': typeof AuthenticatedWorkbenchStartRoute
   '/_authenticated/workflow/designer': typeof AuthenticatedWorkflowDesignerRoute
+  '/review/player/$ticket': typeof ReviewPlayerTicketRoute
+  '/review/weapp/$ticket': typeof ReviewWeappTicketRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/oa/common/$billId': typeof AuthenticatedOaCommonBillIdRoute
@@ -1434,6 +1479,9 @@ export interface FileRoutesById {
   '/_authenticated/workflow/opinion-configs/list': typeof AuthenticatedWorkflowOpinionConfigsListRoute
   '/_authenticated/workflow/publish-records/list': typeof AuthenticatedWorkflowPublishRecordsListRoute
   '/_authenticated/workflow/versions/list': typeof AuthenticatedWorkflowVersionsListRoute
+  '/_authenticated/plm/eco/': typeof AuthenticatedPlmEcoIndexRoute
+  '/_authenticated/plm/ecr/': typeof AuthenticatedPlmEcrIndexRoute
+  '/_authenticated/plm/material-master/': typeof AuthenticatedPlmMaterialMasterIndexRoute
   '/_authenticated/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/_authenticated/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
   '/_authenticated/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
@@ -1512,6 +1560,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/settings'
     | '/sign-in'
     | '/401'
@@ -1520,7 +1569,6 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/ai'
-    | '/'
     | '/errors/$error'
     | '/oa/query'
     | '/plm/query'
@@ -1529,8 +1577,10 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/workbench/start'
     | '/workflow/designer'
+    | '/review/player/$ticket'
+    | '/review/weapp/$ticket'
     | '/settings/'
-    | '/users'
+    | '/users/'
     | '/oa/common/$billId'
     | '/oa/common/create'
     | '/oa/common/list'
@@ -1587,6 +1637,9 @@ export interface FileRouteTypes {
     | '/workflow/opinion-configs/list'
     | '/workflow/publish-records/list'
     | '/workflow/versions/list'
+    | '/plm/eco/'
+    | '/plm/ecr/'
+    | '/plm/material-master/'
     | '/system/agents/$agentId/edit'
     | '/system/ai/agents/create'
     | '/system/ai/agents/list'
@@ -1621,46 +1674,46 @@ export interface FileRouteTypes {
     | '/system/users/$userId/edit'
     | '/workflow/bindings/$bindingId/edit'
     | '/workflow/opinion-configs/$configId/edit'
-    | '/system/agents/$agentId'
-    | '/system/companies/$companyId'
-    | '/system/departments/$departmentId'
-    | '/system/dict-items/$dictItemId'
-    | '/system/dict-types/$dictTypeId'
-    | '/system/files/$fileId'
-    | '/system/menus/$menuId'
-    | '/system/messages/$messageId'
-    | '/system/notification-channels/$channelId'
-    | '/system/posts/$postId'
-    | '/system/roles/$roleId'
-    | '/system/triggers/$triggerId'
-    | '/system/users/$userId'
-    | '/workflow/bindings/$bindingId'
-    | '/workflow/instances/$instanceId'
-    | '/workflow/operation-logs/$logId'
-    | '/workflow/opinion-configs/$configId'
-    | '/workflow/publish-records/$processDefinitionId'
-    | '/workflow/versions/$processDefinitionId'
+    | '/system/agents/$agentId/'
+    | '/system/companies/$companyId/'
+    | '/system/departments/$departmentId/'
+    | '/system/dict-items/$dictItemId/'
+    | '/system/dict-types/$dictTypeId/'
+    | '/system/files/$fileId/'
+    | '/system/menus/$menuId/'
+    | '/system/messages/$messageId/'
+    | '/system/notification-channels/$channelId/'
+    | '/system/posts/$postId/'
+    | '/system/roles/$roleId/'
+    | '/system/triggers/$triggerId/'
+    | '/system/users/$userId/'
+    | '/workflow/bindings/$bindingId/'
+    | '/workflow/instances/$instanceId/'
+    | '/workflow/operation-logs/$logId/'
+    | '/workflow/opinion-configs/$configId/'
+    | '/workflow/publish-records/$processDefinitionId/'
+    | '/workflow/versions/$processDefinitionId/'
     | '/system/ai/agents/$agentId/edit'
     | '/system/ai/mcps/$mcpId/edit'
     | '/system/ai/skills/$skillId/edit'
     | '/system/ai/tools/$toolId/edit'
     | '/system/monitor/notification-channels/health/list'
     | '/system/notifications/templates/$templateId/edit'
-    | '/system/ai/agents/$agentId'
-    | '/system/ai/confirmations/$confirmationId'
-    | '/system/ai/conversations/$conversationId'
-    | '/system/ai/mcps/$mcpId'
-    | '/system/ai/skills/$skillId'
-    | '/system/ai/tool-calls/$toolCallId'
-    | '/system/ai/tools/$toolId'
-    | '/system/logs/audit/$logId'
-    | '/system/logs/login/$logId'
-    | '/system/logs/notifications/$recordId'
-    | '/system/monitor/orchestrator-scans/$executionId'
-    | '/system/monitor/trigger-executions/$executionId'
-    | '/system/notifications/records/$recordId'
-    | '/system/notifications/templates/$templateId'
-    | '/system/monitor/notification-channels/health/$channelId'
+    | '/system/ai/agents/$agentId/'
+    | '/system/ai/confirmations/$confirmationId/'
+    | '/system/ai/conversations/$conversationId/'
+    | '/system/ai/mcps/$mcpId/'
+    | '/system/ai/skills/$skillId/'
+    | '/system/ai/tool-calls/$toolCallId/'
+    | '/system/ai/tools/$toolId/'
+    | '/system/logs/audit/$logId/'
+    | '/system/logs/login/$logId/'
+    | '/system/logs/notifications/$recordId/'
+    | '/system/monitor/orchestrator-scans/$executionId/'
+    | '/system/monitor/trigger-executions/$executionId/'
+    | '/system/notifications/records/$recordId/'
+    | '/system/notifications/templates/$templateId/'
+    | '/system/monitor/notification-channels/health/$channelId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/sign-in'
@@ -1679,6 +1732,8 @@ export interface FileRouteTypes {
     | '/settings/appearance'
     | '/workbench/start'
     | '/workflow/designer'
+    | '/review/player/$ticket'
+    | '/review/weapp/$ticket'
     | '/settings'
     | '/users'
     | '/oa/common/$billId'
@@ -1737,6 +1792,9 @@ export interface FileRouteTypes {
     | '/workflow/opinion-configs/list'
     | '/workflow/publish-records/list'
     | '/workflow/versions/list'
+    | '/plm/eco'
+    | '/plm/ecr'
+    | '/plm/material-master'
     | '/system/agents/$agentId/edit'
     | '/system/ai/agents/create'
     | '/system/ai/agents/list'
@@ -1831,6 +1889,8 @@ export interface FileRouteTypes {
     | '/_authenticated/settings/appearance'
     | '/_authenticated/workbench/start'
     | '/_authenticated/workflow/designer'
+    | '/review/player/$ticket'
+    | '/review/weapp/$ticket'
     | '/_authenticated/settings/'
     | '/_authenticated/users/'
     | '/_authenticated/oa/common/$billId'
@@ -1889,6 +1949,9 @@ export interface FileRouteTypes {
     | '/_authenticated/workflow/opinion-configs/list'
     | '/_authenticated/workflow/publish-records/list'
     | '/_authenticated/workflow/versions/list'
+    | '/_authenticated/plm/eco/'
+    | '/_authenticated/plm/ecr/'
+    | '/_authenticated/plm/material-master/'
     | '/_authenticated/system/agents/$agentId/edit'
     | '/_authenticated/system/ai/agents/create'
     | '/_authenticated/system/ai/agents/list'
@@ -1973,6 +2036,8 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  ReviewPlayerTicketRoute: typeof ReviewPlayerTicketRoute
+  ReviewWeappTicketRoute: typeof ReviewWeappTicketRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1980,7 +2045,7 @@ declare module '@tanstack/react-router' {
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
@@ -2050,7 +2115,7 @@ declare module '@tanstack/react-router' {
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
       path: '/users'
-      fullPath: '/users'
+      fullPath: '/users/'
       preLoaderRoute: typeof AuthenticatedUsersIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
@@ -2060,6 +2125,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
+    '/review/weapp/$ticket': {
+      id: '/review/weapp/$ticket'
+      path: '/review/weapp/$ticket'
+      fullPath: '/review/weapp/$ticket'
+      preLoaderRoute: typeof ReviewWeappTicketRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/review/player/$ticket': {
+      id: '/review/player/$ticket'
+      path: '/review/player/$ticket'
+      fullPath: '/review/player/$ticket'
+      preLoaderRoute: typeof ReviewPlayerTicketRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/workflow/designer': {
       id: '/_authenticated/workflow/designer'
@@ -2115,6 +2194,27 @@ declare module '@tanstack/react-router' {
       path: '/errors/$error'
       fullPath: '/errors/$error'
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/material-master/': {
+      id: '/_authenticated/plm/material-master/'
+      path: '/plm/material-master'
+      fullPath: '/plm/material-master/'
+      preLoaderRoute: typeof AuthenticatedPlmMaterialMasterIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/ecr/': {
+      id: '/_authenticated/plm/ecr/'
+      path: '/plm/ecr'
+      fullPath: '/plm/ecr/'
+      preLoaderRoute: typeof AuthenticatedPlmEcrIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/eco/': {
+      id: '/_authenticated/plm/eco/'
+      path: '/plm/eco'
+      fullPath: '/plm/eco/'
+      preLoaderRoute: typeof AuthenticatedPlmEcoIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workflow/versions/list': {
@@ -2512,133 +2612,133 @@ declare module '@tanstack/react-router' {
     '/_authenticated/workflow/versions/$processDefinitionId/': {
       id: '/_authenticated/workflow/versions/$processDefinitionId/'
       path: '/workflow/versions/$processDefinitionId'
-      fullPath: '/workflow/versions/$processDefinitionId'
+      fullPath: '/workflow/versions/$processDefinitionId/'
       preLoaderRoute: typeof AuthenticatedWorkflowVersionsProcessDefinitionIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workflow/publish-records/$processDefinitionId/': {
       id: '/_authenticated/workflow/publish-records/$processDefinitionId/'
       path: '/workflow/publish-records/$processDefinitionId'
-      fullPath: '/workflow/publish-records/$processDefinitionId'
+      fullPath: '/workflow/publish-records/$processDefinitionId/'
       preLoaderRoute: typeof AuthenticatedWorkflowPublishRecordsProcessDefinitionIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workflow/opinion-configs/$configId/': {
       id: '/_authenticated/workflow/opinion-configs/$configId/'
       path: '/workflow/opinion-configs/$configId'
-      fullPath: '/workflow/opinion-configs/$configId'
+      fullPath: '/workflow/opinion-configs/$configId/'
       preLoaderRoute: typeof AuthenticatedWorkflowOpinionConfigsConfigIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workflow/operation-logs/$logId/': {
       id: '/_authenticated/workflow/operation-logs/$logId/'
       path: '/workflow/operation-logs/$logId'
-      fullPath: '/workflow/operation-logs/$logId'
+      fullPath: '/workflow/operation-logs/$logId/'
       preLoaderRoute: typeof AuthenticatedWorkflowOperationLogsLogIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workflow/instances/$instanceId/': {
       id: '/_authenticated/workflow/instances/$instanceId/'
       path: '/workflow/instances/$instanceId'
-      fullPath: '/workflow/instances/$instanceId'
+      fullPath: '/workflow/instances/$instanceId/'
       preLoaderRoute: typeof AuthenticatedWorkflowInstancesInstanceIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/workflow/bindings/$bindingId/': {
       id: '/_authenticated/workflow/bindings/$bindingId/'
       path: '/workflow/bindings/$bindingId'
-      fullPath: '/workflow/bindings/$bindingId'
+      fullPath: '/workflow/bindings/$bindingId/'
       preLoaderRoute: typeof AuthenticatedWorkflowBindingsBindingIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/users/$userId/': {
       id: '/_authenticated/system/users/$userId/'
       path: '/system/users/$userId'
-      fullPath: '/system/users/$userId'
+      fullPath: '/system/users/$userId/'
       preLoaderRoute: typeof AuthenticatedSystemUsersUserIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/triggers/$triggerId/': {
       id: '/_authenticated/system/triggers/$triggerId/'
       path: '/system/triggers/$triggerId'
-      fullPath: '/system/triggers/$triggerId'
+      fullPath: '/system/triggers/$triggerId/'
       preLoaderRoute: typeof AuthenticatedSystemTriggersTriggerIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/roles/$roleId/': {
       id: '/_authenticated/system/roles/$roleId/'
       path: '/system/roles/$roleId'
-      fullPath: '/system/roles/$roleId'
+      fullPath: '/system/roles/$roleId/'
       preLoaderRoute: typeof AuthenticatedSystemRolesRoleIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/posts/$postId/': {
       id: '/_authenticated/system/posts/$postId/'
       path: '/system/posts/$postId'
-      fullPath: '/system/posts/$postId'
+      fullPath: '/system/posts/$postId/'
       preLoaderRoute: typeof AuthenticatedSystemPostsPostIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/notification-channels/$channelId/': {
       id: '/_authenticated/system/notification-channels/$channelId/'
       path: '/system/notification-channels/$channelId'
-      fullPath: '/system/notification-channels/$channelId'
+      fullPath: '/system/notification-channels/$channelId/'
       preLoaderRoute: typeof AuthenticatedSystemNotificationChannelsChannelIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/messages/$messageId/': {
       id: '/_authenticated/system/messages/$messageId/'
       path: '/system/messages/$messageId'
-      fullPath: '/system/messages/$messageId'
+      fullPath: '/system/messages/$messageId/'
       preLoaderRoute: typeof AuthenticatedSystemMessagesMessageIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/menus/$menuId/': {
       id: '/_authenticated/system/menus/$menuId/'
       path: '/system/menus/$menuId'
-      fullPath: '/system/menus/$menuId'
+      fullPath: '/system/menus/$menuId/'
       preLoaderRoute: typeof AuthenticatedSystemMenusMenuIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/files/$fileId/': {
       id: '/_authenticated/system/files/$fileId/'
       path: '/system/files/$fileId'
-      fullPath: '/system/files/$fileId'
+      fullPath: '/system/files/$fileId/'
       preLoaderRoute: typeof AuthenticatedSystemFilesFileIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/dict-types/$dictTypeId/': {
       id: '/_authenticated/system/dict-types/$dictTypeId/'
       path: '/system/dict-types/$dictTypeId'
-      fullPath: '/system/dict-types/$dictTypeId'
+      fullPath: '/system/dict-types/$dictTypeId/'
       preLoaderRoute: typeof AuthenticatedSystemDictTypesDictTypeIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/dict-items/$dictItemId/': {
       id: '/_authenticated/system/dict-items/$dictItemId/'
       path: '/system/dict-items/$dictItemId'
-      fullPath: '/system/dict-items/$dictItemId'
+      fullPath: '/system/dict-items/$dictItemId/'
       preLoaderRoute: typeof AuthenticatedSystemDictItemsDictItemIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/departments/$departmentId/': {
       id: '/_authenticated/system/departments/$departmentId/'
       path: '/system/departments/$departmentId'
-      fullPath: '/system/departments/$departmentId'
+      fullPath: '/system/departments/$departmentId/'
       preLoaderRoute: typeof AuthenticatedSystemDepartmentsDepartmentIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/companies/$companyId/': {
       id: '/_authenticated/system/companies/$companyId/'
       path: '/system/companies/$companyId'
-      fullPath: '/system/companies/$companyId'
+      fullPath: '/system/companies/$companyId/'
       preLoaderRoute: typeof AuthenticatedSystemCompaniesCompanyIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/agents/$agentId/': {
       id: '/_authenticated/system/agents/$agentId/'
       path: '/system/agents/$agentId'
-      fullPath: '/system/agents/$agentId'
+      fullPath: '/system/agents/$agentId/'
       preLoaderRoute: typeof AuthenticatedSystemAgentsAgentIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
@@ -2883,98 +2983,98 @@ declare module '@tanstack/react-router' {
     '/_authenticated/system/notifications/templates/$templateId/': {
       id: '/_authenticated/system/notifications/templates/$templateId/'
       path: '/system/notifications/templates/$templateId'
-      fullPath: '/system/notifications/templates/$templateId'
+      fullPath: '/system/notifications/templates/$templateId/'
       preLoaderRoute: typeof AuthenticatedSystemNotificationsTemplatesTemplateIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/notifications/records/$recordId/': {
       id: '/_authenticated/system/notifications/records/$recordId/'
       path: '/system/notifications/records/$recordId'
-      fullPath: '/system/notifications/records/$recordId'
+      fullPath: '/system/notifications/records/$recordId/'
       preLoaderRoute: typeof AuthenticatedSystemNotificationsRecordsRecordIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/monitor/trigger-executions/$executionId/': {
       id: '/_authenticated/system/monitor/trigger-executions/$executionId/'
       path: '/system/monitor/trigger-executions/$executionId'
-      fullPath: '/system/monitor/trigger-executions/$executionId'
+      fullPath: '/system/monitor/trigger-executions/$executionId/'
       preLoaderRoute: typeof AuthenticatedSystemMonitorTriggerExecutionsExecutionIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/monitor/orchestrator-scans/$executionId/': {
       id: '/_authenticated/system/monitor/orchestrator-scans/$executionId/'
       path: '/system/monitor/orchestrator-scans/$executionId'
-      fullPath: '/system/monitor/orchestrator-scans/$executionId'
+      fullPath: '/system/monitor/orchestrator-scans/$executionId/'
       preLoaderRoute: typeof AuthenticatedSystemMonitorOrchestratorScansExecutionIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/logs/notifications/$recordId/': {
       id: '/_authenticated/system/logs/notifications/$recordId/'
       path: '/system/logs/notifications/$recordId'
-      fullPath: '/system/logs/notifications/$recordId'
+      fullPath: '/system/logs/notifications/$recordId/'
       preLoaderRoute: typeof AuthenticatedSystemLogsNotificationsRecordIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/logs/login/$logId/': {
       id: '/_authenticated/system/logs/login/$logId/'
       path: '/system/logs/login/$logId'
-      fullPath: '/system/logs/login/$logId'
+      fullPath: '/system/logs/login/$logId/'
       preLoaderRoute: typeof AuthenticatedSystemLogsLoginLogIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/logs/audit/$logId/': {
       id: '/_authenticated/system/logs/audit/$logId/'
       path: '/system/logs/audit/$logId'
-      fullPath: '/system/logs/audit/$logId'
+      fullPath: '/system/logs/audit/$logId/'
       preLoaderRoute: typeof AuthenticatedSystemLogsAuditLogIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/tools/$toolId/': {
       id: '/_authenticated/system/ai/tools/$toolId/'
       path: '/system/ai/tools/$toolId'
-      fullPath: '/system/ai/tools/$toolId'
+      fullPath: '/system/ai/tools/$toolId/'
       preLoaderRoute: typeof AuthenticatedSystemAiToolsToolIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/tool-calls/$toolCallId/': {
       id: '/_authenticated/system/ai/tool-calls/$toolCallId/'
       path: '/system/ai/tool-calls/$toolCallId'
-      fullPath: '/system/ai/tool-calls/$toolCallId'
+      fullPath: '/system/ai/tool-calls/$toolCallId/'
       preLoaderRoute: typeof AuthenticatedSystemAiToolCallsToolCallIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/skills/$skillId/': {
       id: '/_authenticated/system/ai/skills/$skillId/'
       path: '/system/ai/skills/$skillId'
-      fullPath: '/system/ai/skills/$skillId'
+      fullPath: '/system/ai/skills/$skillId/'
       preLoaderRoute: typeof AuthenticatedSystemAiSkillsSkillIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/mcps/$mcpId/': {
       id: '/_authenticated/system/ai/mcps/$mcpId/'
       path: '/system/ai/mcps/$mcpId'
-      fullPath: '/system/ai/mcps/$mcpId'
+      fullPath: '/system/ai/mcps/$mcpId/'
       preLoaderRoute: typeof AuthenticatedSystemAiMcpsMcpIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/conversations/$conversationId/': {
       id: '/_authenticated/system/ai/conversations/$conversationId/'
       path: '/system/ai/conversations/$conversationId'
-      fullPath: '/system/ai/conversations/$conversationId'
+      fullPath: '/system/ai/conversations/$conversationId/'
       preLoaderRoute: typeof AuthenticatedSystemAiConversationsConversationIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/confirmations/$confirmationId/': {
       id: '/_authenticated/system/ai/confirmations/$confirmationId/'
       path: '/system/ai/confirmations/$confirmationId'
-      fullPath: '/system/ai/confirmations/$confirmationId'
+      fullPath: '/system/ai/confirmations/$confirmationId/'
       preLoaderRoute: typeof AuthenticatedSystemAiConfirmationsConfirmationIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system/ai/agents/$agentId/': {
       id: '/_authenticated/system/ai/agents/$agentId/'
       path: '/system/ai/agents/$agentId'
-      fullPath: '/system/ai/agents/$agentId'
+      fullPath: '/system/ai/agents/$agentId/'
       preLoaderRoute: typeof AuthenticatedSystemAiAgentsAgentIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
@@ -3023,7 +3123,7 @@ declare module '@tanstack/react-router' {
     '/_authenticated/system/monitor/notification-channels/health/$channelId/': {
       id: '/_authenticated/system/monitor/notification-channels/health/$channelId/'
       path: '/system/monitor/notification-channels/health/$channelId'
-      fullPath: '/system/monitor/notification-channels/health/$channelId'
+      fullPath: '/system/monitor/notification-channels/health/$channelId/'
       preLoaderRoute: typeof AuthenticatedSystemMonitorNotificationChannelsHealthChannelIdIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
@@ -3115,6 +3215,9 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedWorkflowOpinionConfigsListRoute: typeof AuthenticatedWorkflowOpinionConfigsListRoute
   AuthenticatedWorkflowPublishRecordsListRoute: typeof AuthenticatedWorkflowPublishRecordsListRoute
   AuthenticatedWorkflowVersionsListRoute: typeof AuthenticatedWorkflowVersionsListRoute
+  AuthenticatedPlmEcoIndexRoute: typeof AuthenticatedPlmEcoIndexRoute
+  AuthenticatedPlmEcrIndexRoute: typeof AuthenticatedPlmEcrIndexRoute
+  AuthenticatedPlmMaterialMasterIndexRoute: typeof AuthenticatedPlmMaterialMasterIndexRoute
   AuthenticatedSystemAgentsAgentIdEditRoute: typeof AuthenticatedSystemAgentsAgentIdEditRoute
   AuthenticatedSystemAiAgentsCreateRoute: typeof AuthenticatedSystemAiAgentsCreateRoute
   AuthenticatedSystemAiAgentsListRoute: typeof AuthenticatedSystemAiAgentsListRoute
@@ -3281,6 +3384,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedWorkflowPublishRecordsListRoute,
   AuthenticatedWorkflowVersionsListRoute:
     AuthenticatedWorkflowVersionsListRoute,
+  AuthenticatedPlmEcoIndexRoute: AuthenticatedPlmEcoIndexRoute,
+  AuthenticatedPlmEcrIndexRoute: AuthenticatedPlmEcrIndexRoute,
+  AuthenticatedPlmMaterialMasterIndexRoute:
+    AuthenticatedPlmMaterialMasterIndexRoute,
   AuthenticatedSystemAgentsAgentIdEditRoute:
     AuthenticatedSystemAgentsAgentIdEditRoute,
   AuthenticatedSystemAiAgentsCreateRoute:
@@ -3434,6 +3541,8 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  ReviewPlayerTicketRoute: ReviewPlayerTicketRoute,
+  ReviewWeappTicketRoute: ReviewWeappTicketRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

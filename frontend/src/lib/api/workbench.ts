@@ -46,6 +46,11 @@ export type WorkbenchDashboardSummary = {
   doneApprovalCount: number
 }
 
+export type WorkbenchReviewTicket = {
+  ticket: string
+  expiresAt: string
+}
+
 export type WorkbenchHistoryItem = WorkbenchTaskTraceItem
 
 export type WorkbenchTaskListItem = {
@@ -597,6 +602,10 @@ export const WORKBENCH_RUNTIME_ENDPOINTS = {
   approvalSheetsPage: resolveWorkbenchRuntimePath('approval-sheets', 'page'),
   dashboardSummary: resolveWorkbenchRuntimePath('dashboard', 'summary'),
   tasksCreate: resolveWorkbenchRuntimePath('start'),
+  createReviewTicket: (taskId: string) =>
+    resolveWorkbenchRuntimePath('tasks', taskId, 'review-ticket'),
+  reviewTicketDetail: (ticket: string) =>
+    resolveWorkbenchRuntimePath('review-tickets', ticket),
 } as const
 
 type WorkbenchApiSuccess<T> = {
@@ -651,6 +660,26 @@ export async function getWorkbenchTaskDetail(
 ): Promise<WorkbenchTaskDetail> {
   const response = await apiClient.get<WorkbenchApiSuccess<WorkbenchTaskDetail>>(
     resolveWorkbenchRuntimePath('tasks', taskId)
+  )
+
+  return unwrapResponse(response)
+}
+
+export async function createWorkbenchReviewTicket(
+  taskId: string
+): Promise<WorkbenchReviewTicket> {
+  const response = await apiClient.post<
+    WorkbenchApiSuccess<WorkbenchReviewTicket>
+  >(WORKBENCH_RUNTIME_ENDPOINTS.createReviewTicket(taskId))
+
+  return unwrapResponse(response)
+}
+
+export async function getWorkbenchReviewTicketDetail(
+  ticket: string
+): Promise<WorkbenchTaskDetail> {
+  const response = await apiClient.get<WorkbenchApiSuccess<WorkbenchTaskDetail>>(
+    WORKBENCH_RUNTIME_ENDPOINTS.reviewTicketDetail(ticket)
   )
 
   return unwrapResponse(response)

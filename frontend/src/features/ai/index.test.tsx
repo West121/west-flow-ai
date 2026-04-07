@@ -8,6 +8,9 @@ const aiCopilotApiMocks = vi.hoisted(() => ({
   createAICopilotSession: vi.fn(),
   deleteAICopilotSession: vi.fn(),
   sendAICopilotMessage: vi.fn(),
+  uploadAICopilotAsset: vi.fn(),
+  downloadAICopilotAssetPreview: vi.fn(),
+  transcribeAICopilotAudio: vi.fn(),
   confirmAICopilotConfirmation: vi.fn(),
 }))
 
@@ -217,6 +220,18 @@ describe('AICopilotPage', () => {
       })
     )
     aiCopilotApiMocks.deleteAICopilotSession.mockResolvedValue(undefined)
+    aiCopilotApiMocks.uploadAICopilotAsset.mockResolvedValue({
+      fileId: 'file_001',
+      displayName: '请假材料.png',
+      contentType: 'image/png',
+      previewUrl: 'https://example.com/leave.png',
+    })
+    aiCopilotApiMocks.downloadAICopilotAssetPreview.mockResolvedValue(
+      new Blob(['preview'], { type: 'image/png' })
+    )
+    aiCopilotApiMocks.transcribeAICopilotAudio.mockResolvedValue({
+      text: '请帮我发起一个 5 天的事假',
+    })
     aiCopilotApiMocks.sendAICopilotMessage.mockResolvedValue(
       buildSession({
         sessionId: 'session_001',
@@ -270,6 +285,46 @@ describe('AICopilotPage', () => {
     expect(screen.getByText('流程解释草稿')).toBeInTheDocument()
   })
 
+  it('resolves persisted attachment previews from file ids for historical sessions', async () => {
+    aiCopilotApiMocks.getAICopilotSession.mockResolvedValueOnce(
+      buildSession({
+        sessionId: 'session_001',
+        history: [
+          {
+            messageId: 'session_001_msg_001',
+            role: 'user',
+            authorName: '你',
+            createdAt: '2026-03-23T08:00:00.000Z',
+            content: '已上传 1 张图片',
+            blocks: [
+              {
+                type: 'attachments',
+                items: [
+                  {
+                    fileId: 'file_history_001',
+                    displayName: '请假材料.png',
+                    contentType: 'image/png',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      })
+    )
+
+    const { AICopilotPage } = await import('./index')
+
+    renderWithQuery(<AICopilotPage />)
+
+    await waitFor(() =>
+      expect(aiCopilotApiMocks.downloadAICopilotAssetPreview).toHaveBeenCalledWith(
+        'file_history_001'
+      )
+    )
+    expect(await screen.findByAltText('请假材料.png')).toBeInTheDocument()
+  })
+
   it('supports deleting a session from the context menu', async () => {
     const { AICopilotPage } = await import('./index')
 
@@ -318,9 +373,15 @@ describe('AICopilotPage', () => {
         {
           sessionId: 'session_001',
           content: '请生成一个确认卡和统计卡',
+          attachments: [],
         },
         expect.any(Object)
       )
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByDisplayValue('请生成一个确认卡和统计卡')
+      ).not.toBeInTheDocument()
     )
 
     const confirmButtons = await screen.findAllByRole('button', {
@@ -436,6 +497,7 @@ describe('AICopilotPage', () => {
         {
           sessionId: 'session_003',
           content: '请快速整理当前 ECR 的摘要',
+          attachments: [],
         },
         expect.any(Object)
       )

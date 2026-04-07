@@ -6,11 +6,11 @@ type StatusBadgeProps = {
 }
 
 const toneStyles = {
-  neutral: { backgroundColor: '#F3EEE6', color: '#5F564E' },
-  info: { backgroundColor: '#E8F3FF', color: '#2066C0' },
-  success: { backgroundColor: '#E8F7EF', color: '#27825B' },
-  warning: { backgroundColor: '#FFF3DD', color: '#AC6A00' },
-  danger: { backgroundColor: '#FDEBEC', color: '#B53B46' },
+  neutral: { backgroundColor: 'rgba(255,255,255,0.58)', color: '#666276' },
+  info: { backgroundColor: 'rgba(210,231,255,0.58)', color: '#2E6AC5' },
+  success: { backgroundColor: 'rgba(215,246,229,0.62)', color: '#1E8054' },
+  warning: { backgroundColor: 'rgba(255,236,198,0.7)', color: '#9A6200' },
+  danger: { backgroundColor: 'rgba(255,220,226,0.72)', color: '#AF4058' },
 } as const
 
 export function StatusBadge({
@@ -29,11 +29,15 @@ const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.66)',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
   label: {
     fontSize: 12,
     fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
 })

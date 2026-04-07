@@ -2114,6 +2114,43 @@ class FlowableProcessRuntimeControllerTest {
     }
 
     @Test
+    void shouldNotAllowUrgeWhenInitiatorCanHandleCurrentTask() throws Exception {
+        String applicantToken = login("wangwu");
+        publishLeaveProcess();
+        seedLeaveBill("leave_urge_self_001");
+
+        String taskId = startProcess(applicantToken, "leave_urge_self_001").path("activeTasks").get(0).path("taskId").asText();
+
+        JsonNode candidateActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(candidateActions.path("canClaim").asBoolean()).isTrue();
+        assertThat(candidateActions.path("canUrge").asBoolean()).isFalse();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "自己认领办理"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        JsonNode assignedActions = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
+                        .header("Authorization", "Bearer " + applicantToken))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+        assertThat(assignedActions.path("canApprove").asBoolean()).isTrue();
+        assertThat(assignedActions.path("canUrge").asBoolean()).isFalse();
+    }
+
+    @Test
     void shouldSupportCcReadAndCcApprovalSheetViewOnRealFlowableRuntime() throws Exception {
         String applicantToken = login("zhangsan");
         String managerToken = login("lisi");

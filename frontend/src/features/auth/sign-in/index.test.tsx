@@ -107,7 +107,10 @@ describe('SignIn smoke', () => {
         displayName: '张三',
       })
     )
-    expect(toastSuccessMock).toHaveBeenCalledWith('欢迎回来，张三')
+    expect(toastSuccessMock).toHaveBeenCalledWith('欢迎回来，张三', {
+      position: 'top-right',
+      closeButton: true,
+    })
     expect(navigateMock).toHaveBeenCalledWith({
       to: '/workbench/todos/list',
       replace: true,

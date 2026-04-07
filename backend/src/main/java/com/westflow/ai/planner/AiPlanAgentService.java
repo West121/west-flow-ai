@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.ai.gateway.AiGatewayRequest;
+import com.westflow.ai.service.AiUserReferenceResolver;
 import com.westflow.ai.service.AiRegistryCatalogService;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -12,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 统一规划服务。
@@ -19,13 +22,15 @@ import java.util.Map;
 public class AiPlanAgentService {
 
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
+    private static final Logger log = LoggerFactory.getLogger(AiPlanAgentService.class);
 
     private final AiPlanModelInvoker modelInvoker;
     private final ObjectMapper objectMapper;
     private final AiRegistryCatalogService aiRegistryCatalogService;
+    private final AiUserReferenceResolver aiUserReferenceResolver;
 
     public AiPlanAgentService(AiPlanModelInvoker modelInvoker, ObjectMapper objectMapper) {
-        this(modelInvoker, objectMapper, null);
+        this(modelInvoker, objectMapper, null, null);
     }
 
     public AiPlanAgentService(
@@ -33,18 +38,100 @@ public class AiPlanAgentService {
             ObjectMapper objectMapper,
             AiRegistryCatalogService aiRegistryCatalogService
     ) {
+        this(modelInvoker, objectMapper, aiRegistryCatalogService, null);
+    }
+
+    public AiPlanAgentService(
+            AiPlanModelInvoker modelInvoker,
+            ObjectMapper objectMapper,
+            AiRegistryCatalogService aiRegistryCatalogService,
+            AiUserReferenceResolver aiUserReferenceResolver
+    ) {
         this.modelInvoker = modelInvoker;
         this.objectMapper = objectMapper;
         this.aiRegistryCatalogService = aiRegistryCatalogService;
+        this.aiUserReferenceResolver = aiUserReferenceResolver;
     }
 
     public AiCopilotPlan plan(AiGatewayRequest request) {
+        long startedAt = System.nanoTime();
+        AiCopilotPlan heuristicPlan = inferPlan(request);
+        if (shouldSkipModelForHeuristic(heuristicPlan)) {
+            log.info(
+                    "AI planner fast-path conversationId={} domain={} intent={} executor={} elapsedMs={}",
+                    request.conversationId(),
+                    request.domain(),
+                    heuristicPlan.intent(),
+                    heuristicPlan.executor(),
+                    elapsedMs(startedAt)
+            );
+            return heuristicPlan;
+        }
         String prompt = buildPrompt(request);
         AiCopilotPlan modelPlan = invokeModel(prompt);
-        if (modelPlan != null) {
-            return modelPlan;
+        AiCopilotPlan finalPlan = selectPlan(request, heuristicPlan, modelPlan);
+        log.info(
+                "AI planner planned conversationId={} domain={} intent={} executor={} usedModel={} elapsedMs={}",
+                request.conversationId(),
+                request.domain(),
+                finalPlan.intent(),
+                finalPlan.executor(),
+                modelPlan != null,
+                elapsedMs(startedAt)
+        );
+        return finalPlan;
+    }
+
+    private boolean shouldSkipModelForHeuristic(AiCopilotPlan heuristicPlan) {
+        if (heuristicPlan == null) {
+            return false;
         }
-        return inferPlan(request);
+        if (isCasualChatPlan(heuristicPlan)) {
+            return true;
+        }
+        if (heuristicPlan.intent() == AiCopilotIntent.READ
+                && heuristicPlan.executor() == AiCopilotExecutor.WORKFLOW) {
+            return true;
+        }
+        if (heuristicPlan.intent() == AiCopilotIntent.READ
+                && heuristicPlan.executor() == AiCopilotExecutor.KNOWLEDGE
+                && (heuristicPlan.toolCandidates().contains("feature.catalog.query")
+                || heuristicPlan.toolCandidates().contains("user.profile.query"))) {
+            return true;
+        }
+        if (heuristicPlan.intent() == AiCopilotIntent.READ
+                && heuristicPlan.executor() == AiCopilotExecutor.KNOWLEDGE
+                && heuristicPlan.toolCandidates().isEmpty()) {
+            return true;
+        }
+        if (heuristicPlan.intent() == AiCopilotIntent.READ
+                && heuristicPlan.executor() == AiCopilotExecutor.KNOWLEDGE
+                && !heuristicPlan.toolCandidates().isEmpty()
+                && heuristicPlan.confidence() >= 0.9d) {
+            return true;
+        }
+        return heuristicPlan.intent() == AiCopilotIntent.WRITE;
+    }
+
+    private AiCopilotPlan selectPlan(
+            AiGatewayRequest request,
+            AiCopilotPlan heuristicPlan,
+            AiCopilotPlan modelPlan
+    ) {
+        if (modelPlan == null) {
+            return heuristicPlan;
+        }
+        if (modelPlan.intent() == AiCopilotIntent.CLARIFY && heuristicPlan.intent() != AiCopilotIntent.CLARIFY) {
+            return heuristicPlan;
+        }
+        if (isAttachmentDrivenWritePrompt(request.content())
+                && heuristicPlan.intent() == AiCopilotIntent.WRITE
+                && (modelPlan.intent() != AiCopilotIntent.WRITE
+                || modelPlan.executor() != AiCopilotExecutor.ACTION
+                || modelPlan.presentation() != AiCopilotPresentation.FORM_PREVIEW)) {
+            return heuristicPlan;
+        }
+        return modelPlan;
     }
 
     private AiCopilotPlan invokeModel(String prompt) {
@@ -84,11 +171,17 @@ public class AiPlanAgentService {
         String routePath = normalizeText(request.pageRoute());
         String domain = inferDomain(request.domain(), routePath, content);
 
+        if (isCasualChatIntent(content)) {
+            return inferCasualChatPlan(content, domain, routePath);
+        }
         if (isWriteIntent(content, routePath)) {
             return inferWritePlan(content, domain, routePath);
         }
         if (isWorkflowIntent(content)) {
             return inferWorkflowPlan(content, domain, routePath);
+        }
+        if (isUserProfileIntent(content)) {
+            return inferUserProfilePlan(request, content, domain, routePath);
         }
         if (isStatsIntent(content)) {
             return inferStatsPlan(content, domain, routePath);
@@ -96,7 +189,46 @@ public class AiPlanAgentService {
         if (isKnowledgeIntent(content, routePath)) {
             return inferKnowledgePlan(content, domain, routePath);
         }
-        return AiCopilotPlan.clarify(domain, "当前请求需要更明确的意图");
+        AiCopilotPlan registryMatchedReadPlan = inferRegistryMatchedReadPlan(request, content, domain, routePath);
+        if (registryMatchedReadPlan != null) {
+            return registryMatchedReadPlan;
+        }
+        return inferGeneralKnowledgePlan(content, domain, routePath);
+    }
+
+    private AiCopilotPlan inferCasualChatPlan(String content, String domain, String routePath) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("keyword", content);
+        arguments.put("domain", domain);
+        arguments.put("pageRoute", routePath);
+        arguments.put("chatMode", "casual");
+        return new AiCopilotPlan(
+                AiCopilotIntent.READ,
+                domain,
+                AiCopilotExecutor.KNOWLEDGE,
+                List.of(),
+                arguments,
+                AiCopilotPresentation.TEXT,
+                false,
+                0.98d
+        );
+    }
+
+    private AiCopilotPlan inferGeneralKnowledgePlan(String content, String domain, String routePath) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("keyword", content);
+        arguments.put("domain", domain);
+        arguments.put("pageRoute", routePath);
+        return new AiCopilotPlan(
+                AiCopilotIntent.READ,
+                domain,
+                AiCopilotExecutor.KNOWLEDGE,
+                List.of(),
+                arguments,
+                AiCopilotPresentation.TEXT,
+                false,
+                0.72d
+        );
     }
 
     private AiCopilotPlan inferWritePlan(String content, String domain, String routePath) {
@@ -166,6 +298,16 @@ public class AiPlanAgentService {
         arguments.put("keyword", content);
         arguments.put("domain", domain);
         arguments.put("pageRoute", routePath);
+        if (aiUserReferenceResolver != null) {
+            String targetUserId = stringValue(aiUserReferenceResolver.resolveTodoTargetUserId(content));
+            String targetUserDisplayName = stringValue(aiUserReferenceResolver.resolveTodoTargetDisplayName(content));
+            if (!targetUserId.isBlank()) {
+                arguments.put("userId", targetUserId);
+            }
+            if (!targetUserDisplayName.isBlank()) {
+                arguments.put("targetUserDisplayName", targetUserDisplayName);
+            }
+        }
         return new AiCopilotPlan(
                 AiCopilotIntent.READ,
                 domain,
@@ -193,6 +335,122 @@ public class AiPlanAgentService {
                 AiCopilotPresentation.TEXT,
                 false,
                 0.84d
+        );
+    }
+
+    private AiCopilotPlan inferUserProfilePlan(
+            AiGatewayRequest request,
+            String content,
+            String domain,
+            String routePath
+    ) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("keyword", content);
+        arguments.put("domain", domain);
+        arguments.put("pageRoute", routePath);
+        if (aiUserReferenceResolver != null) {
+            String targetUserId = stringValue(aiUserReferenceResolver.resolveProfileTargetUserId(content, request.userId()));
+            String targetUserDisplayName = stringValue(aiUserReferenceResolver.resolveProfileTargetDisplayName(content));
+            if (!targetUserId.isBlank()) {
+                arguments.put("userId", targetUserId);
+            }
+            if (!targetUserDisplayName.isBlank()) {
+                arguments.put("targetUserDisplayName", targetUserDisplayName);
+            }
+        } else if (containsAny(content, "我", "我的")) {
+            arguments.put("userId", request.userId());
+        }
+        return new AiCopilotPlan(
+                AiCopilotIntent.READ,
+                domain,
+                AiCopilotExecutor.KNOWLEDGE,
+                List.of("user.profile.query"),
+                arguments,
+                AiCopilotPresentation.TEXT,
+                false,
+                0.92d
+        );
+    }
+
+    private AiCopilotPlan inferRegistryMatchedReadPlan(
+            AiGatewayRequest request,
+            String content,
+            String domain,
+            String routePath
+    ) {
+        if (aiRegistryCatalogService == null || content.isBlank()) {
+            return null;
+        }
+        AiRegistryCatalogService.AiToolCatalogItem matchedTool = aiRegistryCatalogService
+                .matchReadTool(request.userId(), content, domain, List.of(), routePath)
+                .orElse(null);
+        if (matchedTool == null) {
+            return null;
+        }
+        String toolCode = matchedTool.toolCode();
+        if ("stats.query".equals(toolCode)) {
+            return inferStatsPlan(content, domain, routePath);
+        }
+        if ("user.profile.query".equals(toolCode)) {
+            return inferUserProfilePlan(request, content, domain, routePath);
+        }
+        if (isWorkflowReadTool(toolCode)) {
+            return inferWorkflowToolPlan(content, domain, routePath, toolCode);
+        }
+        return inferKnowledgeToolPlan(content, domain, routePath, toolCode);
+    }
+
+    private AiCopilotPlan inferWorkflowToolPlan(
+            String content,
+            String domain,
+            String routePath,
+            String toolCode
+    ) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("keyword", content);
+        arguments.put("domain", domain);
+        arguments.put("pageRoute", routePath);
+        if (aiUserReferenceResolver != null) {
+            String targetUserId = stringValue(aiUserReferenceResolver.resolveTodoTargetUserId(content));
+            String targetUserDisplayName = stringValue(aiUserReferenceResolver.resolveTodoTargetDisplayName(content));
+            if (!targetUserId.isBlank()) {
+                arguments.put("userId", targetUserId);
+            }
+            if (!targetUserDisplayName.isBlank()) {
+                arguments.put("targetUserDisplayName", targetUserDisplayName);
+            }
+        }
+        return new AiCopilotPlan(
+                AiCopilotIntent.READ,
+                domain,
+                AiCopilotExecutor.WORKFLOW,
+                List.of(toolCode),
+                arguments,
+                AiCopilotPresentation.TEXT,
+                false,
+                0.91d
+        );
+    }
+
+    private AiCopilotPlan inferKnowledgeToolPlan(
+            String content,
+            String domain,
+            String routePath,
+            String toolCode
+    ) {
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        arguments.put("keyword", content);
+        arguments.put("domain", domain);
+        arguments.put("pageRoute", routePath);
+        return new AiCopilotPlan(
+                AiCopilotIntent.READ,
+                domain,
+                AiCopilotExecutor.KNOWLEDGE,
+                List.of(toolCode),
+                arguments,
+                AiCopilotPresentation.TEXT,
+                false,
+                0.91d
         );
     }
 
@@ -354,7 +612,48 @@ public class AiPlanAgentService {
             }
             return true;
         }
+        if (isAttachmentContextualWriteIntent(content, routePath)) {
+            return true;
+        }
         return containsAny(routePath, "/oa/leave/create", "/oa/expense/create", "/oa/common/create", "/plm/ecr/create", "/plm/eco/create", "/plm/material-master/create");
+    }
+
+    private boolean isAttachmentContextualWriteIntent(String content, String routePath) {
+        boolean hasAttachmentCue = containsAny(
+                content,
+                "附件《",
+                "附件识别结果",
+                "上传的附件",
+                "已上传",
+                "请结合上传的附件",
+                "请根据以下附件识别结果"
+        );
+        if (!hasAttachmentCue && !containsAny(content, "申请人：", "请假类型：", "报销金额：", "申请说明：")) {
+            return false;
+        }
+        if (containsAny(routePath, "/oa/leave/", "/oa/expense/", "/oa/common/", "/plm/ecr/", "/plm/eco/", "/plm/material-master/")) {
+            return true;
+        }
+        if (containsAny(content, "请假类型：", "请假天数：", "请假原因：")) {
+            return true;
+        }
+        if (containsAny(content, "报销金额：", "报销事由：")) {
+            return true;
+        }
+        if (containsAny(content, "申请说明：", "申请内容：")) {
+            return true;
+        }
+        return containsAny(routePath, "/oa/leave/", "/oa/expense/", "/oa/common/");
+    }
+
+    private boolean isAttachmentDrivenWritePrompt(String content) {
+        return containsAny(
+                content,
+                "请根据以下附件识别结果帮我发起请假申请",
+                "请根据以下附件识别结果帮我发起报销申请",
+                "请根据以下附件识别结果帮我发起通用申请",
+                "并生成表单预览"
+        );
     }
 
     private boolean isTaskHandleIntent(String content) {
@@ -382,9 +681,12 @@ public class AiPlanAgentService {
     }
 
     private boolean isWorkflowIntent(String content) {
+        if (containsAny(content, "是什么", "做什么", "怎么用", "如何使用", "如何用", "介绍", "说明", "区别")) {
+            return false;
+        }
         return containsAny(
                 content,
-                "审批",
+                "审批单",
                 "待办",
                 "轨迹",
                 "路径",
@@ -405,9 +707,47 @@ public class AiPlanAgentService {
     }
 
     private boolean isKnowledgeIntent(String content, String routePath) {
-        return containsAny(content, "怎么用", "如何使用", "功能推荐", "这个系统能做什么", "系统功能", "怎么操作", "怎么发起", "怎么配置")
+        return containsAny(content, "怎么用", "如何使用", "功能推荐", "这个系统能做什么", "系统功能", "怎么操作", "怎么发起", "怎么配置",
+                "你具备哪些功能", "你有什么功能", "你能做什么", "你可以做什么", "能帮我做什么",
+                "是什么", "做什么", "介绍", "说明", "有什么区别")
                 || containsAny(content, "PLM", "ECR", "ECO", "物料", "摘要", "变更")
                 || containsAny(routePath, "/system/", "/home", "/settings", "/plm/");
+    }
+
+    private boolean isUserProfileIntent(String content) {
+        if (!containsAny(content, "部门", "岗位", "职位", "公司", "角色", "手机", "手机号", "邮箱", "资料", "信息", "详情")) {
+            return false;
+        }
+        if (containsAny(content, "多少", "几个", "统计", "分布", "占比", "图表", "报表")) {
+            return false;
+        }
+        if (aiUserReferenceResolver != null) {
+            if (!stringValue(aiUserReferenceResolver.resolveProfileTargetDisplayName(content)).isBlank()) {
+                return true;
+            }
+            if (!stringValue(aiUserReferenceResolver.resolveProfileTargetUserId(content, "")).isBlank()) {
+                return true;
+            }
+        }
+        return containsAny(content, "我", "我的");
+    }
+
+    private boolean isCasualChatIntent(String content) {
+        String normalized = normalizeText(content);
+        if (normalized.isBlank()) {
+            return false;
+        }
+        return containsAny(
+                normalized,
+                "你好", "您好", "嗨", "hi", "hello", "早上好", "中午好", "下午好", "晚上好",
+                "在吗", "在不在", "哈喽", "谢谢", "多谢", "辛苦了", "拜拜", "再见"
+        );
+    }
+
+    private boolean isCasualChatPlan(AiCopilotPlan plan) {
+        return plan.intent() == AiCopilotIntent.READ
+                && plan.executor() == AiCopilotExecutor.KNOWLEDGE
+                && "casual".equals(String.valueOf(plan.arguments().get("chatMode")));
     }
 
     private String inferBusinessType(String content, String routePath) {
@@ -450,22 +790,77 @@ public class AiPlanAgentService {
         if ("OA_LEAVE".equals(businessType)) {
             formData.put("leaveType", inferLeaveType(content));
             formData.put("days", inferLeaveDays(content));
-            formData.put("reason", content == null || content.isBlank() ? "请补充请假原因" : content);
+            String fallbackReason = fallbackStructuredValue(content, "请补充请假原因");
+            formData.put("reason", extractStructuredFieldValue(content, fallbackReason, "请假原因", "原因"));
             formData.put("urgent", containsAny(content, "紧急", "急"));
-            formData.put("managerUserId", "");
+            formData.put("managerUserId", inferManagerUserId(content));
             return Map.copyOf(formData);
         }
         if ("OA_EXPENSE".equals(businessType)) {
             formData.put("amount", 0);
-            formData.put("reason", content == null || content.isBlank() ? "请补充报销事由" : content);
+            String fallbackReason = fallbackStructuredValue(content, "请补充报销事由");
+            formData.put("reason", extractStructuredFieldValue(content, fallbackReason, "报销事由", "事由", "原因"));
             return Map.copyOf(formData);
         }
         if ("OA_COMMON".equals(businessType)) {
             formData.put("title", "AI 发起的通用申请");
-            formData.put("content", content == null || content.isBlank() ? "请补充申请内容" : content);
+            String fallbackContent = fallbackStructuredValue(content, "请补充申请内容");
+            formData.put("content", extractStructuredFieldValue(content, fallbackContent, "申请内容", "内容", "说明"));
             return Map.copyOf(formData);
         }
         return Map.of();
+    }
+
+    private String extractStructuredFieldValue(String content, String fallbackValue, String... labels) {
+        String normalized = content == null ? "" : content.trim();
+        if (!normalized.isBlank() && labels != null) {
+            for (String label : labels) {
+                if (label == null || label.isBlank()) {
+                    continue;
+                }
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile(
+                                "(?m)^\\s*(?:[-*•]+\\s*|\\d+[.)、]\\s*)?"
+                                        + java.util.regex.Pattern.quote(label)
+                                        + "\\s*[：:]\\s*(.+?)\\s*$"
+                        )
+                        .matcher(normalized);
+                if (matcher.find()) {
+                    String extracted = matcher.group(1).trim();
+                    if (!extracted.isBlank()) {
+                        return extracted;
+                    }
+                }
+            }
+        }
+        return fallbackValue;
+    }
+
+    private String inferManagerUserId(String content) {
+        if (aiUserReferenceResolver == null) {
+            return "";
+        }
+        return aiUserReferenceResolver.resolveManagerUserId(content);
+    }
+
+    private String fallbackStructuredValue(String content, String fallbackValue) {
+        String normalized = content == null ? "" : content.trim();
+        if (normalized.isBlank()) {
+            return fallbackValue;
+        }
+        if (normalized.contains("附件《") && normalized.contains("识别结果")) {
+            return fallbackValue;
+        }
+        if (looksLikeActionOnlyPrompt(normalized)) {
+            return fallbackValue;
+        }
+        return normalized;
+    }
+
+    private boolean looksLikeActionOnlyPrompt(String content) {
+        return containsAny(content, "帮我发起", "帮我提交", "发起", "提交")
+                && containsAny(content, "请假", "事假", "病假", "年假", "调休", "报销", "申请")
+                && !containsAny(content, "原因", "因为", "事由", "内容", "说明");
     }
 
     private String extractTaskId(String routePath) {
@@ -500,11 +895,22 @@ public class AiPlanAgentService {
     }
 
     private List<String> inferKnowledgeToolCandidates(String content, String routePath) {
+        if (isUserProfileIntent(content)) {
+            return List.of("user.profile.query");
+        }
         if (containsAny(content, "PLM", "ECR", "ECO", "物料", "摘要", "变更")
                 || containsAny(routePath, "/plm/")) {
             return List.of("plm.bill.query");
         }
         return List.of("feature.catalog.query");
+    }
+
+    private boolean isWorkflowReadTool(String toolCode) {
+        return "task.query".equals(toolCode)
+                || "workflow.todo.list".equals(toolCode)
+                || "workflow.trace.summary".equals(toolCode)
+                || "approval.detail.query".equals(toolCode)
+                || "approval.trace.query".equals(toolCode);
     }
 
     private String inferLeaveType(String content) {
@@ -625,6 +1031,14 @@ public class AiPlanAgentService {
 
     private String normalizeText(String text) {
         return text == null ? "" : text.trim();
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : value.toString().trim();
+    }
+
+    private long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -118,7 +118,7 @@ export function ApprovalDetailScreen() {
         <Pressable
           style={styles.secondaryButton}
           onPress={() =>
-            router.push({ pathname: '/process-player', params: { taskId } })
+            router.push({ pathname: '/process-player' as never, params: { taskId } as never })
           }
         >
           <Text style={styles.secondaryButtonLabel}>打开流程播放器</Text>
@@ -212,22 +212,22 @@ function ActionButton({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#F6F4EF',
+    backgroundColor: '#F4F3F8',
   },
   content: {
     gap: 16,
     padding: 20,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F6F4EF',
+    backgroundColor: '#F4F3F8',
     padding: 24,
   },
   emptyText: {
-    color: '#75695E',
+    color: '#777287',
     lineHeight: 20,
   },
   headerMeta: {
@@ -237,47 +237,50 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   metaText: {
-    color: '#6E6257',
+    color: '#7A748C',
     fontSize: 12,
   },
   summaryText: {
-    color: '#473E37',
-    lineHeight: 21,
+    color: '#59556B',
+    lineHeight: 22,
   },
   secondaryButton: {
     alignSelf: 'flex-start',
-    borderRadius: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#D6CBBC',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderColor: 'rgba(255,255,255,0.78)',
+    backgroundColor: 'rgba(255,255,255,0.58)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   secondaryButtonLabel: {
-    color: '#241C18',
+    color: '#1B2132',
     fontWeight: '700',
   },
   fieldRow: {
-    gap: 4,
+    gap: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0E9DF',
-    paddingBottom: 10,
+    borderBottomColor: 'rgba(255,255,255,0.55)',
+    paddingBottom: 12,
   },
   fieldLabel: {
-    color: '#796F66',
+    color: '#78738A',
     fontSize: 12,
     textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   fieldValue: {
-    color: '#171312',
-    lineHeight: 21,
+    color: '#1A2030',
+    lineHeight: 22,
   },
   commentInput: {
     minHeight: 100,
     borderWidth: 1,
-    borderColor: '#D9CFBF',
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.68)',
     padding: 14,
+    color: '#1A2030',
     textAlignVertical: 'top',
   },
   actionRow: {
@@ -286,18 +289,22 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionButton: {
-    borderRadius: 16,
+    borderRadius: 18,
+    borderWidth: 1,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
   },
   actionButtonNeutral: {
-    backgroundColor: '#171312',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderColor: 'rgba(255,255,255,0.82)',
   },
   actionButtonSuccess: {
     backgroundColor: '#1C7B59',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   actionButtonDanger: {
     backgroundColor: '#B53B46',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   actionButtonBusy: {
     opacity: 0.72,

@@ -2,15 +2,18 @@ package com.westflow.ai.api;
 
 import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.ai.model.AiConfirmToolCallRequest;
+import com.westflow.ai.model.AiCopilotAudioTranscriptionResponse;
 import com.westflow.ai.model.AiConversationCreateRequest;
 import com.westflow.ai.model.AiMessageAppendRequest;
 import com.westflow.ai.model.AiToolCallRequest;
 import com.westflow.ai.model.AiToolCallResultResponse;
 import com.westflow.ai.service.AiCopilotService;
+import com.westflow.ai.service.AiCopilotMultimodalService;
 import com.westflow.common.api.ApiResponse;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +21,8 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 
 /**
@@ -29,9 +34,14 @@ import java.util.Map;
 public class AiCopilotController {
 
     private final AiCopilotService aiCopilotService;
+    private final AiCopilotMultimodalService aiCopilotMultimodalService;
 
-    public AiCopilotController(AiCopilotService aiCopilotService) {
+    public AiCopilotController(
+            AiCopilotService aiCopilotService,
+            AiCopilotMultimodalService aiCopilotMultimodalService
+    ) {
         this.aiCopilotService = aiCopilotService;
+        this.aiCopilotMultimodalService = aiCopilotMultimodalService;
     }
 
     /**
@@ -80,6 +90,16 @@ public class AiCopilotController {
     }
 
     /**
+     * 清空当前登录人的全部会话。
+     */
+    @DeleteMapping("/conversations")
+    @SaCheckLogin
+    public ApiResponse<Map<String, Integer>> clearConversations() {
+        aiCopilotService.clearConversations();
+        return ApiResponse.success(Map.of("cleared", 1));
+    }
+
+    /**
      * 追加会话消息。
      */
     @PostMapping("/conversations/{conversationId}/messages")
@@ -89,6 +109,19 @@ public class AiCopilotController {
             @Valid @RequestBody AiMessageAppendRequest request
     ) {
         return ApiResponse.success(aiCopilotService.appendMessage(conversationId, request));
+    }
+
+    /**
+     * 转写 AI Copilot 语音输入。
+     */
+    @PostMapping(path = "/audio/transcriptions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @SaCheckLogin
+    public ApiResponse<AiCopilotAudioTranscriptionResponse> transcribeAudio(
+            @RequestParam("file") MultipartFile file
+    ) {
+        return ApiResponse.success(new AiCopilotAudioTranscriptionResponse(
+                aiCopilotMultimodalService.transcribeAudio(file)
+        ));
     }
 
     /**

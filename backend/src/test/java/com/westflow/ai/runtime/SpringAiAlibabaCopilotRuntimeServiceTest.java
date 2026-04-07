@@ -83,6 +83,7 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         ChatClientRequestSpec requestSpec = mock(ChatClientRequestSpec.class);
         CallResponseSpec callResponseSpec = mock(CallResponseSpec.class);
         when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.options(any())).thenReturn(requestSpec);
         when(requestSpec.system(anyString())).thenReturn(requestSpec);
         when(requestSpec.user(anyString())).thenReturn(requestSpec);
         when(requestSpec.toolCallbacks(any(ToolCallbackProvider.class))).thenReturn(requestSpec);
@@ -108,6 +109,7 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         ChatClientRequestSpec requestSpec = mock(ChatClientRequestSpec.class);
         CallResponseSpec callResponseSpec = mock(CallResponseSpec.class);
         when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.options(any())).thenReturn(requestSpec);
         when(requestSpec.system(anyString())).thenReturn(requestSpec);
         when(requestSpec.user(anyString())).thenReturn(requestSpec);
         when(requestSpec.toolCallbacks(any(ToolCallbackProvider.class))).thenReturn(requestSpec);
@@ -121,5 +123,27 @@ class SpringAiAlibabaCopilotRuntimeServiceTest {
         );
 
         assertThat(result).isEqualTo("当前没有待办。");
+    }
+
+    @Test
+    void shouldGeneratePlannedReplyDirectlyByChatClient() {
+        ChatClientRequestSpec requestSpec = mock(ChatClientRequestSpec.class);
+        CallResponseSpec callResponseSpec = mock(CallResponseSpec.class);
+        when(chatClient.prompt()).thenReturn(requestSpec);
+        when(requestSpec.options(any())).thenReturn(requestSpec);
+        when(requestSpec.system(anyString())).thenReturn(requestSpec);
+        when(requestSpec.user(anyString())).thenReturn(requestSpec);
+        when(requestSpec.call()).thenReturn(callResponseSpec);
+        when(callResponseSpec.content()).thenReturn("张三当前在 PLM产品组，岗位是 PLM产品经理。");
+
+        String result = runtimeService.generatePlannedReply(
+                new AiGatewayRequest("conv_005", "usr_001", "张三是什么部门 岗位", "SYSTEM", false, List.of(), List.of("SYSTEM")),
+                new AiGatewayResponse("ROUTING", "knowledge-agent", false, List.of(), null, null, List.of(), null),
+                "KNOWLEDGE",
+                "{\"keyword\":\"张三是什么部门 岗位\"}",
+                "fallback"
+        );
+
+        assertThat(result).isEqualTo("张三当前在 PLM产品组，岗位是 PLM产品经理。");
     }
 }

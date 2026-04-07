@@ -85,7 +85,10 @@ export function UserAuthForm({
 
       const currentUser = await getCurrentUser()
       setCurrentUser(currentUser)
-      toast.success(`欢迎回来，${currentUser.displayName}`)
+      toast.success(`欢迎回来，${currentUser.displayName}`, {
+        position: 'top-right',
+        closeButton: true,
+      })
 
       const targetPath = redirectTo || '/'
       navigate({ to: targetPath, replace: true })

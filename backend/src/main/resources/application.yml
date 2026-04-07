@@ -101,6 +101,8 @@ westflow:
     slow-sql-threshold-ms: 500
     ip-region-resource: classpath:ip2region/ip2region_v4.xdb
   ai:
+    copilot:
+      fast-chat-model: ${DASHSCOPE_FAST_CHAT_MODEL:qwen-turbo-latest}
     mcp-demo:
       enabled: false
       endpoint-path: /api/mcp-demo

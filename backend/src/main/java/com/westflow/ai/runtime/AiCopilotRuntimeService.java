@@ -25,4 +25,28 @@ public interface AiCopilotRuntimeService {
     ) {
         return fallbackReply;
     }
+
+    /**
+     * 对 planner 已经确定的无工具结果直接生成最终回复，避免再次走完整 Agent 路由图。
+     */
+    default String generatePlannedReply(
+            AiGatewayRequest request,
+            AiGatewayResponse response,
+            String executor,
+            String payloadJson,
+            String fallbackReply
+    ) {
+        return fallbackReply;
+    }
+
+    /**
+     * 对无工具的普通问答直接生成最终回复。
+     */
+    default String generateKnowledgeReply(
+            AiGatewayRequest request,
+            AiGatewayResponse response,
+            String fallbackReply
+    ) {
+        return fallbackReply;
+    }
 }

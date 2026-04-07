@@ -6,6 +6,7 @@ import com.westflow.system.audit.AuditLogInterceptor;
 import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -45,5 +46,26 @@ public class SaTokenConfiguration implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(auditLogInterceptor).addPathPatterns("/api/v1/**");
+    }
+
+    /**
+     * 允许本地 Web 预览和移动端调试访问后端 API。
+     */
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/v1/**")
+            .allowedOriginPatterns(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "http://192.168.*:*",
+                "http://10.*:*",
+                "exp://*",
+                "capacitor://localhost"
+            )
+            .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+            .allowedHeaders("*")
+            .exposedHeaders("Authorization")
+            .allowCredentials(false)
+            .maxAge(3600);
     }
 }

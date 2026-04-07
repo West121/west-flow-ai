@@ -8,6 +8,7 @@ import com.westflow.processruntime.service.FlowableProcessRuntimeService;
 import com.westflow.processruntime.signature.api.SignTaskRequest;
 import com.westflow.processruntime.signature.api.TaskSignatureResponse;
 import com.westflow.processruntime.signature.service.TaskSignatureService;
+import com.westflow.processruntime.query.ProcessReviewTicketService;
 import com.westflow.processruntime.api.request.*;
 import com.westflow.processruntime.api.response.*;
 import jakarta.validation.Valid;
@@ -26,13 +27,16 @@ public class ProcessRuntimeController {
 
     private final FlowableProcessRuntimeService flowableProcessRuntimeService;
     private final TaskSignatureService taskSignatureService;
+    private final ProcessReviewTicketService processReviewTicketService;
 
     public ProcessRuntimeController(
             FlowableProcessRuntimeService flowableProcessRuntimeService,
-            TaskSignatureService taskSignatureService
+            TaskSignatureService taskSignatureService,
+            ProcessReviewTicketService processReviewTicketService
     ) {
         this.flowableProcessRuntimeService = flowableProcessRuntimeService;
         this.taskSignatureService = taskSignatureService;
+        this.processReviewTicketService = processReviewTicketService;
     }
 
     @PostMapping("/start")
@@ -68,6 +72,19 @@ public class ProcessRuntimeController {
     // 查询任务详情。
     public ApiResponse<ProcessTaskDetailResponse> detail(@PathVariable String taskId) {
         return ApiResponse.success(flowableProcessRuntimeService.detail(taskId));
+    }
+
+    @PostMapping("/tasks/{taskId}/review-ticket")
+    @SaCheckLogin
+    // 为微信小程序流程回顾页生成短期访问票据。
+    public ApiResponse<ProcessReviewTicketResponse> createReviewTicket(@PathVariable String taskId) {
+        return ApiResponse.success(processReviewTicketService.create(taskId));
+    }
+
+    @GetMapping("/review-tickets/{ticket}")
+    // 使用短期票据解析只读流程回顾详情，供小程序 web-view 承载的 H5 页面访问。
+    public ApiResponse<ProcessTaskDetailResponse> resolveReviewTicket(@PathVariable String ticket) {
+        return ApiResponse.success(processReviewTicketService.resolve(ticket));
     }
 
     @GetMapping("/approval-sheets/by-business")

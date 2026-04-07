@@ -87,7 +87,6 @@ import {
   resolveCountersignMemberStatusLabel,
   resolveCountersignModeLabel,
   resolveApprovalSheetActingModeLabel,
-  resolveApprovalSheetResultLabel,
   resolveSignatureStatusLabel,
   resolveSignatureTypeLabel,
 } from '@/features/workbench/approval-sheet-helpers'
@@ -520,128 +519,6 @@ function ApprovalSheetListToolbar({
         </div>
       </div>
     </div>
-  )
-}
-
-// 审批过程改成紧凑时间轴，强调顺序而不是平铺信息块。
-function ApprovalSheetActionTimeline({
-  taskTrace,
-  userDisplayNames,
-}: {
-  taskTrace: WorkbenchTaskDetail['taskTrace']
-  userDisplayNames?: Record<string, string> | null
-}) {
-  const items = taskTrace ?? []
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>审批过程</CardTitle>
-        <CardDescription>
-          按时间顺序查看节点流转、办理人和审批意见，快速定位流程推进过程。
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {items.length ? (
-          <ol className='space-y-0'>
-            {items.map((item, index) => (
-              <li
-                key={`${item.taskId}:${item.nodeId}:${index}`}
-                className='grid grid-cols-[120px_24px_minmax(0,1fr)] gap-3 pb-5 last:pb-0'
-              >
-                <div className='pt-0.5 text-right text-xs text-muted-foreground'>
-                  <div className='font-medium text-foreground'>
-                    {formatDateTime(item.handleEndTime ?? item.handleStartTime ?? item.receiveTime)}
-                  </div>
-                  <div className='mt-1'>
-                    {item.handleEndTime
-                      ? '完成'
-                      : item.handleStartTime
-                        ? '处理中'
-                        : item.receiveTime
-                          ? '已接收'
-                          : '待处理'}
-                  </div>
-                </div>
-                <div className='flex flex-col items-center'>
-                  <span className='mt-1 size-3 rounded-full border-2 border-background bg-emerald-500 shadow-sm ring-4 ring-emerald-500/10' />
-                  {index < items.length - 1 ? (
-                    <span className='mt-2 h-full min-h-10 w-px bg-border' />
-                  ) : null}
-                </div>
-                <div className='space-y-2 pb-1'>
-                  <div className='flex flex-wrap items-center gap-2'>
-                    <span className='font-medium leading-none'>{item.nodeName}</span>
-                    <Badge variant='secondary'>{resolveApprovalSheetResultLabel(item)}</Badge>
-                  </div>
-
-                  <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
-                    <span className='flex items-center gap-1'>
-                      办理人：
-                      <ApprovalUserTag
-                        userId={item.operatorUserId ?? item.assigneeUserId}
-                        displayNames={userDisplayNames}
-                      />
-                    </span>
-                    <span>接收：{formatDateTime(item.receiveTime)}</span>
-                    <span>开始：{formatDateTime(item.handleStartTime)}</span>
-                    <span>完成：{formatDateTime(item.handleEndTime)}</span>
-                    <span>
-                      时长：
-                      {item.handleDurationSeconds === null ||
-                      item.handleDurationSeconds === undefined
-                        ? '--'
-                        : `${item.handleDurationSeconds} 秒`}
-                    </span>
-                  </div>
-
-                  {(item.actingMode || item.actingForUserId || item.delegatedByUserId || item.handoverFromUserId) ? (
-                    <div className='flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground'>
-                      <span>办理模式：{resolveApprovalSheetActingModeLabel(item.actingMode)}</span>
-                      {item.actingForUserId ? (
-                        <span className='flex items-center gap-1'>
-                          代谁办理：
-                          <ApprovalUserTag
-                            userId={item.actingForUserId}
-                            displayNames={userDisplayNames}
-                          />
-                        </span>
-                      ) : null}
-                      {item.delegatedByUserId ? (
-                        <span className='flex items-center gap-1'>
-                          委派来源：
-                          <ApprovalUserTag
-                            userId={item.delegatedByUserId}
-                            displayNames={userDisplayNames}
-                          />
-                        </span>
-                      ) : null}
-                      {item.handoverFromUserId ? (
-                        <span className='flex items-center gap-1'>
-                          离职转办来源：
-                          <ApprovalUserTag
-                            userId={item.handoverFromUserId}
-                            displayNames={userDisplayNames}
-                          />
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <p className='text-sm text-foreground/90'>
-                    审批意见：{formatApprovalSheetText(item.comment)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className='rounded-lg border border-dashed p-6 text-sm text-muted-foreground'>
-            暂无动作轨迹。
-          </div>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 
@@ -3728,11 +3605,10 @@ export function WorkbenchTodoDetailPage({
                 <Card className='border-dashed shadow-none'>
                   <CardContent className='p-4'>
                     <Tabs defaultValue='overview' className='gap-4'>
-                      <TabsList className='grid w-full grid-cols-4'>
+                      <TabsList className='grid w-full grid-cols-3'>
                         <TabsTrigger value='overview'>概览</TabsTrigger>
                         <TabsTrigger value='runtime'>运行态</TabsTrigger>
                         <TabsTrigger value='automation'>自动化</TabsTrigger>
-                        <TabsTrigger value='trace'>轨迹</TabsTrigger>
                       </TabsList>
                       <TabsContent value='overview' className='space-y-4'>
                         <ApprovalSheetGraph
@@ -3748,6 +3624,10 @@ export function WorkbenchTodoDetailPage({
                         />
                         <InclusiveGatewaySection
                           hits={detail.inclusiveGatewayHits ?? []}
+                        />
+                        <ApprovalSheetSignatureSection
+                          instanceEvents={detail.instanceEvents ?? []}
+                          userDisplayNames={detail.userDisplayNames}
                         />
                       </TabsContent>
                       <TabsContent value='runtime' className='space-y-4'>
@@ -3900,16 +3780,6 @@ export function WorkbenchTodoDetailPage({
                         />
                         <NotificationSendRecordSection
                           notificationSendRecords={detail.notificationSendRecords ?? []}
-                        />
-                      </TabsContent>
-                      <TabsContent value='trace' className='space-y-4'>
-                        <ApprovalSheetActionTimeline
-                          taskTrace={detail.taskTrace ?? []}
-                          userDisplayNames={detail.userDisplayNames}
-                        />
-                        <ApprovalSheetSignatureSection
-                          instanceEvents={detail.instanceEvents ?? []}
-                          userDisplayNames={detail.userDisplayNames}
                         />
                       </TabsContent>
                     </Tabs>

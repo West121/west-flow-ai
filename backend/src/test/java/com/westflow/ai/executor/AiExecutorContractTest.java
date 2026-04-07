@@ -86,4 +86,58 @@ class AiExecutorContractTest {
                 .containsEntry("pageRoute", "/system/users/list")
                 .containsEntry("userId", "usr_1");
     }
+
+    @Test
+    void actionExecutorShouldFallbackToSupportedToolKeyWhenPlannerCandidateIsInvalid() {
+        AiExecutionPlan plan = new AiExecutionPlan(
+                "write",
+                "OA",
+                AiExecutorType.ACTION,
+                List.of("ACTION"),
+                Map.of("businessType", "OA_LEAVE"),
+                "form_preview",
+                true,
+                0.93
+        );
+        AiExecutionContext context = new AiExecutionContext(
+                "conv_1",
+                "usr_1",
+                "帮我发起请假",
+                "OA",
+                "/oa/leave/create",
+                List.of("route:/oa/leave/create")
+        );
+
+        AiExecutionResult result = new AiActionExecutor().execute(plan, context);
+
+        assertThat(result.toolCallRequest()).isNotNull();
+        assertThat(result.toolCallRequest().toolKey()).isEqualTo("process.start");
+    }
+
+    @Test
+    void actionExecutorShouldNormalizeWorkflowInstanceCreateToProcessStart() {
+        AiExecutionPlan plan = new AiExecutionPlan(
+                "write",
+                "OA",
+                AiExecutorType.ACTION,
+                List.of("workflow.instance.create"),
+                Map.of("businessType", "OA_LEAVE"),
+                "form_preview",
+                true,
+                0.93
+        );
+        AiExecutionContext context = new AiExecutionContext(
+                "conv_1",
+                "usr_1",
+                "帮我发起请假",
+                "OA",
+                "/oa/leave/create",
+                List.of("route:/oa/leave/create")
+        );
+
+        AiExecutionResult result = new AiActionExecutor().execute(plan, context);
+
+        assertThat(result.toolCallRequest()).isNotNull();
+        assertThat(result.toolCallRequest().toolKey()).isEqualTo("process.start");
+    }
 }

@@ -86,20 +86,38 @@ export function WorkbenchScreen() {
   return (
     <ScreenShell
       title="工作台"
-      description="待办、已办和我发起的审批在移动端先收成高频查看与处理链。"
+      description="先看最需要你处理的，再决定是否进入详细审批链。"
     >
-      <View style={styles.summaryRow}>
-        <MetricCard
-          label="今日待办"
-          value={`${summaryQuery.data?.todoTodayCount ?? 0}`}
-        />
-        <MetricCard
-          label="已办审批"
-          value={`${summaryQuery.data?.doneApprovalCount ?? 0}`}
-        />
+      <View style={styles.heroCard}>
+        <View style={styles.heroGlow} />
+        <View style={styles.heroRibbon}>
+          <Text style={styles.heroRibbonText}>Today Focus</Text>
+        </View>
+        <View style={styles.heroHeader}>
+          <View style={styles.heroMain}>
+            <Text style={styles.heroTitle}>先处理待办</Text>
+            <Text style={styles.heroBody}>今天最值得先看的，是还在等你动作的审批单。</Text>
+          </View>
+          <View style={styles.heroCountBadge}>
+            <Text style={styles.heroCountLabel}>待办</Text>
+            <Text style={styles.heroCountValue}>{summaryQuery.data?.todoTodayCount ?? 0}</Text>
+          </View>
+        </View>
+        <View style={styles.summaryRow}>
+          <MetricCard
+            label="已办"
+            value={`${summaryQuery.data?.doneApprovalCount ?? 0}`}
+            hint="已经处理"
+          />
+          <MetricCard
+            label="处理率"
+            value={summaryQuery.data?.todoTodayCount ? `${Math.min(99, Math.round(((summaryQuery.data?.doneApprovalCount ?? 0) / Math.max((summaryQuery.data?.doneApprovalCount ?? 0) + (summaryQuery.data?.todoTodayCount ?? 0), 1)) * 100))}%` : `${Math.min(99, Math.round(((summaryQuery.data?.doneApprovalCount ?? 0) / Math.max((summaryQuery.data?.doneApprovalCount ?? 0) + 1, 1)) * 100))}%`}
+            hint="今日节奏"
+          />
+        </View>
       </View>
 
-      <View style={styles.segmentRow}>
+      <View style={styles.segmentWrap}>
         {(['TODO', 'DONE', 'INITIATED'] as WorkbenchView[]).map((item) => (
           <Pressable
             key={item}
@@ -128,7 +146,7 @@ export function WorkbenchScreen() {
       ) : (
         <SectionCard
           title={resolveViewLabel(view)}
-          description="默认读取 10 条高频记录，详情页可继续查看回顾、动作和流程图。"
+          description="只保留 10 条高频记录，轻点一条进入完整审批详情。"
         >
           {records.length === 0 ? (
             <Text style={styles.emptyText}>当前没有记录。</Text>
@@ -151,22 +169,30 @@ export function WorkbenchScreen() {
                 style={styles.recordCard}
               >
                 <View style={styles.recordHeader}>
-                  <Text style={styles.recordTitle} numberOfLines={1}>
-                    {item.processName}
-                  </Text>
+                  <View style={styles.recordIcon}>
+                    <Text style={styles.recordIconText}>WF</Text>
+                  </View>
+                  <View style={styles.recordHeaderText}>
+                    <Text style={styles.recordTitle} numberOfLines={1}>
+                      {item.processName}
+                    </Text>
+                    <Text style={styles.recordSubtitle} numberOfLines={2}>
+                      {'nodeName' in item
+                        ? item.nodeName
+                        : item.currentNodeName || item.businessTitle || '暂无节点名称'}
+                    </Text>
+                  </View>
                   <StatusBadge
                     label={resolveRecordStatus(item)}
                     tone={resolveRecordTone(item)}
                   />
                 </View>
-                <Text style={styles.recordSubtitle} numberOfLines={2}>
-                  {'nodeName' in item
-                    ? item.nodeName
-                    : item.currentNodeName || item.businessTitle || '暂无节点名称'}
-                </Text>
-                <Text style={styles.recordHint}>
-                  {'updatedAt' in item ? `更新时间 ${formatShortTime(item.updatedAt)}` : ''}
-                </Text>
+                <View style={styles.recordFooter}>
+                  <Text style={styles.recordHint}>
+                    {'updatedAt' in item ? `更新于 ${formatShortTime(item.updatedAt)}` : ''}
+                  </Text>
+                  <Text style={styles.recordChevron}>›</Text>
+                </View>
               </Pressable>
             ))
           )}
@@ -176,9 +202,18 @@ export function WorkbenchScreen() {
   )
 }
 
-function MetricCard({ label, value }: { label: string; value: string }) {
+function MetricCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string
+  value: string
+  hint: string
+}) {
   return (
     <View style={styles.metricCard}>
+      <Text style={styles.metricHint}>{hint}</Text>
       <Text style={styles.metricValue}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
@@ -233,77 +268,215 @@ function formatShortTime(value: string) {
 }
 
 const styles = StyleSheet.create({
-  summaryRow: {
+  heroCard: {
+    overflow: 'hidden',
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    padding: 18,
+    gap: 16,
+    shadowColor: '#97A1CC',
+    shadowOpacity: 0.16,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 18 },
+  },
+  heroGlow: {
+    position: 'absolute',
+    top: -42,
+    right: -26,
+    width: 210,
+    height: 210,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.76)',
+  },
+  heroRibbon: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: 'rgba(24,28,43,0.92)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  heroRibbonText: {
+    color: '#F7F8FC',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  heroHeader: {
     flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
     gap: 12,
   },
-  metricCard: {
+  heroMain: {
     flex: 1,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#E4DCCF',
-    backgroundColor: '#FFFCF7',
-    padding: 18,
   },
-  metricValue: {
-    color: '#171312',
-    fontSize: 28,
+  heroTitle: {
+    color: '#181C2B',
+    fontSize: 30,
     fontWeight: '800',
+    letterSpacing: -0.9,
+    marginTop: 2,
+    maxWidth: 180,
   },
-  metricLabel: {
-    color: '#75695E',
+  heroCountBadge: {
+    minWidth: 96,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.84)',
+    backgroundColor: 'rgba(255,255,255,0.68)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroCountLabel: {
+    color: '#7B7590',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  heroCountValue: {
+    color: '#1A2030',
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
     marginTop: 4,
   },
-  segmentRow: {
+  heroBody: {
+    color: '#615D73',
+    lineHeight: 22,
+    maxWidth: 220,
+    marginTop: 10,
+  },
+  summaryRow: {
     flexDirection: 'row',
     gap: 10,
   },
+  metricCard: {
+    flex: 1,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.48)',
+    padding: 14,
+    shadowColor: '#7784C4',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+  },
+  metricHint: {
+    color: '#807B8E',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  metricValue: {
+    color: '#171B29',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -1,
+    marginTop: 10,
+  },
+  metricLabel: {
+    color: '#5D5870',
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  segmentWrap: {
+    flexDirection: 'row',
+    gap: 6,
+    alignSelf: 'stretch',
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.32)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.64)',
+    padding: 5,
+  },
   segmentButton: {
-    borderRadius: 999,
-    backgroundColor: '#EFE8DE',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    borderRadius: 18,
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 13,
   },
   segmentButtonActive: {
-    backgroundColor: '#171312',
+    backgroundColor: 'rgba(24,28,43,0.96)',
+    shadowColor: '#1A2030',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
   },
   segmentLabel: {
-    color: '#5E564F',
+    color: '#666277',
     fontWeight: '700',
   },
   segmentLabelActive: {
     color: '#FFFFFF',
   },
   recordCard: {
-    borderRadius: 18,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#ECE3D8',
-    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'rgba(255,255,255,0.76)',
     padding: 14,
-    gap: 8,
+    gap: 12,
   },
   recordHeader: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  recordIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(216,229,255,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  recordIconText: {
+    color: '#2B63BD',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  recordHeaderText: {
+    flex: 1,
+    gap: 6,
   },
   recordTitle: {
-    flex: 1,
-    color: '#171312',
+    color: '#171B29',
     fontSize: 16,
     fontWeight: '700',
+    letterSpacing: -0.3,
   },
   recordSubtitle: {
-    color: '#473E37',
-    lineHeight: 20,
+    color: '#67627A',
+    lineHeight: 19,
+  },
+  recordFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   recordHint: {
-    color: '#887C71',
+    color: '#8C889D',
     fontSize: 12,
+    fontWeight: '500',
+  },
+  recordChevron: {
+    color: '#A29DB2',
+    fontSize: 22,
+    lineHeight: 22,
   },
   emptyText: {
-    color: '#7B6F63',
+    color: '#767286',
     lineHeight: 20,
   },
 })

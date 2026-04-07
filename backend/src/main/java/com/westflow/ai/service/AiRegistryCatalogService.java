@@ -201,6 +201,52 @@ public class AiRegistryCatalogService {
                 .toList();
     }
 
+    /**
+     * 生成技能的简要说明，供功能说明类工具直接复用。
+     */
+    public String summarizeSkill(AiSkillCatalogItem item) {
+        if (item == null) {
+            return "";
+        }
+        String content = item.content();
+        if (content != null && !content.isBlank()) {
+            for (String rawLine : content.split("\\R")) {
+                String line = rawLine == null ? "" : rawLine.trim();
+                if (line.isBlank() || line.startsWith("#") || line.startsWith("-")) {
+                    continue;
+                }
+                return shortenSummary(line);
+            }
+        }
+        if (!item.triggerKeywords().isEmpty()) {
+            return "%s，适合处理%s等问题。".formatted(
+                    item.skillName(),
+                    String.join("、", item.triggerKeywords().stream().limit(3).toList())
+            );
+        }
+        return item.skillName();
+    }
+
+    /**
+     * 生成工具的简要说明，供功能目录回答直接复用。
+     */
+    public String summarizeTool(AiToolCatalogItem item) {
+        if (item == null) {
+            return "";
+        }
+        String description = readString(item.metadata(), "description", "");
+        if (!description.isBlank()) {
+            return shortenSummary(description);
+        }
+        if (!item.triggerKeywords().isEmpty()) {
+            return "%s，适合处理%s等问题。".formatted(
+                    item.toolName(),
+                    String.join("、", item.triggerKeywords().stream().limit(3).toList())
+            );
+        }
+        return item.toolName();
+    }
+
     private AiAgentCatalogItem toAgentCatalogItem(AiRegistryMapper.AiAgentRegistryRow row) {
         Map<String, Object> metadata = parseMetadata(row.metadataJson());
         List<String> supportedDomains = readStringList(metadata, "businessDomains");
@@ -342,12 +388,14 @@ public class AiRegistryCatalogService {
             String normalizedRoutePath,
             List<String> skillIds
     ) {
-        int score = item.priority();
+        int score = 0;
+        boolean matched = false;
         if (skillIds != null && !skillIds.isEmpty()) {
             boolean skillMatched = skillIds.stream().anyMatch(skillId -> item.triggerKeywords().stream()
                     .anyMatch(keyword -> keyword.equalsIgnoreCase(skillId)));
             if (skillMatched) {
                 score += 60;
+                matched = true;
             }
         }
         if (!normalizedContent.isBlank()) {
@@ -356,6 +404,7 @@ public class AiRegistryCatalogService {
                     .anyMatch(normalizedContent::contains);
             if (keywordMatched) {
                 score += 40;
+                matched = true;
             }
         }
         if (!normalizedRoutePath.isBlank()) {
@@ -364,9 +413,18 @@ public class AiRegistryCatalogService {
                     .anyMatch(normalizedRoutePath::startsWith);
             if (routeMatched) {
                 score += 20;
+                matched = true;
             }
         }
-        return score;
+        return matched ? score + item.priority() : 0;
+    }
+
+    private String shortenSummary(String text) {
+        String normalized = text == null ? "" : text.trim();
+        if (normalized.isBlank()) {
+            return "";
+        }
+        return normalized.length() > 72 ? normalized.substring(0, 72) + "…" : normalized;
     }
 
     private String inferAgentRouteMode(String agentCode) {

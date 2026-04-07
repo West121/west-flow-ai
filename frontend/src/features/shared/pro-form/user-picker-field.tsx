@@ -203,47 +203,53 @@ export function UserPickerField({
             onValueChange={setKeyword}
             placeholder='搜索姓名、账号、部门或岗位'
           />
-          <CommandList className='max-h-[320px] overflow-y-auto'>
+          <CommandList className='max-h-none overflow-visible'>
             <CommandEmpty>未找到匹配人员</CommandEmpty>
-            <CommandGroup heading='人员列表'>
-              {options.map((option) => {
-                const active = option.userId === value
-                return (
-                  <CommandItem
-                    key={option.userId}
-                    value={[
-                      option.displayName,
-                      option.username,
-                      option.userId,
-                      option.departmentName,
-                      option.postName,
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onSelect={() => {
-                      onChange(option.userId)
-                      setOpen(false)
-                    }}
-                    className='items-start py-3'
-                  >
-                    <span
-                      className={cn(
-                        'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border',
-                        active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30'
-                      )}
-                    >
-                      {active ? <Check className='size-3' /> : null}
-                    </span>
-                    <span className='flex min-w-0 flex-1 flex-col gap-1'>
-                      <span className='truncate text-sm font-medium'>{option.displayName}</span>
-                      <span className='truncate text-xs text-muted-foreground'>
-                        {describeUser(option) || option.userId}
-                      </span>
-                    </span>
-                  </CommandItem>
-                )
-              })}
-            </CommandGroup>
+            <div
+              className='h-80 overflow-y-auto overscroll-contain'
+              onWheelCapture={(event) => event.stopPropagation()}
+              onTouchMoveCapture={(event) => event.stopPropagation()}
+            >
+                <CommandGroup heading='人员列表'>
+                  {options.map((option) => {
+                    const active = option.userId === value
+                    return (
+                      <CommandItem
+                        key={option.userId}
+                        value={[
+                          option.displayName,
+                          option.username,
+                          option.userId,
+                          option.departmentName,
+                          option.postName,
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        onSelect={() => {
+                          onChange(option.userId)
+                          setOpen(false)
+                        }}
+                        className='items-start py-3'
+                      >
+                        <span
+                          className={cn(
+                            'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-sm border',
+                            active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30'
+                          )}
+                        >
+                          {active ? <Check className='size-3' /> : null}
+                        </span>
+                        <span className='flex min-w-0 flex-1 flex-col gap-1'>
+                          <span className='truncate text-sm font-medium'>{option.displayName}</span>
+                          <span className='truncate text-xs text-muted-foreground'>
+                            {describeUser(option) || option.userId}
+                          </span>
+                        </span>
+                      </CommandItem>
+                    )
+                  })}
+                </CommandGroup>
+            </div>
           </CommandList>
         </Command>
       </PopoverContent>

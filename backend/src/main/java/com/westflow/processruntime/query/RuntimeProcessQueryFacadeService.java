@@ -69,6 +69,11 @@ public class RuntimeProcessQueryFacadeService {
         return runtimeApprovalSheetQueryService.pageApprovalSheets(request, actionSupportService.currentUserId());
     }
 
+    public PageResponse<ApprovalSheetListItemResponse> pageApprovalSheets(ApprovalSheetPageRequest request, String userId) {
+        String effectiveUserId = userId == null || userId.isBlank() ? actionSupportService.currentUserId() : userId;
+        return runtimeApprovalSheetQueryService.pageApprovalSheets(request, effectiveUserId);
+    }
+
     public WorkbenchDashboardSummaryResponse dashboardSummary() {
         String currentUserId = actionSupportService.currentUserId();
         java.time.LocalDate today = OffsetDateTime.now(TIME_ZONE).toLocalDate();
@@ -80,6 +85,11 @@ public class RuntimeProcessQueryFacadeService {
     }
 
     public ProcessTaskDetailResponse detail(String taskId) {
+        return detail(taskId, null);
+    }
+
+    public ProcessTaskDetailResponse detail(String taskId, String userId) {
+        String effectiveUserId = userId == null || userId.isBlank() ? actionSupportService.currentUserId() : userId;
         Task activeTask = flowableEngineFacade.taskService().createTaskQuery().taskId(taskId).singleResult();
         if (activeTask != null) {
             String processInstanceId = activeTask.getProcessInstanceId();
@@ -89,8 +99,8 @@ public class RuntimeProcessQueryFacadeService {
                     null,
                     null,
                     true,
-                    subprocessLinks(processInstanceId),
-                    appendLinks(processInstanceId)
+                    subprocessLinks(processInstanceId, effectiveUserId),
+                    appendLinks(processInstanceId, effectiveUserId)
             );
         }
         HistoricTaskInstance historicTask = flowableEngineFacade.historyService()
@@ -107,8 +117,8 @@ public class RuntimeProcessQueryFacadeService {
                 historicTask,
                 null,
                 false,
-                subprocessLinks(processInstanceId),
-                appendLinks(processInstanceId)
+                subprocessLinks(processInstanceId, effectiveUserId),
+                appendLinks(processInstanceId, effectiveUserId)
         );
     }
 
@@ -251,11 +261,19 @@ public class RuntimeProcessQueryFacadeService {
 
     public List<RuntimeAppendLinkResponse> appendLinks(String instanceId) {
         runtimeProcessMetadataService.requireHistoricProcessInstance(instanceId);
-        return runtimeProcessLinkQueryService.appendLinks(instanceId, actionSupportService.currentUserId());
+        return appendLinks(instanceId, actionSupportService.currentUserId());
     }
 
     private List<ProcessInstanceLinkResponse> subprocessLinks(String instanceId) {
-        return runtimeProcessLinkQueryService.subprocessLinks(instanceId, actionSupportService.currentUserId());
+        return subprocessLinks(instanceId, actionSupportService.currentUserId());
+    }
+
+    private List<RuntimeAppendLinkResponse> appendLinks(String instanceId, String userId) {
+        return runtimeProcessLinkQueryService.appendLinks(instanceId, userId);
+    }
+
+    private List<ProcessInstanceLinkResponse> subprocessLinks(String instanceId, String userId) {
+        return runtimeProcessLinkQueryService.subprocessLinks(instanceId, userId);
     }
 
     private boolean isBlockingTask(Task task) {

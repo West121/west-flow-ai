@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useTheme } from '@/context/theme-provider'
+import { cn } from '@/lib/utils'
 import { ApprovalTagList, ApprovalUserTag } from './approval-actor-tags'
 import {
   type WorkbenchFlowEdge,
@@ -43,6 +44,7 @@ type ApprovalSheetGraphProps = {
   instanceEvents: WorkbenchProcessInstanceEvent[]
   instanceStatus?: string | null
   userDisplayNames?: Record<string, string> | null
+  compatibilityMode?: 'default' | 'weapp'
 }
 
 type PlaybackEvent = {
@@ -66,6 +68,39 @@ type TraversalState = {
   visitedEdgeIds: Set<string>
   activeEdgeIds: Set<string>
 }
+
+const compatPreviewStatusClassNames = {
+  ACTIVE: {
+    card: 'border-sky-300 bg-sky-50/90 shadow-sm',
+    badge: 'bg-sky-500/12 text-sky-700',
+  },
+  COMPLETED: {
+    card: 'border-emerald-300 bg-emerald-50/90 shadow-sm',
+    badge: 'bg-emerald-500/12 text-emerald-700',
+  },
+  VISITED: {
+    card: 'border-emerald-300 bg-emerald-50/90 shadow-sm',
+    badge: 'bg-emerald-500/12 text-emerald-700',
+  },
+} as const
+
+const compatKindBadgeLabels = {
+  start: '开始',
+  approver: '审批',
+  subprocess: '子流程',
+  condition: '排他',
+  inclusive: '包容',
+  'dynamic-builder': '动态构建',
+  parallel: '并行',
+  cc: '抄送',
+  supervise: '督办',
+  meeting: '会办',
+  read: '阅办',
+  circulate: '传阅',
+  timer: '定时',
+  trigger: '触发',
+  end: '结束',
+} as const
 
 // 回顾优先使用实例事件；如果后端没有给足事件，再回退到任务轨迹。
 // 先从实例事件构造播放序列，不够时再回退到任务轨迹。
@@ -196,6 +231,28 @@ function eventOccurredAt(event: PlaybackEvent, traceItem: WorkbenchTaskTraceItem
     ?? traceItem?.receiveTime
     ?? event.occurredAt
   )
+}
+
+function resolveTimelineDotTone(event: PlaybackEvent, traceItem: WorkbenchTaskTraceItem | null) {
+  const status = traceItem?.status ?? null
+
+  if (status === 'PENDING' || status === 'PENDING_CLAIM' || traceItem?.handleStartTime || traceItem?.receiveTime) {
+    return 'bg-sky-500 ring-sky-500/12'
+  }
+
+  if (status === 'REJECTED' || status === 'RETURNED' || status === 'TAKEN_BACK') {
+    return 'bg-amber-500 ring-amber-500/12'
+  }
+
+  if (
+    status === 'REVOKED' ||
+    event.eventType === 'INSTANCE_REVOKED' ||
+    event.eventType === 'INSTANCE_TERMINATED'
+  ) {
+    return 'bg-rose-500 ring-rose-500/12'
+  }
+
+  return 'bg-emerald-500 ring-emerald-500/10'
 }
 
 function buildTimelineEntries(
@@ -388,6 +445,7 @@ function ApprovalSheetGraphInner({
   instanceEvents,
   instanceStatus,
   userDisplayNames,
+  compatibilityMode = 'default',
 }: ApprovalSheetGraphProps) {
   const [mode, setMode] = useState<'idle' | 'playing' | 'paused'>('idle')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -641,6 +699,89 @@ function ApprovalSheetGraphInner({
     [flowEdges, mode, traversalState.activeEdgeIds, traversalState.visitedEdgeIds]
   )
 
+  const compatGraph = useMemo(() => {
+    const positionedNodes = flowNodes.map((node) => {
+      const width = Math.max(node.ui?.width ?? 220, 220)
+      const height = Math.max(node.ui?.height ?? 88, 88)
+      const isActive =
+        node.id === activeNodeId &&
+        (mode === 'playing' ||
+          (instanceStatus !== 'COMPLETED' &&
+            instanceStatus !== 'REVOKED' &&
+            instanceStatus !== 'TERMINATED'))
+      const isCompleted = completedNodeIds.has(node.id)
+      const isVisited = visitedNodeIds.has(node.id)
+
+      return {
+        ...node,
+        width,
+        height,
+        previewStatus: isActive
+          ? 'ACTIVE'
+          : isCompleted
+            ? 'COMPLETED'
+            : isVisited
+              ? 'VISITED'
+              : 'IDLE',
+      } as const
+    })
+
+    const minX = Math.min(...positionedNodes.map((node) => node.position.x), 0)
+    const minY = Math.min(...positionedNodes.map((node) => node.position.y), 0)
+    const maxX = Math.max(...positionedNodes.map((node) => node.position.x + node.width), 0)
+    const maxY = Math.max(...positionedNodes.map((node) => node.position.y + node.height), 0)
+    const padding = 32
+    const width = maxX - minX + padding * 2
+    const height = maxY - minY + padding * 2
+    const normalizedNodes = positionedNodes.map((node) => ({
+      ...node,
+      left: node.position.x - minX + padding,
+      top: node.position.y - minY + padding,
+    }))
+    const nodeMap = new Map(normalizedNodes.map((node) => [node.id, node]))
+
+    const compatEdges = flowEdges
+      .map((edge) => {
+        const source = nodeMap.get(edge.source)
+        const target = nodeMap.get(edge.target)
+        if (!source || !target) {
+          return null
+        }
+        const startX = source.left + source.width / 2
+        const startY = source.top + source.height
+        const endX = target.left + target.width / 2
+        const endY = target.top
+        const midY = startY + (endY - startY) / 2
+        const d = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`
+        const isActive = mode === 'playing' && traversalState.activeEdgeIds.has(edge.id)
+        const isTraversed = traversalState.visitedEdgeIds.has(edge.id)
+        return {
+          id: edge.id,
+          d,
+          color: isActive ? '#2563eb' : isTraversed ? '#16a34a' : '#94a3b8',
+          width: isActive ? 3 : isTraversed ? 2.4 : 1.6,
+        }
+      })
+      .filter(Boolean)
+
+    return {
+      width,
+      height,
+      nodes: normalizedNodes,
+      edges: compatEdges,
+    }
+  }, [
+    activeNodeId,
+    completedNodeIds,
+    flowEdges,
+    flowNodes,
+    instanceStatus,
+    mode,
+    traversalState.activeEdgeIds,
+    traversalState.visitedEdgeIds,
+    visitedNodeIds,
+  ])
+
   return (
     <Card>
       <CardHeader>
@@ -692,28 +833,98 @@ function ApprovalSheetGraphInner({
 
         <div className='space-y-4'>
           <div className='min-w-0 overflow-hidden rounded-2xl border bg-background/80'>
-            <div className='h-[460px] min-w-0'>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                nodeTypes={previewNodeTypes}
-                onInit={setFlowInstance}
-                fitView
-                fitViewOptions={{ padding: 0.18 }}
-                minZoom={0.45}
-                maxZoom={1.5}
-                nodesDraggable={false}
-                nodesConnectable={false}
-                elementsSelectable={false}
-                panOnDrag
-                zoomOnDoubleClick={false}
-                colorMode={resolvedTheme}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Controls showInteractive={false} position='bottom-left' />
-                <Background variant={BackgroundVariant.Dots} gap={18} size={1.1} />
-              </ReactFlow>
-            </div>
+            {compatibilityMode === 'weapp' ? (
+              <div className='max-h-[460px] overflow-auto p-4'>
+                <div
+                  className='relative mx-auto rounded-2xl bg-slate-50/90'
+                  style={{ width: compatGraph.width, height: compatGraph.height }}
+                >
+                  <svg
+                    className='absolute inset-0'
+                    width={compatGraph.width}
+                    height={compatGraph.height}
+                    viewBox={`0 0 ${compatGraph.width} ${compatGraph.height}`}
+                    fill='none'
+                  >
+                    {compatGraph.edges.map((edge) => (
+                      <path
+                        key={edge.id}
+                        d={edge.d}
+                        stroke={edge.color}
+                        strokeWidth={edge.width}
+                        strokeLinecap='round'
+                        fill='none'
+                      />
+                    ))}
+                  </svg>
+                  {compatGraph.nodes.map((node) => {
+                    const previewClasses =
+                      node.previewStatus !== 'IDLE'
+                        ? compatPreviewStatusClassNames[node.previewStatus]
+                        : null
+                    const nodeKind = resolvePreviewNodeKind(node.type)
+                    const badgeLabel =
+                      resolveApprovalSheetCollaborationNodeLabel(nodeKind) !== nodeKind
+                        ? resolveApprovalSheetCollaborationNodeLabel(nodeKind)
+                        : compatKindBadgeLabels[nodeKind]
+
+                    return (
+                      <div
+                        key={node.id}
+                        className={cn(
+                          'absolute rounded-2xl border bg-white/95 px-4 py-3 shadow-sm',
+                          previewClasses?.card
+                        )}
+                        style={{
+                          left: node.left,
+                          top: node.top,
+                          width: node.width,
+                          minHeight: node.height,
+                        }}
+                      >
+                        <div className='flex items-start justify-between gap-3'>
+                          <div className='space-y-1'>
+                            <div className='text-sm font-semibold text-slate-900'>{node.name}</div>
+                            <div className='text-xs text-slate-500'>{node.id}</div>
+                          </div>
+                          <span
+                            className={cn(
+                              'rounded-full px-2 py-0.5 text-[11px] font-medium',
+                              previewClasses?.badge ?? 'bg-slate-100 text-slate-700'
+                            )}
+                          >
+                            {badgeLabel}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className='h-[460px] min-w-0'>
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  nodeTypes={previewNodeTypes}
+                  onInit={setFlowInstance}
+                  fitView
+                  fitViewOptions={{ padding: 0.18 }}
+                  minZoom={0.45}
+                  maxZoom={1.5}
+                  nodesDraggable={false}
+                  nodesConnectable={false}
+                  elementsSelectable={false}
+                  panOnDrag
+                  zoomOnDoubleClick={false}
+                  colorMode={resolvedTheme}
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Controls showInteractive={false} position='bottom-left' />
+                  <Background variant={BackgroundVariant.Dots} gap={18} size={1.1} />
+                </ReactFlow>
+              </div>
+            )}
           </div>
 
           <div className='min-w-0 rounded-lg border bg-muted/10 p-4'>
@@ -742,6 +953,7 @@ function ApprovalSheetGraphInner({
                     const active = traceItem?.taskId
                       ? traceItem.taskId === activePlaybackEvent?.taskId
                       : event.id === activePlaybackEvent?.id
+                    const dotToneClass = resolveTimelineDotTone(event, traceItem)
                     const flowNode = flowNodeMap.get(traceItem?.nodeId ?? event.nodeId)
                     const collaborationNodeLabel = flowNode
                       ? resolveApprovalSheetCollaborationNodeLabel(flowNode.type)
@@ -774,10 +986,10 @@ function ApprovalSheetGraphInner({
                         </div>
                         <div className='flex flex-col items-center'>
                           <span
-                            className={`mt-1 size-3 rounded-full border-2 border-background shadow-sm ring-4 ${
+                            className={`mt-1 size-3 rounded-full border-2 shadow-sm ring-4 ${dotToneClass} ${
                               active
-                                ? 'bg-sky-500 ring-sky-500/15'
-                                : 'bg-emerald-500 ring-emerald-500/10'
+                                ? 'border-slate-900/70 scale-110'
+                                : 'border-background'
                             }`}
                           />
                           {index < timelineItems.length - 1 ? (
