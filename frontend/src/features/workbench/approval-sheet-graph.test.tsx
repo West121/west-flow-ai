@@ -161,6 +161,7 @@ describe('ApprovalSheetGraph', () => {
       historicalSampleSize: 12,
       overdueRiskLevel: 'HIGH',
       confidence: 'HIGH',
+      predictedRiskThresholdTime: '2026-04-03T13:30:00+08:00',
       topDelayReasons: ['当前节点停留时间已经超过历史 75 分位。'],
       nextNodeCandidates: [
         {
@@ -169,6 +170,9 @@ describe('ApprovalSheetGraph', () => {
           probability: 0.82,
           hitCount: 9,
           medianDurationMinutes: 45,
+          riskWeight: 82,
+          sortOrder: 1,
+          pathConfidence: 'HIGH',
         },
       ],
     }

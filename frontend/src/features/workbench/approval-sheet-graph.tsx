@@ -623,6 +623,16 @@ function ApprovalSheetGraphInner({
   )
 
   const predictedRiskLevel = (prediction?.overdueRiskLevel ?? '').toUpperCase()
+  const predictedPathEdgeIds = useMemo(() => {
+    if (!activeNodeId || predictedNextNodeIds.size === 0) {
+      return new Set<string>()
+    }
+    const next = new Set<string>()
+    predictedNextNodeIds.forEach((nodeId) => {
+      findPathEdgeIds(flowEdges, activeNodeId, nodeId).forEach((edgeId) => next.add(edgeId))
+    })
+    return next
+  }, [activeNodeId, flowEdges, predictedNextNodeIds])
 
   const nodes = useMemo<Node[]>(
     () =>
@@ -708,11 +718,12 @@ function ApprovalSheetGraphInner({
         const isTraversed = traversalState.visitedEdgeIds.has(edge.id)
         const isPlaying = mode === 'playing'
         const isPredictedNextEdge = predictedNextNodeIds.has(edge.target) && !isActive && !isTraversed
+        const isPredictedPathEdge = predictedPathEdgeIds.has(edge.id) && !isActive && !isTraversed
         const edgeColor = isActive
           ? '#2563eb'
           : isTraversed
             ? '#16a34a'
-            : isPredictedNextEdge
+            : isPredictedNextEdge || isPredictedPathEdge
               ? '#8b5cf6'
               : '#94a3b8'
 
@@ -725,20 +736,20 @@ function ApprovalSheetGraphInner({
             borderRadius: 18,
             offset: 18,
           },
-          animated: isPlaying && (isActive || isTraversed || isPredictedNextEdge),
+          animated: isPlaying && (isActive || isTraversed || isPredictedNextEdge || isPredictedPathEdge),
           markerEnd: {
             type: MarkerType.ArrowClosed,
             color: edgeColor,
           },
           style: {
-            strokeWidth: isActive ? 2.6 : isTraversed ? 2 : isPredictedNextEdge ? 2 : 1.5,
-            strokeDasharray: isPlaying && (isActive || isTraversed || isPredictedNextEdge) ? '7 5' : undefined,
+            strokeWidth: isActive ? 2.6 : isTraversed ? 2 : isPredictedNextEdge ? 2.2 : isPredictedPathEdge ? 1.8 : 1.5,
+            strokeDasharray: isPlaying && (isActive || isTraversed || isPredictedNextEdge || isPredictedPathEdge) ? '7 5' : undefined,
             strokeLinecap: 'round',
             stroke: edgeColor,
           },
         }
       }),
-    [flowEdges, mode, predictedNextNodeIds, traversalState.activeEdgeIds, traversalState.visitedEdgeIds]
+    [flowEdges, mode, predictedNextNodeIds, predictedPathEdgeIds, traversalState.activeEdgeIds, traversalState.visitedEdgeIds]
   )
 
   const compatGraph = useMemo(() => {
@@ -799,11 +810,12 @@ function ApprovalSheetGraphInner({
         const d = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`
         const isActive = mode === 'playing' && traversalState.activeEdgeIds.has(edge.id)
         const isTraversed = traversalState.visitedEdgeIds.has(edge.id)
+        const isPredictedPath = predictedPathEdgeIds.has(edge.id) && !isActive && !isTraversed
         return {
           id: edge.id,
           d,
-          color: isActive ? '#2563eb' : isTraversed ? '#16a34a' : '#94a3b8',
-          width: isActive ? 3 : isTraversed ? 2.4 : 1.6,
+          color: isActive ? '#2563eb' : isTraversed ? '#16a34a' : isPredictedPath ? '#8b5cf6' : '#94a3b8',
+          width: isActive ? 3 : isTraversed ? 2.4 : isPredictedPath ? 2 : 1.6,
         }
       })
       .filter(Boolean)
@@ -823,6 +835,7 @@ function ApprovalSheetGraphInner({
     mode,
     traversalState.activeEdgeIds,
     traversalState.visitedEdgeIds,
+    predictedPathEdgeIds,
     predictedNextNodeIds,
     visitedNodeIds,
   ])
@@ -889,6 +902,9 @@ function ApprovalSheetGraphInner({
           ) : null}
           {prediction?.nextNodeCandidates?.length ? (
             <Badge variant='outline'>候选下一节点 {prediction.nextNodeCandidates.length}</Badge>
+          ) : null}
+          {predictedPathEdgeIds.size > 0 ? (
+            <Badge variant='outline'>预测路径 {predictedPathEdgeIds.size} 段</Badge>
           ) : null}
         </div>
 

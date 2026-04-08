@@ -11,11 +11,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
+  AlertCircle,
   ArrowLeft,
   CheckCircle2,
   Clock3,
   Loader2,
-  Play,
   Sparkles,
   Undo2,
   UserCheck2,
@@ -1344,12 +1344,10 @@ type HandoverTaskFormValues = z.input<typeof handoverTaskSchema>
 
 // 工作台首页只负责把待办、已办和统计卡片串起来。
 export function Dashboard() {
-  const currentUser = useAuthStore((state) => state.currentUser)
   const summaryQuery = useQuery({
     queryKey: ['workbench', 'dashboard-summary'],
     queryFn: () => getWorkbenchDashboardSummary(),
   })
-  const aiCapabilityCount = currentUser?.aiCapabilities?.length ?? 0
   const renderSummaryValue = (value: number) =>
     summaryQuery.isLoading ? '...' : summaryQuery.isError ? '--' : String(value)
 
@@ -1387,10 +1385,10 @@ export function Dashboard() {
             icon: Clock3,
           },
           {
-            title: '流程发起',
-            value: String(WORKBENCH_START_ENTRIES.length),
-            description: `当前工作台可直达的发起入口 ${WORKBENCH_START_ENTRIES.length} 个。`,
-            icon: Play,
+            title: '高风险待办',
+            value: renderSummaryValue(summaryQuery.data?.highRiskTodoCount ?? 0),
+            description: '预测超期风险为高的待办数量，可优先调度处理。',
+            icon: AlertCircle,
           },
           {
             title: '已完成审批',
@@ -1399,9 +1397,9 @@ export function Dashboard() {
             icon: CheckCircle2,
           },
           {
-            title: 'AI 入口',
-            value: String(aiCapabilityCount),
-            description: '当前账号可用的 AI 能力数。',
+            title: '预计今日超期',
+            value: renderSummaryValue(summaryQuery.data?.overdueTodayCount ?? 0),
+            description: '预测风险阈值落在今日的待办数量，适合提前催办。',
             icon: Sparkles,
           },
         ].map((item) => (
@@ -1425,7 +1423,7 @@ export function Dashboard() {
           <CardHeader>
             <CardTitle>工作台入口</CardTitle>
             <CardDescription>
-              左侧导航保持中文菜单，工作台只聚焦流程发起、待办处理和运行态回查。
+              左侧导航保持中文菜单，工作台聚焦风险优先调度、流程发起和运行态回查。
             </CardDescription>
           </CardHeader>
           <CardContent className='grid gap-3 sm:grid-cols-2'>
@@ -1444,13 +1442,13 @@ export function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>运行态约束</CardTitle>
-            <CardDescription>先打通最小闭环，再扩展认领、加签、回退、跳转等复杂动作。</CardDescription>
+            <CardTitle>预测运营焦点</CardTitle>
+            <CardDescription>让高风险待办、预计今日超期和流程图回顾形成统一调度闭环。</CardDescription>
           </CardHeader>
           <CardContent className='flex flex-col gap-3 text-sm text-muted-foreground'>
-            <p>1. 待办列表和处理页都走真实接口，不再使用静态占位数据。</p>
-            <p>2. 流程发起页支持提交 JSON 表单数据，发起后直接跳到首个任务。</p>
-            <p>3. 任务详情页会回显实例信息、审批意见和完成状态，便于调试闭环。</p>
+            <p>1. 工作台首页会直接显示高风险待办和预计今日超期数量。</p>
+            <p>2. 待办列表支持高风险筛选与风险优先排序，便于先处理最可能拖期的任务。</p>
+            <p>3. 详情与流程图回顾会给出预测依据、建议动作和候选下一节点。</p>
           </CardContent>
         </Card>
       </div>
@@ -1683,9 +1681,13 @@ export function WorkbenchTodoListPage() {
             hint: '当前页里仍待审批的任务数量。',
           },
           {
-            label: '当前页已完成',
-            value: String(summary.completed),
-            hint: '用于快速确认闭环任务是否已处理。',
+            label: '当前页高风险',
+            value: String(
+              pageData.records.filter(
+                (item) => (item.prediction?.overdueRiskLevel ?? '').toUpperCase() === 'HIGH'
+              ).length
+            ),
+            hint: '当前页预测为高风险的待办数量。',
           },
         ]}
         topContent={
@@ -1728,6 +1730,15 @@ export function WorkbenchTodoListPage() {
             >
               {prioritySortEnabled ? '已按风险优先' : '按风险优先'}
             </Button>
+            <Badge variant='secondary'>
+              今日可能超期 {pageData.records.filter((item) => {
+                const threshold = item.prediction?.predictedRiskThresholdTime
+                if (!threshold) {
+                  return false
+                }
+                return new Date(threshold).toDateString() === new Date().toDateString()
+              }).length}
+            </Badge>
           </div>
         }
         createAction={{

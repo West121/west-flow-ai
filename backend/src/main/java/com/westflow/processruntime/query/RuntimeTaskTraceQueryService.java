@@ -1,6 +1,7 @@
 package com.westflow.processruntime.query;
 
 import com.westflow.flowable.FlowableEngineFacade;
+import com.westflow.processruntime.action.RuntimeTaskActionSupportService;
 import com.westflow.processruntime.api.response.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.response.ProcessTaskTraceItemResponse;
 import com.westflow.processruntime.support.RuntimeProcessMetadataService;
@@ -28,6 +29,7 @@ public class RuntimeTaskTraceQueryService {
     private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
 
     private final FlowableEngineFacade flowableEngineFacade;
+    private final RuntimeTaskActionSupportService runtimeTaskActionSupportService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
@@ -242,13 +244,7 @@ public class RuntimeTaskTraceQueryService {
     }
 
     public Map<String, Object> ensureReadTimeAndReturnLocalVariables(Task task) {
-        Map<String, Object> localVariables = taskLocalVariables(task.getId());
-        if (localVariables.get("westflowReadTime") != null || !"CC".equals(resolveTaskKind(task))) {
-            return localVariables;
-        }
-        OffsetDateTime now = OffsetDateTime.now(TIME_ZONE);
-        flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowReadTime", java.util.Date.from(now.toInstant()));
-        return taskLocalVariables(task.getId());
+        return runtimeTaskActionSupportService.ensureReadTimeAndReturnLocalVariables(task);
     }
 
     public Map<String, Object> historicTaskLocalVariables(String taskId) {

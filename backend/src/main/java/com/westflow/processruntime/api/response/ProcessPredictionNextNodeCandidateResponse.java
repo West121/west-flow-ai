@@ -8,6 +8,9 @@ public record ProcessPredictionNextNodeCandidateResponse(
         String nodeName,
         double probability,
         int hitCount,
-        Long medianDurationMinutes
+        Long medianDurationMinutes,
+        int riskWeight,
+        int sortOrder,
+        String pathConfidence
 ) {
 }

@@ -62,6 +62,17 @@ function ReviewPlayerRoute() {
               <Badge variant='secondary' className='rounded-full px-3 py-1 text-xs'>
                 只读回顾
               </Badge>
+              {detail.prediction?.predictedRiskThresholdTime ? (
+                <Badge variant='outline' className='rounded-full px-3 py-1 text-xs'>
+                  预计风险阈值 {new Intl.DateTimeFormat('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  }).format(new Date(detail.prediction.predictedRiskThresholdTime))}
+                </Badge>
+              ) : null}
             </div>
             <CardDescription className='text-sm text-slate-500'>
               {detail.nodeName} · 实例 {detail.instanceId}

@@ -143,6 +143,9 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("prediction").isObject()).isTrue();
         assertThat(detailBody.path("prediction").path("currentElapsedMinutes").isNumber()).isTrue();
         assertThat(detailBody.path("prediction").path("nextNodeCandidates").isArray()).isTrue();
+        assertThat(detailBody.path("prediction").path("sampleProfile").asText()).isNotBlank();
+        assertThat(detailBody.path("prediction").path("predictedRiskThresholdTime").isTextual()
+                || detailBody.path("prediction").path("predictedRiskThresholdTime").isNull()).isTrue();
 
         JsonNode actionsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
                         .header("Authorization", "Bearer " + managerToken))
