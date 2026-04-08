@@ -7,6 +7,7 @@ import com.westflow.processruntime.api.request.ClaimTaskRequest;
 import com.westflow.processruntime.api.response.BatchTaskActionResponse;
 import com.westflow.processruntime.api.response.ClaimTaskResponse;
 import com.westflow.processruntime.api.response.CompleteTaskResponse;
+import com.westflow.processruntime.query.RuntimeProcessPredictionRefreshService;
 import com.westflow.processruntime.query.RuntimeTaskSupportService;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -28,6 +29,7 @@ public class RuntimeTaskClaimReadService {
     private final RuntimeProcessActionSupportService processActionSupportService;
     private final FlowableTaskActionService flowableTaskActionService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
+    private final RuntimeProcessPredictionRefreshService runtimeProcessPredictionRefreshService;
 
     public CompleteTaskResponse read(String taskId) {
         Task task = taskActionSupportService.requireActiveTask(taskId);
@@ -124,6 +126,7 @@ public class RuntimeTaskClaimReadService {
         }
         flowableTaskActionService.claim(taskId, assigneeUserId);
         Task claimedTask = taskActionSupportService.requireActiveTask(taskId);
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(claimedTask.getProcessInstanceId());
         return new ClaimTaskResponse(
                 claimedTask.getId(),
                 claimedTask.getProcessInstanceId(),

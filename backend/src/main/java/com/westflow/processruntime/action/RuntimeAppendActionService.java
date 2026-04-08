@@ -11,6 +11,7 @@ import com.westflow.processruntime.api.response.AppendTaskResponse;
 import com.westflow.processruntime.api.response.CompleteTaskResponse;
 import com.westflow.processruntime.link.RuntimeAppendLinkService;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
+import com.westflow.processruntime.query.RuntimeProcessPredictionRefreshService;
 import com.westflow.processruntime.query.RuntimeProcessLinkQueryService;
 import com.westflow.processruntime.service.append.DynamicBuildAppendRuntimeService;
 import com.westflow.processruntime.support.RuntimeProcessMetadataService;
@@ -39,6 +40,7 @@ public class RuntimeAppendActionService {
     private final DynamicBuildAppendRuntimeService dynamicBuildAppendRuntimeService;
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
     private final ProcessDefinitionService processDefinitionService;
+    private final RuntimeProcessPredictionRefreshService runtimeProcessPredictionRefreshService;
 
     public CompleteTaskResponse addSign(String taskId, AddSignTaskRequest request) {
         Task task = requireTaskForAction(taskId, "加签");
@@ -90,6 +92,7 @@ public class RuntimeAppendActionService {
                 null,
                 null
         );
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(task.getProcessInstanceId());
         return new CompleteTaskResponse(
                 task.getProcessInstanceId(),
                 taskId,
@@ -198,6 +201,7 @@ public class RuntimeAppendActionService {
                 null,
                 null
         );
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(sourceTask.getProcessInstanceId());
         return new AppendTaskResponse(
                 sourceTask.getProcessInstanceId(),
                 sourceTask.getId(),
@@ -304,6 +308,8 @@ public class RuntimeAppendActionService {
                 null,
                 null
         );
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(sourceTask.getProcessInstanceId());
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(childInstance.getProcessInstanceId());
         return new AppendTaskResponse(
                 sourceTask.getProcessInstanceId(),
                 sourceTask.getId(),

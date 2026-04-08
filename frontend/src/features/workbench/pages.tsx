@@ -78,6 +78,7 @@ import {
   ApprovalUserTag,
 } from '@/features/workbench/approval-actor-tags'
 import { ApprovalPredictionSection } from '@/features/workbench/approval-prediction-section'
+import { ApprovalPredictionDashboard } from '@/features/workbench/approval-prediction-dashboard'
 import {
   ApprovalSheetAutomationActionTimeline,
   ApprovalSheetAutomationStatusCard,
@@ -1417,6 +1418,10 @@ export function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {!summaryQuery.isLoading && !summaryQuery.isError ? (
+        <ApprovalPredictionDashboard summary={summaryQuery.data} />
+      ) : null}
 
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
         <Card>

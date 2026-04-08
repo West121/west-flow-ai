@@ -5,16 +5,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.westflow.processruntime.api.response.ProcessPredictionResponse;
 import java.util.ArrayList;
 import java.util.List;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
 public class RuntimeProcessPredictionAiNarrationService {
+
+    private static final Logger log = LoggerFactory.getLogger(RuntimeProcessPredictionAiNarrationService.class);
 
     private final ObjectProvider<ChatClient> chatClientProvider;
     private final ObjectMapper objectMapper;
@@ -53,8 +55,10 @@ public class RuntimeProcessPredictionAiNarrationService {
                             你是企业流程预测解释助手。
                             只能解释已经给出的预测结果，不得改写任何时间、时长、风险、置信度和候选节点数值。
                             仅输出 JSON，对象结构固定为：
-                            {"explanation":"...","recommendedActions":["...","..."]}
-                            - explanation 用简洁中文解释为什么会有当前风险。
+                            {"narrativeExplanation":"...","bottleneckAttribution":"...","optimizationSuggestions":["...","..."],"recommendedActions":["...","..."]}
+                            - narrativeExplanation 用简洁中文解释为什么会有当前风险。
+                            - bottleneckAttribution 用一句话指出当前主要卡点。
+                            - optimizationSuggestions 最多 3 条，给出流程优化建议。
                             - recommendedActions 最多 3 条，给出可执行催办/预同步建议。
                             - 不要输出 Markdown，不要输出代码块。
                             """)
@@ -71,10 +75,13 @@ public class RuntimeProcessPredictionAiNarrationService {
                             当前已停留（分钟）：%s
                             当前节点历史 p50（分钟）：%s
                             当前节点历史 p75（分钟）：%s
+                            当前节点历史 p90（分钟）：%s
                             预计进入高风险阈值：%s
                             延迟因素：%s
                             候选下一节点：%s
                             现有规则解释：%s
+                            现有瓶颈归因：%s
+                            现有流程优化建议：%s
                             现有建议动作：%s
                             """.formatted(
                             safe(processName),
@@ -89,16 +96,20 @@ public class RuntimeProcessPredictionAiNarrationService {
                             safe(prediction.currentElapsedMinutes()),
                             safe(prediction.currentNodeDurationP50Minutes()),
                             safe(prediction.currentNodeDurationP75Minutes()),
+                            safe(prediction.currentNodeDurationP90Minutes()),
                             safe(prediction.predictedRiskThresholdTime()),
                             safe(prediction.topDelayReasons()),
                             safe(prediction.nextNodeCandidates()),
                             safe(prediction.explanation()),
+                            safe(prediction.bottleneckAttribution()),
+                            safe(prediction.optimizationSuggestions()),
                             safe(prediction.recommendedActions())
                     ))
                     .call()
                     .content();
             JsonNode json = objectMapper.readTree(extractJson(content));
-            String explanation = stringValue(json.path("explanation").asText());
+            String explanation = stringValue(json.path("narrativeExplanation").asText());
+            String bottleneckAttribution = stringValue(json.path("bottleneckAttribution").asText());
             List<String> actions = new ArrayList<>();
             if (json.path("recommendedActions").isArray()) {
                 json.path("recommendedActions").forEach(item -> {
@@ -108,7 +119,16 @@ public class RuntimeProcessPredictionAiNarrationService {
                     }
                 });
             }
-            if (explanation.isBlank() && actions.isEmpty()) {
+            List<String> optimizationSuggestions = new ArrayList<>();
+            if (json.path("optimizationSuggestions").isArray()) {
+                json.path("optimizationSuggestions").forEach(item -> {
+                    String value = stringValue(item.asText());
+                    if (!value.isBlank()) {
+                        optimizationSuggestions.add(value);
+                    }
+                });
+            }
+            if (explanation.isBlank() && bottleneckAttribution.isBlank() && actions.isEmpty() && optimizationSuggestions.isEmpty()) {
                 return prediction;
             }
             return new ProcessPredictionResponse(
@@ -118,15 +138,27 @@ public class RuntimeProcessPredictionAiNarrationService {
                     prediction.currentElapsedMinutes(),
                     prediction.currentNodeDurationP50Minutes(),
                     prediction.currentNodeDurationP75Minutes(),
+                    prediction.currentNodeDurationP90Minutes(),
                     prediction.overdueRiskLevel(),
                     prediction.confidence(),
                     prediction.historicalSampleSize(),
+                    prediction.outlierFilteredSampleSize(),
                     prediction.sampleProfile(),
+                    prediction.sampleTier(),
+                    prediction.workingDayProfile(),
+                    prediction.organizationProfile(),
                     prediction.basisSummary(),
                     prediction.noPredictionReason(),
                     explanation.isBlank() ? prediction.explanation() : explanation,
+                    explanation.isBlank() ? prediction.narrativeExplanation() : explanation,
+                    bottleneckAttribution.isBlank() ? prediction.bottleneckAttribution() : bottleneckAttribution,
                     prediction.topDelayReasons(),
                     actions.isEmpty() ? prediction.recommendedActions() : List.copyOf(actions.stream().distinct().limit(3).toList()),
+                    optimizationSuggestions.isEmpty()
+                            ? prediction.optimizationSuggestions()
+                            : List.copyOf(optimizationSuggestions.stream().distinct().limit(3).toList()),
+                    prediction.automationActions(),
+                    prediction.featureSnapshot(),
                     prediction.nextNodeCandidates()
             );
         } catch (Exception exception) {

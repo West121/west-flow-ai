@@ -141,11 +141,36 @@ export function ApprovalPredictionSection({
           </div>
         </div>
 
+        <div className='grid gap-3 md:grid-cols-4'>
+          <div className='rounded-lg border bg-muted/20 p-4'>
+            <div className='text-xs text-muted-foreground'>样本层级</div>
+            <div className='mt-2 text-sm font-semibold'>{prediction.sampleTier ?? '--'}</div>
+          </div>
+          <div className='rounded-lg border bg-muted/20 p-4'>
+            <div className='text-xs text-muted-foreground'>工作日画像</div>
+            <div className='mt-2 text-sm font-semibold'>{prediction.workingDayProfile ?? '--'}</div>
+          </div>
+          <div className='rounded-lg border bg-muted/20 p-4'>
+            <div className='text-xs text-muted-foreground'>组织画像</div>
+            <div className='mt-2 text-sm font-semibold'>{prediction.organizationProfile ?? '--'}</div>
+          </div>
+          <div className='rounded-lg border bg-muted/20 p-4'>
+            <div className='text-xs text-muted-foreground'>异常值清洗</div>
+            <div className='mt-2 text-sm font-semibold'>{prediction.outlierFilteredSampleSize ?? 0} 条</div>
+          </div>
+        </div>
+
         <div className='grid gap-4 md:grid-cols-[1.25fr_1fr]'>
           <div className='space-y-2'>
-            {prediction.explanation ? (
+            {prediction.narrativeExplanation || prediction.explanation ? (
               <div className='rounded-lg border bg-slate-50/80 p-3 text-sm text-slate-700'>
-                {prediction.explanation}
+                {prediction.narrativeExplanation ?? prediction.explanation}
+              </div>
+            ) : null}
+            {prediction.bottleneckAttribution ? (
+              <div className='rounded-lg border bg-amber-50/70 p-3 text-sm text-amber-900'>
+                <div className='text-xs font-medium uppercase tracking-wide text-amber-700'>瓶颈归因</div>
+                <div className='mt-1'>{prediction.bottleneckAttribution}</div>
               </div>
             ) : null}
             <div className='text-sm font-medium'>下一节点候选</div>
@@ -197,7 +222,7 @@ export function ApprovalPredictionSection({
               {prediction.currentNodeDurationP50Minutes !== null &&
               prediction.currentNodeDurationP50Minutes !== undefined ? (
                 <div className='mt-1 text-xs text-muted-foreground'>
-                  节点历史 p50 / p75：{formatMinutes(prediction.currentNodeDurationP50Minutes)} / {formatMinutes(prediction.currentNodeDurationP75Minutes)}
+                  节点历史 p50 / p75 / p90：{formatMinutes(prediction.currentNodeDurationP50Minutes)} / {formatMinutes(prediction.currentNodeDurationP75Minutes)} / {formatMinutes(prediction.currentNodeDurationP90Minutes)}
                 </div>
               ) : null}
               {prediction.predictedRiskThresholdTime ? (
@@ -213,6 +238,28 @@ export function ApprovalPredictionSection({
                   (prediction.recommendedActions ?? []).map((item) => <li key={item}>• {item}</li>)
                 ) : (
                   <li>• 当前没有额外建议动作。</li>
+                )}
+              </ul>
+            </div>
+            <div className='text-sm font-medium'>流程优化建议</div>
+            <div className='rounded-lg border bg-muted/20 p-3'>
+              <ul className='space-y-2 text-sm text-muted-foreground'>
+                {(prediction.optimizationSuggestions ?? []).length ? (
+                  (prediction.optimizationSuggestions ?? []).map((item) => <li key={item}>• {item}</li>)
+                ) : (
+                  <li>• 当前没有额外的流程优化建议。</li>
+                )}
+              </ul>
+            </div>
+            <div className='text-sm font-medium'>自动动作</div>
+            <div className='rounded-lg border bg-muted/20 p-3'>
+              <ul className='space-y-2 text-sm text-muted-foreground'>
+                {(prediction.automationActions ?? []).length ? (
+                  (prediction.automationActions ?? []).map((item) => (
+                    <li key={`${item.actionType}:${item.status}`}>• {item.title}：{item.detail}</li>
+                  ))
+                ) : (
+                  <li>• 当前没有触发自动动作。</li>
                 )}
               </ul>
             </div>

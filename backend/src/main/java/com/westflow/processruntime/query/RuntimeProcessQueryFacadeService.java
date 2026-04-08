@@ -54,6 +54,7 @@ public class RuntimeProcessQueryFacadeService {
     private final RuntimeTaskQueryService runtimeTaskQueryService;
     private final RuntimeApprovalSheetQueryService runtimeApprovalSheetQueryService;
     private final RuntimeTaskDetailQueryService runtimeTaskDetailQueryService;
+    private final RuntimeProcessPredictionAnalyticsService runtimeProcessPredictionAnalyticsService;
     private final RuntimeProcessLinkQueryService runtimeProcessLinkQueryService;
     private final RuntimeBusinessLinkService runtimeBusinessLinkService;
     private final ProcessLinkService processLinkService;
@@ -89,7 +90,17 @@ public class RuntimeProcessQueryFacadeService {
                 .filter(task -> task.prediction().predictedRiskThresholdTime().toLocalDate().equals(today))
                 .count();
         long doneApprovalCount = runtimeApprovalSheetQueryService.buildDoneApprovalSheets(currentUserId, List.of()).size();
-        return new WorkbenchDashboardSummaryResponse(todoTodayCount, doneApprovalCount, highRiskTodoCount, overdueTodayCount);
+        var analytics = runtimeProcessPredictionAnalyticsService.summarize(todoRecords);
+        return new WorkbenchDashboardSummaryResponse(
+                todoTodayCount,
+                doneApprovalCount,
+                highRiskTodoCount,
+                overdueTodayCount,
+                analytics.riskDistribution(),
+                analytics.overdueTrend(),
+                analytics.bottleneckNodes(),
+                analytics.topRiskProcesses()
+        );
     }
 
     public ProcessTaskDetailResponse detail(String taskId) {

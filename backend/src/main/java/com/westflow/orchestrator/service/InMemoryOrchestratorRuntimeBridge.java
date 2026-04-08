@@ -29,6 +29,10 @@ public class InMemoryOrchestratorRuntimeBridge implements OrchestratorRuntimeBri
             case ESCALATION -> "已执行超时升级";
             case TIMER_NODE -> "已执行定时节点推进";
             case TRIGGER_NODE -> "已执行触发节点";
+            case PREDICTION_AUTO_URGE -> "已执行预测自动催办";
+            case PREDICTION_SLA_REMINDER -> "已执行预测 SLA 提醒";
+            case PREDICTION_NEXT_NODE_PRE_NOTIFY -> "已执行预测下一节点预提醒";
+            case PREDICTION_COLLABORATION_ACTION -> "已执行预测协同动作";
         };
         return new OrchestratorScanExecutionRecord(
                 buildId("orc_exec_"),

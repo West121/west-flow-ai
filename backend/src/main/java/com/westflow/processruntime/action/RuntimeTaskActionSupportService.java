@@ -3,6 +3,7 @@ package com.westflow.processruntime.action;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processruntime.api.response.CompleteTaskResponse;
 import com.westflow.processruntime.api.response.ProcessTaskSnapshot;
+import com.westflow.processruntime.query.RuntimeProcessPredictionRefreshService;
 import com.westflow.processruntime.link.RuntimeAppendLinkService;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
 import com.westflow.processruntime.query.RuntimeTaskQueryContext;
@@ -35,6 +36,7 @@ public class RuntimeTaskActionSupportService {
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
     private final RuntimeAppendLinkService runtimeAppendLinkService;
+    private final RuntimeProcessPredictionRefreshService runtimeProcessPredictionRefreshService;
 
     public Task requireActiveTask(String taskId) {
         Task task = flowableEngineFacade.taskService().createTaskQuery().taskId(taskId).singleResult();
@@ -347,6 +349,7 @@ public class RuntimeTaskActionSupportService {
     }
 
     public CompleteTaskResponse nextTaskResponse(String processInstanceId, String completedTaskId) {
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(processInstanceId);
         List<ProcessTaskSnapshot> nextTasks = flowableEngineFacade.taskService()
                 .createTaskQuery()
                 .processInstanceId(processInstanceId)

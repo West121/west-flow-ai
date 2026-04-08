@@ -900,6 +900,9 @@ function ApprovalSheetGraphInner({
               预测风险 {predictedRiskLevel === 'HIGH' ? '高' : predictedRiskLevel === 'MEDIUM' ? '中' : '低'}
             </Badge>
           ) : null}
+          {prediction?.sampleTier ? (
+            <Badge variant='outline'>样本层级 {prediction.sampleTier}</Badge>
+          ) : null}
           {prediction?.nextNodeCandidates?.length ? (
             <Badge variant='outline'>候选下一节点 {prediction.nextNodeCandidates.length}</Badge>
           ) : null}

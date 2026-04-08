@@ -39,6 +39,9 @@ final class RuntimeAutomationTraceQueryService {
             ProcessDslPayload payload,
             OffsetDateTime occurredAt
     ) {
+        List<ProcessAutomationTraceItemResponse> generated = payload == null
+                ? List.of()
+                : generateAutomationTraces(instanceId, automationStatus, initiatorUserId, payload, occurredAt);
         if (orchestratorExecutionRepository != null) {
             List<ProcessAutomationTraceItemResponse> persisted = orchestratorExecutionRepository.selectByInstanceId(instanceId).stream()
                     .map(this::toAutomationTrace)
@@ -46,12 +49,22 @@ final class RuntimeAutomationTraceQueryService {
                             .thenComparing(ProcessAutomationTraceItemResponse::traceType, Comparator.nullsLast(Comparator.naturalOrder())))
                     .toList();
             if (!persisted.isEmpty()) {
-                return persisted;
+                return mergeAutomationTraces(persisted, generated);
             }
         }
         if (payload == null) {
             return List.of();
         }
+        return generated;
+    }
+
+    private List<ProcessAutomationTraceItemResponse> generateAutomationTraces(
+            String instanceId,
+            String automationStatus,
+            String initiatorUserId,
+            ProcessDslPayload payload,
+            OffsetDateTime occurredAt
+    ) {
         String status = automationStatus == null ? "PENDING" : automationStatus;
         String normalizedInstanceId = instanceId == null ? "" : instanceId;
         OffsetDateTime at = occurredAt == null ? OffsetDateTime.now(TIME_ZONE) : occurredAt;
@@ -129,6 +142,23 @@ final class RuntimeAutomationTraceQueryService {
         return traces.stream()
                 .sorted(Comparator.comparing(ProcessAutomationTraceItemResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(ProcessAutomationTraceItemResponse::traceType))
+                .toList();
+    }
+
+    private List<ProcessAutomationTraceItemResponse> mergeAutomationTraces(
+            List<ProcessAutomationTraceItemResponse> persisted,
+            List<ProcessAutomationTraceItemResponse> generated
+    ) {
+        Map<String, ProcessAutomationTraceItemResponse> merged = new HashMap<>();
+        for (ProcessAutomationTraceItemResponse item : generated) {
+            merged.put(item.traceType() + "::" + item.nodeId(), item);
+        }
+        for (ProcessAutomationTraceItemResponse item : persisted) {
+            merged.put(item.traceType() + "::" + item.nodeId(), item);
+        }
+        return merged.values().stream()
+                .sorted(Comparator.comparing(ProcessAutomationTraceItemResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(ProcessAutomationTraceItemResponse::traceType, Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
     }
 
@@ -215,6 +245,10 @@ final class RuntimeAutomationTraceQueryService {
             case AUTO_REMINDER -> node.name() + " 自动提醒";
             case ESCALATION -> node.name() + " 升级提醒";
             case TIMER_NODE, TRIGGER_NODE -> node.name();
+            case PREDICTION_AUTO_URGE -> node.name() + " 预测自动催办";
+            case PREDICTION_SLA_REMINDER -> node.name() + " 预测 SLA 提醒";
+            case PREDICTION_NEXT_NODE_PRE_NOTIFY -> node.name() + " 预测下一节点预提醒";
+            case PREDICTION_COLLABORATION_ACTION -> node.name() + " 预测协同动作";
         };
     }
 

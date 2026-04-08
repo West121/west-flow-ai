@@ -9,9 +9,10 @@ import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import lombok.extern.slf4j.Slf4j;
 import org.lionsoul.ip2region.xdb.Searcher;
 import org.lionsoul.ip2region.xdb.Version;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
@@ -19,8 +20,9 @@ import org.springframework.stereotype.Service;
  * 基于 ip2region xdb 的离线 IP 地理解析服务。
  */
 @Service
-@Slf4j
 public class IpRegionService {
+
+    private static final Logger log = LoggerFactory.getLogger(IpRegionService.class);
 
     private static final String XDB_RESOURCE = "ip2region/ip2region_v4.xdb";
 

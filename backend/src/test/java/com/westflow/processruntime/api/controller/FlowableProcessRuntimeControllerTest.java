@@ -31,6 +31,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Sql(statements = {
+        "DELETE FROM wf_process_prediction_aggregate",
+        "DELETE FROM wf_process_prediction_snapshot",
+        "DELETE FROM wf_orchestrator_execution",
         "DELETE FROM wf_process_definition",
         "DELETE FROM wf_process_link",
         "DELETE FROM wf_runtime_append_link",
@@ -129,6 +132,7 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString()).path("data");
         assertThat(pageBody.path("total").asInt()).isEqualTo(1);
         assertThat(pageBody.path("records").get(0).path("taskId").asText()).isEqualTo(taskId);
+        assertThat(pageBody.path("records").get(0).path("prediction").path("automationActions").isArray()).isTrue();
 
         JsonNode detailBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}", taskId)
                         .header("Authorization", "Bearer " + managerToken))
@@ -146,6 +150,19 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("prediction").path("sampleProfile").asText()).isNotBlank();
         assertThat(detailBody.path("prediction").path("predictedRiskThresholdTime").isTextual()
                 || detailBody.path("prediction").path("predictedRiskThresholdTime").isNull()).isTrue();
+        assertThat(detailBody.path("prediction").path("automationActions").isArray()).isTrue();
+        assertThat(detailBody.path("prediction").path("automationActions").toString()).contains("EXECUTED");
+        assertThat(detailBody.path("prediction").path("featureSnapshot").isObject()).isTrue();
+        assertThat(detailBody.path("prediction").path("featureSnapshot").path("processKey").asText()).isEqualTo("oa_leave");
+        assertThat(detailBody.path("automationActionTrace").isArray()).isTrue();
+        assertThat(detailBody.path("automationActionTrace").toString()).contains("PREDICTION_");
+        Integer snapshotCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_process_prediction_snapshot WHERE process_instance_id = ?",
+                Integer.class,
+                startBody.path("instanceId").asText()
+        );
+        assertThat(snapshotCount).isNotNull();
+        assertThat(snapshotCount).isPositive();
 
         JsonNode actionsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
                         .header("Authorization", "Bearer " + managerToken))
@@ -224,6 +241,65 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString()).path("data");
         assertThat(byBusinessBody.path("instanceStatus").asText()).isEqualTo("COMPLETED");
         assertThat(byBusinessBody.path("taskFormData").path("approvedDays").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void shouldTriggerPredictionAutomationOnClaimWritePath() throws Exception {
+        String applicantToken = login("zhangsan");
+        String managerToken = login("lisi");
+        publishLeaveProcess();
+        seedLeaveBill("leave_031");
+
+        JsonNode startBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/start")
+                        .header("Authorization", "Bearer " + applicantToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "processKey": "oa_leave",
+                                  "businessKey": "leave_031",
+                                  "businessType": "OA_LEAVE",
+                                  "formData": {
+                                    "days": 3,
+                                    "reason": "外出处理事项"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString()).path("data");
+
+        String instanceId = startBody.path("instanceId").asText();
+        String taskId = startBody.path("activeTasks").get(0).path("taskId").asText();
+
+        mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/claim", taskId)
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "comment": "认领后直接触发预测重算"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        Integer executionCount = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(1)
+                FROM wf_orchestrator_execution
+                WHERE target_id LIKE ?
+                """,
+                Integer.class,
+                "orc_target_" + Integer.toHexString(instanceId.hashCode()) + "_%"
+        );
+        Integer snapshotCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(1) FROM wf_process_prediction_snapshot WHERE process_instance_id = ?",
+                Integer.class,
+                instanceId
+        );
+        assertThat(executionCount).isNotNull();
+        assertThat(executionCount).isPositive();
+        assertThat(snapshotCount).isNotNull();
+        assertThat(snapshotCount).isPositive();
     }
 
     @Test
@@ -327,6 +403,10 @@ class FlowableProcessRuntimeControllerTest {
 
         assertThat(body.path("todoTodayCount").isNumber()).isTrue();
         assertThat(body.path("doneApprovalCount").isNumber()).isTrue();
+        assertThat(body.path("riskDistribution").isObject()).isTrue();
+        assertThat(body.path("overdueTrend").isArray()).isTrue();
+        assertThat(body.path("bottleneckNodes").isArray()).isTrue();
+        assertThat(body.path("topRiskProcesses").isArray()).isTrue();
     }
 
     @Test

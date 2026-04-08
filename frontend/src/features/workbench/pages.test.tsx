@@ -1561,7 +1561,7 @@ describe('workbench pages', () => {
     expect(screen.getByText(/当前节点历史波动较大/)).toBeInTheDocument()
     expect(screen.getByText(/命中样本口径：同流程同节点（工作日样本） · 业务类型 OA_LEAVE/)).toBeInTheDocument()
     expect(
-      screen.getByText('节点历史 p50 / p75：', {
+      screen.getByText('节点历史 p50 / p75 / p90：', {
         selector: 'div',
         exact: false,
       })
@@ -1569,6 +1569,8 @@ describe('workbench pages', () => {
     expect(screen.getByText(/预计进入高风险阈值：04\/08 15:30/)).toBeInTheDocument()
     expect(screen.getByText('建议动作')).toBeInTheDocument()
     expect(screen.getByText(/提前同步下一审批人/)).toBeInTheDocument()
+    expect(screen.getByText('流程优化建议')).toBeInTheDocument()
+    expect(screen.getByText('自动动作')).toBeInTheDocument()
   })
 
   it('shows subprocess links in approval detail', async () => {

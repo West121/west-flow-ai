@@ -46,6 +46,22 @@ export type WorkbenchDashboardSummary = {
   doneApprovalCount: number
   highRiskTodoCount?: number
   overdueTodayCount?: number
+  riskDistribution?: Record<string, number>
+  overdueTrend?: Array<{ date: string; count: number }>
+  bottleneckNodes?: Array<{
+    nodeId: string
+    nodeName: string
+    totalCount: number
+    highRiskCount: number
+    medianRemainingDurationMinutes?: number | null
+  }>
+  topRiskProcesses?: Array<{
+    processKey: string
+    processName: string
+    totalCount: number
+    highRiskCount: number
+    highRiskRate: number
+  }>
 }
 
 export type WorkbenchReviewTicket = {
@@ -256,6 +272,26 @@ export type WorkbenchProcessPredictionNextNodeCandidate = {
   pathConfidence?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
 }
 
+export type WorkbenchProcessPredictionAutomationAction = {
+  actionType: string
+  mode: string
+  status: string
+  title: string
+  detail: string
+}
+
+export type WorkbenchProcessPredictionFeatureSnapshot = {
+  processKey?: string | null
+  currentNodeId?: string | null
+  businessType?: string | null
+  assigneeUserId?: string | null
+  organizationProfile?: string | null
+  workingDayProfile?: string | null
+  sampleTier?: string | null
+  rawSampleSize: number
+  filteredSampleSize: number
+}
+
 export type WorkbenchProcessPrediction = {
   predictedFinishTime?: string | null
   predictedRiskThresholdTime?: string | null
@@ -263,15 +299,25 @@ export type WorkbenchProcessPrediction = {
   currentElapsedMinutes?: number | null
   currentNodeDurationP50Minutes?: number | null
   currentNodeDurationP75Minutes?: number | null
+  currentNodeDurationP90Minutes?: number | null
   overdueRiskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
   confidence?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
   historicalSampleSize: number
+  outlierFilteredSampleSize?: number | null
   sampleProfile?: string | null
+  sampleTier?: string | null
+  workingDayProfile?: string | null
+  organizationProfile?: string | null
   basisSummary?: string | null
   noPredictionReason?: string | null
   explanation?: string | null
+  narrativeExplanation?: string | null
+  bottleneckAttribution?: string | null
   topDelayReasons?: string[] | null
   recommendedActions?: string[] | null
+  optimizationSuggestions?: string[] | null
+  automationActions?: WorkbenchProcessPredictionAutomationAction[] | null
+  featureSnapshot?: WorkbenchProcessPredictionFeatureSnapshot | null
   nextNodeCandidates?: WorkbenchProcessPredictionNextNodeCandidate[] | null
 }
 

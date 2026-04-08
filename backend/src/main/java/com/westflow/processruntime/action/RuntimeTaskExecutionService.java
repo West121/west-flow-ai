@@ -13,6 +13,7 @@ import com.westflow.processruntime.link.ProcessLinkService;
 import com.westflow.processruntime.link.RuntimeAppendLinkService;
 import com.westflow.processruntime.link.RuntimeBusinessLinkService;
 import com.westflow.processruntime.model.RuntimeAppendLinkRecord;
+import com.westflow.processruntime.query.RuntimeProcessPredictionRefreshService;
 import com.westflow.processruntime.query.RuntimeProcessLinkQueryService;
 import com.westflow.processruntime.query.RuntimeTaskSupportService;
 import java.time.Instant;
@@ -39,6 +40,7 @@ public class RuntimeTaskExecutionService {
     private final RuntimeProcessLinkQueryService runtimeProcessLinkQueryService;
     private final RuntimeBusinessLinkService runtimeBusinessLinkService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
+    private final RuntimeProcessPredictionRefreshService runtimeProcessPredictionRefreshService;
 
     public CompleteTaskResponse complete(String taskId, CompleteTaskRequest request) {
         Task task = requireTaskForAction(taskId, "办理");
@@ -120,6 +122,7 @@ public class RuntimeTaskExecutionService {
                 && !taskActionSupportService.hasRunningAppendStructures(task.getProcessInstanceId())
                 ? "COMPLETED"
                 : "RUNNING";
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(task.getProcessInstanceId());
         return new CompleteTaskResponse(task.getProcessInstanceId(), taskId, status, nextTasks);
     }
 
@@ -161,6 +164,7 @@ public class RuntimeTaskExecutionService {
                 null
         );
         Task updatedTask = taskActionSupportService.requireActiveTask(taskId);
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(updatedTask.getProcessInstanceId());
         return new CompleteTaskResponse(
                 updatedTask.getProcessInstanceId(),
                 taskId,
@@ -218,6 +222,7 @@ public class RuntimeTaskExecutionService {
                 null
         );
 
+        runtimeProcessPredictionRefreshService.refreshForProcessInstance(delegatedTask.getProcessInstanceId());
         return new CompleteTaskResponse(
                 delegatedTask.getProcessInstanceId(),
                 task.getId(),

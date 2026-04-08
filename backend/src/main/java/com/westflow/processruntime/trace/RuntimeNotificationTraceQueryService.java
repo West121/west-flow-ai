@@ -39,19 +39,36 @@ final class RuntimeNotificationTraceQueryService {
             OffsetDateTime occurredAt,
             List<ProcessInstanceEventResponse> instanceEvents
     ) {
+        List<ProcessNotificationSendRecordResponse> generated = payload == null
+                ? List.of()
+                : generateNotificationSendRecords(instanceId, automationStatus, initiatorUserId, payload, occurredAt, instanceEvents);
         if (notificationLogMapper != null) {
-            List<NotificationLogRecord> persisted = notificationLogMapper.selectByInstanceId(instanceId);
+            List<NotificationLogRecord> persisted = notificationLogMapper.selectByInstanceId(instanceId).stream()
+                    .filter(record -> !isPredictionNotification(record))
+                    .toList();
             if (!persisted.isEmpty()) {
-                return persisted.stream()
+                List<ProcessNotificationSendRecordResponse> persistedRecords = persisted.stream()
                         .map(this::toNotificationRecord)
                         .sorted(Comparator.comparing(ProcessNotificationSendRecordResponse::sentAt, Comparator.nullsLast(Comparator.naturalOrder()))
                                 .thenComparing(ProcessNotificationSendRecordResponse::channelType))
                         .toList();
+                return mergeNotificationRecords(persistedRecords, generated);
             }
         }
         if (payload == null) {
             return List.of();
         }
+        return generated;
+    }
+
+    private List<ProcessNotificationSendRecordResponse> generateNotificationSendRecords(
+            String instanceId,
+            String automationStatus,
+            String initiatorUserId,
+            ProcessDslPayload payload,
+            OffsetDateTime occurredAt,
+            List<ProcessInstanceEventResponse> instanceEvents
+    ) {
         String status = "SUCCESS".equals(automationStatus) ? "SUCCESS" : "PENDING";
         Map<String, OrchestratorScanTargetRecord> dueTargets =
                 automationTraceQueryService.loadDueTargetsByKey(instanceId == null ? "" : instanceId);
@@ -99,6 +116,23 @@ final class RuntimeNotificationTraceQueryService {
                 .toList();
     }
 
+    private List<ProcessNotificationSendRecordResponse> mergeNotificationRecords(
+            List<ProcessNotificationSendRecordResponse> persisted,
+            List<ProcessNotificationSendRecordResponse> generated
+    ) {
+        Map<String, ProcessNotificationSendRecordResponse> merged = new HashMap<>();
+        for (ProcessNotificationSendRecordResponse item : generated) {
+            merged.put(item.channelType() + "::" + item.target(), item);
+        }
+        for (ProcessNotificationSendRecordResponse item : persisted) {
+            merged.put(item.channelType() + "::" + item.target(), item);
+        }
+        return merged.values().stream()
+                .sorted(Comparator.comparing(ProcessNotificationSendRecordResponse::sentAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(ProcessNotificationSendRecordResponse::channelType))
+                .toList();
+    }
+
     private ProcessNotificationSendRecordResponse toNotificationRecord(NotificationLogRecord record) {
         return new ProcessNotificationSendRecordResponse(
                 record.logId(),
@@ -110,6 +144,20 @@ final class RuntimeNotificationTraceQueryService {
                 toOffsetDateTime(record.sentAt()),
                 record.success() ? null : record.responseMessage()
         );
+    }
+
+    private boolean isPredictionNotification(NotificationLogRecord record) {
+        if (record == null || record.payload() == null || record.payload().isEmpty()) {
+            return false;
+        }
+        String actionType = stringValue(record.payload().get("actionType"));
+        if (actionType == null) {
+            return false;
+        }
+        return switch (actionType) {
+            case "AUTO_URGE", "SLA_REMINDER", "NEXT_NODE_PRE_NOTIFY", "COLLABORATION_ACTION" -> true;
+            default -> false;
+        };
     }
 
     private Map<String, List<ProcessInstanceEventResponse>> notificationEventsByNode(List<ProcessInstanceEventResponse> instanceEvents) {
@@ -170,6 +218,14 @@ final class RuntimeNotificationTraceQueryService {
             case "DINGTALK" -> "dingtalk:" + userId;
             default -> userId;
         };
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String stringValue = String.valueOf(value);
+        return stringValue.isBlank() ? null : stringValue;
     }
 
     private OffsetDateTime toOffsetDateTime(Instant instant) {

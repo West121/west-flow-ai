@@ -8,9 +8,12 @@ import com.westflow.processruntime.api.response.HandoverExecutionTaskItemRespons
 import com.westflow.processruntime.api.response.HandoverPreviewResponse;
 import com.westflow.processruntime.api.response.HandoverPreviewTaskItemResponse;
 import com.westflow.processruntime.api.response.ProcessTaskSnapshot;
+import com.westflow.processruntime.query.RuntimeProcessPredictionRefreshService;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.flowable.task.api.Task;
 import org.springframework.stereotype.Service;
@@ -25,6 +28,7 @@ public class RuntimeHandoverService {
     private final RuntimeTaskActionSupportService taskActionSupportService;
     private final RuntimeProcessActionSupportService processActionSupportService;
     private final FlowableTaskActionService flowableTaskActionService;
+    private final RuntimeProcessPredictionRefreshService runtimeProcessPredictionRefreshService;
 
     @Transactional
     public CompleteTaskResponse handover(String sourceUserId, HandoverTaskRequest request) {
@@ -62,6 +66,7 @@ public class RuntimeHandoverService {
 
         List<HandoverExecutionTaskItemResponse> executionTasks = new ArrayList<>();
         List<ProcessTaskSnapshot> nextTasks = new ArrayList<>();
+        Set<String> touchedProcessInstanceIds = new LinkedHashSet<>();
         for (Task task : sourceTasks) {
             taskActionSupportService.appendComment(task, comment);
             flowableEngineFacade.taskService().setVariableLocal(task.getId(), "westflowAction", "HANDOVER");
@@ -98,7 +103,9 @@ public class RuntimeHandoverService {
             );
             nextTasks.add(taskActionSupportService.toTaskView(updatedTask));
             executionTasks.add(processActionSupportService.toHandoverExecutionTask(task, updatedTask, normalizedSourceUserId, targetUserId, comment));
+            touchedProcessInstanceIds.add(updatedTask.getProcessInstanceId());
         }
+        touchedProcessInstanceIds.forEach(runtimeProcessPredictionRefreshService::refreshForProcessInstance);
 
         Task firstTask = sourceTasks.stream().findFirst().orElse(null);
         return new HandoverExecutionResponse(

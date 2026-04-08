@@ -151,6 +151,16 @@ public final class FlowableOrchestratorRuntimeBridge implements OrchestratorRunt
                 case ESCALATION -> executeEscalation(runId, target, executedAt);
                 case TIMER_NODE -> executeTimerNode(runId, target, executedAt);
                 case TRIGGER_NODE -> executeTriggerNode(runId, target, executedAt);
+                case PREDICTION_AUTO_URGE,
+                        PREDICTION_SLA_REMINDER,
+                        PREDICTION_NEXT_NODE_PRE_NOTIFY,
+                        PREDICTION_COLLABORATION_ACTION -> buildExecutionRecord(
+                        runId,
+                        target,
+                        OrchestratorExecutionStatus.SKIPPED,
+                        "流程预测自动动作由预测执行链直接处理",
+                        executedAt
+                );
             };
         } catch (Exception exception) {
             return buildExecutionRecord(

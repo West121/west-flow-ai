@@ -84,6 +84,8 @@ public class OrchestratorExecutionRepository {
     }
 
     public List<OrchestratorScanExecutionRecord> selectByInstanceId(String instanceId) {
+        String legacyPattern = "orc_target_" + instanceId + "_%";
+        String compactPattern = "orc_target_" + Integer.toHexString((instanceId == null ? "" : instanceId).hashCode()) + "_%";
         return jdbcTemplate.query(
                 """
                 SELECT
@@ -96,10 +98,12 @@ public class OrchestratorExecutionRepository {
                   executed_at
                 FROM wf_orchestrator_execution
                 WHERE target_id LIKE ?
+                   OR target_id LIKE ?
                 ORDER BY executed_at ASC, id ASC
                 """,
                 this::mapRecord,
-                "orc_target_" + instanceId + "_%"
+                legacyPattern,
+                compactPattern
         );
     }
 

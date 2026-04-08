@@ -19,11 +19,13 @@ import com.westflow.processruntime.api.response.WorkflowFieldBinding;
 import com.westflow.processruntime.support.RuntimeProcessMetadataService;
 import com.westflow.processruntime.trace.ProcessRuntimeTraceStore;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.task.api.Task;
@@ -47,6 +49,8 @@ public class RuntimeTaskDetailQueryService {
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
     private final RuntimeProcessPredictionService runtimeProcessPredictionService;
     private final RuntimeProcessPredictionAiNarrationService runtimeProcessPredictionAiNarrationService;
+    private final RuntimeProcessPredictionActionExecutorService runtimeProcessPredictionActionExecutorService;
+    private final RuntimeProcessPredictionSnapshotService runtimeProcessPredictionSnapshotService;
 
     public ProcessTaskDetailResponse buildDetailResponse(
             String processInstanceId,
@@ -109,8 +113,8 @@ public class RuntimeTaskDetailQueryService {
         String nodeFormKey = stringValue(nodeConfig.get("nodeFormKey"));
         String nodeFormVersion = stringValue(nodeConfig.get("nodeFormVersion"));
         List<WorkflowFieldBinding> fieldBindings = runtimeTaskDetailProjectionService.workflowFieldBindings(nodeConfig.get("fieldBindings"));
-        List<ProcessTaskTraceItemResponse> taskTrace = runtimeTaskTraceQueryService.buildTaskTrace(historicTasks, activeTasks);
         List<ProcessInstanceEventResponse> instanceEvents = traceStore.queryInstanceEvents(processInstanceId);
+        List<ProcessTaskTraceItemResponse> taskTrace = runtimeTaskTraceQueryService.buildTaskTrace(historicTasks, activeTasks);
         if (instanceEvents.isEmpty()) {
             instanceEvents = runtimeTaskTraceQueryService.buildSyntheticEvents(historicProcessInstance, taskTrace);
         }
@@ -124,21 +128,8 @@ public class RuntimeTaskDetailQueryService {
                 instanceEvents,
                 runtimeInclusiveGatewayQueryService.buildInclusiveGatewayEvents(processInstanceId, inclusiveGatewayHits)
         );
-        List<ProcessAutomationTraceItemResponse> automationTrace = traceStore.queryAutomationTraces(
-                processInstanceId,
-                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
-                stringValue(variables.get("westflowInitiatorUserId")),
-                payload,
-                toOffsetDateTime(historicProcessInstance.getStartTime())
-        );
-        List<ProcessNotificationSendRecordResponse> notificationRecords = traceStore.queryNotificationSendRecords(
-                processInstanceId,
-                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
-                stringValue(variables.get("westflowInitiatorUserId")),
-                payload,
-                toOffsetDateTime(historicProcessInstance.getStartTime())
-        );
         List<CountersignTaskGroupResponse> countersignGroups = flowableCountersignService.queryTaskGroups(processInstanceId);
+        taskTrace = applyTraceStatusOverrides(taskTrace, instanceEvents, countersignGroups);
         List<ProcessInstanceLinkResponse> resolvedProcessLinks = processLinks == null ? List.of() : List.copyOf(processLinks);
         List<RuntimeAppendLinkResponse> resolvedRuntimeAppendLinks = runtimeAppendLinks == null ? List.of() : List.copyOf(runtimeAppendLinks);
         Map<String, Object> processFormData = mapValue(variables.get("westflowFormData"));
@@ -179,11 +170,44 @@ public class RuntimeTaskDetailQueryService {
                 nodeName,
                 referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee(),
                 businessType,
+                resolveOrganizationProfile(
+                        stringValue(variables.get("westflowInitiatorDepartmentName")),
+                        stringValue(variables.get("westflowInitiatorPostName"))
+                ),
                 createdAt,
                 taskTrace,
                 payload.nodes(),
                 payload.edges()
                 )
+        );
+        prediction = runtimeProcessPredictionActionExecutorService.execute(
+                processInstanceId,
+                referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),
+                definition.processName(),
+                nodeId,
+                nodeName,
+                referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee(),
+                applicantUserId,
+                prediction
+        );
+        runtimeProcessPredictionSnapshotService.recordSnapshot(
+                processInstanceId,
+                referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),
+                prediction
+        );
+        List<ProcessAutomationTraceItemResponse> automationTrace = traceStore.queryAutomationTraces(
+                processInstanceId,
+                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
+                stringValue(variables.get("westflowInitiatorUserId")),
+                payload,
+                toOffsetDateTime(historicProcessInstance.getStartTime())
+        );
+        List<ProcessNotificationSendRecordResponse> notificationRecords = traceStore.queryNotificationSendRecords(
+                processInstanceId,
+                blockingActiveTasks.isEmpty() ? "SUCCESS" : "PENDING",
+                stringValue(variables.get("westflowInitiatorUserId")),
+                payload,
+                toOffsetDateTime(historicProcessInstance.getStartTime())
         );
         return new ProcessTaskDetailResponse(
                 referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),
@@ -297,6 +321,90 @@ public class RuntimeTaskDetailQueryService {
         return runtimeTaskVisibilityService.resolveTaskKind(engineProcessDefinitionId, nodeId, RuntimeTaskQueryContext.create());
     }
 
+    private List<ProcessTaskTraceItemResponse> applyTraceStatusOverrides(
+            List<ProcessTaskTraceItemResponse> taskTrace,
+            List<ProcessInstanceEventResponse> instanceEvents,
+            List<CountersignTaskGroupResponse> countersignGroups
+    ) {
+        if (taskTrace.isEmpty()) {
+            return taskTrace;
+        }
+        Set<String> revokedTaskIds = new HashSet<>();
+        for (ProcessInstanceEventResponse event : instanceEvents) {
+            if ("TASK_REMOVE_SIGN".equals(event.eventType())
+                    && event.targetTaskId() != null
+                    && !event.targetTaskId().isBlank()) {
+                revokedTaskIds.add(event.targetTaskId());
+            }
+        }
+        Map<String, String> countersignMemberStatusByTaskId = new LinkedHashMap<>();
+        for (CountersignTaskGroupResponse group : countersignGroups) {
+            group.members().forEach(member -> {
+                if (member.taskId() != null && !member.taskId().isBlank()) {
+                    countersignMemberStatusByTaskId.put(member.taskId(), member.memberStatus());
+                }
+            });
+        }
+        return taskTrace.stream()
+                .map(item -> {
+                    if (revokedTaskIds.contains(item.taskId())) {
+                        return copyTraceItem(item, "REVOKED", true, item.isRejected(), item.isJumped(), item.isTakenBack());
+                    }
+                    String memberStatus = countersignMemberStatusByTaskId.get(item.taskId());
+                    if ("AUTO_FINISHED".equals(memberStatus)) {
+                        return copyTraceItem(item, "AUTO_FINISHED", item.isRevoked(), item.isRejected(), item.isJumped(), item.isTakenBack());
+                    }
+                    return item;
+                })
+                .toList();
+    }
+
+    private ProcessTaskTraceItemResponse copyTraceItem(
+            ProcessTaskTraceItemResponse item,
+            String status,
+            boolean isRevoked,
+            boolean isRejected,
+            boolean isJumped,
+            boolean isTakenBack
+    ) {
+        return new ProcessTaskTraceItemResponse(
+                item.taskId(),
+                item.nodeId(),
+                item.nodeName(),
+                item.taskKind(),
+                item.taskSemanticMode(),
+                status,
+                item.assigneeUserId(),
+                item.candidateUserIds(),
+                item.candidateGroupIds(),
+                item.action(),
+                item.operatorUserId(),
+                item.comment(),
+                item.receiveTime(),
+                item.readTime(),
+                item.handleStartTime(),
+                item.handleEndTime(),
+                item.handleDurationSeconds(),
+                item.sourceTaskId(),
+                item.targetTaskId(),
+                item.targetUserId(),
+                item.isCcTask(),
+                item.isAddSignTask(),
+                isRevoked,
+                isRejected,
+                isJumped,
+                isTakenBack,
+                item.targetStrategy(),
+                item.targetNodeId(),
+                item.reapproveStrategy(),
+                item.actingMode(),
+                item.actingForUserId(),
+                item.delegatedByUserId(),
+                item.handoverFromUserId(),
+                item.slaMetadata()
+        );
+    }
+
     private String resolveDetailTaskSemanticMode(
             String processInstanceId,
             Task referenceActiveTask,
@@ -354,6 +462,16 @@ public class RuntimeTaskDetailQueryService {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private String resolveOrganizationProfile(String departmentName, String postName) {
+        if (departmentName == null || departmentName.isBlank()) {
+            return postName == null || postName.isBlank() ? null : postName;
+        }
+        if (postName == null || postName.isBlank()) {
+            return departmentName;
+        }
+        return departmentName + " / " + postName;
     }
 
     private OffsetDateTime toOffsetDateTime(java.util.Date date) {

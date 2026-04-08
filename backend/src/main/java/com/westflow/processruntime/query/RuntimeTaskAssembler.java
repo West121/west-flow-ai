@@ -30,6 +30,8 @@ public class RuntimeTaskAssembler {
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
     private final RuntimeProcessPredictionService runtimeProcessPredictionService;
+    private final RuntimeProcessPredictionActionExecutorService runtimeProcessPredictionActionExecutorService;
+    private final RuntimeProcessPredictionSnapshotService runtimeProcessPredictionSnapshotService;
 
     // 将单个任务转换为列表项。
     public ProcessTaskListItemResponse toTaskListItem(
@@ -55,10 +57,25 @@ public class RuntimeTaskAssembler {
                 task.getName(),
                 task.getAssignee(),
                 stringValue(variables.get("westflowBusinessType")),
+                resolveOrganizationProfile(
+                        stringValue(variables.get("westflowInitiatorDepartmentName")),
+                        stringValue(variables.get("westflowInitiatorPostName"))
+                ),
                 OffsetDateTime.ofInstant(task.getCreateTime().toInstant(), java.time.ZoneId.of("Asia/Shanghai")),
                 definition.dsl().nodes(),
                 definition.dsl().edges()
         );
+        prediction = runtimeProcessPredictionActionExecutorService.execute(
+                processInstanceId,
+                task.getId(),
+                definition.processName(),
+                task.getTaskDefinitionKey(),
+                task.getName(),
+                task.getAssignee(),
+                stringValue(variables.get("westflowInitiatorUserId")),
+                prediction
+        );
+        runtimeProcessPredictionSnapshotService.recordSnapshot(processInstanceId, task.getId(), prediction);
         return new ProcessTaskListItemResponse(
                 task.getId(),
                 processInstanceId,
@@ -230,6 +247,16 @@ public class RuntimeTaskAssembler {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private String resolveOrganizationProfile(String departmentName, String postName) {
+        if (departmentName == null || departmentName.isBlank()) {
+            return postName == null || postName.isBlank() ? null : postName;
+        }
+        if (postName == null || postName.isBlank()) {
+            return departmentName;
+        }
+        return departmentName + " / " + postName;
     }
 
     private ContractException resourceNotFound(String message, Map<String, Object> details) {

@@ -4,6 +4,7 @@ import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processruntime.action.RuntimeTaskActionSupportService;
 import com.westflow.processruntime.api.response.ProcessInstanceEventResponse;
 import com.westflow.processruntime.api.response.ProcessTaskTraceItemResponse;
+import com.westflow.processruntime.link.RuntimeAppendLinkService;
 import com.westflow.processruntime.support.RuntimeProcessMetadataService;
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -33,6 +34,7 @@ public class RuntimeTaskTraceQueryService {
     private final RuntimeTaskSupportService runtimeTaskSupportService;
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
+    private final RuntimeAppendLinkService runtimeAppendLinkService;
 
     public List<ProcessTaskTraceItemResponse> buildTaskTrace(List<HistoricTaskInstance> historicTasks, List<Task> activeTasks) {
         List<ProcessTaskTraceItemResponse> items = new ArrayList<>();
@@ -132,7 +134,10 @@ public class RuntimeTaskTraceQueryService {
                     stringValue(localVariables.get("westflowHandoverFromUserId"))
             ));
         }
-        return items;
+        return items.stream()
+                .sorted(Comparator.comparing(ProcessTaskTraceItemResponse::receiveTime, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .thenComparing(ProcessTaskTraceItemResponse::taskId, Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
     }
 
     public List<ProcessInstanceEventResponse> buildSyntheticEvents(
@@ -264,7 +269,18 @@ public class RuntimeTaskTraceQueryService {
             }
             return isTerminatedProcess(processInstance) ? "TERMINATED" : "COMPLETED";
         }
-        return activeTasks.stream().anyMatch(this::isBlockingTask) ? "RUNNING" : "COMPLETED";
+        if (activeTasks.stream().anyMatch(this::isBlockingTask)) {
+            return "RUNNING";
+        }
+        String processInstanceId = processInstance.getId();
+        if (processInstanceId != null && !processInstanceId.isBlank()) {
+            boolean hasRunningAppendStructures = runtimeAppendLinkService.listByParentInstanceId(processInstanceId).stream()
+                    .anyMatch(link -> "RUNNING".equals(link.status()));
+            if (hasRunningAppendStructures) {
+                return "RUNNING";
+            }
+        }
+        return "COMPLETED";
     }
 
     private Map<String, Object> taskLocalVariables(String taskId) {
