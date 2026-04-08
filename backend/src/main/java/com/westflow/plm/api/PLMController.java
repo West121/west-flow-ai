@@ -4,7 +4,13 @@ import cn.dev33.satoken.annotation.SaCheckLogin;
 import com.westflow.common.api.ApiResponse;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
+import com.westflow.plm.service.PlmConnectorAckService;
+import com.westflow.plm.service.PlmConnectorOrchestrationService;
+import com.westflow.plm.service.PlmImplementationEvidenceService;
+import com.westflow.plm.api.PlmImplementationEvidenceUpdateRequest;
+import com.westflow.plm.service.PlmImplementationTemplateService;
 import com.westflow.plm.service.PlmLaunchService;
+import com.westflow.plm.service.PlmPublicationService;
 import com.westflow.processruntime.api.response.ApprovalSheetListItemResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 /**
  * PLM 业务发起、生命周期与台账接口。
@@ -27,6 +34,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class PLMController {
 
     private final PlmLaunchService plmLaunchService;
+    private final PlmConnectorOrchestrationService plmConnectorOrchestrationService;
+    private final PlmConnectorAckService plmConnectorAckService;
+    private final PlmImplementationTemplateService plmImplementationTemplateService;
+    private final PlmImplementationEvidenceService plmImplementationEvidenceService;
+    private final PlmPublicationService plmPublicationService;
 
     @GetMapping("/dashboard/summary")
     public ApiResponse<PlmDashboardSummaryResponse> dashboardSummary() {
@@ -38,12 +50,181 @@ public class PLMController {
         return ApiResponse.success(plmLaunchService.dashboardAnalytics());
     }
 
+    @GetMapping("/dashboard/cockpit")
+    public ApiResponse<PlmDashboardCockpitResponse> dashboardCockpit() {
+        return ApiResponse.success(plmLaunchService.dashboardCockpit());
+    }
+
     @GetMapping("/bills/{businessType}/{billId}/object-links")
     public ApiResponse<java.util.List<PlmObjectLinkResponse>> objectLinks(
             @PathVariable String businessType,
             @PathVariable String billId
     ) {
         return ApiResponse.success(plmLaunchService.objectLinks(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/bom-nodes")
+    public ApiResponse<java.util.List<PlmBomNodeResponse>> bomNodes(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.bomNodes(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/document-assets")
+    public ApiResponse<java.util.List<PlmDocumentAssetResponse>> documentAssets(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmPublicationService.listDocumentAssets(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/baselines")
+    public ApiResponse<java.util.List<PlmConfigurationBaselineResponse>> baselines(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmPublicationService.listBaselines(businessType, billId));
+    }
+
+    @PutMapping("/bills/{businessType}/{billId}/baselines/{baselineId}/release")
+    public ApiResponse<PlmPublicationActionResponse> releaseBaseline(
+            @PathVariable String businessType,
+            @PathVariable String billId,
+            @PathVariable String baselineId,
+            @RequestBody(required = false) PlmPublicationActionRequest request
+    ) {
+        plmLaunchService.requireManageableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(
+                plmPublicationService.releaseBaseline(
+                        businessType,
+                        billId,
+                        baselineId,
+                        request,
+                        plmLaunchService.currentUserIdForWorkspace()
+                )
+        );
+    }
+
+    @PutMapping("/bills/{businessType}/{billId}/document-assets/{assetId}/release")
+    public ApiResponse<PlmPublicationActionResponse> releaseDocumentAsset(
+            @PathVariable String businessType,
+            @PathVariable String billId,
+            @PathVariable String assetId,
+            @RequestBody(required = false) PlmPublicationActionRequest request
+    ) {
+        plmLaunchService.requireManageableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(
+                plmPublicationService.releaseDocumentAsset(
+                        businessType,
+                        billId,
+                        assetId,
+                        request,
+                        plmLaunchService.currentUserIdForWorkspace()
+                )
+        );
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/acl")
+    public ApiResponse<java.util.List<PlmObjectAclResponse>> objectAcl(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.objectAcl(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/domain-acl")
+    public ApiResponse<java.util.List<PlmDomainAclResponse>> domainAcl(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.domainAcl(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/role-matrix")
+    public ApiResponse<java.util.List<PlmRoleAssignmentResponse>> roleMatrix(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.roleAssignments(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/permissions")
+    public ApiResponse<PlmPermissionSummaryResponse> permissions(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.permissionSummary(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/external-integrations")
+    public ApiResponse<java.util.List<PlmExternalIntegrationResponse>> externalIntegrations(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.externalIntegrations(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/external-sync-events")
+    public ApiResponse<java.util.List<PlmExternalSyncEventEnvelopeResponse>> externalSyncEvents(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        return ApiResponse.success(plmLaunchService.externalSyncEvents(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/connector-jobs")
+    public ApiResponse<java.util.List<PlmConnectorJobResponse>> connectorJobs(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmConnectorOrchestrationService.listBillJobs(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/connector-health-summary")
+    public ApiResponse<PlmConnectorHealthSummaryResponse> connectorHealthSummary(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmConnectorOrchestrationService.summarizeBillHealth(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/connector-tasks")
+    public ApiResponse<java.util.List<PlmConnectorJobResponse>> connectorTasks(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmConnectorOrchestrationService.listBillJobs(businessType, billId));
+    }
+
+    @GetMapping("/connector-jobs/{jobId}/dispatch-logs")
+    public ApiResponse<java.util.List<PlmConnectorDispatchLogResponse>> dispatchLogs(@PathVariable String jobId) {
+        return ApiResponse.success(loadDispatchLogs(jobId));
+    }
+
+    @PostMapping("/connector-jobs/{jobId}/retry")
+    public ApiResponse<PlmConnectorJobResponse> retryConnectorJob(@PathVariable String jobId) {
+        return ApiResponse.success(retryConnectorJobInternal(jobId));
+    }
+
+    @PostMapping("/connector-jobs/{jobId}/dispatch")
+    public ApiResponse<PlmConnectorJobResponse> dispatchConnectorJob(@PathVariable String jobId) {
+        return ApiResponse.success(dispatchConnectorJobInternal(jobId));
+    }
+
+    @PostMapping("/connector-jobs/{jobId}/acks")
+    public ApiResponse<PlmConnectorExternalAckResponse> writeConnectorAck(
+            @PathVariable String jobId,
+            @RequestBody(required = false) PlmConnectorExternalAckRequest request
+    ) {
+        var locator = plmConnectorOrchestrationService.requireJobLocator(jobId);
+        plmLaunchService.requireManageableBillForWorkspace(locator.businessType(), locator.billId());
+        return ApiResponse.success(plmConnectorAckService.writeAck(jobId, request));
     }
 
     @GetMapping("/bills/{businessType}/{billId}/revision-diffs")
@@ -60,6 +241,51 @@ public class PLMController {
             @PathVariable String billId
     ) {
         return ApiResponse.success(plmLaunchService.implementationTasks(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/implementation-templates")
+    public ApiResponse<java.util.List<PlmImplementationTemplateResponse>> implementationTemplates(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        String sceneCode = plmLaunchService.requireReadableBillForWorkspace(businessType, billId).sceneCode();
+        return ApiResponse.success(plmImplementationTemplateService.listTemplates(businessType, sceneCode));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/implementation-dependencies")
+    public ApiResponse<java.util.List<PlmImplementationDependencyResponse>> implementationDependencies(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmImplementationTemplateService.listDependencies(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/implementation-evidence")
+    public ApiResponse<java.util.List<PlmImplementationEvidenceResponse>> implementationEvidence(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmImplementationEvidenceService.listEvidence(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/acceptance-checklist")
+    public ApiResponse<java.util.List<PlmAcceptanceChecklistResponse>> acceptanceChecklist(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmImplementationEvidenceService.listAcceptanceChecklist(businessType, billId));
+    }
+
+    @GetMapping("/bills/{businessType}/{billId}/implementation-workspace")
+    public ApiResponse<PlmImplementationWorkspaceResponse> implementationWorkspace(
+            @PathVariable String businessType,
+            @PathVariable String billId
+    ) {
+        plmLaunchService.requireReadableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(plmImplementationEvidenceService.workspace(businessType, billId));
     }
 
     @PostMapping("/bills/{businessType}/{billId}/implementation-tasks")
@@ -109,6 +335,91 @@ public class PLMController {
             @RequestBody(required = false) PlmImplementationTaskActionRequest request
     ) {
         return ApiResponse.success(plmLaunchService.cancelImplementationTask(businessType, billId, taskId, request));
+    }
+
+    @PostMapping("/bills/{businessType}/{billId}/implementation-tasks/{taskId}/evidence")
+    public ApiResponse<PlmImplementationEvidenceResponse> addImplementationEvidence(
+            @PathVariable String businessType,
+            @PathVariable String billId,
+            @PathVariable String taskId,
+            @RequestBody PlmImplementationEvidenceUpsertRequest request
+    ) {
+        plmLaunchService.requireManageableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(
+                plmImplementationEvidenceService.addEvidence(
+                        businessType,
+                        billId,
+                        taskId,
+                        request,
+                        plmLaunchService.currentUserIdForWorkspace()
+                )
+        );
+    }
+
+    @PutMapping("/bills/{businessType}/{billId}/implementation-evidence/{evidenceId}")
+    public ApiResponse<PlmImplementationEvidenceResponse> updateImplementationEvidence(
+            @PathVariable String businessType,
+            @PathVariable String billId,
+            @PathVariable String evidenceId,
+            @RequestBody PlmImplementationEvidenceUpdateRequest request
+    ) {
+        plmLaunchService.requireManageableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(
+                plmImplementationEvidenceService.updateEvidence(
+                        businessType,
+                        billId,
+                        evidenceId,
+                        request
+                )
+        );
+    }
+
+    @DeleteMapping("/bills/{businessType}/{billId}/implementation-evidence/{evidenceId}")
+    public ApiResponse<Boolean> deleteImplementationEvidence(
+            @PathVariable String businessType,
+            @PathVariable String billId,
+            @PathVariable String evidenceId
+    ) {
+        plmLaunchService.requireManageableBillForWorkspace(businessType, billId);
+        plmImplementationEvidenceService.deleteEvidence(businessType, billId, evidenceId);
+        return ApiResponse.success(Boolean.TRUE);
+    }
+
+    @PutMapping("/bills/{businessType}/{billId}/acceptance-checklist/{checklistId}")
+    public ApiResponse<PlmAcceptanceChecklistResponse> updateAcceptanceChecklist(
+            @PathVariable String businessType,
+            @PathVariable String billId,
+            @PathVariable String checklistId,
+            @RequestBody PlmAcceptanceChecklistUpdateRequest request
+    ) {
+        plmLaunchService.requireManageableBillForWorkspace(businessType, billId);
+        return ApiResponse.success(
+                plmImplementationEvidenceService.updateAcceptanceChecklist(
+                        businessType,
+                        billId,
+                        checklistId,
+                        request,
+                        plmLaunchService.currentUserIdForWorkspace()
+                )
+        );
+    }
+
+    private java.util.List<PlmConnectorDispatchLogResponse> loadDispatchLogs(String jobId) {
+        var locator = plmConnectorOrchestrationService.requireJobLocator(jobId);
+        plmLaunchService.requireReadableBillForWorkspace(locator.businessType(), locator.billId());
+        return plmConnectorOrchestrationService.listDispatchLogs(jobId);
+    }
+
+    private PlmConnectorJobResponse retryConnectorJobInternal(String jobId) {
+        var locator = plmConnectorOrchestrationService.requireJobLocator(jobId);
+        plmLaunchService.requireManageableBillForWorkspace(locator.businessType(), locator.billId());
+        return plmConnectorOrchestrationService.retryJob(jobId, plmLaunchService.currentUserIdForWorkspace());
+    }
+
+    private PlmConnectorJobResponse dispatchConnectorJobInternal(String jobId) {
+        var locator = plmConnectorOrchestrationService.requireJobLocator(jobId);
+        plmLaunchService.requireManageableBillForWorkspace(locator.businessType(), locator.billId());
+        return plmConnectorOrchestrationService.dispatchJob(jobId, plmLaunchService.currentUserIdForWorkspace());
     }
 
     @PostMapping("/ecrs")

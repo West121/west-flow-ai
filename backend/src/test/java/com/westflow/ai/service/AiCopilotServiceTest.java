@@ -1656,6 +1656,13 @@ class AiCopilotServiceTest {
                 .contains("任务进度：共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1")
                 .contains("阻塞任务：TASK-003 · 评审图纸 · 等待图纸冻结")
                 .contains("关闭准备度：不可关闭：存在阻塞任务")
+                .contains("基线状态：BL-20260323-001 · 设计发布基线 · RELEASED")
+                .contains("外部集成：ERP 主数据 · PENDING · 等待编码同步")
+                .contains("待验收：待验收 1 项，已完成 2/3")
+                .contains("连接器任务：ERP_SYNC · PENDING · 等待派发")
+                .contains("卡点同步：ECR-20260323-001 · 电机外壳 BOM 变更（失败 1 / 待处理 1）")
+                .contains("关闭阻塞：ECR-20260323-001 · 存在阻塞实施任务（不可关闭：存在阻塞任务）")
+                .contains("失败热点：ERP 主数据（失败 1 / 待处理 1 / 影响 1 单）")
                 .contains("ECR · ECR-20260323-001 · 电机外壳 BOM 变更")
                 .contains("物料主数据变更 · MAT-20260323-003 · 主数据属性调整");
         List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
@@ -1673,16 +1680,16 @@ class AiCopilotServiceTest {
         assertThat(resultBlock.sourceKey()).isEqualTo("plm.bill.query");
         assertThat(resultBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
-                .contains("来源页面", "工具调用编号", "查询关键词", "命中业务类型", "首条单据", "类型分布", "状态分布", "对象类型", "版本差异", "任务进度", "阻塞任务", "关闭准备度", "命中摘要");
+                .contains("来源页面", "工具调用编号", "查询关键词", "命中业务类型", "首条单据", "类型分布", "状态分布", "对象类型", "版本差异", "任务进度", "阻塞任务", "关闭准备度", "基线状态", "外部集成", "验收状态", "连接器任务", "卡点同步", "关闭阻塞", "失败热点", "命中摘要");
         assertThat(resultBlock.metrics())
                 .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("命中单据数", "类型数", "对象类型数", "版本差异数", "任务进度", "阻塞任务", "可关闭单据", "业务域");
+                .contains("命中单据数", "类型数", "对象类型数", "版本差异数", "任务进度", "阻塞任务", "可关闭单据", "基线数", "同步风险", "待验收", "连接器待处理", "卡点同步", "关闭阻塞", "失败热点", "集成数", "业务域");
         assertThat(statsBlock.metrics())
                 .extracting(AiMessageBlockResponse.Metric::label)
-                .contains("命中单据数", "类型数", "对象类型数", "版本差异数", "任务进度", "阻塞任务", "可关闭单据", "业务域");
+                .contains("命中单据数", "类型数", "对象类型数", "版本差异数", "任务进度", "阻塞任务", "可关闭单据", "基线数", "同步风险", "待验收", "连接器待处理", "卡点同步", "关闭阻塞", "失败热点", "集成数", "业务域");
         assertThat(statsBlock.fields())
                 .extracting(AiMessageBlockResponse.Field::label)
-                .contains("摘要", "类型分布", "状态分布", "对象类型", "版本差异", "任务进度", "阻塞任务", "关闭准备度");
+                .contains("摘要", "类型分布", "状态分布", "对象类型", "版本差异", "任务进度", "阻塞任务", "关闭准备度", "基线状态", "外部集成", "验收状态", "连接器任务", "卡点同步", "关闭阻塞", "失败热点");
     }
 
     @Test
@@ -2110,6 +2117,20 @@ class AiCopilotServiceTest {
         extras.put("blockedTaskSummary", "TASK-003 · 评审图纸 · 等待图纸冻结");
         extras.put("closeReadyCount", 0);
         extras.put("closeReadinessSummary", "不可关闭：存在阻塞任务");
+        extras.put("baselineCount", 1);
+        extras.put("baselineStatusSummary", "BL-20260323-001 · 设计发布基线 · RELEASED");
+        extras.put("integrationCount", 2);
+        extras.put("integrationRiskCount", 1);
+        extras.put("integrationStatusSummary", "ERP 主数据 · PENDING · 等待编码同步；PDM 文档库 · SYNCED · 图纸已发布");
+        extras.put("acceptanceTotalCount", 2);
+        extras.put("acceptanceDueCount", 1);
+        extras.put("acceptanceSummary", "待验收 1 项，已完成 1/2");
+        extras.put("connectorJobCount", 2);
+        extras.put("connectorPendingCount", 1);
+        extras.put("connectorStatusSummary", "ERP_SYNC · PENDING · 等待派发；PDM_RELEASE · ACKED");
+        extras.put("stuckSyncSummary", "ECR-20260323-001 · 电机外壳 BOM 变更（失败 1 / 待处理 1）");
+        extras.put("closeBlockerSummary", "ECR-20260323-001 · 存在阻塞实施任务（不可关闭：存在阻塞任务）");
+        extras.put("failedSystemHotspotSummary", "ERP 主数据（失败 1 / 待处理 1 / 影响 1 单）");
         return Map.copyOf(extras);
     }
 
@@ -2131,6 +2152,20 @@ class AiCopilotServiceTest {
         extras.put("blockedTaskSummary", "");
         extras.put("closeReadyCount", 1);
         extras.put("closeReadinessSummary", "可关闭");
+        extras.put("baselineCount", 1);
+        extras.put("baselineStatusSummary", "BL-20260320-003 · 主数据发布基线 · RELEASED");
+        extras.put("integrationCount", 1);
+        extras.put("integrationRiskCount", 0);
+        extras.put("integrationStatusSummary", "ERP 主数据 · SYNCED · 主数据已同步");
+        extras.put("acceptanceTotalCount", 1);
+        extras.put("acceptanceDueCount", 0);
+        extras.put("acceptanceSummary", "验收已完成 1/1");
+        extras.put("connectorJobCount", 1);
+        extras.put("connectorPendingCount", 0);
+        extras.put("connectorStatusSummary", "ERP_SYNC · ACKED");
+        extras.put("stuckSyncSummary", "");
+        extras.put("closeBlockerSummary", "");
+        extras.put("failedSystemHotspotSummary", "");
         return Map.copyOf(extras);
     }
 
@@ -2173,12 +2208,35 @@ class AiCopilotServiceTest {
         result.put("taskCompletedCount", 4);
         result.put("taskBlockedCount", 1);
         result.put("closeReadyCount", 1);
+        result.put("baselineCount", 2);
+        result.put("baselineStatusSummary", "BL-20260323-001 · 设计发布基线 · RELEASED；BL-20260320-003 · 主数据发布基线 · RELEASED");
+        result.put("integrationCount", 3);
+        result.put("integrationRiskCount", 1);
+        result.put("integrationStatusSummary", "ERP 主数据 · PENDING · 等待编码同步；PDM 文档库 · SYNCED · 图纸已发布；ERP 主数据 · SYNCED · 主数据已同步");
+        result.put("acceptanceTotalCount", 3);
+        result.put("acceptanceDueCount", 1);
+        result.put("acceptanceSummary", "待验收 1 项，已完成 2/3");
+        result.put("connectorJobCount", 3);
+        result.put("connectorPendingCount", 1);
+        result.put("connectorStatusSummary", "ERP_SYNC · PENDING · 等待派发；PDM_RELEASE · ACKED；ERP_SYNC · ACKED");
+        result.put("stuckSyncItems", List.of(
+                Map.of("billId", "ecr_001", "billNo", "ECR-20260323-001", "title", "电机外壳 BOM 变更", "businessTypeLabel", "ECR", "failedCount", 1, "pendingCount", 1, "summary", "ERP 主数据 · PENDING · 等待编码同步")
+        ));
+        result.put("stuckSyncSummary", "ECR-20260323-001 · 电机外壳 BOM 变更（失败 1 / 待处理 1）");
+        result.put("closeBlockerItems", List.of(
+                Map.of("billId", "ecr_001", "billNo", "ECR-20260323-001", "title", "电机外壳 BOM 变更", "businessTypeLabel", "ECR", "blockerTitle", "存在阻塞实施任务", "blockerCount", 2, "summary", "不可关闭：存在阻塞任务")
+        ));
+        result.put("closeBlockerSummary", "ECR-20260323-001 · 存在阻塞实施任务（不可关闭：存在阻塞任务）");
+        result.put("failedSystemHotspots", List.of(
+                Map.of("systemName", "ERP 主数据", "failedCount", 1, "pendingCount", 1, "blockedBillCount", 1, "summary", "ERP 主数据 失败 1 条、待处理 1 条，影响 1 张单据")
+        ));
+        result.put("failedSystemHotspotSummary", "ERP 主数据（失败 1 / 待处理 1 / 影响 1 单）");
         result.put("objectTypesSummary", "BOM、图纸、物料");
         result.put("revisionDiffSummary", "ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结；ATTRIBUTE · 物料编码与名称同步");
         result.put("taskProgressSummary", "共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1");
         result.put("blockedTaskSummary", "TASK-003 · 评审图纸 · 等待图纸冻结");
         result.put("closeReadinessSummary", "不可关闭：存在阻塞任务");
-        result.put("summary", "当前命中 2 条 PLM 单据，类型分布：ECR 1 条、物料主数据变更 1 条，状态分布：草稿 1 条、已完成 1 条，受影响对象共 3 个，对象类型：BOM、图纸、物料，版本差异：ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结；ATTRIBUTE · 物料编码与名称同步，任务进度：共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1；阻塞任务：TASK-003 · 评审图纸 · 等待图纸冻结，关闭准备度：不可关闭：存在阻塞任务；重点包括：ECR · ECR-20260323-001 · 电机外壳 BOM 变更（影响产品 P-1001 · 优先级 高 · 草稿 · 当前节点 待同步）；物料主数据变更 · MAT-20260323-003 · 主数据属性调整（物料 MAT-7788 / 电机外壳 · 已完成 · 当前节点 proc_mat_001）。");
+        result.put("summary", "当前命中 2 条 PLM 单据，类型分布：ECR 1 条、物料主数据变更 1 条，状态分布：草稿 1 条、已完成 1 条，受影响对象共 3 个，对象类型：BOM、图纸、物料，版本差异：ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结；ATTRIBUTE · 物料编码与名称同步，任务进度：共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1；阻塞任务：TASK-003 · 评审图纸 · 等待图纸冻结，关闭准备度：不可关闭：存在阻塞任务，基线状态：BL-20260323-001 · 设计发布基线 · RELEASED；BL-20260320-003 · 主数据发布基线 · RELEASED，外部集成：ERP 主数据 · PENDING · 等待编码同步；PDM 文档库 · SYNCED · 图纸已发布；ERP 主数据 · SYNCED · 主数据已同步，待验收：待验收 1 项，已完成 2/3，连接器任务：ERP_SYNC · PENDING · 等待派发；PDM_RELEASE · ACKED；ERP_SYNC · ACKED，卡点同步：ECR-20260323-001 · 电机外壳 BOM 变更（失败 1 / 待处理 1），关闭阻塞：ECR-20260323-001 · 存在阻塞实施任务（不可关闭：存在阻塞任务），失败热点：ERP 主数据（失败 1 / 待处理 1 / 影响 1 单）；重点包括：ECR · ECR-20260323-001 · 电机外壳 BOM 变更（影响产品 P-1001 · 优先级 高 · 草稿 · 当前节点 待同步）；物料主数据变更 · MAT-20260323-003 · 主数据属性调整（物料 MAT-7788 / 电机外壳 · 已完成 · 当前节点 proc_mat_001）。");
         return Map.copyOf(result);
     }
 

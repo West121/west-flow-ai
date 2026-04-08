@@ -67,6 +67,34 @@ spring.ai:
       options:
         model: qwen3.5-plus
 
+westflow:
+  plm:
+    connectors:
+      erp:
+        mode: stub
+        transport: http-simulated
+        endpoint-url: http://localhost:18081
+        endpoint-path: /api/plm/erp/sync
+        description: ERP 主数据同步桩接口
+      mes:
+        mode: stub
+        transport: http-simulated
+        endpoint-url: http://localhost:18082
+        endpoint-path: /api/plm/mes/sync
+        description: MES 执行同步桩接口
+      pdm:
+        mode: stub
+        transport: http-simulated
+        endpoint-url: http://localhost:18083
+        endpoint-path: /api/plm/pdm/release
+        description: PDM 文档发布桩接口
+      cad:
+        mode: stub
+        transport: http-simulated
+        endpoint-url: http://localhost:18084
+        endpoint-path: /api/plm/cad/publish
+        description: CAD 发布桩接口
+
 logging:
   level:
     # 测试环境只保留 MCP 错误级日志，避免 provider/握手预探测刷屏。

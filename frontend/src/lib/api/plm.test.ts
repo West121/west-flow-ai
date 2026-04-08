@@ -459,4 +459,136 @@ describe('plm api', () => {
       {}
     )
   })
+
+  it('maps connector task payloads into business summaries', async () => {
+    getMock.mockResolvedValueOnce(
+      okResponse([
+        {
+          id: 'job_001',
+          businessType: 'PLM_ECR',
+          billId: 'bill_001',
+          connectorCode: 'PLM_ERP_SYNC',
+          systemCode: 'ERP',
+          systemName: 'ERP 主数据',
+          directionCode: 'DOWNSTREAM',
+          jobType: 'BILL_SUBMITTED',
+          status: 'DISPATCHED',
+          requestPayloadJson: JSON.stringify({
+            summaryMessage: '结构件替换准备同步',
+            dispatchProfile: {
+              mode: 'stub',
+              transport: 'http-simulated',
+              endpointUrl: 'http://localhost:18081',
+              endpointPath: '/api/plm/erp/sync',
+            },
+            bill: {
+              billNo: 'ECR-001',
+              title: '结构件替换',
+            },
+            affectedData: {
+              objectLinkCount: 2,
+              baselineCount: 1,
+              documentCount: 3,
+            },
+            implementation: {
+              taskCount: 4,
+              blockedTaskCount: 1,
+            },
+            systemPayload: {
+              intent: 'MASTER_DATA_SYNC',
+              summary: '同步主数据对象、基线摘要与实施状态到 ERP。',
+            },
+          }),
+          externalRef: 'EXT-001',
+          retryCount: 0,
+          nextRunAt: '2026-04-08T10:00:00',
+          lastDispatchedAt: '2026-04-08T10:05:00',
+          lastAckAt: null,
+          lastError: null,
+          createdBy: 'usr_001',
+          sortOrder: 1,
+          dispatchLogs: [
+            {
+              id: 'dlog_001',
+              jobId: 'job_001',
+              actionType: 'DISPATCHED',
+              status: 'DISPATCHED',
+              requestPayloadJson: JSON.stringify({
+                summaryMessage: '结构件替换准备同步',
+                bill: { billNo: 'ECR-001' },
+                dispatchProfile: {
+                  transport: 'http-simulated',
+                  endpointUrl: 'http://localhost:18081',
+                  endpointPath: '/api/plm/erp/sync',
+                },
+              }),
+              responsePayloadJson: JSON.stringify({
+                message:
+                  'ERP 主数据 已派发到 http://localhost:18081/api/plm/erp/sync（stub）。',
+                mode: 'stub',
+                transport: 'http-simulated',
+                endpointUrl: 'http://localhost:18081',
+                endpointPath: '/api/plm/erp/sync',
+                handlerKey: 'plm.connector.erp.stub',
+              }),
+              errorMessage: null,
+              happenedAt: '2026-04-08T10:05:00',
+              sortOrder: 2,
+            },
+          ],
+          acknowledgements: [
+            {
+              id: 'ack_001',
+              jobId: 'job_001',
+              ackStatus: 'ACKED',
+              ackCode: '200',
+              idempotencyKey: 'ack-001',
+              externalRef: 'ERP-REF-001',
+              message: 'ERP 已确认收单',
+              payloadJson: null,
+              sourceSystem: 'ERP',
+              happenedAt: '2026-04-08T10:06:00',
+              sortOrder: 1,
+            },
+          ],
+        },
+      ])
+    )
+
+    const { listPLMConnectorTasks } = await import('./plm')
+    const tasks = await listPLMConnectorTasks('PLM_ECR', 'bill_001')
+
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]?.payloadSummary).toBe(
+      '同步主数据对象、基线摘要与实施状态到 ERP。'
+    )
+    expect(tasks[0]?.payloadDetails).toEqual([
+      '单据：结构件替换',
+      '编号：ECR-001',
+      '受影响对象 2 个',
+      '基线 1 组',
+      '文档 3 份',
+      '实施任务 4 项',
+      '阻塞 1 项',
+    ])
+    expect(tasks[0]?.dispatchProfile).toMatchObject({
+      transport: 'http-simulated',
+      endpointUrl: 'http://localhost:18081',
+      endpointPath: '/api/plm/erp/sync',
+    })
+    expect(tasks[0]?.dispatchLogs[0]).toMatchObject({
+      requestSummary: '结构件替换准备同步',
+      responseSummary:
+        'ERP 主数据 已派发到 http://localhost:18081/api/plm/erp/sync（stub）。',
+      requestDetails: [
+        '单据：ECR-001',
+        '传输：http-simulated',
+        '目标：http://localhost:18081/api/plm/erp/sync',
+      ],
+    })
+    expect(tasks[0]?.receipts[0]).toMatchObject({
+      payloadSummary: 'ERP 已确认收单',
+      payloadDetails: ['来源：ERP', '回执码：200', '幂等键：ack-001'],
+    })
+  })
 })

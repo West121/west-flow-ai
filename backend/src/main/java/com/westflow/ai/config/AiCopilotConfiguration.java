@@ -54,6 +54,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +72,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Comparator;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -895,6 +898,19 @@ public class AiCopilotConfiguration {
         int taskOverdueCount = sumPlmIntegerField(items, "taskOverdueCount");
         int taskRequiredOpenCount = sumPlmIntegerField(items, "taskRequiredOpenCount");
         int closeReadyCount = sumPlmIntegerField(items, "closeReadyCount");
+        int baselineCount = sumPlmIntegerField(items, "baselineCount");
+        int integrationCount = sumPlmIntegerField(items, "integrationCount");
+        int integrationRiskCount = sumPlmIntegerField(items, "integrationRiskCount");
+        int acceptanceTotalCount = sumPlmIntegerField(items, "acceptanceTotalCount");
+        int acceptanceDueCount = sumPlmIntegerField(items, "acceptanceDueCount");
+        int connectorJobCount = sumPlmIntegerField(items, "connectorJobCount");
+        int connectorPendingCount = sumPlmIntegerField(items, "connectorPendingCount");
+        List<Map<String, Object>> stuckSyncItems = buildPlmStuckSyncItems(items);
+        List<Map<String, Object>> closeBlockerItems = buildPlmCloseBlockerItems(items);
+        List<Map<String, Object>> failedSystemHotspots = buildPlmFailedSystemHotspots(items);
+        String stuckSyncSummary = summarizePlmStuckSyncItems(stuckSyncItems);
+        String closeBlockerSummary = summarizePlmCloseBlockerItems(closeBlockerItems);
+        String failedSystemHotspotSummary = summarizePlmFailedSystemHotspots(failedSystemHotspots);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("keyword", normalizedKeyword);
         result.put("count", items.size());
@@ -923,6 +939,23 @@ public class AiCopilotConfiguration {
         result.put("taskOverdueCount", taskOverdueCount);
         result.put("taskRequiredOpenCount", taskRequiredOpenCount);
         result.put("closeReadyCount", closeReadyCount);
+        result.put("baselineCount", baselineCount);
+        result.put("baselineStatusSummary", summarizePlmField(items, "baselineStatusSummary"));
+        result.put("integrationCount", integrationCount);
+        result.put("integrationRiskCount", integrationRiskCount);
+        result.put("integrationStatusSummary", summarizePlmField(items, "integrationStatusSummary"));
+        result.put("acceptanceTotalCount", acceptanceTotalCount);
+        result.put("acceptanceDueCount", acceptanceDueCount);
+        result.put("acceptanceSummary", summarizePlmField(items, "acceptanceSummary"));
+        result.put("connectorJobCount", connectorJobCount);
+        result.put("connectorPendingCount", connectorPendingCount);
+        result.put("connectorStatusSummary", summarizePlmField(items, "connectorStatusSummary"));
+        result.put("stuckSyncItems", stuckSyncItems);
+        result.put("stuckSyncSummary", stuckSyncSummary);
+        result.put("closeBlockerItems", closeBlockerItems);
+        result.put("closeBlockerSummary", closeBlockerSummary);
+        result.put("failedSystemHotspots", failedSystemHotspots);
+        result.put("failedSystemHotspotSummary", failedSystemHotspotSummary);
         result.put("highlights", items.stream()
                 .limit(3)
                 .map(item -> {
@@ -943,6 +976,10 @@ public class AiCopilotConfiguration {
                     highlight.put("taskProgressSummary", item.get("taskProgressSummary"));
                     highlight.put("blockedTaskSummary", item.get("blockedTaskSummary"));
                     highlight.put("closeReadinessSummary", item.get("closeReadinessSummary"));
+                    highlight.put("baselineStatusSummary", item.get("baselineStatusSummary"));
+                    highlight.put("integrationStatusSummary", item.get("integrationStatusSummary"));
+                    highlight.put("acceptanceSummary", item.get("acceptanceSummary"));
+                    highlight.put("connectorStatusSummary", item.get("connectorStatusSummary"));
                     return Map.copyOf(highlight);
                 })
                 .toList());
@@ -962,7 +999,17 @@ public class AiCopilotConfiguration {
                 taskPendingCount,
                 taskOverdueCount,
                 taskRequiredOpenCount,
-                closeReadyCount
+                closeReadyCount,
+                baselineCount,
+                integrationCount,
+                integrationRiskCount,
+                acceptanceTotalCount,
+                acceptanceDueCount,
+                connectorJobCount,
+                connectorPendingCount,
+                stuckSyncSummary,
+                closeBlockerSummary,
+                failedSystemHotspotSummary
         ));
         return Map.copyOf(result);
     }
@@ -1076,6 +1123,32 @@ public class AiCopilotConfiguration {
                             taskRequiredOpenCount,
                             closeReadyCount
                     );
+                    int baselineCount = resolvePlmAffectedItemCount(resultSet.getObject("baseline_count"), "");
+                    String baselineStatusSummary = resolvePlmBaselineStatusSummary(
+                            stringValue(resultSet.getString("baseline_status_summary")),
+                            baselineCount
+                    );
+                    int integrationCount = resolvePlmAffectedItemCount(resultSet.getObject("integration_count"), "");
+                    int integrationRiskCount = resolvePlmAffectedItemCount(resultSet.getObject("integration_risk_count"), "");
+                    String integrationStatusSummary = resolvePlmIntegrationStatusSummary(
+                            stringValue(resultSet.getString("integration_status_summary")),
+                            integrationCount,
+                            integrationRiskCount
+                    );
+                    int acceptanceTotalCount = resolvePlmAffectedItemCount(resultSet.getObject("acceptance_total_count"), "");
+                    int acceptanceDueCount = resolvePlmAffectedItemCount(resultSet.getObject("acceptance_due_count"), "");
+                    String acceptanceSummary = resolvePlmAcceptanceSummary(
+                            stringValue(resultSet.getString("acceptance_summary")),
+                            acceptanceTotalCount,
+                            acceptanceDueCount
+                    );
+                    int connectorJobCount = resolvePlmAffectedItemCount(resultSet.getObject("connector_job_count"), "");
+                    int connectorPendingCount = resolvePlmAffectedItemCount(resultSet.getObject("connector_pending_count"), "");
+                    String connectorStatusSummary = resolvePlmConnectorStatusSummary(
+                            stringValue(resultSet.getString("connector_status_summary")),
+                            connectorJobCount,
+                            connectorPendingCount
+                    );
                     item.put("businessType", businessTypeValue);
                     item.put("businessTypeLabel", resolvePlmBusinessTypeLabel(businessTypeValue));
                     item.put("billId", stringValue(resultSet.getString("bill_id")));
@@ -1111,6 +1184,17 @@ public class AiCopilotConfiguration {
                     item.put("blockedTaskSummary", blockedTaskSummary);
                     item.put("closeReadyCount", closeReadyCount);
                     item.put("closeReadinessSummary", closeReadinessSummary);
+                    item.put("baselineCount", baselineCount);
+                    item.put("baselineStatusSummary", baselineStatusSummary);
+                    item.put("integrationCount", integrationCount);
+                    item.put("integrationRiskCount", integrationRiskCount);
+                    item.put("integrationStatusSummary", integrationStatusSummary);
+                    item.put("acceptanceTotalCount", acceptanceTotalCount);
+                    item.put("acceptanceDueCount", acceptanceDueCount);
+                    item.put("acceptanceSummary", acceptanceSummary);
+                    item.put("connectorJobCount", connectorJobCount);
+                    item.put("connectorPendingCount", connectorPendingCount);
+                    item.put("connectorStatusSummary", connectorStatusSummary);
                     item.put("businessSummary", buildPlmBusinessSummary(
                             businessTypeValue,
                             title,
@@ -1126,7 +1210,11 @@ public class AiCopilotConfiguration {
                             revisionDiffSummary,
                             taskProgressSummary,
                             blockedTaskSummary,
-                            closeReadinessSummary
+                            closeReadinessSummary,
+                            baselineStatusSummary,
+                            integrationStatusSummary,
+                            acceptanceSummary,
+                            connectorStatusSummary
                     ));
                     return Map.copyOf(item);
                 },
@@ -1280,6 +1368,22 @@ public class AiCopilotConfiguration {
         boolean hasImplementationTaskTable() {
             return tableColumns.containsKey("plm_implementation_task") && !tableColumns.get("plm_implementation_task").isEmpty();
         }
+
+        boolean hasBaselineTable() {
+            return tableColumns.containsKey("plm_configuration_baseline") && !tableColumns.get("plm_configuration_baseline").isEmpty();
+        }
+
+        boolean hasExternalIntegrationTable() {
+            return tableColumns.containsKey("plm_external_integration_record") && !tableColumns.get("plm_external_integration_record").isEmpty();
+        }
+
+        boolean hasAcceptanceChecklistTable() {
+            return tableColumns.containsKey("plm_acceptance_checklist") && !tableColumns.get("plm_acceptance_checklist").isEmpty();
+        }
+
+        boolean hasConnectorJobTable() {
+            return tableColumns.containsKey("plm_connector_job") && !tableColumns.get("plm_connector_job").isEmpty();
+        }
     }
 
     private static PlmBillQuerySchema inspectPlmBillQuerySchema(JdbcTemplate jdbcTemplate) {
@@ -1294,6 +1398,10 @@ public class AiCopilotConfiguration {
             tableColumns.put("plm_object_master", loadTableColumns(metaData, "plm_object_master"));
             tableColumns.put("plm_revision_diff", loadTableColumns(metaData, "plm_revision_diff"));
             tableColumns.put("plm_implementation_task", loadTableColumns(metaData, "plm_implementation_task"));
+            tableColumns.put("plm_configuration_baseline", loadTableColumns(metaData, "plm_configuration_baseline"));
+            tableColumns.put("plm_external_integration_record", loadTableColumns(metaData, "plm_external_integration_record"));
+            tableColumns.put("plm_acceptance_checklist", loadTableColumns(metaData, "plm_acceptance_checklist"));
+            tableColumns.put("plm_connector_job", loadTableColumns(metaData, "plm_connector_job"));
             return new PlmBillQuerySchema(tableColumns);
         });
     }
@@ -1432,6 +1540,96 @@ public class AiCopilotConfiguration {
                         ) it ON it.business_type = '%s' AND it.bill_id = b.id
                         """.formatted(businessType, businessType));
         }
+        if (schema.hasBaselineTable()) {
+            joinClause.append("""
+                        LEFT JOIN (
+                          SELECT
+                            business_type,
+                            bill_id,
+                            COUNT(*) AS baseline_count,
+                            STRING_AGG(
+                              NULLIF(CONCAT_WS(' · ',
+                                NULLIF(baseline_code, ''),
+                                NULLIF(baseline_name, ''),
+                                NULLIF(status, '')
+                              ), ''),
+                              '；' ORDER BY released_at NULLS LAST, id
+                            ) AS baseline_status_summary
+                          FROM plm_configuration_baseline
+                          WHERE business_type = '%s'
+                          GROUP BY business_type, bill_id
+                        ) bl ON bl.business_type = '%s' AND bl.bill_id = b.id
+                        """.formatted(businessType, businessType));
+        }
+        if (schema.hasExternalIntegrationTable()) {
+            joinClause.append("""
+                        LEFT JOIN (
+                          SELECT
+                            business_type,
+                            bill_id,
+                            COUNT(*) AS integration_count,
+                            COUNT(*) FILTER (WHERE UPPER(status) IN ('PENDING', 'BLOCKED', 'FAILED')) AS integration_risk_count,
+                            STRING_AGG(
+                              NULLIF(CONCAT_WS(' · ',
+                                NULLIF(system_name, ''),
+                                NULLIF(status, ''),
+                                NULLIF(message, '')
+                              ), ''),
+                              '；' ORDER BY sort_order, id
+                            ) AS integration_status_summary
+                          FROM plm_external_integration_record
+                          WHERE business_type = '%s'
+                          GROUP BY business_type, bill_id
+                        ) ir ON ir.business_type = '%s' AND ir.bill_id = b.id
+                        """.formatted(businessType, businessType));
+        }
+        if (schema.hasAcceptanceChecklistTable()) {
+            joinClause.append("""
+                        LEFT JOIN (
+                          SELECT
+                            business_type,
+                            bill_id,
+                            COUNT(*) AS acceptance_total_count,
+                            COUNT(*) FILTER (
+                              WHERE COALESCE(required_flag, TRUE) = TRUE
+                                AND UPPER(status) NOT IN ('ACCEPTED', 'WAIVED')
+                            ) AS acceptance_due_count,
+                            STRING_AGG(
+                              NULLIF(CONCAT_WS(' · ',
+                                NULLIF(check_name, ''),
+                                NULLIF(status, ''),
+                                NULLIF(result_summary, '')
+                              ), ''),
+                              '；' ORDER BY sort_order, id
+                            ) AS acceptance_summary
+                          FROM plm_acceptance_checklist
+                          WHERE business_type = '%s'
+                          GROUP BY business_type, bill_id
+                        ) ac ON ac.business_type = '%s' AND ac.bill_id = b.id
+                        """.formatted(businessType, businessType));
+        }
+        if (schema.hasConnectorJobTable()) {
+            joinClause.append("""
+                        LEFT JOIN (
+                          SELECT
+                            business_type,
+                            bill_id,
+                            COUNT(*) AS connector_job_count,
+                            COUNT(*) FILTER (WHERE UPPER(status) IN ('PENDING', 'DISPATCHED', 'FAILED')) AS connector_pending_count,
+                            STRING_AGG(
+                              NULLIF(CONCAT_WS(' · ',
+                                NULLIF(job_type, ''),
+                                NULLIF(status, ''),
+                                NULLIF(last_error, '')
+                              ), ''),
+                              '；' ORDER BY sort_order, id
+                            ) AS connector_status_summary
+                          FROM plm_connector_job
+                          WHERE business_type = '%s'
+                          GROUP BY business_type, bill_id
+                        ) cj ON cj.business_type = '%s' AND cj.bill_id = b.id
+                        """.formatted(businessType, businessType));
+        }
         return joinClause.toString();
     }
 
@@ -1499,6 +1697,50 @@ public class AiCopilotConfiguration {
         return schema.hasImplementationTaskTable() ? "it.close_readiness_summary" : "NULL";
     }
 
+    private static String selectPlmBaselineCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasBaselineTable() ? "bl.baseline_count" : "NULL";
+    }
+
+    private static String selectPlmBaselineStatusSummary(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasBaselineTable() ? "bl.baseline_status_summary" : "NULL";
+    }
+
+    private static String selectPlmIntegrationCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasExternalIntegrationTable() ? "ir.integration_count" : "NULL";
+    }
+
+    private static String selectPlmIntegrationRiskCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasExternalIntegrationTable() ? "ir.integration_risk_count" : "NULL";
+    }
+
+    private static String selectPlmIntegrationStatusSummary(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasExternalIntegrationTable() ? "ir.integration_status_summary" : "NULL";
+    }
+
+    private static String selectPlmAcceptanceTotalCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasAcceptanceChecklistTable() ? "ac.acceptance_total_count" : "NULL";
+    }
+
+    private static String selectPlmAcceptanceDueCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasAcceptanceChecklistTable() ? "ac.acceptance_due_count" : "NULL";
+    }
+
+    private static String selectPlmAcceptanceSummary(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasAcceptanceChecklistTable() ? "ac.acceptance_summary" : "NULL";
+    }
+
+    private static String selectPlmConnectorJobCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasConnectorJobTable() ? "cj.connector_job_count" : "NULL";
+    }
+
+    private static String selectPlmConnectorPendingCount(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasConnectorJobTable() ? "cj.connector_pending_count" : "NULL";
+    }
+
+    private static String selectPlmConnectorStatusSummary(PlmBillQuerySchema schema, String businessType) {
+        return schema.hasConnectorJobTable() ? "cj.connector_status_summary" : "NULL";
+    }
+
     private static String buildPlmV4SelectTail(PlmBillQuerySchema schema, String businessType) {
         return """
                   %s AS object_type_count,
@@ -1517,6 +1759,17 @@ public class AiCopilotConfiguration {
                   %s AS blocked_task_summary,
                   %s AS close_ready_count,
                   %s AS close_readiness_summary,
+                  %s AS baseline_count,
+                  %s AS baseline_status_summary,
+                  %s AS integration_count,
+                  %s AS integration_risk_count,
+                  %s AS integration_status_summary,
+                  %s AS acceptance_total_count,
+                  %s AS acceptance_due_count,
+                  %s AS acceptance_summary,
+                  %s AS connector_job_count,
+                  %s AS connector_pending_count,
+                  %s AS connector_status_summary,
                 """.formatted(
                 selectPlmObjectTypeCount(schema, businessType),
                 selectPlmObjectTypesSummary(schema, businessType),
@@ -1533,7 +1786,18 @@ public class AiCopilotConfiguration {
                 selectPlmBlockedTaskCount(schema, businessType),
                 selectPlmBlockedTaskSummary(schema, businessType),
                 selectPlmCloseReadyCount(schema, businessType),
-                selectPlmCloseReadinessSummary(schema, businessType)
+                selectPlmCloseReadinessSummary(schema, businessType),
+                selectPlmBaselineCount(schema, businessType),
+                selectPlmBaselineStatusSummary(schema, businessType),
+                selectPlmIntegrationCount(schema, businessType),
+                selectPlmIntegrationRiskCount(schema, businessType),
+                selectPlmIntegrationStatusSummary(schema, businessType),
+                selectPlmAcceptanceTotalCount(schema, businessType),
+                selectPlmAcceptanceDueCount(schema, businessType),
+                selectPlmAcceptanceSummary(schema, businessType),
+                selectPlmConnectorJobCount(schema, businessType),
+                selectPlmConnectorPendingCount(schema, businessType),
+                selectPlmConnectorStatusSummary(schema, businessType)
         );
     }
 
@@ -1553,7 +1817,17 @@ public class AiCopilotConfiguration {
             int taskPendingCount,
             int taskOverdueCount,
             int taskRequiredOpenCount,
-            int closeReadyCount
+            int closeReadyCount,
+            int baselineCount,
+            int integrationCount,
+            int integrationRiskCount,
+            int acceptanceTotalCount,
+            int acceptanceDueCount,
+            int connectorJobCount,
+            int connectorPendingCount,
+            String stuckSyncSummary,
+            String closeBlockerSummary,
+            String failedSystemHotspotSummary
     ) {
         int count = items == null ? 0 : items.size();
         if (count <= 0) {
@@ -1567,6 +1841,10 @@ public class AiCopilotConfiguration {
         String taskProgressSummary = summarizePlmField(items, "taskProgressSummary");
         String blockedTaskSummary = summarizePlmField(items, "blockedTaskSummary");
         String closeReadinessSummary = summarizePlmField(items, "closeReadinessSummary");
+        String baselineStatusSummary = summarizePlmField(items, "baselineStatusSummary");
+        String integrationStatusSummary = summarizePlmField(items, "integrationStatusSummary");
+        String acceptanceSummary = summarizePlmField(items, "acceptanceSummary");
+        String connectorStatusSummary = summarizePlmField(items, "connectorStatusSummary");
         String itemSummary = items.stream()
                 .limit(3)
                 .map(AiCopilotConfiguration::describePlmItem)
@@ -1615,6 +1893,42 @@ public class AiCopilotConfiguration {
             builder.append("，关闭准备度：").append(closeReadinessSummary);
         } else if (closeReadyCount > 0) {
             builder.append("，可关闭 ").append(closeReadyCount).append(" 条");
+        }
+        if (baselineCount > 0 && !baselineStatusSummary.isBlank()) {
+            builder.append("，基线状态：").append(baselineStatusSummary);
+        } else if (baselineCount > 0) {
+            builder.append("，配置基线 ").append(baselineCount).append(" 条");
+        }
+        if (integrationCount > 0 && !integrationStatusSummary.isBlank()) {
+            builder.append("，外部集成：").append(integrationStatusSummary);
+        } else if (integrationCount > 0) {
+            builder.append("，外部集成 ").append(integrationCount).append(" 条");
+        }
+        if (integrationRiskCount > 0) {
+            builder.append("，同步风险 ").append(integrationRiskCount).append(" 条");
+        }
+        if (acceptanceDueCount > 0 && !acceptanceSummary.isBlank()) {
+            builder.append("，待验收：").append(acceptanceSummary);
+        } else if (acceptanceTotalCount > 0 && !acceptanceSummary.isBlank()) {
+            builder.append("，验收状态：").append(acceptanceSummary);
+        } else if (acceptanceDueCount > 0) {
+            builder.append("，待验收 ").append(acceptanceDueCount).append(" 项");
+        }
+        if (connectorPendingCount > 0 && !connectorStatusSummary.isBlank()) {
+            builder.append("，连接器任务：").append(connectorStatusSummary);
+        } else if (connectorJobCount > 0 && !connectorStatusSummary.isBlank()) {
+            builder.append("，连接器状态：").append(connectorStatusSummary);
+        } else if (connectorPendingCount > 0) {
+            builder.append("，连接器待处理 ").append(connectorPendingCount).append(" 条");
+        }
+        if (!stuckSyncSummary.isBlank()) {
+            builder.append("，卡点同步：").append(stuckSyncSummary);
+        }
+        if (!closeBlockerSummary.isBlank()) {
+            builder.append("，关闭阻塞：").append(closeBlockerSummary);
+        }
+        if (!failedSystemHotspotSummary.isBlank()) {
+            builder.append("，失败热点：").append(failedSystemHotspotSummary);
         }
         if (pendingClosureCount > 0) {
             builder.append("，已审批完成但未关闭 ").append(pendingClosureCount).append(" 条");
@@ -1752,7 +2066,11 @@ public class AiCopilotConfiguration {
             String revisionDiffSummary,
             String taskProgressSummary,
             String blockedTaskSummary,
-            String closeReadinessSummary
+            String closeReadinessSummary,
+            String baselineStatusSummary,
+            String integrationStatusSummary,
+            String acceptanceSummary,
+            String connectorStatusSummary
     ) {
         String base = buildPlmBusinessSummary(businessType, title, detailSummary, approvalSummary);
         ArrayList<String> extras = new ArrayList<>();
@@ -1788,12 +2106,68 @@ public class AiCopilotConfiguration {
         if (!stringValue(closeReadinessSummary).isBlank()) {
             extras.add("关闭准备度 " + stringValue(closeReadinessSummary));
         }
+        if (!stringValue(baselineStatusSummary).isBlank()) {
+            extras.add("基线 " + stringValue(baselineStatusSummary));
+        }
+        if (!stringValue(integrationStatusSummary).isBlank()) {
+            extras.add("集成 " + stringValue(integrationStatusSummary));
+        }
+        if (!stringValue(acceptanceSummary).isBlank()) {
+            extras.add("验收 " + stringValue(acceptanceSummary));
+        }
+        if (!stringValue(connectorStatusSummary).isBlank()) {
+            extras.add("连接器 " + stringValue(connectorStatusSummary));
+        }
         String suffix = extras.stream()
                 .filter(text -> !text.isBlank())
                 .limit(5)
                 .reduce((left, right) -> left + "；" + right)
                 .orElse("");
         return suffix.isBlank() ? base : base + " · " + suffix;
+    }
+
+    private static String resolvePlmBaselineStatusSummary(String baselineStatusSummary, int baselineCount) {
+        if (!stringValue(baselineStatusSummary).isBlank()) {
+            return stringValue(baselineStatusSummary);
+        }
+        return baselineCount > 0 ? "共 " + baselineCount + " 条配置基线" : "";
+    }
+
+    private static String resolvePlmIntegrationStatusSummary(String integrationStatusSummary, int integrationCount, int integrationRiskCount) {
+        if (!stringValue(integrationStatusSummary).isBlank()) {
+            return stringValue(integrationStatusSummary);
+        }
+        if (integrationCount <= 0) {
+            return "";
+        }
+        return integrationRiskCount > 0
+                ? "共 %d 条外部集成，其中风险 %d 条".formatted(integrationCount, integrationRiskCount)
+                : "共 %d 条外部集成".formatted(integrationCount);
+    }
+
+    private static String resolvePlmAcceptanceSummary(String acceptanceSummary, int acceptanceTotalCount, int acceptanceDueCount) {
+        if (!stringValue(acceptanceSummary).isBlank()) {
+            return stringValue(acceptanceSummary);
+        }
+        if (acceptanceTotalCount <= 0) {
+            return "";
+        }
+        int acceptedCount = Math.max(acceptanceTotalCount - acceptanceDueCount, 0);
+        return acceptanceDueCount > 0
+                ? "待验收 %d 项，已完成 %d/%d".formatted(acceptanceDueCount, acceptedCount, acceptanceTotalCount)
+                : "验收已完成 %d/%d".formatted(acceptedCount, acceptanceTotalCount);
+    }
+
+    private static String resolvePlmConnectorStatusSummary(String connectorStatusSummary, int connectorJobCount, int connectorPendingCount) {
+        if (!stringValue(connectorStatusSummary).isBlank()) {
+            return stringValue(connectorStatusSummary);
+        }
+        if (connectorJobCount <= 0) {
+            return "";
+        }
+        return connectorPendingCount > 0
+                ? "连接器任务 %d 条，待处理 %d 条".formatted(connectorJobCount, connectorPendingCount)
+                : "连接器任务 %d 条".formatted(connectorJobCount);
     }
 
     private static String resolvePlmObjectTypesSummary(
@@ -1923,6 +2297,193 @@ public class AiCopilotConfiguration {
         return (int) items.stream()
                 .filter(item -> "待关闭".equals(stringValue(item.get("lifecycleStage"))))
                 .count();
+    }
+
+    private static List<Map<String, Object>> buildPlmStuckSyncItems(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        return items.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> resolvePlmAffectedItemCount(item.get("integrationRiskCount"), "") > 0
+                        || resolvePlmAffectedItemCount(item.get("connectorPendingCount"), "") > 0)
+                .sorted(Comparator
+                        .comparingInt((Map<String, Object> item) -> resolvePlmAffectedItemCount(item.get("integrationRiskCount"), "")).reversed()
+                        .thenComparingInt(item -> resolvePlmAffectedItemCount(item.get("connectorPendingCount"), "")).reversed()
+                        .thenComparing(item -> stringValue(item.get("billNo"))))
+                .limit(5)
+                .map(item -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    int failedCount = resolvePlmAffectedItemCount(item.get("integrationRiskCount"), "");
+                    int pendingCount = resolvePlmAffectedItemCount(item.get("connectorPendingCount"), "");
+                    String integrationStatusSummary = stringValue(item.get("integrationStatusSummary"));
+                    String connectorStatusSummary = stringValue(item.get("connectorStatusSummary"));
+                    row.put("billId", stringValue(item.get("billId")));
+                    row.put("billNo", stringValue(item.get("billNo")));
+                    row.put("title", stringValue(item.get("title")));
+                    row.put("businessTypeLabel", stringValue(item.get("businessTypeLabel")));
+                    row.put("failedCount", failedCount);
+                    row.put("pendingCount", pendingCount);
+                    row.put("summary", !integrationStatusSummary.isBlank() ? integrationStatusSummary : connectorStatusSummary);
+                    return Map.copyOf(row);
+                })
+                .toList();
+    }
+
+    private static List<Map<String, Object>> buildPlmCloseBlockerItems(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        return items.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> resolvePlmAffectedItemCount(item.get("taskBlockedCount"), "") > 0
+                        || resolvePlmAffectedItemCount(item.get("acceptanceDueCount"), "") > 0
+                        || resolvePlmAffectedItemCount(item.get("connectorPendingCount"), "") > 0
+                        || stringValue(item.get("closeReadinessSummary")).startsWith("不可关闭"))
+                .sorted(Comparator
+                        .comparingInt((Map<String, Object> item) -> resolvePlmAffectedItemCount(item.get("taskBlockedCount"), "")
+                                + resolvePlmAffectedItemCount(item.get("acceptanceDueCount"), "")
+                                + resolvePlmAffectedItemCount(item.get("connectorPendingCount"), "")).reversed()
+                        .thenComparing(item -> stringValue(item.get("billNo"))))
+                .limit(5)
+                .map(item -> {
+                    int blockedTaskCount = resolvePlmAffectedItemCount(item.get("taskBlockedCount"), "");
+                    int acceptanceDueCount = resolvePlmAffectedItemCount(item.get("acceptanceDueCount"), "");
+                    int connectorPendingCount = resolvePlmAffectedItemCount(item.get("connectorPendingCount"), "");
+                    String blockerTitle;
+                    if (blockedTaskCount > 0) {
+                        blockerTitle = "存在阻塞实施任务";
+                    } else if (acceptanceDueCount > 0) {
+                        blockerTitle = "验收清单待完成";
+                    } else if (connectorPendingCount > 0) {
+                        blockerTitle = "外部回执待确认";
+                    } else {
+                        blockerTitle = "关闭条件未满足";
+                    }
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("billId", stringValue(item.get("billId")));
+                    row.put("billNo", stringValue(item.get("billNo")));
+                    row.put("title", stringValue(item.get("title")));
+                    row.put("businessTypeLabel", stringValue(item.get("businessTypeLabel")));
+                    row.put("blockerTitle", blockerTitle);
+                    row.put("blockerCount", blockedTaskCount + acceptanceDueCount + connectorPendingCount);
+                    row.put("summary", stringValue(item.get("closeReadinessSummary")));
+                    return Map.copyOf(row);
+                })
+                .toList();
+    }
+
+    private static List<Map<String, Object>> buildPlmFailedSystemHotspots(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return List.of();
+        }
+        Map<String, int[]> counters = new LinkedHashMap<>();
+        Map<String, Set<String>> billsBySystem = new LinkedHashMap<>();
+        for (Map<String, Object> item : items) {
+            if (item == null) {
+                continue;
+            }
+            String billId = stringValue(item.get("billId"));
+            String summary = stringValue(item.get("integrationStatusSummary"));
+            for (String entry : splitPlmSummaryEntries(summary)) {
+                String systemName = extractPlmSystemName(entry);
+                if (systemName.isBlank()) {
+                    continue;
+                }
+                int[] counts = counters.computeIfAbsent(systemName, ignored -> new int[2]);
+                String normalized = entry.toUpperCase(Locale.ROOT);
+                if (normalized.contains("FAILED")) {
+                    counts[0] += 1;
+                }
+                if (normalized.contains("PENDING") || normalized.contains("BLOCKED") || normalized.contains("RETRY") || normalized.contains("ACK_PENDING")) {
+                    counts[1] += 1;
+                }
+                billsBySystem.computeIfAbsent(systemName, ignored -> new LinkedHashSet<>()).add(billId);
+            }
+        }
+        return counters.entrySet().stream()
+                .filter(entry -> entry.getValue()[0] > 0 || entry.getValue()[1] > 0)
+                .sorted(Comparator
+                        .comparingInt((Map.Entry<String, int[]> entry) -> entry.getValue()[0]).reversed()
+                        .thenComparingInt(entry -> entry.getValue()[1]).reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .limit(5)
+                .map(entry -> {
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    String systemName = entry.getKey();
+                    int failedCount = entry.getValue()[0];
+                    int pendingCount = entry.getValue()[1];
+                    int blockedBillCount = billsBySystem.getOrDefault(systemName, Set.of()).size();
+                    row.put("systemName", systemName);
+                    row.put("failedCount", failedCount);
+                    row.put("pendingCount", pendingCount);
+                    row.put("blockedBillCount", blockedBillCount);
+                    row.put("summary", "%s 失败 %d 条、待处理 %d 条，影响 %d 张单据".formatted(systemName, failedCount, pendingCount, blockedBillCount));
+                    return Map.copyOf(row);
+                })
+                .toList();
+    }
+
+    private static List<String> splitPlmSummaryEntries(String summary) {
+        if (summary == null || summary.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(summary.split("；"))
+                .map(String::trim)
+                .filter(text -> !text.isBlank())
+                .toList();
+    }
+
+    private static String extractPlmSystemName(String summaryEntry) {
+        if (summaryEntry == null || summaryEntry.isBlank()) {
+            return "";
+        }
+        int index = summaryEntry.indexOf('·');
+        return index > 0 ? summaryEntry.substring(0, index).trim() : summaryEntry.trim();
+    }
+
+    private static String summarizePlmStuckSyncItems(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+                .limit(3)
+                .map(item -> "%s · %s（失败 %s / 待处理 %s）".formatted(
+                        stringValue(item.get("billNo")),
+                        stringValue(item.get("title")),
+                        stringValue(item.get("failedCount")),
+                        stringValue(item.get("pendingCount"))))
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("");
+    }
+
+    private static String summarizePlmCloseBlockerItems(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+                .limit(3)
+                .map(item -> "%s · %s（%s）".formatted(
+                        stringValue(item.get("billNo")),
+                        stringValue(item.get("blockerTitle")),
+                        stringValue(item.get("summary"))))
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("");
+    }
+
+    private static String summarizePlmFailedSystemHotspots(List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return "";
+        }
+        return items.stream()
+                .limit(3)
+                .map(item -> "%s（失败 %s / 待处理 %s / 影响 %s 单）".formatted(
+                        stringValue(item.get("systemName")),
+                        stringValue(item.get("failedCount")),
+                        stringValue(item.get("pendingCount")),
+                        stringValue(item.get("blockedBillCount"))))
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("");
     }
 
     private static String summarizePlmField(List<Map<String, Object>> items, String fieldName) {

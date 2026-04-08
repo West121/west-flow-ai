@@ -11,9 +11,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
+import { Textarea } from '@/components/ui/textarea'
 import { formatApprovalSheetDateTime } from '@/features/workbench/approval-sheet-list'
+import { useState } from 'react'
 
 const TASK_STATUS_ORDER: Array<PLMImplementationTask['status']> = [
   'PENDING',
@@ -81,17 +84,35 @@ function resolveTaskActionButtons(task: PLMImplementationTask): Array<{
 function TaskCard({
   task,
   onTaskAction,
+  onAddEvidence,
   pendingTaskId,
+  evidencePendingTaskId,
 }: {
   task: PLMImplementationTask
   onTaskAction?: (
     task: PLMImplementationTask,
     action: PLMImplementationTaskActionCode
   ) => void
+  onAddEvidence?: (
+    task: PLMImplementationTask,
+    payload: {
+      evidenceType: string
+      evidenceName: string
+      evidenceRef?: string
+      evidenceSummary?: string
+    }
+  ) => void
   pendingTaskId?: string | null
+  evidencePendingTaskId?: string | null
 }) {
   const buttons = resolveTaskActionButtons(task)
   const isPending = pendingTaskId != null
+  const [showEvidenceForm, setShowEvidenceForm] = useState(false)
+  const [evidenceName, setEvidenceName] = useState(`${task.taskTitle} 验证记录`)
+  const [evidenceSummary, setEvidenceSummary] = useState(
+    task.resultSummary ?? `已完成 ${task.taskTitle} 的阶段性证据收集。`
+  )
+  const [evidenceRef, setEvidenceRef] = useState(task.taskNo)
 
   return (
     <div className='rounded-lg border bg-background p-4 shadow-sm'>
@@ -183,6 +204,63 @@ function TaskCard({
                 {button.label}
               </Button>
             ))}
+            <Button
+              type='button'
+              size='sm'
+              variant='secondary'
+              disabled={evidencePendingTaskId != null}
+              onClick={() => setShowEvidenceForm((value) => !value)}
+            >
+              {showEvidenceForm ? '收起证据' : '补证据'}
+            </Button>
+          </div>
+        </>
+      ) : null}
+      {showEvidenceForm ? (
+        <>
+          <Separator className='my-4' />
+          <div className='space-y-3 rounded-lg border bg-muted/10 p-3'>
+            <div className='grid gap-3 md:grid-cols-2'>
+              <div className='space-y-2'>
+                <div className='text-xs text-muted-foreground'>证据标题</div>
+                <Input
+                  value={evidenceName}
+                  onChange={(event) => setEvidenceName(event.target.value)}
+                />
+              </div>
+              <div className='space-y-2'>
+                <div className='text-xs text-muted-foreground'>外部引用</div>
+                <Input
+                  value={evidenceRef}
+                  onChange={(event) => setEvidenceRef(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className='space-y-2'>
+              <div className='text-xs text-muted-foreground'>摘要</div>
+              <Textarea
+                rows={3}
+                value={evidenceSummary}
+                onChange={(event) => setEvidenceSummary(event.target.value)}
+              />
+            </div>
+            <div className='flex justify-end'>
+              <Button
+                type='button'
+                size='sm'
+                disabled={evidencePendingTaskId != null || !evidenceName.trim()}
+                onClick={() =>
+                  onAddEvidence?.(task, {
+                    evidenceType: task.verificationRequired ? 'VALIDATION' : 'EXECUTION',
+                    evidenceName: evidenceName.trim(),
+                    evidenceRef: evidenceRef.trim() || undefined,
+                    evidenceSummary: evidenceSummary.trim() || undefined,
+                  })
+                }
+              >
+                {evidencePendingTaskId === task.id ? '提交中...' : '保存证据'}
+              </Button>
+            </div>
           </div>
         </>
       ) : null}
@@ -194,7 +272,9 @@ function TaskLane({
   status,
   tasks,
   onTaskAction,
+  onAddEvidence,
   pendingTaskId,
+  evidencePendingTaskId,
 }: {
   status: PLMImplementationTask['status']
   tasks: PLMImplementationTask[]
@@ -202,7 +282,17 @@ function TaskLane({
     task: PLMImplementationTask,
     action: PLMImplementationTaskActionCode
   ) => void
+  onAddEvidence?: (
+    task: PLMImplementationTask,
+    payload: {
+      evidenceType: string
+      evidenceName: string
+      evidenceRef?: string
+      evidenceSummary?: string
+    }
+  ) => void
   pendingTaskId?: string | null
+  evidencePendingTaskId?: string | null
 }) {
   return (
     <div className='flex min-w-72 flex-1 flex-col rounded-xl border bg-muted/20 p-4'>
@@ -232,7 +322,9 @@ function TaskLane({
                 key={task.id}
                 task={task}
                 onTaskAction={onTaskAction}
+                onAddEvidence={onAddEvidence}
                 pendingTaskId={pendingTaskId}
+                evidencePendingTaskId={evidencePendingTaskId}
               />
             ))
           )}
@@ -245,7 +337,9 @@ function TaskLane({
 export function PLMImplementationTaskBoard({
   tasks,
   onTaskAction,
+  onAddEvidence,
   pendingTaskId,
+  evidencePendingTaskId,
   emptyDescription = '当前没有实施任务。',
 }: {
   tasks: PLMImplementationTask[]
@@ -253,7 +347,17 @@ export function PLMImplementationTaskBoard({
     task: PLMImplementationTask,
     action: PLMImplementationTaskActionCode
   ) => void
+  onAddEvidence?: (
+    task: PLMImplementationTask,
+    payload: {
+      evidenceType: string
+      evidenceName: string
+      evidenceRef?: string
+      evidenceSummary?: string
+    }
+  ) => void
   pendingTaskId?: string | null
+  evidencePendingTaskId?: string | null
   emptyDescription?: string
 }) {
   const groupedTasks = TASK_STATUS_ORDER.map((status) => ({
@@ -282,7 +386,9 @@ export function PLMImplementationTaskBoard({
                 status={lane.status}
                 tasks={lane.tasks}
                 onTaskAction={onTaskAction}
+                onAddEvidence={onAddEvidence}
                 pendingTaskId={pendingTaskId}
+                evidencePendingTaskId={evidencePendingTaskId}
               />
             ))}
           </div>

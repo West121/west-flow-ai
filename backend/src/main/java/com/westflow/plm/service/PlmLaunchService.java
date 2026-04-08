@@ -13,21 +13,40 @@ import com.westflow.plm.api.ClosePlmBillRequest;
 import com.westflow.plm.api.PlmBillActionResponse;
 import com.westflow.plm.api.PlmAffectedItemRequest;
 import com.westflow.plm.api.PlmAffectedItemResponse;
+import com.westflow.plm.api.PlmAcceptanceChecklistResponse;
+import com.westflow.plm.api.PlmAcceptanceChecklistUpdateRequest;
 import com.westflow.plm.api.PlmDashboardAnalyticsResponse;
+import com.westflow.plm.api.PlmDashboardCockpitResponse;
 import com.westflow.plm.api.PlmDashboardRecentBillResponse;
 import com.westflow.plm.api.PlmDashboardSummaryResponse;
+import com.westflow.plm.api.PlmBomNodeResponse;
+import com.westflow.plm.api.PlmConfigurationBaselineResponse;
+import com.westflow.plm.api.PlmConnectorExternalAckRequest;
+import com.westflow.plm.api.PlmConnectorExternalAckResponse;
+import com.westflow.plm.api.PlmConnectorJobResponse;
+import com.westflow.plm.api.PlmDomainAclResponse;
+import com.westflow.plm.api.PlmDocumentAssetResponse;
 import com.westflow.plm.api.PlmEcoBillDetailResponse;
 import com.westflow.plm.api.PlmEcoBillListItemResponse;
 import com.westflow.plm.api.PlmEcrBillDetailResponse;
 import com.westflow.plm.api.PlmEcrBillListItemResponse;
+import com.westflow.plm.api.PlmExternalIntegrationResponse;
+import com.westflow.plm.api.PlmExternalSyncEventEnvelopeResponse;
+import com.westflow.plm.api.PlmImplementationDependencyResponse;
+import com.westflow.plm.api.PlmImplementationEvidenceResponse;
+import com.westflow.plm.api.PlmImplementationEvidenceUpsertRequest;
 import com.westflow.plm.api.PlmImplementationTaskActionRequest;
 import com.westflow.plm.api.PlmImplementationTaskResponse;
+import com.westflow.plm.api.PlmImplementationTemplateResponse;
 import com.westflow.plm.api.PlmImplementationTaskUpsertRequest;
 import com.westflow.plm.api.PlmLaunchResponse;
+import com.westflow.plm.api.PlmObjectAclResponse;
 import com.westflow.plm.api.PlmObjectLinkResponse;
+import com.westflow.plm.api.PlmPermissionSummaryResponse;
 import com.westflow.plm.api.PlmRevisionDiffResponse;
 import com.westflow.plm.api.PlmMaterialChangeBillDetailResponse;
 import com.westflow.plm.api.PlmMaterialChangeBillListItemResponse;
+import com.westflow.plm.api.PlmRoleAssignmentResponse;
 import com.westflow.plm.api.StartPlmImplementationRequest;
 import com.westflow.plm.api.SubmitPlmValidationRequest;
 import com.westflow.plm.mapper.PlmAffectedItemMapper;
@@ -92,6 +111,8 @@ public class PlmLaunchService {
     private final PlmRevisionDiffService plmRevisionDiffService;
     private final PlmImplementationTaskService plmImplementationTaskService;
     private final PlmDashboardService plmDashboardService;
+    private final PlmEnterpriseDepthService plmEnterpriseDepthService;
+    private final PlmConnectorJobService plmConnectorJobService;
     private final FlowableRuntimeStartService flowableRuntimeStartService;
     private final FlowableProcessRuntimeService flowableProcessRuntimeService;
 
@@ -133,6 +154,10 @@ public class PlmLaunchService {
 
     public PlmDashboardAnalyticsResponse dashboardAnalytics() {
         return plmDashboardService.dashboardAnalytics(currentUserId());
+    }
+
+    public PlmDashboardCockpitResponse dashboardCockpit() {
+        return plmEnterpriseDepthService.dashboardCockpit(currentUserId());
     }
 
     @Transactional
@@ -185,6 +210,8 @@ public class PlmLaunchService {
         );
         plmEcrBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
         insertLink("PLM_ECR", billId, startResponse, lifecycle.creatorUserId());
+        plmEnterpriseDepthService.appendLifecycleSyncEvents("PLM_ECR", billId, "BILL_SUBMITTED", "PENDING", "ECR 变更申请已提交审批，等待外部系统消费", currentUserId());
+        plmConnectorJobService.enqueueLifecycleJobs("PLM_ECR", billId, "BILL_SUBMITTED", currentUserId(), "ECR 变更申请已提交审批");
         return toLaunchResponse(billId, lifecycle.billNo(), startResponse);
     }
 
@@ -211,6 +238,8 @@ public class PlmLaunchService {
         );
         plmEcoBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
         insertLink("PLM_ECO", billId, startResponse, lifecycle.creatorUserId());
+        plmEnterpriseDepthService.appendLifecycleSyncEvents("PLM_ECO", billId, "BILL_SUBMITTED", "PENDING", "ECO 变更执行单已提交审批，等待外部系统消费", currentUserId());
+        plmConnectorJobService.enqueueLifecycleJobs("PLM_ECO", billId, "BILL_SUBMITTED", currentUserId(), "ECO 变更执行单已提交审批");
         return toLaunchResponse(billId, lifecycle.billNo(), startResponse);
     }
 
@@ -237,6 +266,8 @@ public class PlmLaunchService {
         );
         plmMaterialChangeBillMapper.updateProcessLink(billId, startResponse.instanceId(), startResponse.status());
         insertLink("PLM_MATERIAL", billId, startResponse, lifecycle.creatorUserId());
+        plmEnterpriseDepthService.appendLifecycleSyncEvents("PLM_MATERIAL", billId, "BILL_SUBMITTED", "PENDING", "物料主数据变更单已提交审批，等待外部系统消费", currentUserId());
+        plmConnectorJobService.enqueueLifecycleJobs("PLM_MATERIAL", billId, "BILL_SUBMITTED", currentUserId(), "物料主数据变更单已提交审批");
         return toLaunchResponse(billId, lifecycle.billNo(), startResponse);
     }
 
@@ -313,18 +344,108 @@ public class PlmLaunchService {
     }
 
     public List<PlmObjectLinkResponse> objectLinks(String businessType, String billId) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireReadableBill(businessType, billId);
         return plmObjectService.listBillObjectLinks(businessType, billId);
     }
 
+    public List<PlmBomNodeResponse> bomNodes(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillBomNodes(businessType, billId);
+    }
+
+    public List<PlmDocumentAssetResponse> documentAssets(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillDocumentAssets(businessType, billId);
+    }
+
+    public List<PlmConfigurationBaselineResponse> baselines(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillBaselines(businessType, billId);
+    }
+
+    public PlmBillLifecycleRecord requireReadableBillForWorkspace(String businessType, String billId) {
+        return requireReadableBill(businessType, billId);
+    }
+
+    public List<PlmObjectAclResponse> objectAcl(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillObjectAcl(businessType, billId);
+    }
+
+    public List<PlmDomainAclResponse> domainAcl(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillDomainAcl(businessType, billId);
+    }
+
+    public List<PlmRoleAssignmentResponse> roleAssignments(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillRoleAssignments(businessType, billId);
+    }
+
+    public PlmPermissionSummaryResponse permissionSummary(String businessType, String billId) {
+        PlmBillLifecycleRecord lifecycle = requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.permissionSummary(businessType, billId, lifecycle.creatorUserId(), currentUserId());
+    }
+
+    public PlmBillLifecycleRecord requireManageableBillForWorkspace(String businessType, String billId) {
+        return requireManageableBill(businessType, billId);
+    }
+
+    public List<PlmExternalIntegrationResponse> externalIntegrations(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillExternalIntegrations(businessType, billId);
+    }
+
+    public List<PlmExternalSyncEventEnvelopeResponse> externalSyncEvents(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmEnterpriseDepthService.listBillExternalSyncEvents(businessType, billId);
+    }
+
+    public List<PlmConnectorJobResponse> connectorJobs(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmConnectorJobService.listBillJobs(businessType, billId);
+    }
+
+    public PlmConnectorJobResponse retryConnectorJob(String jobId) {
+        PlmConnectorJobService.JobLocator locator = plmConnectorJobService.requireJobLocator(jobId);
+        requireManageableBill(locator.businessType(), locator.billId());
+        return plmConnectorJobService.retryJob(jobId, currentUserId());
+    }
+
+    public PlmConnectorExternalAckResponse writeConnectorAck(String jobId, PlmConnectorExternalAckRequest request) {
+        PlmConnectorJobService.JobLocator locator = plmConnectorJobService.requireJobLocator(jobId);
+        requireManageableBill(locator.businessType(), locator.billId());
+        return plmConnectorJobService.writeAck(jobId, request);
+    }
+
     public List<PlmRevisionDiffResponse> revisionDiffs(String businessType, String billId) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireReadableBill(businessType, billId);
         return plmRevisionDiffService.listBillRevisionDiffs(businessType, billId);
     }
 
     public List<PlmImplementationTaskResponse> implementationTasks(String businessType, String billId) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireReadableBill(businessType, billId);
         return plmImplementationTaskService.listBillTasks(businessType, billId);
+    }
+
+    public List<PlmImplementationTemplateResponse> implementationTemplates(String businessType, String billId) {
+        PlmBillLifecycleRecord lifecycle = requireReadableBill(businessType, billId);
+        return plmImplementationTaskService.listTemplates(businessType, lifecycle.sceneCode());
+    }
+
+    public List<PlmImplementationDependencyResponse> implementationDependencies(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmImplementationTaskService.listDependencies(businessType, billId);
+    }
+
+    public List<PlmImplementationEvidenceResponse> implementationEvidence(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmImplementationTaskService.listEvidence(businessType, billId);
+    }
+
+    public List<PlmAcceptanceChecklistResponse> acceptanceChecklist(String businessType, String billId) {
+        requireReadableBill(businessType, billId);
+        return plmImplementationTaskService.listAcceptanceChecklist(businessType, billId);
     }
 
     public PlmImplementationTaskResponse upsertImplementationTask(
@@ -332,7 +453,7 @@ public class PlmLaunchService {
             String billId,
             PlmImplementationTaskUpsertRequest request
     ) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireManageableBill(businessType, billId);
         return plmImplementationTaskService.upsertTask(businessType, billId, request, currentUserId());
     }
 
@@ -342,7 +463,7 @@ public class PlmLaunchService {
             String taskId,
             PlmImplementationTaskActionRequest request
     ) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireManageableBill(businessType, billId);
         return plmImplementationTaskService.startTask(businessType, billId, taskId, request);
     }
 
@@ -352,7 +473,7 @@ public class PlmLaunchService {
             String taskId,
             PlmImplementationTaskActionRequest request
     ) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireManageableBill(businessType, billId);
         return plmImplementationTaskService.completeTask(businessType, billId, taskId, request);
     }
 
@@ -362,7 +483,7 @@ public class PlmLaunchService {
             String taskId,
             PlmImplementationTaskActionRequest request
     ) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireManageableBill(businessType, billId);
         return plmImplementationTaskService.blockTask(businessType, billId, taskId, request);
     }
 
@@ -372,8 +493,28 @@ public class PlmLaunchService {
             String taskId,
             PlmImplementationTaskActionRequest request
     ) {
-        requireOwnedBill(selectLifecycle(businessType, billId), lifecycleNotFoundMessage(businessType), billId);
+        requireManageableBill(businessType, billId);
         return plmImplementationTaskService.cancelTask(businessType, billId, taskId, request);
+    }
+
+    public PlmImplementationEvidenceResponse addImplementationEvidence(
+            String businessType,
+            String billId,
+            String taskId,
+            PlmImplementationEvidenceUpsertRequest request
+    ) {
+        requireManageableBill(businessType, billId);
+        return plmImplementationTaskService.addEvidence(businessType, billId, taskId, request, currentUserId());
+    }
+
+    public PlmAcceptanceChecklistResponse updateAcceptanceChecklist(
+            String businessType,
+            String billId,
+            String checklistId,
+            PlmAcceptanceChecklistUpdateRequest request
+    ) {
+        requireManageableBill(businessType, billId);
+        return plmImplementationTaskService.updateAcceptanceChecklist(businessType, billId, checklistId, request, currentUserId());
     }
 
     public PlmDashboardSummaryResponse dashboardSummary() {
@@ -381,6 +522,7 @@ public class PlmLaunchService {
     }
 
     public PlmEcrBillDetailResponse ecrDetail(String billId) {
+        requireReadableBill("PLM_ECR", billId);
         PlmEcrBillDetailResponse detail = plmEcrBillMapper.selectDetail(billId);
         if (detail == null) {
             throw resourceNotFound("ECR 变更申请不存在", billId);
@@ -418,6 +560,7 @@ public class PlmLaunchService {
     }
 
     public PlmEcoBillDetailResponse ecoDetail(String billId) {
+        requireReadableBill("PLM_ECO", billId);
         PlmEcoBillDetailResponse detail = plmEcoBillMapper.selectDetail(billId);
         if (detail == null) {
             throw resourceNotFound("ECO 变更执行不存在", billId);
@@ -455,6 +598,7 @@ public class PlmLaunchService {
     }
 
     public PlmMaterialChangeBillDetailResponse materialChangeDetail(String billId) {
+        requireReadableBill("PLM_MATERIAL", billId);
         PlmMaterialChangeBillDetailResponse detail = plmMaterialChangeBillMapper.selectDetail(billId);
         if (detail == null) {
             throw resourceNotFound("物料主数据变更申请不存在", billId);
@@ -577,6 +721,21 @@ public class PlmLaunchService {
             );
         }
         statusUpdater.update(lifecycle.billId(), "CANCELLED");
+        plmEnterpriseDepthService.appendLifecycleSyncEvents(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "BILL_CANCELLED",
+                "FAILED",
+                label + "已取消，需要外部系统回滚或忽略待处理项",
+                currentUserId()
+        );
+        plmConnectorJobService.enqueueLifecycleJobs(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "BILL_CANCELLED",
+                currentUserId(),
+                label + "已取消，等待外部系统回滚确认"
+        );
         return new PlmBillActionResponse(
                 lifecycle.billId(),
                 lifecycle.billNo(),
@@ -599,8 +758,29 @@ public class PlmLaunchService {
             implementationOwner = currentUserId();
         }
         String implementationSummary = blankToNull(safeRequest.implementationSummary());
-        plmImplementationTaskService.seedDefaultTaskIfMissing(resolveBusinessType(label), lifecycle.billId(), implementationSummary, implementationOwner);
+        plmImplementationTaskService.seedDefaultTaskIfMissing(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                lifecycle.sceneCode(),
+                implementationSummary,
+                implementationOwner
+        );
         statusUpdater.update(lifecycle.billId(), implementationOwner, implementationSummary, "IMPLEMENTING");
+        plmEnterpriseDepthService.appendLifecycleSyncEvents(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "IMPLEMENTATION_STARTED",
+                "PENDING",
+                label + "已进入实施阶段，等待下游系统更新",
+                currentUserId()
+        );
+        plmConnectorJobService.enqueueLifecycleJobs(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "IMPLEMENTATION_STARTED",
+                currentUserId(),
+                label + "已进入实施阶段"
+        );
         return new PlmBillActionResponse(
                 lifecycle.billId(),
                 lifecycle.billNo(),
@@ -624,6 +804,21 @@ public class PlmLaunchService {
         }
         String validationSummary = blankToNull(safeRequest.validationSummary());
         statusUpdater.update(lifecycle.billId(), validationOwner, validationSummary, "VALIDATING");
+        plmEnterpriseDepthService.appendLifecycleSyncEvents(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "VALIDATION_SUBMITTED",
+                "PENDING",
+                label + "已提交验证，等待外部系统确认验证态",
+                currentUserId()
+        );
+        plmConnectorJobService.enqueueLifecycleJobs(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "VALIDATION_SUBMITTED",
+                currentUserId(),
+                label + "已提交验证"
+        );
         return new PlmBillActionResponse(
                 lifecycle.billId(),
                 lifecycle.billNo(),
@@ -647,6 +842,21 @@ public class PlmLaunchService {
         }
         String closeComment = blankToNull(safeRequest.closeComment());
         statusUpdater.update(lifecycle.billId(), closedBy, closeComment, "CLOSED");
+        plmEnterpriseDepthService.appendLifecycleSyncEvents(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "BILL_CLOSED",
+                "SUCCESS",
+                label + "已关闭，可对外发布最终版本",
+                currentUserId()
+        );
+        plmConnectorJobService.enqueueLifecycleJobs(
+                resolveBusinessType(label),
+                lifecycle.billId(),
+                "BILL_CLOSED",
+                currentUserId(),
+                label + "已关闭"
+        );
         return new PlmBillActionResponse(
                 lifecycle.billId(),
                 lifecycle.billNo(),
@@ -724,6 +934,34 @@ public class PlmLaunchService {
                     Map.of("billId", billId)
             );
         }
+        return lifecycle;
+    }
+
+    private PlmBillLifecycleRecord requireReadableBill(String businessType, String billId) {
+        PlmBillLifecycleRecord lifecycle = selectLifecycle(businessType, billId);
+        if (lifecycle == null) {
+            throw resourceNotFound(lifecycleNotFoundMessage(businessType), billId);
+        }
+        plmEnterpriseDepthService.assertBillReadable(
+                businessType,
+                billId,
+                lifecycle.creatorUserId(),
+                currentUserId()
+        );
+        return lifecycle;
+    }
+
+    private PlmBillLifecycleRecord requireManageableBill(String businessType, String billId) {
+        PlmBillLifecycleRecord lifecycle = selectLifecycle(businessType, billId);
+        if (lifecycle == null) {
+            throw resourceNotFound(lifecycleNotFoundMessage(businessType), billId);
+        }
+        plmEnterpriseDepthService.assertBillManageable(
+                businessType,
+                billId,
+                lifecycle.creatorUserId(),
+                currentUserId()
+        );
         return lifecycle;
     }
 
@@ -849,6 +1087,7 @@ public class PlmLaunchService {
         }
         List<PlmBillObjectLinkRecord> objectLinks = plmObjectService.syncBillObjects(businessType, billId, affectedItems, currentUserId());
         plmRevisionDiffService.syncBillRevisionDiffs(businessType, billId, objectLinks, affectedItems);
+        plmEnterpriseDepthService.syncBillEnterpriseDepth(businessType, billId, affectedItems, objectLinks, currentUserId());
     }
 
     private List<PlmAffectedItemRecord> toAffectedItemRecords(
@@ -1054,6 +1293,10 @@ public class PlmLaunchService {
 
     private String currentUserId() {
         return StpUtil.getLoginIdAsString();
+    }
+
+    public String currentUserIdForWorkspace() {
+        return currentUserId();
     }
 
     private String buildId(String prefix) {

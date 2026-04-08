@@ -8,6 +8,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { ArrowRight, Loader2, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import {
+  addPLMImplementationEvidence,
   cancelPLMECOExecution,
   cancelPLMECRRequest,
   cancelPLMMaterialChange,
@@ -15,11 +16,25 @@ import {
   createPLMECRRequest,
   createPLMMaterialChangeRequest,
   closePLMBusinessBill,
+  dispatchPLMConnectorTask,
+  getPLMDashboardCockpit,
   getPLMDashboardSummary,
   getPLMECOExecutionDetail,
   getPLMECRRequestDetail,
   getPLMMaterialChangeDetail,
+  releasePLMConfigurationBaseline,
+  releasePLMDocumentAsset,
+  listPLMBomNodes,
+  listPLMConfigurationBaselines,
+  listPLMDomainAcl,
+  listPLMDocumentAssets,
+  listPLMExternalIntegrations,
+  listPLMExternalSyncEvents,
+  listPLMConnectorTasks,
+  getPLMImplementationWorkspace,
   performPLMImplementationTaskAction,
+  listPLMObjectAcl,
+  listPLMRoleAssignments,
   listPLMECOExecutions,
   listPLMECRRequests,
   listPLMMaterialChangeRequests,
@@ -28,17 +43,30 @@ import {
   submitPLMECODraft,
   submitPLMECRDraft,
   submitPLMMaterialDraft,
+  retryPLMConnectorTask,
+  updatePLMAcceptanceChecklist,
   type PLMAffectedItemChangeActionCode,
   type PLMAffectedItemPayload,
   type PLMAffectedItemTypeCode,
+  type PLMBomNode,
   type PLMBillDetail,
   type PLMBillLifecycleAction,
   type PLMBillPage,
   type PLMBusinessTypeCode,
+  type PLMConfigurationBaseline,
+  type PLMDomainAcl,
+  type PLMDashboardCockpit,
   type PLMDashboardSummary,
+  type PLMDocumentAsset,
+  type PLMConnectorTask,
+  type PLMExternalIntegration,
+  type PLMExternalSyncEventEnvelope,
   type PLMImplementationTask,
   type PLMImplementationTaskActionCode,
+  type PLMImplementationWorkspace,
+  type PLMObjectAcl,
   type PLMObjectLink,
+  type PLMRoleAssignment,
   type PLMRevisionDiff,
   type PLMECOBillListItem,
   type PLMECOExecutionPayload,
@@ -76,9 +104,23 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
+import { PLMBaselinePanel } from '@/features/plm/components/plm-baseline-panel'
+import { PLMBomTreePanel } from '@/features/plm/components/plm-bom-tree-panel'
+import { PLMCockpitPanel } from '@/features/plm/components/plm-cockpit-panel'
 import { PLMDashboardPanels } from '@/features/plm/components/plm-dashboard-panels'
+import { PLMDocumentAssetPanel } from '@/features/plm/components/plm-document-asset-panel'
+import { PLMConnectorTaskPanel } from '@/features/plm/components/plm-connector-task-panel'
+import { PLMExternalIntegrationPanel } from '@/features/plm/components/plm-external-integration-panel'
+import { PLMExternalSyncEventPanel } from '@/features/plm/components/plm-external-sync-event-panel'
+import { PLMExecutionOverviewPanel } from '@/features/plm/components/plm-execution-overview-panel'
 import { PLMImplementationTaskBoard } from '@/features/plm/components/plm-implementation-task-board'
+import { PLMImplementationWorkspacePanel } from '@/features/plm/components/plm-implementation-workspace-panel'
+import { PLMIntegrationBoundaryPanel } from '@/features/plm/components/plm-integration-boundary-panel'
+import { PLMObjectAclPanel } from '@/features/plm/components/plm-object-acl-panel'
 import { PLMObjectLinkTable } from '@/features/plm/components/plm-object-link-table'
+import { PLMReleaseReadinessPanel } from '@/features/plm/components/plm-release-readiness-panel'
+import { PLMRoleDomainAccessPanel } from '@/features/plm/components/plm-role-domain-access-panel'
+import { PLMRoleMatrixPanel } from '@/features/plm/components/plm-role-matrix-panel'
 import { PLMRevisionDiffPanel } from '@/features/plm/components/plm-revision-diff-panel'
 import { ResourceListPage } from '@/features/shared/crud/resource-list-page'
 import { PageShell } from '@/features/shared/page-shell'
@@ -1267,6 +1309,10 @@ export function PLMQueryPage() {
     queryKey: ['plm', 'workspace-summary'],
     queryFn: getPLMDashboardSummary,
   })
+  const cockpitQuery = useQuery({
+    queryKey: ['plm', 'workspace-cockpit'],
+    queryFn: getPLMDashboardCockpit,
+  })
   const byBusinessType = summaryQuery.data?.byBusinessType ?? []
 
   return (
@@ -1299,6 +1345,10 @@ export function PLMQueryPage() {
       <PLMDashboardPanels
         summary={summaryQuery.data}
         isLoading={summaryQuery.isLoading}
+      />
+      <PLMCockpitPanel
+        cockpit={cockpitQuery.data as PLMDashboardCockpit | undefined}
+        summary={summaryQuery.data as PLMDashboardSummary | undefined}
       />
 
       <div className='grid gap-4 xl:grid-cols-3'>
@@ -2301,6 +2351,46 @@ function PLMBusinessBillDetailPage({
         businessId: billId,
       }),
   })
+  const bomNodesQuery = useQuery({
+    queryKey: ['plm', 'bom-nodes', businessType, billId],
+    queryFn: () => listPLMBomNodes(businessType, billId),
+  })
+  const documentAssetsQuery = useQuery({
+    queryKey: ['plm', 'document-assets', businessType, billId],
+    queryFn: () => listPLMDocumentAssets(businessType, billId),
+  })
+  const baselinesQuery = useQuery({
+    queryKey: ['plm', 'baselines', businessType, billId],
+    queryFn: () => listPLMConfigurationBaselines(businessType, billId),
+  })
+  const objectAclQuery = useQuery({
+    queryKey: ['plm', 'object-acl', businessType, billId],
+    queryFn: () => listPLMObjectAcl(businessType, billId),
+  })
+  const domainAclQuery = useQuery({
+    queryKey: ['plm', 'domain-acl', businessType, billId],
+    queryFn: () => listPLMDomainAcl(businessType, billId),
+  })
+  const roleAssignmentsQuery = useQuery({
+    queryKey: ['plm', 'role-matrix', businessType, billId],
+    queryFn: () => listPLMRoleAssignments(businessType, billId),
+  })
+  const externalIntegrationsQuery = useQuery({
+    queryKey: ['plm', 'external-integrations', businessType, billId],
+    queryFn: () => listPLMExternalIntegrations(businessType, billId),
+  })
+  const externalSyncEventsQuery = useQuery({
+    queryKey: ['plm', 'external-sync-events', businessType, billId],
+    queryFn: () => listPLMExternalSyncEvents(businessType, billId),
+  })
+  const connectorTasksQuery = useQuery({
+    queryKey: ['plm', 'connector-tasks', businessType, billId],
+    queryFn: () => listPLMConnectorTasks(businessType, billId),
+  })
+  const implementationWorkspaceQuery = useQuery({
+    queryKey: ['plm', 'implementation-workspace', businessType, billId],
+    queryFn: () => getPLMImplementationWorkspace(businessType, billId),
+  })
   const approvalDetail = approvalDetailQuery.data
   const businessDetail =
     businessDetailQuery.data ??
@@ -2317,6 +2407,24 @@ function PLMBusinessBillDetailPage({
   const revisionDiffs = (detail.revisionDiffs ?? []) as PLMRevisionDiff[]
   const implementationTasks = (detail.implementationTasks ??
     []) as PLMImplementationTask[]
+  const bomNodes = (bomNodesQuery.data ?? []) as PLMBomNode[]
+  const documentAssets = (documentAssetsQuery.data ?? []) as PLMDocumentAsset[]
+  const baselines = (baselinesQuery.data ?? []) as PLMConfigurationBaseline[]
+  const objectAcl = (objectAclQuery.data ?? []) as PLMObjectAcl[]
+  const domainAcl = (domainAclQuery.data ?? []) as PLMDomainAcl[]
+  const roleAssignments =
+    (roleAssignmentsQuery.data ?? []) as PLMRoleAssignment[]
+  const externalIntegrations =
+    (externalIntegrationsQuery.data ?? []) as PLMExternalIntegration[]
+  const externalSyncEvents =
+    (externalSyncEventsQuery.data ?? []) as PLMExternalSyncEventEnvelope[]
+  const connectorTasks = (connectorTasksQuery.data ?? []) as PLMConnectorTask[]
+  const implementationWorkspace =
+    (implementationWorkspaceQuery.data ?? {
+      dependencies: [],
+      evidences: [],
+      acceptanceCheckpoints: [],
+    }) as PLMImplementationWorkspace
   const refreshQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({
@@ -2327,6 +2435,21 @@ function PLMBusinessBillDetailPage({
       }),
       queryClient.invalidateQueries({
         queryKey: ['plm', 'workspace-summary'],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ['plm', 'workspace-cockpit'],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ['plm', 'connector-tasks', businessType, billId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ['plm', 'external-integrations', businessType, billId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ['plm', 'external-sync-events', businessType, billId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ['plm', 'implementation-workspace', businessType, billId],
       }),
       queryClient.invalidateQueries({
         queryKey: ['plm'],
@@ -2389,6 +2512,97 @@ function PLMBusinessBillDetailPage({
     onSuccess: async (response, variables) => {
       toast.success(
         `${formatTaskActionLabel(variables.action)} ${response.billNo ?? detail.billNo}。`
+      )
+      await refreshQueries()
+    },
+    onError: handleServerError,
+  })
+  const connectorTaskMutation = useMutation({
+    mutationFn: async ({
+      task,
+      action,
+    }: {
+      task: PLMConnectorTask
+      action: 'dispatch' | 'retry'
+    }) =>
+      action === 'dispatch'
+        ? dispatchPLMConnectorTask(task.id)
+        : retryPLMConnectorTask(task.id),
+    onSuccess: async (_, variables) => {
+      toast.success(
+        `${variables.action === 'dispatch' ? '已派发' : '已重试'} ${variables.task.connectorName}。`
+      )
+      await refreshQueries()
+    },
+    onError: handleServerError,
+  })
+  const publicationMutation = useMutation({
+    mutationFn: async (
+      variables:
+        | { kind: 'baseline'; baseline: PLMConfigurationBaseline }
+        | { kind: 'asset'; asset: PLMDocumentAsset }
+    ) => {
+      if (variables.kind === 'baseline') {
+        return releasePLMConfigurationBaseline(
+          businessType,
+          billId,
+          variables.baseline.id
+        )
+      }
+      return releasePLMDocumentAsset(
+        businessType,
+        billId,
+        variables.asset.id
+      )
+    },
+    onSuccess: async (response, variables) => {
+      toast.success(
+        `${variables.kind === 'baseline' ? '已发布基线' : '已受控发布'} ${response.targetName}。`
+      )
+      await refreshQueries()
+    },
+    onError: handleServerError,
+  })
+  const evidenceMutation = useMutation({
+    mutationFn: async ({
+      task,
+      payload,
+    }: {
+      task: PLMImplementationTask
+      payload: {
+        evidenceType: string
+        evidenceName: string
+        evidenceRef?: string
+        evidenceSummary?: string
+      }
+    }) =>
+      addPLMImplementationEvidence(businessType, billId, task.id, payload),
+    onSuccess: async (_, variables) => {
+      toast.success(`已补充 ${variables.task.taskTitle} 的验证证据。`)
+      await refreshQueries()
+    },
+    onError: handleServerError,
+  })
+  const acceptanceMutation = useMutation({
+    mutationFn: async ({
+      checklistId,
+      payload,
+    }: {
+      checklistId: string
+      payload: {
+        status: string
+        resultSummary?: string
+      }
+    }) =>
+      updatePLMAcceptanceChecklist(
+        businessType,
+        billId,
+        checklistId,
+        payload
+      ),
+    onSuccess: async (_, variables) => {
+      toast.success(
+        `${variables.payload.status === 'ACCEPTED' ? '已完成' : '已回退'}验收检查。`
       )
       await refreshQueries()
     },
@@ -2467,11 +2681,108 @@ function PLMBusinessBillDetailPage({
           {buildDetailSections(businessType, detail).map((section) => (
             <DetailSectionCard key={section.title} section={section} />
           ))}
+          <PLMBomTreePanel nodes={bomNodes} />
+          <PLMDocumentAssetPanel
+            assets={documentAssets}
+            pendingAssetId={
+              publicationMutation.isPending &&
+              publicationMutation.variables?.kind === 'asset'
+                ? publicationMutation.variables.asset.id
+                : null
+            }
+            onReleaseAsset={(asset) =>
+              publicationMutation.mutate({
+                kind: 'asset',
+                asset,
+              })
+            }
+          />
+          <PLMBaselinePanel
+            baselines={baselines}
+            pendingBaselineId={
+              publicationMutation.isPending &&
+              publicationMutation.variables?.kind === 'baseline'
+                ? publicationMutation.variables.baseline.id
+                : null
+            }
+            onReleaseBaseline={(baseline) =>
+              publicationMutation.mutate({
+                kind: 'baseline',
+                baseline,
+              })
+            }
+          />
           <PLMObjectLinkTable objectLinks={objectLinks} />
           <PLMRevisionDiffPanel revisionDiffs={revisionDiffs} />
         </div>
 
         <div className='space-y-4'>
+          <PLMExecutionOverviewPanel
+            baselines={baselines}
+            documentAssets={documentAssets}
+            integrations={externalIntegrations}
+            syncEvents={externalSyncEvents}
+            connectorTasks={connectorTasks}
+            workspace={implementationWorkspace}
+          />
+          <PLMReleaseReadinessPanel
+            baselines={baselines}
+            documentAssets={documentAssets}
+            integrations={externalIntegrations}
+            syncEvents={externalSyncEvents}
+            connectorTasks={connectorTasks}
+            workspace={implementationWorkspace}
+          />
+          <PLMRoleMatrixPanel roles={roleAssignments} domainAcl={domainAcl} />
+          <PLMRoleDomainAccessPanel
+            entries={objectAcl}
+            sceneCode={detail.sceneCode}
+          />
+          <PLMObjectAclPanel entries={objectAcl} />
+          <PLMConnectorTaskPanel
+            tasks={connectorTasks}
+            pendingTaskAction={
+              connectorTaskMutation.isPending
+                ? {
+                    taskId: connectorTaskMutation.variables?.task.id ?? '__pending__',
+                    action: connectorTaskMutation.variables?.action ?? 'dispatch',
+                  }
+                : null
+            }
+            onDispatchTask={(task) =>
+              connectorTaskMutation.mutate({
+                task,
+                action: 'dispatch',
+              })
+            }
+            onRetryTask={(task) =>
+              connectorTaskMutation.mutate({
+                task,
+                action: 'retry',
+              })
+            }
+          />
+          <PLMExternalIntegrationPanel integrations={externalIntegrations} />
+          <PLMExternalSyncEventPanel events={externalSyncEvents} />
+          <PLMIntegrationBoundaryPanel
+            objectLinks={objectLinks}
+            documentAssets={documentAssets}
+            baselines={baselines}
+          />
+          <PLMImplementationWorkspacePanel
+            workspace={implementationWorkspace}
+            pendingAcceptanceId={
+              acceptanceMutation.isPending
+                ? (acceptanceMutation.variables?.checklistId ?? '__pending__')
+                : null
+            }
+            onUpdateAcceptance={(checkpoint, payload) =>
+              acceptanceMutation.mutate({
+                checklistId: checkpoint.id,
+                payload,
+              })
+            }
+          />
           <PLMImplementationTaskBoard
             tasks={implementationTasks}
             pendingTaskId={
@@ -2479,10 +2790,21 @@ function PLMBusinessBillDetailPage({
                 ? (taskActionMutation.variables?.task.id ?? '__pending__')
                 : null
             }
+            evidencePendingTaskId={
+              evidenceMutation.isPending
+                ? (evidenceMutation.variables?.task.id ?? '__pending__')
+                : null
+            }
             onTaskAction={(task, action) =>
               taskActionMutation.mutate({
                 task,
                 action,
+              })
+            }
+            onAddEvidence={(task, payload) =>
+              evidenceMutation.mutate({
+                task,
+                payload,
               })
             }
           />

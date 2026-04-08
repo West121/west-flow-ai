@@ -36,13 +36,28 @@ const {
     createPLMECRRequest: vi.fn(),
     createPLMECOExecution: vi.fn(),
     createPLMMaterialChangeRequest: vi.fn(),
+    addPLMImplementationEvidence: vi.fn(),
+    dispatchPLMConnectorTask: vi.fn(),
+    releasePLMConfigurationBaseline: vi.fn(),
+    releasePLMDocumentAsset: vi.fn(),
     getPLMDashboardSummary: vi.fn(),
+    getPLMDashboardCockpit: vi.fn(),
     listPLMECRRequests: vi.fn(),
     listPLMECOExecutions: vi.fn(),
     listPLMMaterialChangeRequests: vi.fn(),
     getPLMECRRequestDetail: vi.fn(),
     getPLMECOExecutionDetail: vi.fn(),
     getPLMMaterialChangeDetail: vi.fn(),
+    listPLMBomNodes: vi.fn(),
+    listPLMConfigurationBaselines: vi.fn(),
+    listPLMDomainAcl: vi.fn(),
+    listPLMDocumentAssets: vi.fn(),
+    listPLMExternalIntegrations: vi.fn(),
+    listPLMExternalSyncEvents: vi.fn(),
+    listPLMObjectAcl: vi.fn(),
+    listPLMRoleAssignments: vi.fn(),
+    listPLMConnectorTasks: vi.fn(),
+    getPLMImplementationWorkspace: vi.fn(),
     performPLMImplementationTaskAction: vi.fn(),
     submitPLMECRDraft: vi.fn(),
     cancelPLMECRRequest: vi.fn(),
@@ -52,6 +67,8 @@ const {
     cancelPLMMaterialChange: vi.fn(),
     startPLMBusinessImplementation: vi.fn(),
     markPLMBusinessValidating: vi.fn(),
+    retryPLMConnectorTask: vi.fn(),
+    updatePLMAcceptanceChecklist: vi.fn(),
     closePLMBusinessBill: vi.fn(),
   },
   workbenchApiMocks: {
@@ -327,6 +344,63 @@ describe('plm pages', () => {
       sorts: [],
       groups: [],
     })
+    plmApiMocks.listPLMBomNodes.mockResolvedValue([])
+    plmApiMocks.listPLMConfigurationBaselines.mockResolvedValue([])
+    plmApiMocks.listPLMDomainAcl.mockResolvedValue([])
+    plmApiMocks.listPLMDocumentAssets.mockResolvedValue([])
+    plmApiMocks.listPLMExternalIntegrations.mockResolvedValue([])
+    plmApiMocks.listPLMExternalSyncEvents.mockResolvedValue([])
+    plmApiMocks.listPLMObjectAcl.mockResolvedValue([])
+    plmApiMocks.listPLMRoleAssignments.mockResolvedValue([])
+    plmApiMocks.listPLMConnectorTasks.mockResolvedValue([])
+    plmApiMocks.dispatchPLMConnectorTask.mockResolvedValue({
+      id: 'job_default',
+      businessType: 'PLM_ECR',
+      billId: 'plm_001',
+      connectorCode: 'ERP',
+      connectorName: 'ERP Connector',
+      targetSystem: 'ERP',
+      taskType: 'SYNC',
+      status: 'DISPATCHED',
+      dispatchLogs: [],
+      receipts: [],
+    })
+    plmApiMocks.retryPLMConnectorTask.mockResolvedValue({
+      id: 'job_default',
+      businessType: 'PLM_ECR',
+      billId: 'plm_001',
+      connectorCode: 'ERP',
+      connectorName: 'ERP Connector',
+      targetSystem: 'ERP',
+      taskType: 'SYNC',
+      status: 'PENDING',
+      dispatchLogs: [],
+      receipts: [],
+    })
+    plmApiMocks.addPLMImplementationEvidence.mockResolvedValue({
+      id: 'evidence_default',
+      businessType: 'PLM_ECR',
+      billId: 'plm_001',
+      evidenceType: 'VALIDATION',
+      title: '默认验证记录',
+      status: 'COLLECTED',
+      summary: '默认验证摘要',
+    })
+    plmApiMocks.updatePLMAcceptanceChecklist.mockResolvedValue({
+      id: 'checkpoint_default',
+      businessType: 'PLM_ECR',
+      billId: 'plm_001',
+      checkpointCode: 'AC-DEFAULT',
+      checkpointName: '默认检查点',
+      status: 'COMPLETED',
+      required: true,
+      summary: '默认检查结果',
+    })
+    plmApiMocks.getPLMImplementationWorkspace.mockResolvedValue({
+      dependencies: [],
+      evidences: [],
+      acceptanceCheckpoints: [],
+    })
   })
 
   afterEach(() => {
@@ -485,6 +559,89 @@ describe('plm pages', () => {
         },
       ],
     })
+    plmApiMocks.getPLMDashboardCockpit.mockResolvedValue({
+      stuckSyncItems: [
+        {
+          id: 'stuck_sync_001',
+          billId: 'ecr_001',
+          billNo: 'PLM-ECR-001',
+          businessType: 'PLM_ECR',
+          businessTitle: '结构件替换',
+          systemCode: 'ERP',
+          systemName: 'ERP',
+          connectorName: 'ERP 变更下发',
+          status: 'FAILED',
+          pendingCount: 1,
+          failedCount: 2,
+          ownerDisplayName: '李四',
+          summary: 'ERP 回执失败，仍有 1 条待推进记录。',
+          updatedAt: '2026-04-07T10:08:00+08:00',
+        },
+      ],
+      closeBlockerItems: [
+        {
+          id: 'close_blocker_001',
+          billId: 'ecr_001',
+          billNo: 'PLM-ECR-001',
+          businessType: 'PLM_ECR',
+          businessTitle: '结构件替换',
+          blockerType: 'ACCEPTANCE',
+          blockerTitle: '工艺验证签收',
+          blockerCount: 1,
+          ownerDisplayName: '赵六',
+          summary: '工艺验证签收未完成，不能关闭。',
+          dueAt: '2026-04-08T18:00:00+08:00',
+        },
+      ],
+      failedSystemHotspots: [
+        {
+          systemCode: 'ERP',
+          systemName: 'ERP',
+          failedCount: 2,
+          pendingCount: 1,
+          blockedBillCount: 1,
+          summary: 'ERP 是当前最需要处理的失败系统。',
+        },
+      ],
+      objectTypeDistribution: [
+        { code: 'PART', label: '零部件', totalCount: 5 },
+        { code: 'DOCUMENT', label: '文档', totalCount: 3 },
+      ],
+      domainDistribution: [
+        { code: 'SCENE_A', label: '试制变更', totalCount: 6 },
+        { code: 'SCENE_B', label: '量产变更', totalCount: 6 },
+      ],
+      baselineStatusDistribution: [
+        { code: 'RELEASED', label: '已发布', totalCount: 4 },
+        { code: 'DRAFT', label: '草稿', totalCount: 2 },
+      ],
+      blockedTaskCount: 1,
+      overdueTaskCount: 2,
+      readyToCloseCount: 3,
+      pendingIntegrationCount: 2,
+      failedSyncEventCount: 1,
+      roleCoverageRate: 83,
+      averageClosureHours: 48,
+      connectorTaskBacklogCount: 3,
+      pendingReceiptCount: 2,
+      implementationHealthyRate: 75,
+      acceptanceDueCount: 1,
+      integrationSystemDistribution: [
+        { code: 'ERP', label: 'ERP', totalCount: 3 },
+        { code: 'MES', label: 'MES', totalCount: 2 },
+      ],
+      integrationStatusDistribution: [
+        { code: 'SYNCED', label: '已同步', totalCount: 2 },
+        { code: 'FAILED', label: '失败', totalCount: 1 },
+      ],
+      connectorStatusDistribution: [
+        { code: 'RUNNING', label: '处理中', totalCount: 2 },
+      ],
+      implementationHealthDistribution: [
+        { code: 'HEALTHY', label: '健康', totalCount: 4 },
+        { code: 'RISK', label: '风险', totalCount: 1 },
+      ],
+    })
 
     renderWithQuery(<PLMQueryPage />)
 
@@ -493,7 +650,17 @@ describe('plm pages', () => {
     expect(await screen.findByText('生命周期分布')).toBeInTheDocument()
     expect(await screen.findByText('任务预警')).toBeInTheDocument()
     expect(await screen.findByText('负责人排行')).toBeInTheDocument()
-    expect(await screen.findByText('结构件替换')).toBeInTheDocument()
+    expect(await screen.findByText('管理驾驶舱 v2')).toBeInTheDocument()
+    expect(await screen.findByText('连接器健康')).toBeInTheDocument()
+    expect(await screen.findByText('卡住同步')).toBeInTheDocument()
+    expect(await screen.findByText('失败系统热点')).toBeInTheDocument()
+    expect(await screen.findByText('阻塞关闭清单')).toBeInTheDocument()
+    expect(await screen.findByText('ERP 回执失败，仍有 1 条待推进记录。')).toBeInTheDocument()
+    expect(await screen.findByText('工艺验证签收未完成，不能关闭。')).toBeInTheDocument()
+    expect((await screen.findAllByText('ERP')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('超期任务')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('实施闭环')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('结构件替换')).length).toBeGreaterThan(0)
     expect(screen.getByText('总单据')).toBeInTheDocument()
     expect(
       screen.getByText('进入实施阶段、等待任务完成的单据数量。')
@@ -936,6 +1103,199 @@ describe('plm pages', () => {
       status: 'RUNNING',
       processInstanceId: 'pi_ecr_001',
     })
+    plmApiMocks.listPLMBomNodes.mockResolvedValue([
+      {
+        id: 'bom_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        nodeCode: 'PART-001',
+        nodeName: '机壳',
+        nodeType: 'PART',
+        quantity: 1,
+        unit: 'EA',
+        hierarchyLevel: 0,
+        changeAction: 'REPLACE',
+      },
+    ])
+    plmApiMocks.listPLMDocumentAssets.mockResolvedValue([
+      {
+        id: 'doc_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        documentCode: 'DOC-010',
+        documentName: '总装图纸',
+        documentType: 'DRAWING',
+        versionLabel: 'V2',
+        vaultState: 'WORKING',
+        fileName: 'assy.pdf',
+        sourceSystem: 'PDM',
+        externalRef: 'PDM-DOC-010',
+      },
+    ])
+    plmApiMocks.listPLMConfigurationBaselines.mockResolvedValue([
+      {
+        id: 'baseline_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        baselineCode: 'BL-001',
+        baselineName: '样机基线',
+        baselineType: 'PRODUCT',
+        status: 'DRAFT',
+        releasedAt: null,
+        items: [
+          {
+            id: 'baseline_item_001',
+            objectCode: 'PART-001',
+            objectName: '机壳',
+            objectType: 'PART',
+            beforeRevisionCode: 'A.01',
+            afterRevisionCode: 'A.02',
+          },
+        ],
+      },
+    ])
+    plmApiMocks.listPLMObjectAcl.mockResolvedValue([
+      {
+        id: 'acl_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        objectId: 'obj_001',
+        objectCode: 'PART-001',
+        objectName: '机壳',
+        subjectType: 'ROLE',
+        subjectCode: 'PLM_MANAGER',
+        permissionCode: 'EDIT',
+        accessScope: 'SCENE_A',
+        inherited: false,
+      },
+    ])
+    plmApiMocks.listPLMDomainAcl.mockResolvedValue([
+      {
+        id: 'domain_acl_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        domainCode: 'SCENE_A',
+        roleCode: 'PLM_MANAGER',
+        permissionCode: 'EDIT',
+        accessScope: 'DOMAIN',
+        policySource: 'POLICY',
+      },
+    ])
+    plmApiMocks.listPLMRoleAssignments.mockResolvedValue([
+      {
+        id: 'role_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        roleCode: 'PLM_MANAGER',
+        roleLabel: '变更经理',
+        assigneeUserId: 'usr_001',
+        assigneeDisplayName: '张三',
+        assignmentScope: 'SCENE_A',
+        required: true,
+        status: 'ASSIGNED',
+      },
+    ])
+    plmApiMocks.listPLMExternalIntegrations.mockResolvedValue([
+      {
+        id: 'integration_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        systemCode: 'ERP',
+        systemName: 'ERP',
+        directionCode: 'OUTBOUND',
+        integrationType: 'CHANGE_NOTICE',
+        status: 'RUNNING',
+        endpointKey: 'erp.change.notice',
+        externalRef: 'ERP-CHANGE-001',
+        lastSyncAt: '2026-04-07T10:10:00+08:00',
+        message: '等待 ERP 确认',
+        events: [],
+      },
+    ])
+    plmApiMocks.listPLMExternalSyncEvents.mockResolvedValue([
+      {
+        id: 'sync_event_001',
+        integrationId: 'integration_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        systemCode: 'ERP',
+        systemName: 'ERP',
+        directionCode: 'OUTBOUND',
+        eventType: 'PUSH_CHANGE',
+        status: 'FAILED',
+        errorMessage: 'ERP 接口超时',
+        happenedAt: '2026-04-07T10:12:00+08:00',
+      },
+    ])
+    plmApiMocks.listPLMConnectorTasks.mockResolvedValue([
+      {
+        id: 'connector_task_001',
+        businessType: 'PLM_ECR',
+        billId: 'ecr_001',
+        connectorCode: 'ERP_CHANGE',
+        connectorName: 'ERP 变更下发',
+        targetSystem: 'ERP',
+        directionCode: 'OUTBOUND',
+        taskType: 'CHANGE_NOTICE',
+        status: 'RUNNING',
+        ownerDisplayName: '李四',
+        requestedAt: '2026-04-07T10:00:00+08:00',
+        completedAt: null,
+        externalRef: 'ERP-CHANGE-001',
+        payloadSummary: '向 ERP 推送结构件替换指令',
+        receipts: [
+          {
+            id: 'receipt_001',
+            connectorTaskId: 'connector_task_001',
+            receiptType: 'ACK',
+            receiptStatus: 'PENDING',
+            receiptNo: 'ACK-001',
+          },
+        ],
+      },
+    ])
+    plmApiMocks.getPLMImplementationWorkspace.mockResolvedValue({
+      dependencies: [
+        {
+          id: 'dependency_001',
+          businessType: 'PLM_ECR',
+          billId: 'ecr_001',
+          dependencyType: 'UPSTREAM_APPROVAL',
+          upstreamTaskNo: 'TASK-UP-001',
+          upstreamTitle: 'ERP 接口窗口确认',
+          status: 'BLOCKED',
+          blocking: true,
+          dueAt: '2026-04-08T10:00:00+08:00',
+          note: '需等待 ERP 可用窗口',
+        },
+      ],
+      evidences: [
+        {
+          id: 'evidence_001',
+          businessType: 'PLM_ECR',
+          billId: 'ecr_001',
+          evidenceType: 'TEST_REPORT',
+          title: '样机验证报告',
+          status: 'COLLECTED',
+          ownerDisplayName: '王五',
+          externalRef: 'DOC-REPORT-001',
+          summary: '已上传样机验证结果',
+        },
+      ],
+      acceptanceCheckpoints: [
+        {
+          id: 'checkpoint_001',
+          businessType: 'PLM_ECR',
+          billId: 'ecr_001',
+          checkpointCode: 'AC-001',
+          checkpointName: '工艺验证签收',
+          status: 'READY',
+          required: true,
+          ownerDisplayName: '赵六',
+          summary: '等待最终确认',
+        },
+      ],
+    })
 
     renderWithQuery(<PLMECRRequestBillDetailPage billId='ecr_001' />)
 
@@ -945,8 +1305,87 @@ describe('plm pages', () => {
     expect(await screen.findByText('机壳、总装文件')).toBeInTheDocument()
     expect(await screen.findByText('对象链接')).toBeInTheDocument()
     expect(await screen.findByText('版本对比')).toBeInTheDocument()
-    expect(await screen.findAllByText('PART-001')).toHaveLength(2)
+    expect(await screen.findByText('执行总览')).toBeInTheDocument()
+    expect(await screen.findByText('发布 / 外部推进总览')).toBeInTheDocument()
+    expect(await screen.findByText('连接器任务 / 回执')).toBeInTheDocument()
+    expect(await screen.findByText('下一步动作')).toBeInTheDocument()
+    expect(await screen.findByText('优先处理失败回执与连接器任务')).toBeInTheDocument()
+    expect(await screen.findByText('实施依赖 / 证据 / 验收')).toBeInTheDocument()
+    expect((await screen.findAllByText('连接器健康')).length).toBeGreaterThan(0)
+    expect(await screen.findByText('回执闭环')).toBeInTheDocument()
+    expect(
+      await screen.findByText('向 ERP 推送结构件替换指令')
+    ).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '发布基线' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '受控发布' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: '实施依赖' })).toBeInTheDocument()
+    expect(await screen.findByText('阻塞关闭清单')).toBeInTheDocument()
+    expect(await screen.findByText('卡住同步')).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: '验证证据' })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: '验收检查' })).toBeInTheDocument()
+    expect(await screen.findByText('已收集 1')).toBeInTheDocument()
+    expect(await screen.findByText('已就绪 1')).toBeInTheDocument()
+    expect(await screen.findByText('依赖疏通')).toBeInTheDocument()
+    expect((await screen.findAllByText('PART-001')).length).toBeGreaterThanOrEqual(2)
     expect(await screen.findByText('材质和尺寸字段更新')).toBeInTheDocument()
+
+    plmApiMocks.dispatchPLMConnectorTask.mockResolvedValue({
+      id: 'connector_task_001',
+      businessType: 'PLM_ECR',
+      billId: 'ecr_001',
+      connectorCode: 'ERP_CHANGE',
+      connectorName: 'ERP 变更下发',
+      targetSystem: 'ERP',
+      taskType: 'CHANGE_NOTICE',
+      status: 'DISPATCHED',
+      dispatchLogs: [],
+      receipts: [],
+    })
+    fireEvent.click(screen.getByRole('button', { name: '重新派发' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.dispatchPLMConnectorTask).toHaveBeenCalledWith(
+        'connector_task_001'
+      )
+    })
+
+    plmApiMocks.releasePLMConfigurationBaseline.mockResolvedValue({
+      businessType: 'PLM_ECR',
+      billId: 'ecr_001',
+      targetType: 'BASELINE',
+      targetId: 'baseline_001',
+      targetName: '样机基线',
+      status: 'RELEASED',
+      message: '样机基线 已完成发布，等待外部系统消费基线变更。',
+      actedAt: '2026-04-07T10:40:00+08:00',
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发布基线' }))
+    await waitFor(() => {
+      expect(plmApiMocks.releasePLMConfigurationBaseline).toHaveBeenCalledWith(
+        'PLM_ECR',
+        'ecr_001',
+        'baseline_001'
+      )
+    })
+
+    plmApiMocks.releasePLMDocumentAsset.mockResolvedValue({
+      businessType: 'PLM_ECR',
+      billId: 'ecr_001',
+      targetType: 'DOCUMENT_ASSET',
+      targetId: 'doc_001',
+      targetName: '总装图纸',
+      status: 'RELEASED',
+      message: '总装图纸 已受控发布，等待外部系统同步文档资产。',
+      actedAt: '2026-04-07T10:41:00+08:00',
+    })
+    fireEvent.click(screen.getByRole('button', { name: '受控发布' }))
+    await waitFor(() => {
+      expect(plmApiMocks.releasePLMDocumentAsset).toHaveBeenCalledWith(
+        'PLM_ECR',
+        'ecr_001',
+        'doc_001'
+      )
+    })
 
     fireEvent.click(screen.getByRole('button', { name: '提交草稿' }))
 
@@ -1117,6 +1556,21 @@ describe('plm pages', () => {
       expect(
         plmApiMocks.performPLMImplementationTaskAction
       ).toHaveBeenCalledWith('PLM_ECO', 'eco_001', 'task_eco_001', 'COMPLETE')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '补证据' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存证据' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.addPLMImplementationEvidence).toHaveBeenCalledWith(
+        'PLM_ECO',
+        'eco_001',
+        'task_eco_001',
+        expect.objectContaining({
+          evidenceType: 'VALIDATION',
+          evidenceName: '实施工厂确认 验证记录',
+        })
+      )
     })
   })
 })

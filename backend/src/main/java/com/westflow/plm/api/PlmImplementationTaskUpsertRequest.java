@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
  */
 public record PlmImplementationTaskUpsertRequest(
         String taskId,
+        String templateId,
+        String templateCode,
         String taskNo,
         String taskTitle,
         String taskType,
@@ -15,6 +17,7 @@ public record PlmImplementationTaskUpsertRequest(
         LocalDateTime plannedStartAt,
         LocalDateTime plannedEndAt,
         String resultSummary,
+        Integer requiredEvidenceCount,
         Boolean verificationRequired,
         Integer sortOrder
 ) {

@@ -2732,7 +2732,7 @@ public class DbAiCopilotService implements AiCopilotService {
                     : "我已经汇总当前审批轨迹，可继续追问节点处理路径。";
         }
         if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
-            return "我已经生成当前 PLM 业务摘要，已补充对象类型、版本差异、任务进度、阻塞任务和关闭准备度，可继续追问影响对象或为什么不能关闭。";
+            return "我已经生成当前 PLM 业务摘要，已补充对象类型、版本差异、任务进度、阻塞任务、关闭准备度、基线状态、外部集成、验收状态和连接器任务，可继续追问影响对象、同步风险或为什么不能关闭。";
         }
         if ("stats.query".equals(result.toolKey())) {
             return "我已经整理出当前统计摘要，可继续追问时间范围或业务域。";
@@ -4241,6 +4241,13 @@ public class DbAiCopilotService implements AiCopilotService {
         String taskProgressSummary = stringValue(result.get("taskProgressSummary"));
         String blockedTaskSummary = stringValue(result.get("blockedTaskSummary"));
         String closeReadinessSummary = stringValue(result.get("closeReadinessSummary"));
+        String baselineStatusSummary = stringValue(result.get("baselineStatusSummary"));
+        String integrationStatusSummary = stringValue(result.get("integrationStatusSummary"));
+        String acceptanceSummary = stringValue(result.get("acceptanceSummary"));
+        String connectorStatusSummary = stringValue(result.get("connectorStatusSummary"));
+        String stuckSyncSummary = stringValue(result.get("stuckSyncSummary"));
+        String closeBlockerSummary = stringValue(result.get("closeBlockerSummary"));
+        String failedSystemHotspotSummary = stringValue(result.get("failedSystemHotspotSummary"));
         List<Field> fields = new java.util.ArrayList<>(List.of(
                 new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
                 new Field("工具调用编号", toolResult.toolCallId(), null),
@@ -4269,6 +4276,27 @@ public class DbAiCopilotService implements AiCopilotService {
         if (!closeReadinessSummary.isBlank()) {
             fields.add(new Field("关闭准备度", closeReadinessSummary, "是否可以关闭的判断"));
         }
+        if (!baselineStatusSummary.isBlank()) {
+            fields.add(new Field("基线状态", baselineStatusSummary, "配置基线与发布状态"));
+        }
+        if (!integrationStatusSummary.isBlank()) {
+            fields.add(new Field("外部集成", integrationStatusSummary, "ERP / MES / PDM / CAD 同步状态"));
+        }
+        if (!acceptanceSummary.isBlank()) {
+            fields.add(new Field("验收状态", acceptanceSummary, "关闭前验收检查摘要"));
+        }
+        if (!connectorStatusSummary.isBlank()) {
+            fields.add(new Field("连接器任务", connectorStatusSummary, "出站连接器调度与重试状态"));
+        }
+        if (!stuckSyncSummary.isBlank()) {
+            fields.add(new Field("卡点同步", stuckSyncSummary, "失败或待处理的同步任务"));
+        }
+        if (!closeBlockerSummary.isBlank()) {
+            fields.add(new Field("关闭阻塞", closeBlockerSummary, "影响关闭的任务、验收或回执问题"));
+        }
+        if (!failedSystemHotspotSummary.isBlank()) {
+            fields.add(new Field("失败热点", failedSystemHotspotSummary, "失败/待处理最集中的外部系统"));
+        }
         String topSummary = summarizeTopPlmItems(items);
         if (!topSummary.isBlank()) {
             fields.add(new Field("命中摘要", topSummary, "最多展示前三条命中单据"));
@@ -4285,6 +4313,14 @@ public class DbAiCopilotService implements AiCopilotService {
         int taskCompletedCount = intValue(result.get("taskCompletedCount"));
         int taskBlockedCount = intValue(result.get("taskBlockedCount"));
         int closeReadyCount = intValue(result.get("closeReadyCount"));
+        int baselineCount = intValue(result.get("baselineCount"));
+        int integrationCount = intValue(result.get("integrationCount"));
+        int integrationRiskCount = intValue(result.get("integrationRiskCount"));
+        int acceptanceDueCount = intValue(result.get("acceptanceDueCount"));
+        int connectorPendingCount = intValue(result.get("connectorPendingCount"));
+        int stuckSyncCount = countItems(result.get("stuckSyncItems"));
+        int closeBlockerCount = countItems(result.get("closeBlockerItems"));
+        int failedSystemHotspotCount = countItems(result.get("failedSystemHotspots"));
         return List.of(
                 new Metric("命中单据数", String.valueOf(count), count > 0 ? "已读取真实 PLM 业务数据" : "当前关键词未匹配到 PLM 单据", count > 0 ? "positive" : "warning"),
                 new Metric("类型数", String.valueOf(typeCount), "ECR / ECO / 物料主数据变更", typeCount > 0 ? "positive" : "neutral"),
@@ -4293,6 +4329,14 @@ public class DbAiCopilotService implements AiCopilotService {
                 new Metric("任务进度", taskTotalCount <= 0 ? "无任务" : taskCompletedCount + "/" + taskTotalCount, "已完成 / 总数", taskTotalCount > 0 ? "positive" : "neutral"),
                 new Metric("阻塞任务", String.valueOf(taskBlockedCount), "处于 BLOCKED 的实施任务", taskBlockedCount > 0 ? "warning" : "neutral"),
                 new Metric("可关闭单据", String.valueOf(closeReadyCount), "满足关闭条件的单据数", closeReadyCount > 0 ? "positive" : "neutral"),
+                new Metric("基线数", String.valueOf(baselineCount), "配置基线记录数", baselineCount > 0 ? "positive" : "neutral"),
+                new Metric("同步风险", String.valueOf(integrationRiskCount), "外部集成处于 PENDING / BLOCKED / FAILED", integrationRiskCount > 0 ? "warning" : "neutral"),
+                new Metric("待验收", String.valueOf(acceptanceDueCount), "必做验收项未完成", acceptanceDueCount > 0 ? "warning" : "neutral"),
+                new Metric("连接器待处理", String.valueOf(connectorPendingCount), "连接器任务待派发 / 失败 / 派发中", connectorPendingCount > 0 ? "warning" : "neutral"),
+                new Metric("卡点同步", String.valueOf(stuckSyncCount), "失败或待处理的同步单据", stuckSyncCount > 0 ? "warning" : "neutral"),
+                new Metric("关闭阻塞", String.valueOf(closeBlockerCount), "未满足关闭条件的单据", closeBlockerCount > 0 ? "warning" : "neutral"),
+                new Metric("失败热点", String.valueOf(failedSystemHotspotCount), "失败/待处理最集中的外部系统", failedSystemHotspotCount > 0 ? "warning" : "neutral"),
+                new Metric("集成数", String.valueOf(integrationCount), "外部系统边界记录数", integrationCount > 0 ? "positive" : "neutral"),
                 new Metric("业务域", "PLM", null, "neutral")
         );
     }
@@ -4320,7 +4364,14 @@ public class DbAiCopilotService implements AiCopilotService {
                         new Field("版本差异", stringValue(result.get("revisionDiffSummary")), null),
                         new Field("任务进度", stringValue(result.get("taskProgressSummary")), null),
                         new Field("阻塞任务", stringValue(result.get("blockedTaskSummary")), null),
-                        new Field("关闭准备度", stringValue(result.get("closeReadinessSummary")), null)
+                        new Field("关闭准备度", stringValue(result.get("closeReadinessSummary")), null),
+                        new Field("基线状态", stringValue(result.get("baselineStatusSummary")), null),
+                        new Field("外部集成", stringValue(result.get("integrationStatusSummary")), null),
+                        new Field("验收状态", stringValue(result.get("acceptanceSummary")), null),
+                        new Field("连接器任务", stringValue(result.get("connectorStatusSummary")), null),
+                        new Field("卡点同步", stringValue(result.get("stuckSyncSummary")), null),
+                        new Field("关闭阻塞", stringValue(result.get("closeBlockerSummary")), null),
+                        new Field("失败热点", stringValue(result.get("failedSystemHotspotSummary")), null)
                 ),
                 buildPlmSummaryMetrics(result)
         );
@@ -4391,6 +4442,10 @@ public class DbAiCopilotService implements AiCopilotService {
         String taskProgress = stringValue(result.get("taskProgressSummary"));
         String blockedTasks = stringValue(result.get("blockedTaskSummary"));
         String closeReadiness = stringValue(result.get("closeReadinessSummary"));
+        String baselineStatus = stringValue(result.get("baselineStatusSummary"));
+        String integrationStatus = stringValue(result.get("integrationStatusSummary"));
+        String acceptanceStatus = stringValue(result.get("acceptanceSummary"));
+        String connectorStatus = stringValue(result.get("connectorStatusSummary"));
         java.util.ArrayList<String> fragments = new java.util.ArrayList<>();
         String topSummary = summarizeTopPlmItems(result.get("items"));
         if (!topSummary.isBlank()) {
@@ -4410,6 +4465,18 @@ public class DbAiCopilotService implements AiCopilotService {
         }
         if (!closeReadiness.isBlank()) {
             fragments.add("关闭准备度：" + closeReadiness);
+        }
+        if (!baselineStatus.isBlank()) {
+            fragments.add("基线状态：" + baselineStatus);
+        }
+        if (!integrationStatus.isBlank()) {
+            fragments.add("外部集成：" + integrationStatus);
+        }
+        if (!acceptanceStatus.isBlank()) {
+            fragments.add("验收状态：" + acceptanceStatus);
+        }
+        if (!connectorStatus.isBlank()) {
+            fragments.add("连接器任务：" + connectorStatus);
         }
         if (fragments.isEmpty()) {
             return topSummary;

@@ -69,6 +69,417 @@ export type PlmImplementationTaskStatus =
   | 'COMPLETED'
   | 'CANCELLED'
 
+export type PLMBomNode = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  parentNodeId?: string | null
+  objectId?: string | null
+  nodeCode: string
+  nodeName: string
+  nodeType: string
+  quantity?: number | null
+  unit?: string | null
+  effectivity?: string | null
+  changeAction?: string | null
+  hierarchyLevel?: number | null
+  sortOrder?: number | null
+}
+
+export type PLMDocumentAsset = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  objectId?: string | null
+  documentCode: string
+  documentName: string
+  documentType: string
+  versionLabel?: string | null
+  vaultState: string
+  fileName?: string | null
+  fileType?: string | null
+  sourceSystem?: string | null
+  externalRef?: string | null
+  changeAction?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMPublicationActionResponse = {
+  businessType: PlmBusinessTypeCode
+  billId: string
+  targetType: string
+  targetId: string
+  targetName: string
+  status: string
+  message: string
+  actedAt?: string | null
+}
+
+export type PLMConfigurationBaselineItem = {
+  id: string
+  objectId?: string | null
+  objectCode: string
+  objectName: string
+  objectType: string
+  beforeRevisionCode?: string | null
+  afterRevisionCode?: string | null
+  effectivity?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMConfigurationBaseline = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  baselineCode: string
+  baselineName: string
+  baselineType: string
+  status: string
+  releasedAt?: string | null
+  summaryJson?: string | null
+  items: PLMConfigurationBaselineItem[]
+}
+
+export type PLMObjectAcl = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  objectId?: string | null
+  objectCode?: string | null
+  objectName?: string | null
+  subjectType: string
+  subjectCode: string
+  permissionCode: string
+  accessScope: string
+  inherited?: boolean | null
+  sortOrder?: number | null
+}
+
+export type PLMDomainAcl = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  domainCode: string
+  roleCode: string
+  permissionCode: string
+  accessScope: string
+  policySource: string
+  sortOrder?: number | null
+}
+
+export type PLMRoleAssignment = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  roleCode: string
+  roleLabel: string
+  assigneeUserId?: string | null
+  assigneeDisplayName?: string | null
+  assignmentScope: string
+  required: boolean
+  status: string
+  sortOrder?: number | null
+}
+
+export type PLMExternalSyncEvent = {
+  id: string
+  integrationId: string
+  eventType: string
+  status: string
+  payloadJson?: string | null
+  errorMessage?: string | null
+  happenedAt?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMExternalIntegration = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  objectId?: string | null
+  systemCode: string
+  systemName: string
+  directionCode: string
+  integrationType: string
+  status: string
+  endpointKey?: string | null
+  externalRef?: string | null
+  lastSyncAt?: string | null
+  message?: string | null
+  sortOrder?: number | null
+  events: PLMExternalSyncEvent[]
+}
+
+export type PLMExternalSyncEventEnvelope = {
+  id: string
+  integrationId: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  systemCode: string
+  systemName: string
+  directionCode: string
+  eventType: string
+  status: string
+  payloadJson?: string | null
+  errorMessage?: string | null
+  happenedAt?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMConnectorTaskReceipt = {
+  id: string
+  connectorTaskId: string
+  receiptType: string
+  receiptStatus: string
+  receiptNo?: string | null
+  acknowledgedAt?: string | null
+  payloadSummary?: string | null
+  payloadDetails?: string[]
+  errorMessage?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMConnectorDispatchLog = {
+  id: string
+  connectorTaskId: string
+  actionType: string
+  status: string
+  requestPayload?: string | null
+  responsePayload?: string | null
+  requestSummary?: string | null
+  requestDetails?: string[]
+  responseSummary?: string | null
+  responseDetails?: string[]
+  errorMessage?: string | null
+  happenedAt?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMConnectorDispatchProfile = {
+  mode?: string | null
+  transport?: string | null
+  endpointUrl?: string | null
+  endpointPath?: string | null
+  description?: string | null
+}
+
+export type PLMConnectorTask = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  connectorCode: string
+  connectorName: string
+  targetSystem: string
+  directionCode?: string | null
+  taskType: string
+  status: string
+  ownerUserId?: string | null
+  ownerDisplayName?: string | null
+  requestedAt?: string | null
+  completedAt?: string | null
+  externalRef?: string | null
+  payloadSummary?: string | null
+  payloadDetails?: string[]
+  dispatchProfile?: PLMConnectorDispatchProfile | null
+  dispatchLogs: PLMConnectorDispatchLog[]
+  receipts: PLMConnectorTaskReceipt[]
+}
+
+export type PLMImplementationDependency = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  dependencyType: string
+  upstreamTaskNo?: string | null
+  upstreamTitle?: string | null
+  status: string
+  blocking?: boolean | null
+  dueAt?: string | null
+  note?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMImplementationEvidence = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  evidenceType: string
+  title: string
+  status: string
+  ownerUserId?: string | null
+  ownerDisplayName?: string | null
+  collectedAt?: string | null
+  externalRef?: string | null
+  summary?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMAcceptanceCheckpoint = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  checkpointCode: string
+  checkpointName: string
+  status: string
+  required: boolean
+  ownerUserId?: string | null
+  ownerDisplayName?: string | null
+  completedAt?: string | null
+  summary?: string | null
+  sortOrder?: number | null
+}
+
+export type PLMImplementationWorkspace = {
+  dependencies: PLMImplementationDependency[]
+  evidences: PLMImplementationEvidence[]
+  acceptanceCheckpoints: PLMAcceptanceCheckpoint[]
+}
+
+export type PLMImplementationEvidenceCreatePayload = {
+  evidenceType: string
+  evidenceName: string
+  evidenceRef?: string
+  evidenceSummary?: string
+}
+
+export type PLMAcceptanceChecklistUpdatePayload = {
+  status: string
+  resultSummary?: string
+}
+
+type RawPLMConnectorDispatchLog = {
+  id: string
+  jobId: string
+  actionType: string
+  status: string
+  requestPayloadJson?: string | null
+  responsePayloadJson?: string | null
+  errorMessage?: string | null
+  happenedAt?: string | null
+  sortOrder?: number | null
+}
+
+type RawPLMConnectorAck = {
+  id: string
+  jobId: string
+  ackStatus: string
+  ackCode?: string | null
+  externalRef?: string | null
+  message?: string | null
+  payloadJson?: string | null
+  sourceSystem?: string | null
+  happenedAt?: string | null
+  sortOrder?: number | null
+}
+
+type RawPLMConnectorJob = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  connectorRegistryId?: string | null
+  connectorCode: string
+  systemCode: string
+  systemName: string
+  directionCode?: string | null
+  jobType: string
+  status: string
+  requestPayloadJson?: string | null
+  externalRef?: string | null
+  retryCount?: number | null
+  nextRunAt?: string | null
+  lastDispatchedAt?: string | null
+  lastAckAt?: string | null
+  lastError?: string | null
+  createdBy?: string | null
+  sortOrder?: number | null
+  dispatchLogs?: RawPLMConnectorDispatchLog[]
+  acknowledgements?: RawPLMConnectorAck[]
+}
+
+type ConnectorPayloadEnvelope = {
+  businessType?: string
+  billId?: string
+  jobType?: string
+  summaryMessage?: string
+  connectorCode?: string
+  systemCode?: string
+  systemName?: string
+  endpointKey?: string
+  dispatchProfile?: {
+    mode?: string
+    transport?: string
+    endpointUrl?: string
+    endpointPath?: string
+    description?: string
+  }
+  bill?: {
+    billNo?: string
+    title?: string
+    status?: string
+    sceneCode?: string
+    creatorUserId?: string
+    effectiveDate?: string
+  }
+  affectedData?: {
+    objectLinkCount?: number
+    bomNodeCount?: number
+    documentCount?: number
+    baselineCount?: number
+    objects?: Array<Record<string, unknown>>
+    bomHighlights?: Array<Record<string, unknown>>
+    documents?: Array<Record<string, unknown>>
+    baselines?: Array<Record<string, unknown>>
+  }
+  implementation?: {
+    taskCount?: number
+    pendingTaskCount?: number
+    blockedTaskCount?: number
+    verificationTaskCount?: number
+    requiredEvidenceCount?: number
+    evidenceCount?: number
+    acceptancePendingCount?: number
+    tasks?: Array<Record<string, unknown>>
+  }
+  systemPayload?: {
+    intent?: string
+    summary?: string
+    [key: string]: unknown
+  }
+}
+
+type RawPLMImplementationEvidence = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  taskId: string
+  evidenceType: string
+  evidenceName: string
+  evidenceRef?: string | null
+  evidenceSummary?: string | null
+  uploadedBy?: string | null
+  createdAt?: string | null
+}
+
+type RawPLMAcceptanceCheckpoint = {
+  id: string
+  businessType: PlmBusinessTypeCode
+  billId: string
+  checkCode: string
+  checkName: string
+  requiredFlag: boolean
+  status: string
+  resultSummary?: string | null
+  checkedBy?: string | null
+  checkedAt?: string | null
+  sortOrder?: number | null
+}
+
+type RawPLMImplementationWorkspace = {
+  dependencies: PLMImplementationDependency[]
+  evidences: RawPLMImplementationEvidence[]
+  acceptanceCheckpoints: RawPLMAcceptanceCheckpoint[]
+}
+
 export type PLMObjectLink = {
   id: string
   businessType: PlmBusinessTypeCode
@@ -428,6 +839,92 @@ export type PLMDashboardSummary = PLMDashboardSummaryMetrics & {
   }>
 }
 
+export type PLMDashboardCockpit = {
+  stuckSyncItems?: Array<{
+    id: string
+    billId?: string | null
+    billNo?: string | null
+    businessType?: PlmBusinessTypeCode | null
+    businessTitle?: string | null
+    systemCode?: string | null
+    systemName?: string | null
+    connectorName?: string | null
+    status: string
+    pendingCount?: number | null
+    failedCount?: number | null
+    ownerDisplayName?: string | null
+    summary?: string | null
+    updatedAt?: string | null
+  }>
+  closeBlockerItems?: Array<{
+    id: string
+    billId?: string | null
+    billNo?: string | null
+    businessType?: PlmBusinessTypeCode | null
+    businessTitle?: string | null
+    blockerType: string
+    blockerTitle?: string | null
+    blockerCount?: number | null
+    ownerDisplayName?: string | null
+    summary?: string | null
+    dueAt?: string | null
+  }>
+  failedSystemHotspots?: Array<{
+    systemCode: string
+    systemName?: string | null
+    failedCount?: number | null
+    pendingCount?: number | null
+    blockedBillCount?: number | null
+    summary?: string | null
+  }>
+  objectTypeDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  domainDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  baselineStatusDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  integrationSystemDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  integrationStatusDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  blockedTaskCount: number
+  overdueTaskCount: number
+  readyToCloseCount: number
+  pendingIntegrationCount: number
+  failedSyncEventCount: number
+  roleCoverageRate: number
+  averageClosureHours: number
+  connectorTaskBacklogCount?: number
+  pendingReceiptCount?: number
+  implementationHealthyRate?: number
+  acceptanceDueCount?: number
+  connectorStatusDistribution?: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  implementationHealthDistribution?: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+}
+
 export type PLMImplementationTaskActionCode =
   | 'START'
   | 'COMPLETE'
@@ -500,6 +997,28 @@ async function getPLMDashboard(): Promise<PLMDashboardSummary> {
     data: PLMDashboardSummary
     requestId: string
   }>('/plm/dashboard/summary')
+
+  return unwrapResponse(response)
+}
+
+async function getPLMDashboardCockpitInternal(): Promise<PLMDashboardCockpit> {
+  const response = await apiClient.get<{
+    code: 'OK'
+    message: string
+    data: PLMDashboardCockpit
+    requestId: string
+  }>('/plm/dashboard/cockpit')
+
+  return unwrapResponse(response)
+}
+
+async function getPLMBillResource<T>(url: string): Promise<T> {
+  const response = await apiClient.get<{
+    code: 'OK'
+    message: string
+    data: T
+    requestId: string
+  }>(url)
 
   return unwrapResponse(response)
 }
@@ -583,6 +1102,10 @@ export async function createPLMMaterialChangeRequest(
 
 export async function getPLMDashboardSummary(): Promise<PLMDashboardSummary> {
   return getPLMDashboard()
+}
+
+export async function getPLMDashboardCockpit(): Promise<PLMDashboardCockpit> {
+  return getPLMDashboardCockpitInternal()
 }
 
 export async function submitPLMECRDraft(
@@ -676,6 +1199,289 @@ export async function performPLMImplementationTaskAction(
   )
 }
 
+function parseConnectorPayloadEnvelope(
+  value?: string | null
+): ConnectorPayloadEnvelope | null {
+  if (!value) {
+    return null
+  }
+  try {
+    return JSON.parse(value) as ConnectorPayloadEnvelope
+  } catch {
+    return null
+  }
+}
+
+function compactDetails(values: Array<string | null | undefined>): string[] {
+  return values.filter((value): value is string => Boolean(value && value.trim()))
+}
+
+function formatConnectorIntent(intent?: string | null) {
+  switch (intent) {
+    case 'MASTER_DATA_SYNC':
+      return '主数据同步'
+    case 'ROLL_OUT_SYNC':
+      return '实施下发'
+    case 'DOCUMENT_RELEASE':
+      return '文档发布'
+    case 'DRAWING_PUBLISH':
+      return '图档发布'
+    default:
+      return intent ?? '系统同步'
+  }
+}
+
+function buildConnectorTaskOverview(job: RawPLMConnectorJob) {
+  const envelope = parseConnectorPayloadEnvelope(job.requestPayloadJson)
+  const profile = envelope?.dispatchProfile
+  const bill = envelope?.bill
+  const affectedData = envelope?.affectedData
+  const implementation = envelope?.implementation
+  const systemPayload = envelope?.systemPayload
+
+  const payloadSummary =
+    systemPayload?.summary ??
+    envelope?.summaryMessage ??
+    `${job.systemName} ${formatConnectorIntent(systemPayload?.intent)}`
+
+  const payloadDetails = compactDetails([
+    bill?.title ? `单据：${bill.title}` : null,
+    bill?.billNo ? `编号：${bill.billNo}` : null,
+    affectedData?.objectLinkCount != null
+      ? `受影响对象 ${affectedData.objectLinkCount} 个`
+      : null,
+    affectedData?.baselineCount != null
+      ? `基线 ${affectedData.baselineCount} 组`
+      : null,
+    affectedData?.documentCount != null
+      ? `文档 ${affectedData.documentCount} 份`
+      : null,
+    implementation?.taskCount != null
+      ? `实施任务 ${implementation.taskCount} 项`
+      : null,
+    implementation?.blockedTaskCount
+      ? `阻塞 ${implementation.blockedTaskCount} 项`
+      : null,
+  ])
+
+  return {
+    payloadSummary,
+    payloadDetails,
+    dispatchProfile: profile
+      ? {
+          mode: profile.mode ?? null,
+          transport: profile.transport ?? null,
+          endpointUrl: profile.endpointUrl ?? null,
+          endpointPath: profile.endpointPath ?? null,
+          description: profile.description ?? null,
+        }
+      : null,
+  }
+}
+
+function buildDispatchLogOverview(log: RawPLMConnectorDispatchLog) {
+  const requestEnvelope = parseConnectorPayloadEnvelope(log.requestPayloadJson)
+  const responsePayload = parseConnectorPayloadEnvelope(log.responsePayloadJson)
+  const responseRecord = parseConnectorPayloadEnvelope(log.responsePayloadJson) as
+    | Record<string, unknown>
+    | null
+
+  const requestSummary =
+    requestEnvelope?.systemPayload?.summary ??
+    requestEnvelope?.summaryMessage ??
+    null
+  const requestDetails = compactDetails([
+    requestEnvelope?.bill?.billNo
+      ? `单据：${requestEnvelope.bill.billNo}`
+      : null,
+    requestEnvelope?.dispatchProfile?.transport
+      ? `传输：${requestEnvelope.dispatchProfile.transport}`
+      : null,
+    requestEnvelope?.dispatchProfile?.endpointUrl
+      ? `目标：${requestEnvelope.dispatchProfile.endpointUrl}${requestEnvelope.dispatchProfile.endpointPath ?? ''}`
+      : null,
+  ])
+
+  const responseSummary =
+    typeof responseRecord?.message === 'string'
+      ? responseRecord.message
+      : responsePayload?.systemPayload?.summary ?? null
+  const responseDetails = compactDetails([
+    typeof responseRecord?.mode === 'string' ? `模式：${responseRecord.mode}` : null,
+    typeof responseRecord?.transport === 'string'
+      ? `链路：${responseRecord.transport}`
+      : null,
+    typeof responseRecord?.endpointUrl === 'string'
+      ? `端点：${responseRecord.endpointUrl}${typeof responseRecord?.endpointPath === 'string' ? responseRecord.endpointPath : ''}`
+      : null,
+    typeof responseRecord?.handlerKey === 'string'
+      ? `处理器：${responseRecord.handlerKey}`
+      : null,
+  ])
+
+  return {
+    requestSummary,
+    requestDetails,
+    responseSummary,
+    responseDetails,
+  }
+}
+
+function buildReceiptOverview(ack: RawPLMConnectorAck) {
+  const payload = parseConnectorPayloadEnvelope(ack.payloadJson) as
+    | Record<string, unknown>
+    | null
+  const payloadSummary =
+    ack.message ??
+    (typeof payload?.message === 'string' ? payload.message : null) ??
+    ack.payloadJson
+  const payloadDetails = compactDetails([
+    ack.sourceSystem ? `来源：${ack.sourceSystem}` : null,
+    ack.ackCode ? `回执码：${ack.ackCode}` : null,
+    ack.idempotencyKey ? `幂等键：${ack.idempotencyKey}` : null,
+  ])
+  return {
+    payloadSummary,
+    payloadDetails,
+  }
+}
+
+function mapConnectorJob(job: RawPLMConnectorJob): PLMConnectorTask {
+  const taskOverview = buildConnectorTaskOverview(job)
+  return {
+    id: job.id,
+    businessType: job.businessType,
+    billId: job.billId,
+    connectorCode: job.connectorCode,
+    connectorName: job.systemName,
+    targetSystem: job.systemCode,
+    directionCode: job.directionCode,
+    taskType: job.jobType,
+    status: job.status,
+    ownerUserId: job.createdBy,
+    ownerDisplayName: job.createdBy,
+    requestedAt: job.nextRunAt,
+    completedAt: job.lastAckAt ?? job.lastDispatchedAt,
+    externalRef: job.externalRef,
+    payloadSummary: taskOverview.payloadSummary,
+    payloadDetails: taskOverview.payloadDetails,
+    dispatchProfile: taskOverview.dispatchProfile,
+    dispatchLogs: (job.dispatchLogs ?? []).map((log) => {
+      const logOverview = buildDispatchLogOverview(log)
+      return {
+        id: log.id,
+        connectorTaskId: log.jobId,
+        actionType: log.actionType,
+        status: log.status,
+        requestPayload: log.requestPayloadJson,
+        responsePayload: log.responsePayloadJson,
+        requestSummary: logOverview.requestSummary,
+        requestDetails: logOverview.requestDetails,
+        responseSummary: logOverview.responseSummary,
+        responseDetails: logOverview.responseDetails,
+        errorMessage: log.errorMessage,
+        happenedAt: log.happenedAt,
+        sortOrder: log.sortOrder,
+      }
+    }),
+    receipts: (job.acknowledgements ?? []).map((ack) => {
+      const overview = buildReceiptOverview(ack)
+      return {
+        id: ack.id,
+        connectorTaskId: ack.jobId,
+        receiptType: ack.ackCode ?? ack.sourceSystem ?? 'ACK',
+        receiptStatus: ack.ackStatus,
+        receiptNo: ack.externalRef,
+        acknowledgedAt: ack.happenedAt,
+        payloadSummary: overview.payloadSummary,
+        payloadDetails: overview.payloadDetails,
+        errorMessage: ack.ackStatus === 'FAILED' ? ack.message : undefined,
+        sortOrder: ack.sortOrder,
+      }
+    }),
+  }
+}
+
+export async function dispatchPLMConnectorTask(
+  jobId: string
+): Promise<PLMConnectorTask> {
+  const job = await requestPLMAction<RawPLMConnectorJob>(
+    'post',
+    `/plm/connector-jobs/${jobId}/dispatch`,
+    {}
+  )
+
+  return mapConnectorJob(job)
+}
+
+export async function retryPLMConnectorTask(
+  jobId: string
+): Promise<PLMConnectorTask> {
+  const job = await requestPLMAction<RawPLMConnectorJob>(
+    'post',
+    `/plm/connector-jobs/${jobId}/retry`,
+    {}
+  )
+
+  return mapConnectorJob(job)
+}
+
+export async function addPLMImplementationEvidence(
+  businessType: PlmBusinessTypeCode,
+  billId: string,
+  taskId: string,
+  payload: PLMImplementationEvidenceCreatePayload
+): Promise<PLMImplementationEvidence> {
+  const item = await requestPLMAction<RawPLMImplementationEvidence>(
+    'post',
+    `${getPLMBillEndpoint(businessType)}/${billId}/implementation-tasks/${taskId}/evidence`,
+    payload
+  )
+
+  return {
+    id: item.id,
+    businessType: item.businessType,
+    billId: item.billId,
+    evidenceType: item.evidenceType,
+    title: item.evidenceName,
+    status: 'COLLECTED',
+    ownerUserId: item.uploadedBy,
+    ownerDisplayName: item.uploadedBy,
+    collectedAt: item.createdAt,
+    externalRef: item.evidenceRef,
+    summary: item.evidenceSummary,
+    sortOrder: item.sortOrder ?? null,
+  }
+}
+
+export async function updatePLMAcceptanceChecklist(
+  businessType: PlmBusinessTypeCode,
+  billId: string,
+  checklistId: string,
+  payload: PLMAcceptanceChecklistUpdatePayload
+): Promise<PLMAcceptanceCheckpoint> {
+  const item = await requestPLMAction<RawPLMAcceptanceCheckpoint>(
+    'put',
+    `${getPLMBillEndpoint(businessType)}/${billId}/acceptance-checklist/${checklistId}`,
+    payload
+  )
+
+  return {
+    id: item.id,
+    businessType: item.businessType,
+    billId: item.billId,
+    checkpointCode: item.checkCode,
+    checkpointName: item.checkName,
+    status: item.status === 'ACCEPTED' ? 'COMPLETED' : item.status,
+    required: item.requiredFlag,
+    ownerUserId: item.checkedBy,
+    ownerDisplayName: item.checkedBy,
+    completedAt: item.checkedAt,
+    summary: item.resultSummary,
+    sortOrder: item.sortOrder ?? null,
+  }
+}
+
 export async function getPLMECRRequestDetail(
   billId: string
 ): Promise<PLMBillDetail> {
@@ -716,4 +1522,146 @@ export async function listPLMApprovalSheets(
   search: ListQuerySearch
 ): Promise<PLMApprovalSheetPage> {
   return getPLMApprovalSheetPage(search)
+}
+
+export async function listPLMBomNodes(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMBomNode[]> {
+  return getPLMBillResource(
+    `/plm/bills/${businessType}/${billId}/bom-nodes`
+  )
+}
+
+export async function listPLMDocumentAssets(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMDocumentAsset[]> {
+  return getPLMBillResource(
+    `/plm/bills/${businessType}/${billId}/document-assets`
+  )
+}
+
+export async function listPLMConfigurationBaselines(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMConfigurationBaseline[]> {
+  return getPLMBillResource(`/plm/bills/${businessType}/${billId}/baselines`)
+}
+
+export async function releasePLMConfigurationBaseline(
+  businessType: PlmBusinessTypeCode,
+  billId: string,
+  baselineId: string,
+  payload?: { summaryMessage?: string }
+): Promise<PLMPublicationActionResponse> {
+  const { data } = await apiClient.put<ApiResponse<PLMPublicationActionResponse>>(
+    `/plm/bills/${businessType}/${billId}/baselines/${baselineId}/release`,
+    payload ?? {}
+  )
+  return data.data
+}
+
+export async function releasePLMDocumentAsset(
+  businessType: PlmBusinessTypeCode,
+  billId: string,
+  assetId: string,
+  payload?: { summaryMessage?: string }
+): Promise<PLMPublicationActionResponse> {
+  const { data } = await apiClient.put<ApiResponse<PLMPublicationActionResponse>>(
+    `/plm/bills/${businessType}/${billId}/document-assets/${assetId}/release`,
+    payload ?? {}
+  )
+  return data.data
+}
+
+export async function listPLMObjectAcl(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMObjectAcl[]> {
+  return getPLMBillResource(`/plm/bills/${businessType}/${billId}/acl`)
+}
+
+export async function listPLMDomainAcl(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMDomainAcl[]> {
+  return getPLMBillResource(`/plm/bills/${businessType}/${billId}/domain-acl`)
+}
+
+export async function listPLMRoleAssignments(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMRoleAssignment[]> {
+  return getPLMBillResource(`/plm/bills/${businessType}/${billId}/role-matrix`)
+}
+
+export async function listPLMExternalIntegrations(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMExternalIntegration[]> {
+  return getPLMBillResource(
+    `/plm/bills/${businessType}/${billId}/external-integrations`
+  )
+}
+
+export async function listPLMExternalSyncEvents(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMExternalSyncEventEnvelope[]> {
+  return getPLMBillResource(
+    `/plm/bills/${businessType}/${billId}/external-sync-events`
+  )
+}
+
+export async function listPLMConnectorTasks(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMConnectorTask[]> {
+  const jobs = await getPLMBillResource<RawPLMConnectorJob[]>(
+    `/plm/bills/${businessType}/${billId}/connector-tasks`
+  )
+  return jobs.map(mapConnectorJob)
+}
+
+export async function getPLMImplementationWorkspace(
+  businessType: PlmBusinessTypeCode,
+  billId: string
+): Promise<PLMImplementationWorkspace> {
+  const workspace = await getPLMBillResource<RawPLMImplementationWorkspace>(
+    `/plm/bills/${businessType}/${billId}/implementation-workspace`
+  )
+  return {
+    dependencies: workspace.dependencies ?? [],
+    evidences: (workspace.evidences ?? []).map((item) => ({
+      id: item.id,
+      businessType: item.businessType,
+      billId: item.billId,
+      evidenceType: item.evidenceType,
+      title: item.evidenceName,
+      status: 'COLLECTED',
+      ownerUserId: item.uploadedBy,
+      ownerDisplayName: item.uploadedBy,
+      collectedAt: item.createdAt,
+      externalRef: item.evidenceRef,
+      summary: item.evidenceSummary,
+      sortOrder: item.sortOrder ?? null,
+    })),
+    acceptanceCheckpoints: (workspace.acceptanceCheckpoints ?? []).map(
+      (item) => ({
+        id: item.id,
+        businessType: item.businessType,
+        billId: item.billId,
+        checkpointCode: item.checkCode,
+        checkpointName: item.checkName,
+        status: item.status === 'ACCEPTED' ? 'COMPLETED' : item.status,
+        required: item.requiredFlag,
+        ownerUserId: item.checkedBy,
+        ownerDisplayName: item.checkedBy,
+        completedAt: item.checkedAt,
+        summary: item.resultSummary,
+        sortOrder: item.sortOrder ?? null,
+      })
+    ),
+  }
 }
