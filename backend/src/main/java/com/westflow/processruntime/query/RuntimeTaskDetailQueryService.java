@@ -46,6 +46,7 @@ public class RuntimeTaskDetailQueryService {
     private final RuntimeTaskDetailProjectionService runtimeTaskDetailProjectionService;
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
     private final RuntimeProcessPredictionService runtimeProcessPredictionService;
+    private final RuntimeProcessPredictionAiNarrationService runtimeProcessPredictionAiNarrationService;
 
     public ProcessTaskDetailResponse buildDetailResponse(
             String processInstanceId,
@@ -167,15 +168,22 @@ public class RuntimeTaskDetailQueryService {
         String instanceStatus = runtimeTaskTraceQueryService.resolveInstanceStatus(historicProcessInstance, activeTasks);
         String detailTaskKind = resolveDetailTaskKind(processInstanceId, referenceActiveTask, referenceHistoricTask, nodeId);
         String detailTaskSemanticMode = resolveDetailTaskSemanticMode(processInstanceId, referenceActiveTask, referenceHistoricTask, nodeId);
-        var prediction = runtimeProcessPredictionService.predict(
+        var prediction = runtimeProcessPredictionAiNarrationService.enhanceDetailPrediction(
+                definition.processName(),
+                businessType,
+                nodeName,
+                runtimeProcessPredictionService.predict(
                 definition.processKey(),
                 instanceStatus,
                 nodeId,
                 nodeName,
+                referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee(),
+                businessType,
                 createdAt,
                 taskTrace,
                 payload.nodes(),
                 payload.edges()
+                )
         );
         return new ProcessTaskDetailResponse(
                 referenceActiveTask != null ? referenceActiveTask.getId() : referenceHistoricTask == null ? null : referenceHistoricTask.getId(),

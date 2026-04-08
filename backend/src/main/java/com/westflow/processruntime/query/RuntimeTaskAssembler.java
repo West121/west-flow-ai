@@ -53,6 +53,8 @@ public class RuntimeTaskAssembler {
                 definition.processKey(),
                 task.getTaskDefinitionKey(),
                 task.getName(),
+                task.getAssignee(),
+                stringValue(variables.get("westflowBusinessType")),
                 OffsetDateTime.ofInstant(task.getCreateTime().toInstant(), java.time.ZoneId.of("Asia/Shanghai")),
                 definition.dsl().nodes(),
                 definition.dsl().edges()

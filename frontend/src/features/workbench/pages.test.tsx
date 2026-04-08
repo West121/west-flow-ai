@@ -520,21 +520,27 @@ describe('workbench pages', () => {
     expect(
       screen.getByRole('button', { name: '用 AI 解读当前待办' })
     ).toHaveAttribute('data-source-route', '/workbench/todos/list')
+    expect(screen.getByText('今日可能超期 0')).toBeInTheDocument()
   })
 
   it('renders real overview metrics on the dashboard', async () => {
     workbenchApiMocks.getWorkbenchDashboardSummary.mockResolvedValue({
       todoTodayCount: 7,
       doneApprovalCount: 12,
+      highRiskTodoCount: 4,
+      overdueTodayCount: 1,
     })
 
     renderWithQuery(<Dashboard />)
 
     expect(await screen.findByText('平台总览')).toBeInTheDocument()
+    expect(screen.getByText('高风险待办')).toBeInTheDocument()
+    expect(screen.getByText('预计今日超期')).toBeInTheDocument()
     expect(await screen.findByText('7')).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('4')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByText('预测运营焦点')).toBeInTheDocument()
     expect(workbenchApiMocks.getWorkbenchDashboardSummary).toHaveBeenCalled()
   })
 
@@ -1500,11 +1506,15 @@ describe('workbench pages', () => {
         taskId: 'task_prediction_001',
         prediction: {
           predictedFinishTime: '2026-04-08T18:00:00+08:00',
+          predictedRiskThresholdTime: '2026-04-08T15:30:00+08:00',
           remainingDurationMinutes: 180,
           currentElapsedMinutes: 45,
+          currentNodeDurationP50Minutes: 30,
+          currentNodeDurationP75Minutes: 60,
           overdueRiskLevel: 'MEDIUM',
           confidence: 'HIGH',
           historicalSampleSize: 12,
+          sampleProfile: '同流程同节点（工作日样本） · 业务类型 OA_LEAVE',
           basisSummary: '基于 12 条同节点历史样本估算当前节点剩余 180 分钟。',
           noPredictionReason: null,
           explanation: '部门经理审批已停留 45 分钟，按历史中位样本预计还需 180 分钟。',
@@ -1549,6 +1559,14 @@ describe('workbench pages', () => {
     expect(screen.getByText(/高置信度/)).toBeInTheDocument()
     expect(screen.getByText('总监审批')).toBeInTheDocument()
     expect(screen.getByText(/当前节点历史波动较大/)).toBeInTheDocument()
+    expect(screen.getByText(/命中样本口径：同流程同节点（工作日样本） · 业务类型 OA_LEAVE/)).toBeInTheDocument()
+    expect(
+      screen.getByText('节点历史 p50 / p75：', {
+        selector: 'div',
+        exact: false,
+      })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/预计进入高风险阈值：04\/08 15:30/)).toBeInTheDocument()
     expect(screen.getByText('建议动作')).toBeInTheDocument()
     expect(screen.getByText(/提前同步下一审批人/)).toBeInTheDocument()
   })

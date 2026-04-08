@@ -31,6 +31,23 @@ function formatMinutes(value?: number | null) {
   return minutes === 0 ? `${hours} 小时` : `${hours} 小时 ${minutes} 分钟`
 }
 
+function formatShortDateTime(value?: string | null) {
+  if (!value) {
+    return '--'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
 function badgeVariantForRisk(risk?: string | null) {
   switch ((risk ?? '').toUpperCase()) {
     case 'HIGH':
@@ -172,6 +189,22 @@ export function ApprovalPredictionSection({
               <div className='mt-3 text-xs text-muted-foreground'>
                 历史样本 {prediction.historicalSampleSize ?? 0} 条
               </div>
+              {prediction.sampleProfile ? (
+                <div className='mt-1 text-xs text-muted-foreground'>
+                  命中样本口径：{prediction.sampleProfile}
+                </div>
+              ) : null}
+              {prediction.currentNodeDurationP50Minutes !== null &&
+              prediction.currentNodeDurationP50Minutes !== undefined ? (
+                <div className='mt-1 text-xs text-muted-foreground'>
+                  节点历史 p50 / p75：{formatMinutes(prediction.currentNodeDurationP50Minutes)} / {formatMinutes(prediction.currentNodeDurationP75Minutes)}
+                </div>
+              ) : null}
+              {prediction.predictedRiskThresholdTime ? (
+                <div className='mt-1 text-xs text-muted-foreground'>
+                  预计进入高风险阈值：{formatShortDateTime(prediction.predictedRiskThresholdTime)}
+                </div>
+              ) : null}
             </div>
             <div className='text-sm font-medium'>建议动作</div>
             <div className='rounded-lg border bg-muted/20 p-3'>

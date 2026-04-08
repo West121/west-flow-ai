@@ -44,6 +44,8 @@ export type WorkbenchTaskRuntimeSummary = {
 export type WorkbenchDashboardSummary = {
   todoTodayCount: number
   doneApprovalCount: number
+  highRiskTodoCount?: number
+  overdueTodayCount?: number
 }
 
 export type WorkbenchReviewTicket = {
@@ -249,15 +251,22 @@ export type WorkbenchProcessPredictionNextNodeCandidate = {
   probability: number
   hitCount: number
   medianDurationMinutes?: number | null
+  riskWeight?: number | null
+  sortOrder?: number | null
+  pathConfidence?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
 }
 
 export type WorkbenchProcessPrediction = {
   predictedFinishTime?: string | null
+  predictedRiskThresholdTime?: string | null
   remainingDurationMinutes?: number | null
   currentElapsedMinutes?: number | null
+  currentNodeDurationP50Minutes?: number | null
+  currentNodeDurationP75Minutes?: number | null
   overdueRiskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
   confidence?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
   historicalSampleSize: number
+  sampleProfile?: string | null
   basisSummary?: string | null
   noPredictionReason?: string | null
   explanation?: string | null

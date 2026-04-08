@@ -77,11 +77,19 @@ public class RuntimeProcessQueryFacadeService {
     public WorkbenchDashboardSummaryResponse dashboardSummary() {
         String currentUserId = actionSupportService.currentUserId();
         java.time.LocalDate today = OffsetDateTime.now(TIME_ZONE).toLocalDate();
-        long todoTodayCount = page(new PageRequest(1, Integer.MAX_VALUE, null, List.of(), List.of(), List.of())).records().stream()
+        List<ProcessTaskListItemResponse> todoRecords = page(new PageRequest(1, Integer.MAX_VALUE, null, List.of(), List.of(), List.of())).records();
+        long todoTodayCount = todoRecords.stream()
                 .filter(task -> task.createdAt() != null && task.createdAt().toLocalDate().equals(today))
                 .count();
+        long highRiskTodoCount = todoRecords.stream()
+                .filter(task -> task.prediction() != null && "HIGH".equalsIgnoreCase(task.prediction().overdueRiskLevel()))
+                .count();
+        long overdueTodayCount = todoRecords.stream()
+                .filter(task -> task.prediction() != null && task.prediction().predictedRiskThresholdTime() != null)
+                .filter(task -> task.prediction().predictedRiskThresholdTime().toLocalDate().equals(today))
+                .count();
         long doneApprovalCount = runtimeApprovalSheetQueryService.buildDoneApprovalSheets(currentUserId, List.of()).size();
-        return new WorkbenchDashboardSummaryResponse(todoTodayCount, doneApprovalCount);
+        return new WorkbenchDashboardSummaryResponse(todoTodayCount, doneApprovalCount, highRiskTodoCount, overdueTodayCount);
     }
 
     public ProcessTaskDetailResponse detail(String taskId) {
