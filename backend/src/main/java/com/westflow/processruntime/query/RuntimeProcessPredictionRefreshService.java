@@ -23,6 +23,7 @@ public class RuntimeProcessPredictionRefreshService {
     private final FlowableEngineFacade flowableEngineFacade;
     private final RuntimeProcessMetadataService runtimeProcessMetadataService;
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
+    private final RuntimeTaskSupportService runtimeTaskSupportService;
     private final RuntimeProcessPredictionService runtimeProcessPredictionService;
     private final RuntimeProcessPredictionActionExecutorService runtimeProcessPredictionActionExecutorService;
     private final RuntimeProcessPredictionSnapshotService runtimeProcessPredictionSnapshotService;
@@ -67,6 +68,13 @@ public class RuntimeProcessPredictionRefreshService {
                         definition.processKey(),
                         task.getTaskDefinitionKey(),
                         task.getName(),
+                        taskKind,
+                        runtimeTaskSupportService.resolveTaskSemanticMode(task),
+                        resolveCurrentAction(variables),
+                        runtimeTaskSupportService.resolveActingMode(task, null),
+                        stringValue(flowableEngineFacade.taskService().getVariableLocal(task.getId(), "westflowActingForUserId")),
+                        stringValue(flowableEngineFacade.taskService().getVariableLocal(task.getId(), "westflowDelegatedByUserId")),
+                        stringValue(flowableEngineFacade.taskService().getVariableLocal(task.getId(), "westflowHandoverFromUserId")),
                         task.getAssignee(),
                         businessType,
                         organizationProfile,
@@ -97,6 +105,14 @@ public class RuntimeProcessPredictionRefreshService {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private String resolveCurrentAction(Map<String, Object> variables) {
+        String currentAction = stringValue(variables.get("westflowAction"));
+        if (currentAction != null) {
+            return currentAction;
+        }
+        return stringValue(variables.get("westflowLastAction"));
     }
 
     private String resolveOrganizationProfile(String departmentName, String postName) {

@@ -1820,6 +1820,9 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(interimDetail.path("countersignGroups").get(0).path("approvedWeight").asInt()).isEqualTo(40);
         assertThat(interimDetail.path("countersignGroups").get(0).path("decisionStatus").isNull()).isTrue();
         assertThat(interimDetail.path("countersignGroups").get(0).path("members").get(0).path("voteWeight").asInt()).isEqualTo(40);
+        assertThat(interimDetail.path("prediction").path("sampleProfile").asText()).contains("会签");
+        assertThat(interimDetail.path("prediction").path("topDelayReasons").toString()).contains("会签");
+        assertThat(interimDetail.path("prediction").path("recommendedActions").toString()).contains("会签");
 
         JsonNode secondCompleteBody = objectMapper.readTree(mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/complete", secondTaskId)
                         .header("Authorization", "Bearer " + secondManagerToken)
@@ -1944,6 +1947,8 @@ class FlowableProcessRuntimeControllerTest {
                 .getContentAsString()).path("data");
         assertThat(targetPage.path("records").get(0).path("taskId").asText()).isEqualTo(taskId);
         assertThat(targetPage.path("records").get(0).path("assigneeUserId").asText()).isEqualTo("usr_003");
+        assertThat(targetPage.path("records").get(0).path("prediction").path("sampleProfile").asText()).contains("转办");
+        assertThat(targetPage.path("records").get(0).path("prediction").path("recommendedActions").toString()).contains("转办");
     }
 
     @Test
@@ -2626,6 +2631,9 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailByBusinessBeforeRemove.path("taskId").asText()).isEqualTo(addSignTaskId);
         assertThat(detailByBusinessBeforeRemove.path("assigneeUserId").asText()).isEqualTo("usr_003");
         assertThat(detailByBusinessBeforeRemove.path("taskKind").asText()).isEqualTo("ADD_SIGN");
+        assertThat(detailByBusinessBeforeRemove.path("prediction").path("sampleProfile").asText()).contains("加签");
+        assertThat(detailByBusinessBeforeRemove.path("prediction").path("topDelayReasons").toString()).contains("加签");
+        assertThat(detailByBusinessBeforeRemove.path("prediction").path("recommendedActions").toString()).contains("加签");
 
         mockMvc.perform(post("/api/v1/process-runtime/tasks/{taskId}/remove-sign", taskId)
                         .header("Authorization", "Bearer " + managerToken)

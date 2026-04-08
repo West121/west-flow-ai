@@ -3,6 +3,7 @@ package com.westflow.processruntime.query;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.ProcessDslPayload;
 import com.westflow.processruntime.api.response.ProcessPredictionAutomationActionResponse;
+import com.westflow.processruntime.api.response.CountersignTaskGroupResponse;
 import com.westflow.processruntime.api.response.ProcessPredictionFeatureSnapshotResponse;
 import com.westflow.processruntime.api.response.ProcessPredictionNextNodeCandidateResponse;
 import com.westflow.processruntime.api.response.ProcessPredictionResponse;
@@ -40,11 +41,19 @@ public class RuntimeProcessPredictionService {
             String instanceStatus,
             String currentNodeId,
             String currentNodeName,
+            String currentTaskKind,
+            String currentTaskSemanticMode,
+            String currentAction,
+            String currentActingMode,
+            String currentActingForUserId,
+            String currentDelegatedByUserId,
+            String currentHandoverFromUserId,
             String assigneeUserId,
             String businessType,
             String organizationProfile,
             OffsetDateTime receiveTime,
             List<ProcessTaskTraceItemResponse> taskTrace,
+            List<CountersignTaskGroupResponse> countersignGroups,
             List<ProcessDslPayload.Node> flowNodes,
             List<ProcessDslPayload.Edge> flowEdges
     ) {
@@ -77,6 +86,17 @@ public class RuntimeProcessPredictionService {
         }
 
         Long currentElapsedMinutes = minutesBetween(receiveTime, now);
+        PredictionScenarioSignals scenarioSignals = resolveScenarioSignals(
+                currentTaskKind,
+                currentTaskSemanticMode,
+                currentAction,
+                currentActingMode,
+                currentActingForUserId,
+                currentDelegatedByUserId,
+                currentHandoverFromUserId,
+                taskTrace,
+                countersignGroups
+        );
         PredictionSampleSet sampleSet = resolvePredictionSamples(
                 processKey,
                 currentNodeId,
@@ -132,7 +152,13 @@ public class RuntimeProcessPredictionService {
         String sampleTier = resolveSampleTier(filteredSampleSize, sampleSet.usedFallback());
         String workingDayProfile = resolveWorkingDayProfile(now);
         String resolvedOrganizationProfile = resolveOrganizationProfile(organizationProfile, filteredContexts);
-        String sampleProfile = effectiveSampleProfile(sampleSet.profile(), businessType, filteredContexts.size(), sampleSet.tasks().size());
+        String sampleProfile = effectiveSampleProfile(
+                sampleSet.profile(),
+                businessType,
+                filteredContexts.size(),
+                sampleSet.tasks().size(),
+                scenarioSignals
+        );
         String riskLevel = resolveRiskLevel(currentElapsedMinutes, nodeDurationSamples, p50, p75, p90);
         List<ProcessPredictionNextNodeCandidateResponse> nextCandidates = nextNodeStats.isEmpty()
                 ? fallbackCandidates(currentNodeId, flowNodes, flowEdges)
@@ -159,7 +185,7 @@ public class RuntimeProcessPredictionService {
                     p75,
                     p90,
                     riskLevel,
-                    resolveConfidence(0, nextCandidates, true, sampleTier),
+                    resolveConfidence(0, nextCandidates, true, sampleTier, scenarioSignals),
                     0,
                     outlierFilteredSampleSize,
                     sampleProfile,
@@ -168,12 +194,12 @@ public class RuntimeProcessPredictionService {
                     resolvedOrganizationProfile,
                     "当前节点历史样本不足，已回退到流程图候选路径。",
                     "历史样本不足",
-                    buildExplanation(currentNodeName, currentElapsedMinutes, null, riskLevel, nextCandidates, true, sampleProfile),
-                    buildNarrativeExplanation(currentNodeName, currentElapsedMinutes, null, riskLevel, sampleProfile),
-                    buildBottleneckAttribution(currentNodeName, currentElapsedMinutes, p75, p90, true),
-                    buildDelayReasons(currentElapsedMinutes, nodeDurationSamples, true),
-                    buildRecommendedActions(currentElapsedMinutes, riskLevel, nextCandidates, true),
-                    buildOptimizationSuggestions(riskLevel, true),
+                    buildExplanation(currentNodeName, currentElapsedMinutes, null, riskLevel, nextCandidates, true, sampleProfile, scenarioSignals),
+                    buildNarrativeExplanation(currentNodeName, currentElapsedMinutes, null, riskLevel, sampleProfile, scenarioSignals),
+                    buildBottleneckAttribution(currentNodeName, currentElapsedMinutes, p75, p90, true, scenarioSignals),
+                    buildDelayReasons(currentElapsedMinutes, nodeDurationSamples, true, scenarioSignals),
+                    buildRecommendedActions(currentElapsedMinutes, riskLevel, nextCandidates, true, scenarioSignals),
+                    buildOptimizationSuggestions(riskLevel, true, scenarioSignals),
                     List.of(),
                     featureSnapshot,
                     nextCandidates
@@ -181,7 +207,7 @@ public class RuntimeProcessPredictionService {
             return attachAutomationActions(response, currentNodeName);
         }
 
-        long remainingMedian = median(remainingDurationSamples);
+        long remainingMedian = applyScenarioBuffer(median(remainingDurationSamples), scenarioSignals);
         OffsetDateTime predictedFinishTime = now.plusMinutes(remainingMedian);
         OffsetDateTime predictedRiskThresholdTime = receiveTime == null || p75 == null
                 ? null
@@ -195,7 +221,7 @@ public class RuntimeProcessPredictionService {
                 p75,
                 p90,
                 riskLevel,
-                resolveConfidence(remainingDurationSamples.size(), nextCandidates, sampleSet.usedFallback(), sampleTier),
+                resolveConfidence(remainingDurationSamples.size(), nextCandidates, sampleSet.usedFallback(), sampleTier, scenarioSignals),
                 remainingDurationSamples.size(),
                 outlierFilteredSampleSize,
                 sampleProfile,
@@ -204,12 +230,12 @@ public class RuntimeProcessPredictionService {
                 resolvedOrganizationProfile,
                 buildBasisSummary(currentNodeName, sampleProfile, remainingDurationSamples.size(), remainingMedian, nextCandidates),
                 null,
-                buildExplanation(currentNodeName, currentElapsedMinutes, remainingMedian, riskLevel, nextCandidates, false, sampleProfile),
-                buildNarrativeExplanation(currentNodeName, currentElapsedMinutes, remainingMedian, riskLevel, sampleProfile),
-                buildBottleneckAttribution(currentNodeName, currentElapsedMinutes, p75, p90, false),
-                buildDelayReasons(currentElapsedMinutes, nodeDurationSamples, false),
-                buildRecommendedActions(currentElapsedMinutes, riskLevel, nextCandidates, false),
-                buildOptimizationSuggestions(riskLevel, false),
+                buildExplanation(currentNodeName, currentElapsedMinutes, remainingMedian, riskLevel, nextCandidates, false, sampleProfile, scenarioSignals),
+                buildNarrativeExplanation(currentNodeName, currentElapsedMinutes, remainingMedian, riskLevel, sampleProfile, scenarioSignals),
+                buildBottleneckAttribution(currentNodeName, currentElapsedMinutes, p75, p90, false, scenarioSignals),
+                buildDelayReasons(currentElapsedMinutes, nodeDurationSamples, false, scenarioSignals),
+                buildRecommendedActions(currentElapsedMinutes, riskLevel, nextCandidates, false, scenarioSignals),
+                buildOptimizationSuggestions(riskLevel, false, scenarioSignals),
                 List.of(),
                 featureSnapshot,
                 nextCandidates
@@ -221,6 +247,13 @@ public class RuntimeProcessPredictionService {
             String processKey,
             String currentNodeId,
             String currentNodeName,
+            String currentTaskKind,
+            String currentTaskSemanticMode,
+            String currentAction,
+            String currentActingMode,
+            String currentActingForUserId,
+            String currentDelegatedByUserId,
+            String currentHandoverFromUserId,
             String assigneeUserId,
             String businessType,
             String organizationProfile,
@@ -233,10 +266,18 @@ public class RuntimeProcessPredictionService {
                 "RUNNING",
                 currentNodeId,
                 currentNodeName,
+                currentTaskKind,
+                currentTaskSemanticMode,
+                currentAction,
+                currentActingMode,
+                currentActingForUserId,
+                currentDelegatedByUserId,
+                currentHandoverFromUserId,
                 assigneeUserId,
                 businessType,
                 organizationProfile,
                 receiveTime,
+                List.of(),
                 List.of(),
                 flowNodes,
                 flowEdges
@@ -482,18 +523,22 @@ public class RuntimeProcessPredictionService {
             String baseProfile,
             String businessType,
             int filteredSize,
-            int originalSize
+            int originalSize,
+            PredictionScenarioSignals scenarioSignals
     ) {
+        String scenarioSuffix = scenarioSignals.labels().isEmpty()
+                ? ""
+                : " · 场景 " + String.join(" / ", scenarioSignals.labels());
         if (businessType == null || businessType.isBlank()) {
-            return baseProfile;
+            return stringValue(baseProfile, "默认样本口径") + scenarioSuffix;
         }
         if (filteredSize <= 0) {
-            return stringValue(baseProfile, "默认样本口径") + " · 业务类型 " + businessType + "（未命中专属样本）";
+            return stringValue(baseProfile, "默认样本口径") + " · 业务类型 " + businessType + "（未命中专属样本）" + scenarioSuffix;
         }
         if (filteredSize < originalSize) {
-            return stringValue(baseProfile, "默认样本口径") + " · 业务类型 " + businessType + "（已过滤专属样本）";
+            return stringValue(baseProfile, "默认样本口径") + " · 业务类型 " + businessType + "（已过滤专属样本）" + scenarioSuffix;
         }
-        return stringValue(baseProfile, "默认样本口径") + " · 业务类型 " + businessType;
+        return stringValue(baseProfile, "默认样本口径") + " · 业务类型 " + businessType + scenarioSuffix;
     }
 
     private java.util.Optional<ProcessPredictionNextNodeCandidateResponse> resolveNextNode(
@@ -632,19 +677,25 @@ public class RuntimeProcessPredictionService {
             int sampleSize,
             List<ProcessPredictionNextNodeCandidateResponse> nextCandidates,
             boolean usedFallback,
-            String sampleTier
+            String sampleTier,
+            PredictionScenarioSignals scenarioSignals
     ) {
         double topProbability = nextCandidates.stream()
                 .mapToDouble(ProcessPredictionNextNodeCandidateResponse::probability)
                 .max()
                 .orElse(0D);
+        String confidence;
         if (!usedFallback && sampleSize >= 20 && topProbability >= 0.6D && "DENSE".equals(sampleTier)) {
-            return "HIGH";
+            confidence = "HIGH";
+        } else if (sampleSize >= 8) {
+            confidence = "MEDIUM";
+        } else {
+            confidence = "LOW";
         }
-        if (sampleSize >= 8) {
-            return "MEDIUM";
+        if (scenarioSignals.addSign() || scenarioSignals.transferFamily()) {
+            confidence = degradeConfidence(confidence);
         }
-        return "LOW";
+        return confidence;
     }
 
     private String buildBasisSummary(
@@ -671,7 +722,8 @@ public class RuntimeProcessPredictionService {
             String riskLevel,
             List<ProcessPredictionNextNodeCandidateResponse> nextCandidates,
             boolean fallbackOnly,
-            String sampleProfile
+            String sampleProfile,
+            PredictionScenarioSignals scenarioSignals
     ) {
         StringBuilder explanation = new StringBuilder();
         explanation.append(stringValue(currentNodeName, "当前节点"));
@@ -684,6 +736,9 @@ public class RuntimeProcessPredictionService {
         explanation.append(fallbackOnly ? "。历史样本不足，当前主要依据流程图结构推断后续走向" : "。该预测主要依据同流程历史实例和当前节点完成分布");
         if (sampleProfile != null && !sampleProfile.isBlank()) {
             explanation.append("，当前命中的样本口径为 ").append(sampleProfile);
+        }
+        if (!scenarioSignals.labels().isEmpty()) {
+            explanation.append("，并结合了").append(String.join("、", scenarioSignals.labels())).append("场景的专门口径");
         }
         explanation.append("，超期风险为 ").append(resolveRiskLabel(riskLevel));
         if (nextCandidates != null && !nextCandidates.isEmpty()) {
@@ -704,7 +759,8 @@ public class RuntimeProcessPredictionService {
             Long currentElapsedMinutes,
             Long remainingMedian,
             String riskLevel,
-            String sampleProfile
+            String sampleProfile,
+            PredictionScenarioSignals scenarioSignals
     ) {
         return buildExplanation(
                 currentNodeName,
@@ -713,7 +769,8 @@ public class RuntimeProcessPredictionService {
                 riskLevel,
                 List.of(),
                 remainingMedian == null,
-                sampleProfile
+                sampleProfile,
+                scenarioSignals
         );
     }
 
@@ -722,10 +779,20 @@ public class RuntimeProcessPredictionService {
             Long currentElapsedMinutes,
             Long p75,
             Long p90,
-            boolean insufficientSamples
+            boolean insufficientSamples,
+            PredictionScenarioSignals scenarioSignals
     ) {
         if (insufficientSamples) {
             return "当前节点历史样本不足，主要瓶颈归因只能回退到流程结构和当前停留时长。";
+        }
+        if (scenarioSignals.countersign()) {
+            return "当前节点属于会签场景，瓶颈通常来自成员意见汇聚和阈值达成速度。";
+        }
+        if (scenarioSignals.addSign()) {
+            return "当前节点叠加了加签链路，瓶颈通常来自原审批人与加签人之间的串行等待。";
+        }
+        if (scenarioSignals.transferFamily()) {
+            return "当前节点发生过转办/委派/离职转办，瓶颈通常来自责任人切换后的重新认领与信息交接。";
         }
         if (currentElapsedMinutes == null) {
             return "当前节点还没有足够的停留时长，暂无明显瓶颈。";
@@ -739,10 +806,24 @@ public class RuntimeProcessPredictionService {
         return "当前节点仍在历史可接受波动范围内，主要瓶颈暂未形成。";
     }
 
-    private List<String> buildDelayReasons(Long currentElapsedMinutes, List<Long> nodeDurationSamples, boolean insufficientSamples) {
+    private List<String> buildDelayReasons(
+            Long currentElapsedMinutes,
+            List<Long> nodeDurationSamples,
+            boolean insufficientSamples,
+            PredictionScenarioSignals scenarioSignals
+    ) {
         List<String> reasons = new ArrayList<>();
         if (insufficientSamples) {
             reasons.add("当前节点历史样本不足，预测置信度降低。");
+        }
+        if (scenarioSignals.addSign()) {
+            reasons.add("当前链路包含加签任务，原节点完成时间会被加签处理节奏拉长。");
+        }
+        if (scenarioSignals.countersign()) {
+            reasons.add("当前处于会签节点，需要等待多位成员意见汇聚。");
+        }
+        if (scenarioSignals.transferFamily()) {
+            reasons.add("当前任务发生过转办/委派/离职转办，责任人切换带来的交接会增加波动。");
         }
         if (currentElapsedMinutes != null && !nodeDurationSamples.isEmpty()) {
             long p75 = percentile(nodeDurationSamples, 0.75);
@@ -760,7 +841,8 @@ public class RuntimeProcessPredictionService {
             Long currentElapsedMinutes,
             String riskLevel,
             List<ProcessPredictionNextNodeCandidateResponse> nextCandidates,
-            boolean insufficientSamples
+            boolean insufficientSamples,
+            PredictionScenarioSignals scenarioSignals
     ) {
         List<String> actions = new ArrayList<>();
         String normalizedRisk = riskLevel == null ? "" : riskLevel.toUpperCase();
@@ -777,13 +859,26 @@ public class RuntimeProcessPredictionService {
         if (insufficientSamples) {
             actions.add("历史样本不足，建议结合流程规则和人工判断复核预测结果。");
         }
+        if (scenarioSignals.addSign()) {
+            actions.add("加签场景建议先确认加签人是否已认领，并提前同步原审批人预期恢复时间。");
+        }
+        if (scenarioSignals.countersign()) {
+            actions.add("会签节点建议优先催办尚未表态的成员，并核对阈值是否接近达成。");
+        }
+        if (scenarioSignals.transferFamily()) {
+            actions.add("转办/委派场景建议确认新责任人是否完成交接并已开始处理。");
+        }
         if (nextCandidates != null && !nextCandidates.isEmpty()) {
             actions.add("可提前与下一节点“" + stringValue(nextCandidates.get(0).nodeName(), "后续节点") + "”的候选办理人沟通。");
         }
         return actions.stream().distinct().limit(3).toList();
     }
 
-    private List<String> buildOptimizationSuggestions(String riskLevel, boolean insufficientSamples) {
+    private List<String> buildOptimizationSuggestions(
+            String riskLevel,
+            boolean insufficientSamples,
+            PredictionScenarioSignals scenarioSignals
+    ) {
         List<String> suggestions = new ArrayList<>();
         if ("HIGH".equalsIgnoreCase(riskLevel)) {
             suggestions.add("把当前节点的 SLA 预警阈值前移，并增加催办频率。");
@@ -796,7 +891,90 @@ public class RuntimeProcessPredictionService {
         if (insufficientSamples) {
             suggestions.add("优先积累该节点更多历史样本，再决定是否调整流程规则。");
         }
+        if (scenarioSignals.addSign()) {
+            suggestions.add("评估把高频加签改成固定并行评审节点，减少临时加签带来的波动。");
+        }
+        if (scenarioSignals.countersign()) {
+            suggestions.add("会签节点可评估改成更明确的阈值配置或缩减参与人范围。");
+        }
+        if (scenarioSignals.transferFamily()) {
+            suggestions.add("为转办/委派链路增加交接清单和预提醒，降低责任切换损耗。");
+        }
         return suggestions.stream().distinct().limit(3).toList();
+    }
+
+    private PredictionScenarioSignals resolveScenarioSignals(
+            String currentTaskKind,
+            String currentTaskSemanticMode,
+            String currentAction,
+            String currentActingMode,
+            String currentActingForUserId,
+            String currentDelegatedByUserId,
+            String currentHandoverFromUserId,
+            List<ProcessTaskTraceItemResponse> taskTrace,
+            List<CountersignTaskGroupResponse> countersignGroups
+    ) {
+        List<ProcessTaskTraceItemResponse> trace = taskTrace == null ? List.of() : taskTrace;
+        List<CountersignTaskGroupResponse> groups = countersignGroups == null ? List.of() : countersignGroups;
+        boolean countersign = isCountersignMode(currentTaskSemanticMode)
+                || trace.stream().anyMatch(item -> isCountersignMode(item.taskSemanticMode()))
+                || !groups.isEmpty();
+        boolean addSign = "ADD_SIGN".equalsIgnoreCase(currentTaskKind)
+                || trace.stream().anyMatch(item -> item.isAddSignTask() && !item.isRevoked());
+        boolean delegated = "DELEGATE".equalsIgnoreCase(currentActingMode)
+                || currentDelegatedByUserId != null
+                || trace.stream().anyMatch(item -> "DELEGATE".equalsIgnoreCase(item.actingMode()) || item.delegatedByUserId() != null);
+        boolean handover = "HANDOVER".equalsIgnoreCase(currentActingMode)
+                || currentHandoverFromUserId != null
+                || trace.stream().anyMatch(item -> "HANDOVER".equalsIgnoreCase(item.actingMode()) || item.handoverFromUserId() != null);
+        boolean transferred = "TRANSFER".equalsIgnoreCase(currentAction)
+                || "TRANSFER".equalsIgnoreCase(currentActingMode)
+                || currentActingForUserId != null
+                || trace.stream().anyMatch(item -> "TRANSFER".equalsIgnoreCase(item.action()));
+        LinkedHashSet<String> labels = new LinkedHashSet<>();
+        if (countersign) {
+            labels.add("会签");
+        }
+        if (addSign) {
+            labels.add("加签");
+        }
+        if (handover) {
+            labels.add("离职转办");
+        } else if (delegated) {
+            labels.add("委派");
+        } else if (transferred) {
+            labels.add("转办");
+        }
+        return new PredictionScenarioSignals(countersign, addSign, delegated || handover || transferred, List.copyOf(labels));
+    }
+
+    private boolean isCountersignMode(String taskSemanticMode) {
+        if (taskSemanticMode == null || taskSemanticMode.isBlank()) {
+            return false;
+        }
+        String normalized = taskSemanticMode.toUpperCase();
+        return normalized.contains("SIGN") || normalized.contains("VOTE");
+    }
+
+    private long applyScenarioBuffer(long remainingMedian, PredictionScenarioSignals scenarioSignals) {
+        double factor = 1.0D;
+        if (scenarioSignals.countersign()) {
+            factor += 0.15D;
+        }
+        if (scenarioSignals.addSign()) {
+            factor += 0.20D;
+        }
+        if (scenarioSignals.transferFamily()) {
+            factor += 0.10D;
+        }
+        return Math.max(remainingMedian, Math.round(remainingMedian * factor));
+    }
+
+    private String degradeConfidence(String confidence) {
+        if ("HIGH".equalsIgnoreCase(confidence)) {
+            return "MEDIUM";
+        }
+        return "LOW";
     }
 
     private ProcessPredictionResponse attachAutomationActions(
@@ -1017,6 +1195,14 @@ public class RuntimeProcessPredictionService {
             String organizationProfile,
             String workingDayProfile,
             OffsetDateTime createdAt
+    ) {
+    }
+
+    private record PredictionScenarioSignals(
+            boolean countersign,
+            boolean addSign,
+            boolean transferFamily,
+            List<String> labels
     ) {
     }
 }

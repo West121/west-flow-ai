@@ -51,10 +51,18 @@ public class RuntimeTaskAssembler {
         List<String> candidateUserIds = runtimeTaskSupportService.candidateUsers(identityLinks);
         List<String> candidateGroupIds = runtimeTaskSupportService.candidateGroups(identityLinks);
         String taskKind = runtimeTaskVisibilityService.resolveTaskKind(task, queryContext);
+        Map<String, Object> taskLocalVariables = flowableEngineFacade.taskService().getVariablesLocal(task.getId());
         ProcessPredictionResponse prediction = runtimeProcessPredictionService.predictForActiveTaskListItem(
                 definition.processKey(),
                 task.getTaskDefinitionKey(),
                 task.getName(),
+                taskKind,
+                runtimeTaskSupportService.resolveTaskSemanticMode(task),
+                resolveCurrentAction(variables),
+                runtimeTaskSupportService.resolveActingMode(task, null),
+                stringValue(taskLocalVariables.get("westflowActingForUserId")),
+                stringValue(taskLocalVariables.get("westflowDelegatedByUserId")),
+                stringValue(taskLocalVariables.get("westflowHandoverFromUserId")),
                 task.getAssignee(),
                 stringValue(variables.get("westflowBusinessType")),
                 resolveOrganizationProfile(
@@ -247,6 +255,14 @@ public class RuntimeTaskAssembler {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private String resolveCurrentAction(Map<String, Object> variables) {
+        String currentAction = stringValue(variables.get("westflowAction"));
+        if (currentAction != null) {
+            return currentAction;
+        }
+        return stringValue(variables.get("westflowLastAction"));
     }
 
     private String resolveOrganizationProfile(String departmentName, String postName) {

@@ -1351,6 +1351,32 @@ export function Dashboard() {
   })
   const renderSummaryValue = (value: number) =>
     summaryQuery.isLoading ? '...' : summaryQuery.isError ? '--' : String(value)
+  const summaryCards = [
+    {
+      title: '今日待办',
+      value: renderSummaryValue(summaryQuery.data?.todoTodayCount ?? 0),
+      description: '按今天 00:00 以来新增且当前仍处于待处理状态的任务统计。',
+      icon: Clock3,
+    },
+    {
+      title: '高风险待办',
+      value: renderSummaryValue(summaryQuery.data?.highRiskTodoCount ?? 0),
+      description: '预测超期风险为高的待办数量，可优先调度处理。',
+      icon: AlertCircle,
+    },
+    {
+      title: '已完成审批',
+      value: renderSummaryValue(summaryQuery.data?.doneApprovalCount ?? 0),
+      description: '当前登录人已完成的审批单总数。',
+      icon: CheckCircle2,
+    },
+    {
+      title: '预计今日超期',
+      value: renderSummaryValue(summaryQuery.data?.overdueTodayCount ?? 0),
+      description: '预测风险阈值落在今日的待办数量，适合提前催办。',
+      icon: Sparkles,
+    },
+  ]
 
   return (
     <PageShell
@@ -1360,6 +1386,9 @@ export function Dashboard() {
         <>
           <Button asChild>
             <Link to='/workbench/start' search={{}}>发起流程</Link>
+          </Button>
+          <Button asChild variant='outline'>
+            <Link to='/workbench/prediction' search={{}}>进入预测驾驶舱</Link>
           </Button>
           <Button asChild variant='outline'>
             <Link to='/workbench/todos/list' search={{}}>进入待办列表</Link>
@@ -1378,32 +1407,7 @@ export function Dashboard() {
         </Alert>
       ) : null}
       <div className='grid gap-4 lg:grid-cols-4'>
-        {[
-          {
-            title: '今日待办',
-            value: renderSummaryValue(summaryQuery.data?.todoTodayCount ?? 0),
-            description: '按今天 00:00 以来新增且当前仍处于待处理状态的任务统计。',
-            icon: Clock3,
-          },
-          {
-            title: '高风险待办',
-            value: renderSummaryValue(summaryQuery.data?.highRiskTodoCount ?? 0),
-            description: '预测超期风险为高的待办数量，可优先调度处理。',
-            icon: AlertCircle,
-          },
-          {
-            title: '已完成审批',
-            value: renderSummaryValue(summaryQuery.data?.doneApprovalCount ?? 0),
-            description: '当前登录人已完成的审批单总数。',
-            icon: CheckCircle2,
-          },
-          {
-            title: '预计今日超期',
-            value: renderSummaryValue(summaryQuery.data?.overdueTodayCount ?? 0),
-            description: '预测风险阈值落在今日的待办数量，适合提前催办。',
-            icon: Sparkles,
-          },
-        ].map((item) => (
+        {summaryCards.map((item) => (
           <Card key={item.title}>
             <CardHeader className='gap-3'>
               <div className='flex items-center justify-between gap-3'>
@@ -1434,6 +1438,7 @@ export function Dashboard() {
           <CardContent className='grid gap-3 sm:grid-cols-2'>
             {[
               ['工作台待办列表', '/workbench/todos/list'],
+              ['预测驾驶舱', '/workbench/prediction'],
               ['发起流程', '/workbench/start'],
               ['系统用户列表', '/system/users/list'],
               ['流程定义列表', '/workflow/definitions/list'],
@@ -1454,6 +1459,155 @@ export function Dashboard() {
             <p>1. 工作台首页会直接显示高风险待办和预计今日超期数量。</p>
             <p>2. 待办列表支持高风险筛选与风险优先排序，便于先处理最可能拖期的任务。</p>
             <p>3. 详情与流程图回顾会给出预测依据、建议动作和候选下一节点。</p>
+          </CardContent>
+        </Card>
+      </div>
+    </PageShell>
+  )
+}
+
+export function WorkbenchPredictionCockpitPage() {
+  const summaryQuery = useQuery({
+    queryKey: ['workbench', 'dashboard-summary'],
+    queryFn: () => getWorkbenchDashboardSummary(),
+  })
+
+  const summary = summaryQuery.data
+
+  return (
+    <PageShell
+      title='预测驾驶舱'
+      description='聚合高风险待办、预计今日超期、风险分布和节点瓶颈，优先处理最可能拖期的流程。'
+      actions={
+        <>
+          <Button asChild>
+            <Link to='/workbench/todos/list' search={{}}>进入高风险待办</Link>
+          </Button>
+          <Button asChild variant='outline'>
+            <Link
+              to='/workbench/todos/list'
+              search={{
+                page: 1,
+                pageSize: 20,
+                keyword: '',
+                filters: [
+                  {
+                    field: 'prediction.overdueRiskLevel',
+                    operator: 'in',
+                    value: ['HIGH', 'MEDIUM'],
+                  },
+                ],
+                sorts: [
+                  {
+                    field: 'prediction.overdueRiskLevel',
+                    direction: 'desc',
+                  },
+                ],
+                groups: [],
+              }}
+            >
+              查看风险优先队列
+            </Link>
+          </Button>
+        </>
+      }
+    >
+      {summaryQuery.isError ? (
+        <Alert variant='destructive'>
+          <AlertTitle>预测驾驶舱加载失败</AlertTitle>
+          <AlertDescription>
+            {summaryQuery.error instanceof Error
+              ? summaryQuery.error.message
+              : '请稍后重试'}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
+        {[
+          {
+            title: '高风险待办',
+            value: summaryQuery.isLoading ? '...' : summary ? String(summary.highRiskTodoCount) : '--',
+            description: '预测超期风险为高的待办，适合优先催办和预警。',
+            icon: AlertCircle,
+          },
+          {
+            title: '预计今日超期',
+            value: summaryQuery.isLoading ? '...' : summary ? String(summary.overdueTodayCount) : '--',
+            description: '风险阈值会落在今天的待办数量，用来安排今日动作。',
+            icon: Sparkles,
+          },
+          {
+            title: '已完成审批',
+            value: summaryQuery.isLoading ? '...' : summary ? String(summary.doneApprovalCount) : '--',
+            description: '用于对比当前调度压力与当天历史吞吐。',
+            icon: CheckCircle2,
+          },
+          {
+            title: '今日待办',
+            value: summaryQuery.isLoading ? '...' : summary ? String(summary.todoTodayCount) : '--',
+            description: '当前登录人今日新增且仍需处理的任务数量。',
+            icon: Clock3,
+          },
+        ].map((item) => (
+          <Card key={item.title}>
+            <CardHeader className='gap-3'>
+              <div className='flex items-center justify-between gap-3'>
+                <CardDescription>{item.title}</CardDescription>
+                <item.icon className='text-muted-foreground' />
+              </div>
+              <CardTitle className='text-3xl'>{item.value}</CardTitle>
+            </CardHeader>
+            <CardContent className='text-sm text-muted-foreground'>
+              {item.description}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {!summaryQuery.isLoading && !summaryQuery.isError ? (
+        <ApprovalPredictionDashboard summary={summary} />
+      ) : null}
+
+      <div className='grid gap-4 lg:grid-cols-3'>
+        <Card className='lg:col-span-2'>
+          <CardHeader>
+            <CardTitle>驾驶舱使用建议</CardTitle>
+            <CardDescription>
+              先看高风险数量和今日超期，再进风险优先队列处理当前最可能卡住的待办。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className='grid gap-3 text-sm text-muted-foreground md:grid-cols-3'>
+            <div className='rounded-lg border bg-muted/20 p-4'>
+              <div className='font-medium text-foreground'>1. 看趋势</div>
+              <p className='mt-2'>先判断今天的风险压力、超期趋势和瓶颈节点有没有明显抬头。</p>
+            </div>
+            <div className='rounded-lg border bg-muted/20 p-4'>
+              <div className='font-medium text-foreground'>2. 进风险队列</div>
+              <p className='mt-2'>切到高风险或中高风险视图，按风险优先顺序处理最容易拖期的任务。</p>
+            </div>
+            <div className='rounded-lg border bg-muted/20 p-4'>
+              <div className='font-medium text-foreground'>3. 回到图谱</div>
+              <p className='mt-2'>在详情和流程图里看候选下一节点、高风险路径和催办建议，再决定动作。</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>快捷入口</CardTitle>
+            <CardDescription>风险运营页不做第二套能力，直接复用工作台与流程回顾链路。</CardDescription>
+          </CardHeader>
+          <CardContent className='grid gap-3'>
+            <Button asChild variant='outline' className='justify-start'>
+              <Link to='/workbench/todos/list' search={{}}>待办列表</Link>
+            </Button>
+            <Button asChild variant='outline' className='justify-start'>
+              <Link to='/' search={{}}>平台总览</Link>
+            </Button>
+            <Button asChild variant='outline' className='justify-start'>
+              <Link to='/workbench/start' search={{}}>发起流程</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   Dashboard,
+  WorkbenchPredictionCockpitPage,
   WorkbenchCopiedListPage,
   WorkbenchDoneListPage,
   WorkbenchInitiatedListPage,
@@ -541,7 +542,57 @@ describe('workbench pages', () => {
     expect(screen.getByText('4')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
     expect(screen.getByText('预测运营焦点')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '进入预测驾驶舱' })).toHaveAttribute(
+      'href',
+      '/workbench/prediction'
+    )
     expect(workbenchApiMocks.getWorkbenchDashboardSummary).toHaveBeenCalled()
+  })
+
+  it('renders a dedicated prediction cockpit page', async () => {
+    workbenchApiMocks.getWorkbenchDashboardSummary.mockResolvedValue({
+      todoTodayCount: 9,
+      doneApprovalCount: 12,
+      highRiskTodoCount: 5,
+      overdueTodayCount: 2,
+      riskDistribution: {
+        HIGH: 5,
+        MEDIUM: 3,
+        LOW: 1,
+      },
+      overdueTrend: [
+        { date: '2026-04-08', count: 2 },
+      ],
+      bottleneckNodes: [
+        {
+          nodeId: 'approve_manager',
+          nodeName: '部门负责人审批',
+          highRiskCount: 4,
+          totalCount: 7,
+          medianRemainingDurationMinutes: 180,
+        },
+      ],
+      topRiskProcesses: [
+        {
+          processKey: 'oa_leave',
+          processName: '请假审批',
+          highRiskCount: 4,
+          totalCount: 8,
+          highRiskRate: 0.5,
+        },
+      ],
+    })
+
+    renderWithQuery(<WorkbenchPredictionCockpitPage />)
+
+    expect(await screen.findByText('预测驾驶舱')).toBeInTheDocument()
+    expect(screen.getByText('高风险待办')).toBeInTheDocument()
+    expect(screen.getByText('预计今日超期')).toBeInTheDocument()
+    expect(screen.getByText('驾驶舱使用建议')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '查看风险优先队列' })).toHaveAttribute(
+      'href',
+      '/workbench/todos/list'
+    )
   })
 
   it('shows the handover toolbar entry on the todo list', async () => {

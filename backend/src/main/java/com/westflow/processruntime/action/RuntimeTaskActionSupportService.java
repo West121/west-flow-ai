@@ -309,6 +309,7 @@ public class RuntimeTaskActionSupportService {
             Map<String, Object> taskFormData
     ) {
         Map<String, Object> variables = new LinkedHashMap<>();
+        variables.put("westflowAction", action);
         variables.put("westflowLastAction", action);
         variables.put("westflowLastOperatorUserId", operatorUserId);
         variables.put("westflowLastComment", comment);

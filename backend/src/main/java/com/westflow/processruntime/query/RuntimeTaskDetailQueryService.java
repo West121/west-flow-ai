@@ -168,6 +168,15 @@ public class RuntimeTaskDetailQueryService {
                 instanceStatus,
                 nodeId,
                 nodeName,
+                detailTaskKind,
+                detailTaskSemanticMode,
+                resolveCurrentAction(variables),
+                referenceActiveTask != null
+                        ? runtimeTaskSupportService.resolveActingMode(referenceActiveTask, null)
+                        : runtimeTaskSupportService.resolveActingMode(null, referenceHistoricTask),
+                resolveActingForUserId(referenceActiveTask, referenceHistoricTask),
+                resolveDelegatedByUserId(referenceActiveTask, referenceHistoricTask),
+                resolveHandoverFromUserId(referenceActiveTask, referenceHistoricTask),
                 referenceActiveTask != null ? referenceActiveTask.getAssignee() : referenceHistoricTask == null ? null : referenceHistoricTask.getAssignee(),
                 businessType,
                 resolveOrganizationProfile(
@@ -176,6 +185,7 @@ public class RuntimeTaskDetailQueryService {
                 ),
                 createdAt,
                 taskTrace,
+                countersignGroups,
                 payload.nodes(),
                 payload.edges()
                 )
@@ -447,6 +457,13 @@ public class RuntimeTaskDetailQueryService {
         return resolveActingForUserId(activeTask, historicTask);
     }
 
+    private String resolveHandoverFromUserId(Task activeTask, HistoricTaskInstance historicTask) {
+        Map<String, Object> localVariables = activeTask != null
+                ? runtimeTaskTraceQueryService.ensureReadTimeAndReturnLocalVariables(activeTask)
+                : historicTask == null ? Map.of() : runtimeTaskTraceQueryService.historicTaskLocalVariables(historicTask.getId());
+        return stringValue(localVariables.get("westflowHandoverFromUserId"));
+    }
+
     private Map<String, Object> mapValue(Object value) {
         if (!(value instanceof Map<?, ?> map)) {
             return Map.of();
@@ -462,6 +479,14 @@ public class RuntimeTaskDetailQueryService {
         }
         String text = String.valueOf(value);
         return text.isBlank() ? null : text;
+    }
+
+    private String resolveCurrentAction(Map<String, Object> variables) {
+        String currentAction = stringValue(variables.get("westflowAction"));
+        if (currentAction != null) {
+            return currentAction;
+        }
+        return stringValue(variables.get("westflowLastAction"));
     }
 
     private String resolveOrganizationProfile(String departmentName, String postName) {
