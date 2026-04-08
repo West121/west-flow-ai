@@ -27,6 +27,8 @@ public class RuntimeProcessPredictionActionExecutorService {
     private final OrchestratorExecutionRepository orchestratorExecutionRepository;
     private final NotificationDispatchService notificationDispatchService;
     private final RuntimeInstanceEventRecorder runtimeInstanceEventRecorder;
+    private final RuntimeProcessPredictionGovernanceService runtimeProcessPredictionGovernanceService;
+    private final RuntimeProcessPredictionAutomationProperties automationProperties;
 
     public ProcessPredictionResponse execute(
             String processInstanceId,
@@ -71,17 +73,24 @@ public class RuntimeProcessPredictionActionExecutorService {
             String initiatorUserId,
             ProcessPredictionAutomationActionResponse action
     ) {
+        if (!runtimeProcessPredictionGovernanceService.isActionEnabled(action.actionType())) {
+            return skippedAction(action, "当前自动动作已被治理开关禁用");
+        }
+        if (runtimeProcessPredictionGovernanceService.isInQuietHoursNow()) {
+            return skippedAction(action, "当前处于静默时间窗，自动动作已跳过");
+        }
         String targetId = buildTargetId(processInstanceId, currentNodeId, action.actionType());
-        if (orchestratorExecutionRepository.countSucceededByTargetId(targetId) > 0) {
+        Instant now = Instant.now();
+        Instant dedupCutoff = now.minusSeconds(Math.max(1, automationProperties.getDedupWindowMinutes()) * 60L);
+        if (orchestratorExecutionRepository.countSucceededByTargetIdSince(targetId, dedupCutoff) > 0) {
             return new ProcessPredictionAutomationActionResponse(
                     action.actionType(),
                     action.mode(),
                     "EXECUTED",
                     action.title(),
-                    action.detail() + "（自动动作已执行）"
+                    action.detail() + "（节流窗口内已执行）"
             );
         }
-        Instant now = Instant.now();
         String recipient = resolveRecipient(action.actionType(), assigneeUserId, initiatorUserId);
         if (requiresNotification(action.actionType()) && (recipient == null || recipient.isBlank())) {
             orchestratorExecutionRepository.insert(new OrchestratorScanExecutionRecord(
@@ -104,7 +113,7 @@ public class RuntimeProcessPredictionActionExecutorService {
         try {
             if (recipient != null) {
                 notificationDispatchService.dispatchByChannelCode(
-                        DEFAULT_CHANNEL_CODE,
+                        effectiveChannelCode(),
                         new NotificationDispatchRequest(
                                 recipient,
                                 processName == null || processName.isBlank() ? action.title() : processName + " · " + action.title(),
@@ -179,6 +188,19 @@ public class RuntimeProcessPredictionActionExecutorService {
         }
     }
 
+    private ProcessPredictionAutomationActionResponse skippedAction(
+            ProcessPredictionAutomationActionResponse action,
+            String reason
+    ) {
+        return new ProcessPredictionAutomationActionResponse(
+                action.actionType(),
+                action.mode(),
+                "SKIPPED",
+                action.title(),
+                action.detail() + "（" + reason + "）"
+        );
+    }
+
     private ProcessPredictionResponse copyWithActions(
             ProcessPredictionResponse prediction,
             List<ProcessPredictionAutomationActionResponse> automationActions
@@ -209,7 +231,15 @@ public class RuntimeProcessPredictionActionExecutorService {
                 prediction.optimizationSuggestions(),
                 automationActions,
                 prediction.featureSnapshot(),
-                prediction.nextNodeCandidates()
+                prediction.nextNodeCandidates(),
+                prediction.sampleLayer(),
+                prediction.predictedPathRemainingMinutes(),
+                prediction.predictedPathTotalDurationMinutes(),
+                prediction.predictedPathRiskLevel(),
+                prediction.predictedPathConfidence(),
+                prediction.predictedPathNodeIds(),
+                prediction.predictedPathNodeNames(),
+                prediction.evaluationReport()
         );
     }
 
@@ -226,6 +256,11 @@ public class RuntimeProcessPredictionActionExecutorService {
             case "AUTO_URGE", "SLA_REMINDER", "NEXT_NODE_PRE_NOTIFY" -> true;
             default -> false;
         };
+    }
+
+    private String effectiveChannelCode() {
+        String configured = automationProperties.getChannelCode();
+        return configured == null || configured.isBlank() ? DEFAULT_CHANNEL_CODE : configured.trim();
     }
 
     private OrchestratorAutomationType resolveAutomationType(String actionType) {

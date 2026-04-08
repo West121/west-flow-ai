@@ -77,6 +77,13 @@ public class RuntimeProcessPredictionAiNarrationService {
                             当前节点历史 p75（分钟）：%s
                             当前节点历史 p90（分钟）：%s
                             预计进入高风险阈值：%s
+                            样本层级：%s
+                            路径级剩余时长（分钟）：%s
+                            路径级总时长（分钟）：%s
+                            路径级风险：%s
+                            路径级置信度：%s
+                            预测路径节点：%s
+                            评估报告摘要：%s
                             延迟因素：%s
                             候选下一节点：%s
                             现有规则解释：%s
@@ -98,6 +105,13 @@ public class RuntimeProcessPredictionAiNarrationService {
                             safe(prediction.currentNodeDurationP75Minutes()),
                             safe(prediction.currentNodeDurationP90Minutes()),
                             safe(prediction.predictedRiskThresholdTime()),
+                            safe(prediction.sampleLayer()),
+                            safe(prediction.predictedPathRemainingMinutes()),
+                            safe(prediction.predictedPathTotalDurationMinutes()),
+                            safe(prediction.predictedPathRiskLevel()),
+                            safe(prediction.predictedPathConfidence()),
+                            safe(prediction.predictedPathNodeNames()),
+                            safe(prediction.evaluationReport() == null ? null : prediction.evaluationReport().summary()),
                             safe(prediction.topDelayReasons()),
                             safe(prediction.nextNodeCandidates()),
                             safe(prediction.explanation()),
@@ -159,7 +173,15 @@ public class RuntimeProcessPredictionAiNarrationService {
                             : List.copyOf(optimizationSuggestions.stream().distinct().limit(3).toList()),
                     prediction.automationActions(),
                     prediction.featureSnapshot(),
-                    prediction.nextNodeCandidates()
+                    prediction.nextNodeCandidates(),
+                    prediction.sampleLayer(),
+                    prediction.predictedPathRemainingMinutes(),
+                    prediction.predictedPathTotalDurationMinutes(),
+                    prediction.predictedPathRiskLevel(),
+                    prediction.predictedPathConfidence(),
+                    prediction.predictedPathNodeIds(),
+                    prediction.predictedPathNodeNames(),
+                    prediction.evaluationReport()
             );
         } catch (Exception exception) {
             log.debug("process prediction AI narration fallback process={} node={}", processName, currentNodeName, exception);

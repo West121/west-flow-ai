@@ -42,12 +42,21 @@ class RuntimeProcessPredictionActionExecutorServiceTest {
     @Mock
     private RuntimeInstanceEventRecorder runtimeInstanceEventRecorder;
 
+    @Mock
+    private RuntimeProcessPredictionGovernanceService runtimeProcessPredictionGovernanceService;
+
+    @Mock
+    private RuntimeProcessPredictionAutomationProperties automationProperties;
+
     @InjectMocks
     private RuntimeProcessPredictionActionExecutorService actionExecutorService;
 
     @Test
     void shouldSkipNotificationActionWhenRecipientMissing() {
-        when(orchestratorExecutionRepository.countSucceededByTargetId(anyString())).thenReturn(0L);
+        when(runtimeProcessPredictionGovernanceService.isActionEnabled(anyString())).thenReturn(true);
+        when(runtimeProcessPredictionGovernanceService.isInQuietHoursNow()).thenReturn(false);
+        when(automationProperties.getDedupWindowMinutes()).thenReturn(240);
+        when(orchestratorExecutionRepository.countSucceededByTargetIdSince(anyString(), any())).thenReturn(0L);
         ProcessPredictionResponse response = actionExecutorService.execute(
                 "pi-001",
                 "task-001",
@@ -82,7 +91,10 @@ class RuntimeProcessPredictionActionExecutorServiceTest {
 
     @Test
     void shouldNotReDispatchWhenActionAlreadyExecuted() {
-        when(orchestratorExecutionRepository.countSucceededByTargetId(anyString())).thenReturn(1L);
+        when(runtimeProcessPredictionGovernanceService.isActionEnabled(anyString())).thenReturn(true);
+        when(runtimeProcessPredictionGovernanceService.isInQuietHoursNow()).thenReturn(false);
+        when(automationProperties.getDedupWindowMinutes()).thenReturn(240);
+        when(orchestratorExecutionRepository.countSucceededByTargetIdSince(anyString(), any())).thenReturn(1L);
 
         ProcessPredictionResponse response = actionExecutorService.execute(
                 "pi-001",
@@ -103,7 +115,7 @@ class RuntimeProcessPredictionActionExecutorServiceTest {
 
         assertThat(response.automationActions()).singleElement().satisfies(action -> {
             assertThat(action.status()).isEqualTo("EXECUTED");
-            assertThat(action.detail()).contains("自动动作已执行");
+            assertThat(action.detail()).contains("节流窗口内已执行");
         });
         verify(orchestratorExecutionRepository, never()).insert(any());
         verify(notificationDispatchService, never()).dispatchByChannelCode(anyString(), any());
@@ -116,7 +128,11 @@ class RuntimeProcessPredictionActionExecutorServiceTest {
 
     @Test
     void shouldDispatchAndRecordAuditForNextNodePreNotify() {
-        when(orchestratorExecutionRepository.countSucceededByTargetId(anyString())).thenReturn(0L);
+        when(runtimeProcessPredictionGovernanceService.isActionEnabled(anyString())).thenReturn(true);
+        when(runtimeProcessPredictionGovernanceService.isInQuietHoursNow()).thenReturn(false);
+        when(automationProperties.getDedupWindowMinutes()).thenReturn(240);
+        when(automationProperties.getChannelCode()).thenReturn("in_app_default");
+        when(orchestratorExecutionRepository.countSucceededByTargetIdSince(anyString(), any())).thenReturn(0L);
         when(notificationDispatchService.dispatchByChannelCode(anyString(), any())).thenReturn(
                 new NotificationDispatchResult(
                         "log-001",
@@ -163,6 +179,65 @@ class RuntimeProcessPredictionActionExecutorServiceTest {
         ArgumentCaptor<OrchestratorScanExecutionRecord> recordCaptor = ArgumentCaptor.forClass(OrchestratorScanExecutionRecord.class);
         verify(orchestratorExecutionRepository).insert(recordCaptor.capture());
         assertThat(recordCaptor.getValue().status()).isEqualTo(OrchestratorExecutionStatus.SUCCEEDED);
+    }
+
+    @Test
+    void shouldSkipActionWhenGovernanceDisablesIt() {
+        when(runtimeProcessPredictionGovernanceService.isActionEnabled(anyString())).thenReturn(false);
+
+        ProcessPredictionResponse response = actionExecutorService.execute(
+                "pi-001",
+                "task-001",
+                "请假审批",
+                "approve",
+                "部门经理审批",
+                "usr_002",
+                "usr_001",
+                prediction(new ProcessPredictionAutomationActionResponse(
+                        "AUTO_URGE",
+                        "AUTO_URGE",
+                        "READY",
+                        "高风险自动催办",
+                        "建议立即催办。"
+                ))
+        );
+
+        assertThat(response.automationActions()).singleElement().satisfies(action -> {
+            assertThat(action.status()).isEqualTo("SKIPPED");
+            assertThat(action.detail()).contains("治理开关禁用");
+        });
+        verify(orchestratorExecutionRepository, never()).insert(any());
+        verify(notificationDispatchService, never()).dispatchByChannelCode(anyString(), any());
+    }
+
+    @Test
+    void shouldSkipActionDuringQuietHours() {
+        when(runtimeProcessPredictionGovernanceService.isActionEnabled(anyString())).thenReturn(true);
+        when(runtimeProcessPredictionGovernanceService.isInQuietHoursNow()).thenReturn(true);
+
+        ProcessPredictionResponse response = actionExecutorService.execute(
+                "pi-001",
+                "task-001",
+                "请假审批",
+                "approve",
+                "部门经理审批",
+                "usr_002",
+                "usr_001",
+                prediction(new ProcessPredictionAutomationActionResponse(
+                        "SLA_REMINDER",
+                        "NOTIFY",
+                        "READY",
+                        "SLA 临近提醒",
+                        "建议提前提醒。"
+                ))
+        );
+
+        assertThat(response.automationActions()).singleElement().satisfies(action -> {
+            assertThat(action.status()).isEqualTo("SKIPPED");
+            assertThat(action.detail()).contains("静默时间窗");
+        });
+        verify(orchestratorExecutionRepository, never()).insert(any());
+        verify(notificationDispatchService, never()).dispatchByChannelCode(anyString(), any());
     }
 
     private ProcessPredictionResponse prediction(ProcessPredictionAutomationActionResponse action) {

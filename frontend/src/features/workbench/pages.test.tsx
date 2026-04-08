@@ -537,10 +537,10 @@ describe('workbench pages', () => {
     expect(await screen.findByText('平台总览')).toBeInTheDocument()
     expect(screen.getByText('高风险待办')).toBeInTheDocument()
     expect(screen.getByText('预计今日超期')).toBeInTheDocument()
-    expect(await screen.findByText('7')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText('4')).toBeInTheDocument()
-    expect(screen.getByText('1')).toBeInTheDocument()
+    expect((await screen.findAllByText('7')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('12').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('4').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0)
     expect(screen.getByText('预测运营焦点')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '进入预测驾驶舱' })).toHaveAttribute(
       'href',
@@ -1606,9 +1606,9 @@ describe('workbench pages', () => {
     expect(screen.getByText('预计完成')).toBeInTheDocument()
     expect(screen.getByText('剩余时长')).toBeInTheDocument()
     expect(screen.getByText(/超期风险/)).toBeInTheDocument()
-    expect(screen.getByText(/中风险/)).toBeInTheDocument()
+    expect(screen.getAllByText(/中风险/).length).toBeGreaterThan(0)
     expect(screen.getByText(/高置信度/)).toBeInTheDocument()
-    expect(screen.getByText('总监审批')).toBeInTheDocument()
+    expect(screen.getAllByText('总监审批').length).toBeGreaterThan(0)
     expect(screen.getByText(/当前节点历史波动较大/)).toBeInTheDocument()
     expect(screen.getByText(/命中样本口径：同流程同节点（工作日样本） · 业务类型 OA_LEAVE/)).toBeInTheDocument()
     expect(

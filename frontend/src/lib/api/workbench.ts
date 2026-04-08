@@ -62,6 +62,8 @@ export type WorkbenchDashboardSummary = {
     highRiskCount: number
     highRiskRate: number
   }>
+  automationGovernance?: WorkbenchPredictionAutomationGovernance | null
+  automationMetrics?: WorkbenchPredictionAutomationMetrics | null
 }
 
 export type WorkbenchReviewTicket = {
@@ -292,6 +294,61 @@ export type WorkbenchProcessPredictionFeatureSnapshot = {
   filteredSampleSize: number
 }
 
+export type WorkbenchPredictionEvaluationReport = {
+  evaluationScope?: string | null
+  sampleLayer?: string | null
+  readinessLevel?: string | null
+  snapshotCount: number
+  rawSampleCount: number
+  cleanSampleCount: number
+  outlierSampleCount: number
+  cleanRate: number
+  pathCoverageRate: number
+  automationCoverageRate: number
+  averageRemainingMinutes?: number | null
+  averageCurrentElapsedMinutes?: number | null
+  averageCurrentNodeP50Minutes?: number | null
+  averageCurrentNodeP75Minutes?: number | null
+  averageCurrentNodeP90Minutes?: number | null
+  medianRemainingMinutes?: number | null
+  medianCurrentNodeP75Minutes?: number | null
+  medianCurrentNodeP90Minutes?: number | null
+  sampleLayerDistribution?: Record<string, number> | null
+  sampleTierDistribution?: Record<string, number> | null
+  riskDistribution?: Record<string, number> | null
+  topPathSignatures?: string[] | null
+  topRiskSignals?: string[] | null
+  topOptimizationSuggestions?: string[] | null
+  summary?: string | null
+  evaluatedAt?: string | null
+}
+
+export type WorkbenchPredictionAutomationGovernance = {
+  automationEnabled: boolean
+  autoUrgeEnabled: boolean
+  slaReminderEnabled: boolean
+  nextNodePreNotifyEnabled: boolean
+  collaborationActionEnabled: boolean
+  respectQuietHours: boolean
+  inQuietHours: boolean
+  quietHoursWindow?: string | null
+  dedupWindowMinutes: number
+  channelCode?: string | null
+}
+
+export type WorkbenchPredictionAutomationMetrics = {
+  executedCount: number
+  skippedCount: number
+  failedCount: number
+  notificationSentCount: number
+  notificationSuccessCount: number
+  notificationSuccessRate: number
+  autoUrgeExecutedCount: number
+  slaReminderExecutedCount: number
+  nextNodePreNotifyExecutedCount: number
+  collaborationExecutedCount: number
+}
+
 export type WorkbenchProcessPrediction = {
   predictedFinishTime?: string | null
   predictedRiskThresholdTime?: string | null
@@ -319,6 +376,14 @@ export type WorkbenchProcessPrediction = {
   automationActions?: WorkbenchProcessPredictionAutomationAction[] | null
   featureSnapshot?: WorkbenchProcessPredictionFeatureSnapshot | null
   nextNodeCandidates?: WorkbenchProcessPredictionNextNodeCandidate[] | null
+  sampleLayer?: string | null
+  predictedPathRemainingMinutes?: number | null
+  predictedPathTotalDurationMinutes?: number | null
+  predictedPathRiskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
+  predictedPathConfidence?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
+  predictedPathNodeIds?: string[] | null
+  predictedPathNodeNames?: string[] | null
+  evaluationReport?: WorkbenchPredictionEvaluationReport | null
 }
 
 export type WorkbenchRuntimeAppendLink = RuntimeStructureLink & {

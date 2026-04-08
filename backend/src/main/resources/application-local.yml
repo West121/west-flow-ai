@@ -89,3 +89,16 @@ westflow:
       server-version: 1.0.0
       description: 本地可直接演示的外部 Streamable HTTP MCP 服务
       summary-limit: 5
+  process-runtime:
+    prediction:
+      automation:
+        enabled: true
+        auto-urge-enabled: true
+        sla-reminder-enabled: true
+        next-node-pre-notify-enabled: true
+        collaboration-action-enabled: true
+        respect-quiet-hours: false
+        quiet-hours-start: "22:00"
+        quiet-hours-end: "08:00"
+        dedup-window-minutes: 120
+        channel-code: in_app_default

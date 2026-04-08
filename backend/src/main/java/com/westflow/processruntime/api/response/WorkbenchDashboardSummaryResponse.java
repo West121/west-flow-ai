@@ -17,6 +17,10 @@ public record WorkbenchDashboardSummaryResponse(
         // 节点瓶颈排行
         java.util.List<PredictionBottleneckNodeResponse> bottleneckNodes,
         // 高风险流程排行
-        java.util.List<PredictionTopRiskProcessResponse> topRiskProcesses
+        java.util.List<PredictionTopRiskProcessResponse> topRiskProcesses,
+        // 自动动作治理快照
+        PredictionAutomationGovernanceResponse automationGovernance,
+        // 自动动作运营指标
+        PredictionAutomationMetricsResponse automationMetrics
 ) {
 }

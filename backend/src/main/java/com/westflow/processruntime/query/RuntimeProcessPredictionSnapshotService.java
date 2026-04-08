@@ -238,13 +238,21 @@ public class RuntimeProcessPredictionSnapshotService {
         try {
             Map<String, Object> featureMap = new LinkedHashMap<>();
             featureMap.put("featureSnapshot", prediction.featureSnapshot());
+            featureMap.put("sampleLayer", prediction.sampleLayer());
             featureMap.put("nextNodeCandidates", prediction.nextNodeCandidates());
+            featureMap.put("predictedPathRemainingMinutes", prediction.predictedPathRemainingMinutes());
+            featureMap.put("predictedPathTotalDurationMinutes", prediction.predictedPathTotalDurationMinutes());
+            featureMap.put("predictedPathRiskLevel", prediction.predictedPathRiskLevel());
+            featureMap.put("predictedPathConfidence", prediction.predictedPathConfidence());
+            featureMap.put("predictedPathNodeIds", prediction.predictedPathNodeIds());
+            featureMap.put("predictedPathNodeNames", prediction.predictedPathNodeNames());
             featureMap.put("automationActions", prediction.automationActions());
             featureMap.put("topDelayReasons", prediction.topDelayReasons());
             featureMap.put("recommendedActions", prediction.recommendedActions());
             featureMap.put("optimizationSuggestions", prediction.optimizationSuggestions());
             featureMap.put("narrativeExplanation", prediction.narrativeExplanation());
             featureMap.put("bottleneckAttribution", prediction.bottleneckAttribution());
+            featureMap.put("evaluationReport", prediction.evaluationReport());
             return objectMapper.writeValueAsString(featureMap);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("序列化流程预测特征快照失败", exception);

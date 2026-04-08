@@ -164,6 +164,19 @@ const workbenchTodoListRoute = getRouteApi('/_authenticated/workbench/todos/list
 const workbenchDoneListRoute = getRouteApi('/_authenticated/workbench/done/list')
 const workbenchInitiatedListRoute = getRouteApi('/_authenticated/workbench/initiated/list')
 const workbenchCopiedListRoute = getRouteApi('/_authenticated/workbench/copied/list')
+const predictionOperationsSearch: ListQuerySearch = {
+  page: 1,
+  pageSize: 50,
+  keyword: '',
+  filters: [],
+  sorts: [
+    {
+      field: 'prediction.overdueRiskLevel',
+      direction: 'desc',
+    },
+  ],
+  groups: [],
+}
 
 async function loadCandidateHandlerUsers(detail: {
   taskId: string | null
@@ -1349,6 +1362,10 @@ export function Dashboard() {
     queryKey: ['workbench', 'dashboard-summary'],
     queryFn: () => getWorkbenchDashboardSummary(),
   })
+  const taskPageQuery = useQuery({
+    queryKey: ['workbench', 'prediction-operations-tasks'],
+    queryFn: () => listWorkbenchTasks(predictionOperationsSearch),
+  })
   const renderSummaryValue = (value: number) =>
     summaryQuery.isLoading ? '...' : summaryQuery.isError ? '--' : String(value)
   const summaryCards = [
@@ -1424,7 +1441,10 @@ export function Dashboard() {
       </div>
 
       {!summaryQuery.isLoading && !summaryQuery.isError ? (
-        <ApprovalPredictionDashboard summary={summaryQuery.data} />
+        <ApprovalPredictionDashboard
+          summary={summaryQuery.data}
+          taskPage={taskPageQuery.data ?? null}
+        />
       ) : null}
 
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]'>
@@ -1470,6 +1490,10 @@ export function WorkbenchPredictionCockpitPage() {
   const summaryQuery = useQuery({
     queryKey: ['workbench', 'dashboard-summary'],
     queryFn: () => getWorkbenchDashboardSummary(),
+  })
+  const taskPageQuery = useQuery({
+    queryKey: ['workbench', 'prediction-operations-tasks'],
+    queryFn: () => listWorkbenchTasks(predictionOperationsSearch),
   })
 
   const summary = summaryQuery.data
@@ -1566,7 +1590,10 @@ export function WorkbenchPredictionCockpitPage() {
       </div>
 
       {!summaryQuery.isLoading && !summaryQuery.isError ? (
-        <ApprovalPredictionDashboard summary={summary} />
+        <ApprovalPredictionDashboard
+          summary={summary}
+          taskPage={taskPageQuery.data ?? null}
+        />
       ) : null}
 
       <div className='grid gap-4 lg:grid-cols-3'>

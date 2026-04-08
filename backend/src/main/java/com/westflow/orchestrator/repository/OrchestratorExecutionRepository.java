@@ -83,6 +83,23 @@ public class OrchestratorExecutionRepository {
         return count == null ? 0L : count;
     }
 
+    public long countSucceededByTargetIdSince(String targetId, Instant since) {
+        Integer count = jdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(1)
+                FROM wf_orchestrator_execution
+                WHERE target_id = ?
+                  AND status = ?
+                  AND executed_at >= ?
+                """,
+                Integer.class,
+                targetId,
+                OrchestratorExecutionStatus.SUCCEEDED.name(),
+                toTimestamp(since)
+        );
+        return count == null ? 0L : count;
+    }
+
     public List<OrchestratorScanExecutionRecord> selectByInstanceId(String instanceId) {
         String legacyPattern = "orc_target_" + instanceId + "_%";
         String compactPattern = "orc_target_" + Integer.toHexString((instanceId == null ? "" : instanceId).hashCode()) + "_%";

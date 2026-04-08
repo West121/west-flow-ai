@@ -35,6 +35,7 @@ public class RuntimeProcessPredictionService {
 
     private final FlowableEngineFacade flowableEngineFacade;
     private final RuntimeProcessPredictionAutomationService runtimeProcessPredictionAutomationService;
+    private final RuntimeProcessPredictionEvaluationService runtimeProcessPredictionEvaluationService;
 
     public ProcessPredictionResponse predict(
             String processKey,
@@ -152,6 +153,7 @@ public class RuntimeProcessPredictionService {
         String sampleTier = resolveSampleTier(filteredSampleSize, sampleSet.usedFallback());
         String workingDayProfile = resolveWorkingDayProfile(now);
         String resolvedOrganizationProfile = resolveOrganizationProfile(organizationProfile, filteredContexts);
+        String sampleLayer = resolveSampleLayer(sampleSet, scenarioSignals, assigneeUserId, resolvedOrganizationProfile);
         String sampleProfile = effectiveSampleProfile(
                 sampleSet.profile(),
                 businessType,
@@ -163,6 +165,18 @@ public class RuntimeProcessPredictionService {
         List<ProcessPredictionNextNodeCandidateResponse> nextCandidates = nextNodeStats.isEmpty()
                 ? fallbackCandidates(currentNodeId, flowNodes, flowEdges)
                 : mapNextCandidates(nextNodeStats, filteredContexts.size(), p75);
+        PathPrediction pathPrediction = buildPathPrediction(
+                currentNodeId,
+                currentNodeName,
+                flowNodes,
+                flowEdges,
+                nextCandidates,
+                remainingDurationSamples,
+                currentElapsedMinutes,
+                riskLevel,
+                sampleTier,
+                scenarioSignals
+        );
         ProcessPredictionFeatureSnapshotResponse featureSnapshot = new ProcessPredictionFeatureSnapshotResponse(
                 processKey,
                 currentNodeId,
@@ -202,7 +216,15 @@ public class RuntimeProcessPredictionService {
                     buildOptimizationSuggestions(riskLevel, true, scenarioSignals),
                     List.of(),
                     featureSnapshot,
-                    nextCandidates
+                    nextCandidates,
+                    sampleLayer,
+                    pathPrediction.remainingMinutes(),
+                    pathPrediction.totalDurationMinutes(),
+                    pathPrediction.riskLevel(),
+                    pathPrediction.confidence(),
+                    pathPrediction.nodeIds(),
+                    pathPrediction.nodeNames(),
+                    null
             );
             return attachAutomationActions(response, currentNodeName);
         }
@@ -238,7 +260,15 @@ public class RuntimeProcessPredictionService {
                 buildOptimizationSuggestions(riskLevel, false, scenarioSignals),
                 List.of(),
                 featureSnapshot,
-                nextCandidates
+                nextCandidates,
+                sampleLayer,
+                pathPrediction.remainingMinutes(),
+                pathPrediction.totalDurationMinutes(),
+                pathPrediction.riskLevel(),
+                pathPrediction.confidence(),
+                pathPrediction.nodeIds(),
+                pathPrediction.nodeNames(),
+                null
         );
         return attachAutomationActions(response, currentNodeName);
     }
@@ -331,7 +361,15 @@ public class RuntimeProcessPredictionService {
                         0,
                         0
                 ),
-                List.of()
+                List.of(),
+                "NO_ACTIVE_NODE",
+                null,
+                null,
+                "LOW",
+                "LOW",
+                List.of(),
+                List.of(),
+                null
         );
         return attachAutomationActions(response, currentNodeName);
     }
@@ -381,7 +419,15 @@ public class RuntimeProcessPredictionService {
                         0,
                         0
                 ),
-                List.of()
+                List.of(),
+                "ENDED",
+                0L,
+                0L,
+                "LOW",
+                "HIGH",
+                List.of(currentNodeId == null ? "process_end" : currentNodeId),
+                List.of(currentNodeName == null ? "流程结束" : currentNodeName),
+                null
         );
         return attachAutomationActions(response, currentNodeName);
     }
@@ -986,7 +1032,7 @@ public class RuntimeProcessPredictionService {
         }
         List<ProcessPredictionAutomationActionResponse> actions =
                 runtimeProcessPredictionAutomationService.evaluate(null, currentNodeName, prediction);
-        return new ProcessPredictionResponse(
+        ProcessPredictionResponse withActions = new ProcessPredictionResponse(
                 prediction.predictedFinishTime(),
                 prediction.predictedRiskThresholdTime(),
                 prediction.remainingDurationMinutes(),
@@ -1012,7 +1058,163 @@ public class RuntimeProcessPredictionService {
                 prediction.optimizationSuggestions(),
                 actions,
                 prediction.featureSnapshot(),
-                prediction.nextNodeCandidates()
+                prediction.nextNodeCandidates(),
+                prediction.sampleLayer(),
+                prediction.predictedPathRemainingMinutes(),
+                prediction.predictedPathTotalDurationMinutes(),
+                prediction.predictedPathRiskLevel(),
+                prediction.predictedPathConfidence(),
+                prediction.predictedPathNodeIds(),
+                prediction.predictedPathNodeNames(),
+                null
+        );
+        return attachEvaluationReport(withActions);
+    }
+
+    private ProcessPredictionResponse attachEvaluationReport(ProcessPredictionResponse prediction) {
+        if (prediction == null) {
+            return null;
+        }
+        return new ProcessPredictionResponse(
+                prediction.predictedFinishTime(),
+                prediction.predictedRiskThresholdTime(),
+                prediction.remainingDurationMinutes(),
+                prediction.currentElapsedMinutes(),
+                prediction.currentNodeDurationP50Minutes(),
+                prediction.currentNodeDurationP75Minutes(),
+                prediction.currentNodeDurationP90Minutes(),
+                prediction.overdueRiskLevel(),
+                prediction.confidence(),
+                prediction.historicalSampleSize(),
+                prediction.outlierFilteredSampleSize(),
+                prediction.sampleProfile(),
+                prediction.sampleTier(),
+                prediction.workingDayProfile(),
+                prediction.organizationProfile(),
+                prediction.basisSummary(),
+                prediction.noPredictionReason(),
+                prediction.explanation(),
+                prediction.narrativeExplanation(),
+                prediction.bottleneckAttribution(),
+                prediction.topDelayReasons(),
+                prediction.recommendedActions(),
+                prediction.optimizationSuggestions(),
+                prediction.automationActions(),
+                prediction.featureSnapshot(),
+                prediction.nextNodeCandidates(),
+                prediction.sampleLayer(),
+                prediction.predictedPathRemainingMinutes(),
+                prediction.predictedPathTotalDurationMinutes(),
+                prediction.predictedPathRiskLevel(),
+                prediction.predictedPathConfidence(),
+                prediction.predictedPathNodeIds(),
+                prediction.predictedPathNodeNames(),
+                runtimeProcessPredictionEvaluationService.evaluate(prediction)
+        );
+    }
+
+    private String resolveSampleLayer(
+            PredictionSampleSet sampleSet,
+            PredictionScenarioSignals scenarioSignals,
+            String assigneeUserId,
+            String organizationProfile
+    ) {
+        if (sampleSet == null) {
+            return "FLOW_NODE_FALLBACK";
+        }
+        StringBuilder layer = new StringBuilder("FLOW_NODE");
+        if (assigneeUserId != null && !assigneeUserId.isBlank() && !sampleSet.usedFallback()) {
+            layer.append("_ASSIGNEE");
+        }
+        if (organizationProfile != null && !organizationProfile.isBlank()) {
+            layer.append("_ORG");
+        }
+        if (!sampleSet.usedFallback()) {
+            layer.append("_DAY");
+        } else {
+            layer.append("_FULL");
+        }
+        if (scenarioSignals.countersign()) {
+            layer.append("_COUNTERSIGN");
+        } else if (scenarioSignals.addSign()) {
+            layer.append("_ADDSIGN");
+        } else if (scenarioSignals.transferFamily()) {
+            layer.append("_TRANSFER");
+        }
+        return layer.toString();
+    }
+
+    private PathPrediction buildPathPrediction(
+            String currentNodeId,
+            String currentNodeName,
+            List<ProcessDslPayload.Node> flowNodes,
+            List<ProcessDslPayload.Edge> flowEdges,
+            List<ProcessPredictionNextNodeCandidateResponse> nextCandidates,
+            List<Long> remainingDurationSamples,
+            Long currentElapsedMinutes,
+            String riskLevel,
+            String sampleTier,
+            PredictionScenarioSignals scenarioSignals
+    ) {
+        List<String> nodeIds = new ArrayList<>();
+        List<String> nodeNames = new ArrayList<>();
+        if (currentNodeId != null && !currentNodeId.isBlank()) {
+            nodeIds.add(currentNodeId);
+            nodeNames.add(stringValue(currentNodeName, currentNodeId));
+        }
+        Map<String, String> nodeNameById = new LinkedHashMap<>();
+        for (ProcessDslPayload.Node node : flowNodes == null ? List.<ProcessDslPayload.Node>of() : flowNodes) {
+            nodeNameById.put(node.id(), stringValue(node.name(), node.id()));
+        }
+        Map<String, List<ProcessDslPayload.Edge>> outgoing = new LinkedHashMap<>();
+        for (ProcessDslPayload.Edge edge : flowEdges == null ? List.<ProcessDslPayload.Edge>of() : flowEdges) {
+            outgoing.computeIfAbsent(edge.source(), key -> new ArrayList<>()).add(edge);
+        }
+        Set<String> visited = new LinkedHashSet<>(nodeIds);
+        String cursor = currentNodeId;
+        int hop = 0;
+        while (cursor != null && hop < 6) {
+            String nextId = null;
+            if (hop == 0 && nextCandidates != null && !nextCandidates.isEmpty()) {
+                nextId = nextCandidates.getFirst().nodeId();
+            }
+            if (nextId == null) {
+                List<ProcessDslPayload.Edge> edges = new ArrayList<>(outgoing.getOrDefault(cursor, List.of()));
+                edges.sort(Comparator
+                        .comparing((ProcessDslPayload.Edge edge) -> edge.priority() == null ? Integer.MAX_VALUE : edge.priority())
+                        .thenComparing(ProcessDslPayload.Edge::target));
+                for (ProcessDslPayload.Edge edge : edges) {
+                    if (!visited.contains(edge.target())) {
+                        nextId = edge.target();
+                        break;
+                    }
+                }
+            }
+            if (nextId == null || visited.contains(nextId)) {
+                break;
+            }
+            visited.add(nextId);
+            nodeIds.add(nextId);
+            nodeNames.add(nodeNameById.getOrDefault(nextId, nextId));
+            cursor = nextId;
+            hop++;
+        }
+        Long remaining = remainingDurationSamples == null || remainingDurationSamples.isEmpty()
+                ? null
+                : applyScenarioBuffer(median(remainingDurationSamples), scenarioSignals);
+        Long total = remaining == null ? currentElapsedMinutes : (currentElapsedMinutes == null ? remaining : remaining + currentElapsedMinutes);
+        String confidence = "HIGH".equalsIgnoreCase(sampleTier)
+                || "DENSE".equalsIgnoreCase(sampleTier)
+                || "BALANCED".equalsIgnoreCase(sampleTier)
+                ? "HIGH"
+                : "SPARSE".equalsIgnoreCase(sampleTier) ? "MEDIUM" : "LOW";
+        return new PathPrediction(
+                remaining,
+                total,
+                riskLevel == null ? "LOW" : riskLevel.toUpperCase(),
+                confidence,
+                List.copyOf(nodeIds),
+                List.copyOf(nodeNames)
         );
     }
 
@@ -1203,6 +1405,16 @@ public class RuntimeProcessPredictionService {
             boolean addSign,
             boolean transferFamily,
             List<String> labels
+    ) {
+    }
+
+    private record PathPrediction(
+            Long remainingMinutes,
+            Long totalDurationMinutes,
+            String riskLevel,
+            String confidence,
+            List<String> nodeIds,
+            List<String> nodeNames
     ) {
     }
 }

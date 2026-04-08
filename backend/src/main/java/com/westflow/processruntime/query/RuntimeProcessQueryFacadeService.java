@@ -55,6 +55,7 @@ public class RuntimeProcessQueryFacadeService {
     private final RuntimeApprovalSheetQueryService runtimeApprovalSheetQueryService;
     private final RuntimeTaskDetailQueryService runtimeTaskDetailQueryService;
     private final RuntimeProcessPredictionAnalyticsService runtimeProcessPredictionAnalyticsService;
+    private final RuntimeProcessPredictionGovernanceService runtimeProcessPredictionGovernanceService;
     private final RuntimeProcessLinkQueryService runtimeProcessLinkQueryService;
     private final RuntimeBusinessLinkService runtimeBusinessLinkService;
     private final ProcessLinkService processLinkService;
@@ -99,7 +100,9 @@ public class RuntimeProcessQueryFacadeService {
                 analytics.riskDistribution(),
                 analytics.overdueTrend(),
                 analytics.bottleneckNodes(),
-                analytics.topRiskProcesses()
+                analytics.topRiskProcesses(),
+                runtimeProcessPredictionGovernanceService.governanceSnapshot(),
+                runtimeProcessPredictionGovernanceService.metricsLastDays(7)
         );
     }
 

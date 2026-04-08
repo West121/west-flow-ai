@@ -96,6 +96,28 @@ function labelForConfidence(confidence?: string | null) {
   }
 }
 
+function labelForPathConfidence(confidence?: string | null) {
+  switch ((confidence ?? '').toUpperCase()) {
+    case 'HIGH':
+      return '高'
+    case 'MEDIUM':
+      return '中'
+    case 'LOW':
+      return '低'
+    default:
+      return '--'
+  }
+}
+
+function renderDistribution(distribution?: Record<string, number> | null) {
+  if (!distribution || Object.keys(distribution).length === 0) {
+    return '--'
+  }
+  return Object.entries(distribution)
+    .map(([key, value]) => `${key} ${value}`)
+    .join(' · ')
+}
+
 export function ApprovalPredictionSection({
   prediction,
 }: {
@@ -104,6 +126,12 @@ export function ApprovalPredictionSection({
   if (!prediction) {
     return null
   }
+
+  const primaryCandidate = prediction.nextNodeCandidates?.[0] ?? null
+  const automationAdviceCount =
+    (prediction.recommendedActions?.length ?? 0) +
+    (prediction.optimizationSuggestions?.length ?? 0) +
+    (prediction.automationActions?.length ?? 0)
 
   return (
     <Card className='border-slate-200/80 bg-white/90 shadow-sm'>
@@ -126,6 +154,49 @@ export function ApprovalPredictionSection({
         </div>
       </CardHeader>
       <CardContent className='space-y-4'>
+        <div className='grid gap-3 md:grid-cols-4'>
+          <div className='rounded-lg border bg-slate-50/80 p-4'>
+            <div className='text-xs text-muted-foreground'>路径级风险</div>
+            <div className='mt-2 text-lg font-semibold'>
+              {labelForRisk(prediction.predictedPathRiskLevel ?? prediction.overdueRiskLevel)}
+            </div>
+            <div className='mt-1 text-xs text-muted-foreground'>
+              置信度 {labelForPathConfidence(prediction.predictedPathConfidence ?? prediction.confidence)}
+            </div>
+          </div>
+          <div className='rounded-lg border bg-slate-50/80 p-4'>
+            <div className='text-xs text-muted-foreground'>预计完成点</div>
+            <div className='mt-2 text-lg font-semibold'>
+              {formatDateTime(prediction.predictedFinishTime)}
+            </div>
+            <div className='mt-1 text-xs text-muted-foreground'>
+              {prediction.predictedRiskThresholdTime
+                ? `高风险阈值 ${formatShortDateTime(prediction.predictedRiskThresholdTime)}`
+                : '当前没有高风险阈值时间。'}
+            </div>
+          </div>
+          <div className='rounded-lg border bg-slate-50/80 p-4'>
+            <div className='text-xs text-muted-foreground'>首选路径</div>
+            <div className='mt-2 text-lg font-semibold'>
+              {prediction.predictedPathNodeNames?.slice(0, 2).join(' → ') || primaryCandidate?.nodeName || '--'}
+            </div>
+            <div className='mt-1 text-xs text-muted-foreground'>
+              {primaryCandidate
+                ? `命中 ${primaryCandidate.hitCount} 次 · 路径置信度 ${labelForPathConfidence(primaryCandidate.pathConfidence)}`
+                : prediction.predictedPathNodeNames?.length
+                  ? `路径节点 ${prediction.predictedPathNodeNames.length} 个 · 样本层 ${prediction.sampleLayer ?? '--'}`
+                  : '当前没有可用候选节点。'}
+            </div>
+          </div>
+          <div className='rounded-lg border bg-slate-50/80 p-4'>
+            <div className='text-xs text-muted-foreground'>自动化建议</div>
+            <div className='mt-2 text-lg font-semibold'>{automationAdviceCount} 条</div>
+            <div className='mt-1 text-xs text-muted-foreground'>
+              适合先做提醒、预告和协同动作再进入人工处理。
+            </div>
+          </div>
+        </div>
+
         <div className='grid gap-3 md:grid-cols-3'>
           <div className='rounded-lg border bg-muted/30 p-4'>
             <div className='text-xs text-muted-foreground'>预计完成</div>
@@ -133,7 +204,12 @@ export function ApprovalPredictionSection({
           </div>
           <div className='rounded-lg border bg-muted/30 p-4'>
             <div className='text-xs text-muted-foreground'>剩余时长</div>
-            <div className='mt-2 text-lg font-semibold'>{formatMinutes(prediction.remainingDurationMinutes)}</div>
+            <div className='mt-2 text-lg font-semibold'>
+              {formatMinutes(prediction.predictedPathRemainingMinutes ?? prediction.remainingDurationMinutes)}
+            </div>
+            <div className='mt-1 text-xs text-muted-foreground'>
+              路径总时长 {formatMinutes(prediction.predictedPathTotalDurationMinutes)}
+            </div>
           </div>
           <div className='rounded-lg border bg-muted/30 p-4'>
             <div className='text-xs text-muted-foreground'>当前节点已停留</div>
@@ -144,7 +220,8 @@ export function ApprovalPredictionSection({
         <div className='grid gap-3 md:grid-cols-4'>
           <div className='rounded-lg border bg-muted/20 p-4'>
             <div className='text-xs text-muted-foreground'>样本层级</div>
-            <div className='mt-2 text-sm font-semibold'>{prediction.sampleTier ?? '--'}</div>
+            <div className='mt-2 text-sm font-semibold'>{prediction.sampleLayer ?? prediction.sampleTier ?? '--'}</div>
+            <div className='mt-1 text-xs text-muted-foreground'>样本密度 {prediction.sampleTier ?? '--'}</div>
           </div>
           <div className='rounded-lg border bg-muted/20 p-4'>
             <div className='text-xs text-muted-foreground'>工作日画像</div>
@@ -162,6 +239,12 @@ export function ApprovalPredictionSection({
 
         <div className='grid gap-4 md:grid-cols-[1.25fr_1fr]'>
           <div className='space-y-2'>
+            {prediction.predictedPathNodeNames?.length ? (
+              <div className='rounded-lg border bg-slate-50/80 p-3 text-sm text-slate-700'>
+                <div className='text-xs font-medium uppercase tracking-wide text-slate-500'>预测路径</div>
+                <div className='mt-1 break-words'>{prediction.predictedPathNodeNames.join(' → ')}</div>
+              </div>
+            ) : null}
             {prediction.narrativeExplanation || prediction.explanation ? (
               <div className='rounded-lg border bg-slate-50/80 p-3 text-sm text-slate-700'>
                 {prediction.narrativeExplanation ?? prediction.explanation}
@@ -263,6 +346,24 @@ export function ApprovalPredictionSection({
                 )}
               </ul>
             </div>
+            {prediction.evaluationReport ? (
+              <>
+                <div className='text-sm font-medium'>评估报告</div>
+                <div className='rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground'>
+                  <div className='font-medium text-foreground'>
+                    {prediction.evaluationReport.summary ?? '当前没有评估摘要。'}
+                  </div>
+                  <div className='mt-2 grid gap-2 md:grid-cols-2'>
+                    <div>评估就绪度：{prediction.evaluationReport.readinessLevel ?? '--'}</div>
+                    <div>快照数：{prediction.evaluationReport.snapshotCount}</div>
+                    <div>清洗率：{Math.round((prediction.evaluationReport.cleanRate ?? 0) * 100)}%</div>
+                    <div>路径覆盖率：{Math.round((prediction.evaluationReport.pathCoverageRate ?? 0) * 100)}%</div>
+                    <div>自动化覆盖率：{Math.round((prediction.evaluationReport.automationCoverageRate ?? 0) * 100)}%</div>
+                    <div>风险分布：{renderDistribution(prediction.evaluationReport.riskDistribution)}</div>
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       </CardContent>

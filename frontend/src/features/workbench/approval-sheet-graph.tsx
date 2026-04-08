@@ -71,6 +71,49 @@ type TraversalState = {
   activeEdgeIds: Set<string>
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return '--'
+  }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+function labelForRisk(risk?: string | null) {
+  switch ((risk ?? '').toUpperCase()) {
+    case 'HIGH':
+      return '高'
+    case 'MEDIUM':
+      return '中'
+    case 'LOW':
+      return '低'
+    default:
+      return '--'
+  }
+}
+
+function labelForPathConfidence(confidence?: string | null) {
+  switch ((confidence ?? '').toUpperCase()) {
+    case 'HIGH':
+      return '高'
+    case 'MEDIUM':
+      return '中'
+    case 'LOW':
+      return '低'
+    default:
+      return '--'
+  }
+}
+
 const compatPreviewStatusClassNames = {
   ACTIVE: {
     card: 'border-sky-300 bg-sky-50/90 shadow-sm',
@@ -90,6 +133,7 @@ const compatPredictionClassNames = {
   activeHighRisk: 'ring-2 ring-rose-300 shadow-[0_0_0_4px_rgba(244,63,94,0.08)]',
   activeMediumRisk: 'ring-2 ring-amber-300 shadow-[0_0_0_4px_rgba(251,191,36,0.08)]',
   nextCandidate: 'ring-2 ring-violet-200 shadow-[0_0_0_4px_rgba(139,92,246,0.06)]',
+  primaryNextCandidate: 'ring-2 ring-violet-400 shadow-[0_0_0_4px_rgba(124,58,237,0.12)]',
 } as const
 
 const compatKindBadgeLabels = {
@@ -621,8 +665,12 @@ function ApprovalSheetGraphInner({
       ),
     [prediction?.nextNodeCandidates]
   )
+  const primaryPredictedCandidate = prediction?.nextNodeCandidates?.[0] ?? null
+  const primaryPredictedNextNodeId = primaryPredictedCandidate?.nodeId ?? null
 
   const predictedRiskLevel = (prediction?.overdueRiskLevel ?? '').toUpperCase()
+  const predictedFinishLabel = formatDateTime(prediction?.predictedFinishTime)
+  const predictedThresholdLabel = formatDateTime(prediction?.predictedRiskThresholdTime)
   const predictedPathEdgeIds = useMemo(() => {
     if (!activeNodeId || predictedNextNodeIds.size === 0) {
       return new Set<string>()
@@ -633,6 +681,12 @@ function ApprovalSheetGraphInner({
     })
     return next
   }, [activeNodeId, flowEdges, predictedNextNodeIds])
+  const primaryPredictedPathEdgeIds = useMemo(() => {
+    if (!activeNodeId || !primaryPredictedNextNodeId) {
+      return new Set<string>()
+    }
+    return new Set(findPathEdgeIds(flowEdges, activeNodeId, primaryPredictedNextNodeId))
+  }, [activeNodeId, flowEdges, primaryPredictedNextNodeId])
 
   const nodes = useMemo<Node[]>(
     () =>
@@ -646,6 +700,8 @@ function ApprovalSheetGraphInner({
         const isCompleted = completedNodeIds.has(node.id)
         const isVisited = visitedNodeIds.has(node.id)
         const isPredictedNext = predictedNextNodeIds.has(node.id) && node.id !== activeNodeId
+        const isPrimaryPredictedNext =
+          primaryPredictedNextNodeId === node.id && node.id !== activeNodeId
         const activeRiskBoxShadow = highlightActiveNode
           ? predictedRiskLevel === 'HIGH'
             ? '0 0 0 4px rgba(244, 63, 94, 0.08)'
@@ -660,7 +716,11 @@ function ApprovalSheetGraphInner({
               ? '#fcd34d'
               : undefined
           : undefined
-        const predictedNextBorder = isPredictedNext ? '#c4b5fd' : undefined
+        const predictedNextBorder = isPrimaryPredictedNext
+          ? '#7c3aed'
+          : isPredictedNext
+            ? '#c4b5fd'
+            : undefined
 
         return {
           id: node.id,
@@ -687,11 +747,27 @@ function ApprovalSheetGraphInner({
           style: {
             width: Math.max(node.ui?.width ?? 220, 220),
             borderColor: activeRiskBorder ?? predictedNextBorder,
-            boxShadow: activeRiskBoxShadow ?? (isPredictedNext ? '0 0 0 4px rgba(139, 92, 246, 0.06)' : undefined),
+            boxShadow:
+              activeRiskBoxShadow ??
+              (isPrimaryPredictedNext
+                ? '0 0 0 4px rgba(124, 58, 237, 0.12)'
+                : isPredictedNext
+                  ? '0 0 0 4px rgba(139, 92, 246, 0.06)'
+                  : undefined),
           },
         }
       }),
-    [activeNodeId, completedNodeIds, flowNodes, instanceStatus, mode, predictedNextNodeIds, predictedRiskLevel, visitedNodeIds]
+    [
+      activeNodeId,
+      completedNodeIds,
+      flowNodes,
+      instanceStatus,
+      mode,
+      primaryPredictedNextNodeId,
+      predictedNextNodeIds,
+      predictedRiskLevel,
+      visitedNodeIds,
+    ]
   )
 
   useEffect(() => {
@@ -719,11 +795,15 @@ function ApprovalSheetGraphInner({
         const isPlaying = mode === 'playing'
         const isPredictedNextEdge = predictedNextNodeIds.has(edge.target) && !isActive && !isTraversed
         const isPredictedPathEdge = predictedPathEdgeIds.has(edge.id) && !isActive && !isTraversed
+        const isPrimaryPredictedPathEdge =
+          primaryPredictedPathEdgeIds.has(edge.id) && !isActive && !isTraversed
         const edgeColor = isActive
           ? '#2563eb'
           : isTraversed
             ? '#16a34a'
-            : isPredictedNextEdge || isPredictedPathEdge
+            : isPrimaryPredictedPathEdge
+              ? '#7c3aed'
+              : isPredictedNextEdge || isPredictedPathEdge
               ? '#8b5cf6'
               : '#94a3b8'
 
@@ -742,8 +822,21 @@ function ApprovalSheetGraphInner({
             color: edgeColor,
           },
           style: {
-            strokeWidth: isActive ? 2.6 : isTraversed ? 2 : isPredictedNextEdge ? 2.2 : isPredictedPathEdge ? 1.8 : 1.5,
-            strokeDasharray: isPlaying && (isActive || isTraversed || isPredictedNextEdge || isPredictedPathEdge) ? '7 5' : undefined,
+            strokeWidth: isActive
+              ? 2.6
+              : isTraversed
+                ? 2
+                : isPrimaryPredictedPathEdge
+                  ? 2.6
+                  : isPredictedNextEdge
+                    ? 2.2
+                    : isPredictedPathEdge
+                      ? 1.8
+                      : 1.5,
+            strokeDasharray:
+              isPlaying && (isActive || isTraversed || isPredictedNextEdge || isPredictedPathEdge)
+                ? '7 5'
+                : undefined,
             strokeLinecap: 'round',
             stroke: edgeColor,
           },
@@ -765,6 +858,8 @@ function ApprovalSheetGraphInner({
       const isCompleted = completedNodeIds.has(node.id)
       const isVisited = visitedNodeIds.has(node.id)
       const isPredictedNext = predictedNextNodeIds.has(node.id) && node.id !== activeNodeId
+      const isPrimaryPredictedNext =
+        primaryPredictedNextNodeId === node.id && node.id !== activeNodeId
 
       return {
         ...node,
@@ -778,6 +873,7 @@ function ApprovalSheetGraphInner({
               ? 'VISITED'
               : 'IDLE',
         isPredictedNext,
+        isPrimaryPredictedNext,
       } as const
     })
 
@@ -837,6 +933,7 @@ function ApprovalSheetGraphInner({
     traversalState.visitedEdgeIds,
     predictedPathEdgeIds,
     predictedNextNodeIds,
+    primaryPredictedNextNodeId,
     visitedNodeIds,
   ])
 
