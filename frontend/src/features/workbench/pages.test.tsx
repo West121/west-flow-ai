@@ -408,6 +408,27 @@ describe('workbench pages', () => {
           createdAt: '2026-03-22T09:00:00+08:00',
           updatedAt: '2026-03-22T09:00:00+08:00',
           completedAt: null,
+          prediction: {
+            predictedFinishTime: '2026-03-22T15:00:00+08:00',
+            remainingDurationMinutes: 180,
+            currentElapsedMinutes: 15,
+            overdueRiskLevel: 'MEDIUM',
+            confidence: 'HIGH',
+            historicalSampleSize: 16,
+            basisSummary: '基于共享审批池的历史样本生成。',
+            explanation: '共享审批池已停留 15 分钟，预计剩余约 180 分钟。',
+            noPredictionReason: null,
+            topDelayReasons: ['当前节点历史波动较大。'],
+            nextNodeCandidates: [
+              {
+                nodeId: 'director_1',
+                nodeName: '总监审批',
+                probability: 0.7,
+                hitCount: 8,
+                medianDurationMinutes: 45,
+              },
+            ],
+          },
         },
       ],
     })
@@ -492,6 +513,10 @@ describe('workbench pages', () => {
 
     expect(await screen.findByText('公共认领请假审批')).toBeInTheDocument()
     expect(screen.getAllByText('待认领').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '全部风险' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '仅看高风险' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '中高风险' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '按风险优先' })).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: '用 AI 解读当前待办' })
     ).toHaveAttribute('data-source-route', '/workbench/todos/list')
@@ -1467,6 +1492,65 @@ describe('workbench pages', () => {
     expect(screen.getByText('负责人票签')).toBeInTheDocument()
     expect(screen.getByText('票权 40')).toBeInTheDocument()
     expect(screen.getByText(/状态：自动结束/)).toBeInTheDocument()
+  })
+
+  it('shows process prediction summary in approval detail', async () => {
+    workbenchApiMocks.getWorkbenchTaskDetail.mockResolvedValue(
+      createWorkbenchTaskDetail({
+        taskId: 'task_prediction_001',
+        prediction: {
+          predictedFinishTime: '2026-04-08T18:00:00+08:00',
+          remainingDurationMinutes: 180,
+          currentElapsedMinutes: 45,
+          overdueRiskLevel: 'MEDIUM',
+          confidence: 'HIGH',
+          historicalSampleSize: 12,
+          basisSummary: '基于 12 条同节点历史样本估算当前节点剩余 180 分钟。',
+          noPredictionReason: null,
+          explanation: '部门经理审批已停留 45 分钟，按历史中位样本预计还需 180 分钟。',
+          topDelayReasons: ['当前节点历史波动较大'],
+          recommendedActions: ['建议关注当前节点办理进展，并提前同步下一审批人。'],
+          nextNodeCandidates: [
+            {
+              nodeId: 'approve_director',
+              nodeName: '总监审批',
+              probability: 0.75,
+              hitCount: 9,
+              medianDurationMinutes: 120,
+            },
+          ],
+        },
+      })
+    )
+    workbenchApiMocks.getWorkbenchTaskActions.mockResolvedValue({
+      canClaim: false,
+      canApprove: true,
+      canReject: true,
+      canRejectRoute: true,
+      canTransfer: false,
+      canReturn: false,
+      canAddSign: false,
+      canRemoveSign: false,
+      canRevoke: false,
+      canUrge: false,
+      canRead: false,
+      canJump: false,
+      canTakeBack: false,
+      canWakeUp: false,
+    })
+
+    renderWithQuery(<WorkbenchTodoDetailPage taskId='task_prediction_001' />)
+
+    expect(await screen.findByText('流程预测')).toBeInTheDocument()
+    expect(screen.getByText('预计完成')).toBeInTheDocument()
+    expect(screen.getByText('剩余时长')).toBeInTheDocument()
+    expect(screen.getByText(/超期风险/)).toBeInTheDocument()
+    expect(screen.getByText(/中风险/)).toBeInTheDocument()
+    expect(screen.getByText(/高置信度/)).toBeInTheDocument()
+    expect(screen.getByText('总监审批')).toBeInTheDocument()
+    expect(screen.getByText(/当前节点历史波动较大/)).toBeInTheDocument()
+    expect(screen.getByText('建议动作')).toBeInTheDocument()
+    expect(screen.getByText(/提前同步下一审批人/)).toBeInTheDocument()
   })
 
   it('shows subprocess links in approval detail', async () => {

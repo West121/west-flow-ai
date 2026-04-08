@@ -79,6 +79,7 @@ export type WorkbenchTaskListItem = {
   createdAt: string
   updatedAt: string
   completedAt: string | null
+  prediction?: WorkbenchProcessPrediction | null
 }
 
 export type WorkbenchFlowNode = {
@@ -242,6 +243,29 @@ export type WorkbenchProcessLink = {
   finishedAt: string | null
 } & RuntimeStructureLink
 
+export type WorkbenchProcessPredictionNextNodeCandidate = {
+  nodeId: string
+  nodeName: string
+  probability: number
+  hitCount: number
+  medianDurationMinutes?: number | null
+}
+
+export type WorkbenchProcessPrediction = {
+  predictedFinishTime?: string | null
+  remainingDurationMinutes?: number | null
+  currentElapsedMinutes?: number | null
+  overdueRiskLevel?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
+  confidence?: 'LOW' | 'MEDIUM' | 'HIGH' | string | null
+  historicalSampleSize: number
+  basisSummary?: string | null
+  noPredictionReason?: string | null
+  explanation?: string | null
+  topDelayReasons?: string[] | null
+  recommendedActions?: string[] | null
+  nextNodeCandidates?: WorkbenchProcessPredictionNextNodeCandidate[] | null
+}
+
 export type WorkbenchRuntimeAppendLink = RuntimeStructureLink & {
   appendType: 'TASK' | 'SUBPROCESS'
   runtimeLinkType: 'ADHOC_TASK' | 'ADHOC_SUBPROCESS'
@@ -290,6 +314,7 @@ export type WorkbenchTaskDetail = WorkbenchTaskListItem & {
   processLinks?: WorkbenchProcessLink[] | null
   runtimeStructureLinks?: WorkbenchRuntimeAppendLink[] | null
   activeTaskIds: string[]
+  prediction?: WorkbenchProcessPrediction | null
   userDisplayNames?: Record<string, string> | null
   groupDisplayNames?: Record<string, string> | null
 }

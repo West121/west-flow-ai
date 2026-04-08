@@ -50,6 +50,8 @@ public record ProcessTaskListItemResponse(
         // 更新时间。
         OffsetDateTime updatedAt,
         // 完成时间。
-        OffsetDateTime completedAt
+        OffsetDateTime completedAt,
+        // 流程预测摘要。
+        ProcessPredictionResponse prediction
 ) {
 }

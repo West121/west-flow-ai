@@ -4,6 +4,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.model.PublishedProcessDefinition;
 import com.westflow.processdef.service.ProcessDefinitionService;
+import com.westflow.processruntime.api.response.ProcessPredictionResponse;
 import com.westflow.processruntime.api.response.ProcessTaskListItemResponse;
 import java.time.OffsetDateTime;
 import java.util.Collections;
@@ -28,6 +29,7 @@ public class RuntimeTaskAssembler {
     private final ProcessDefinitionService processDefinitionService;
     private final RuntimeTaskVisibilityService runtimeTaskVisibilityService;
     private final RuntimeTaskSupportService runtimeTaskSupportService;
+    private final RuntimeProcessPredictionService runtimeProcessPredictionService;
 
     // 将单个任务转换为列表项。
     public ProcessTaskListItemResponse toTaskListItem(
@@ -47,6 +49,14 @@ public class RuntimeTaskAssembler {
         List<String> candidateUserIds = runtimeTaskSupportService.candidateUsers(identityLinks);
         List<String> candidateGroupIds = runtimeTaskSupportService.candidateGroups(identityLinks);
         String taskKind = runtimeTaskVisibilityService.resolveTaskKind(task, queryContext);
+        ProcessPredictionResponse prediction = runtimeProcessPredictionService.predictForActiveTaskListItem(
+                definition.processKey(),
+                task.getTaskDefinitionKey(),
+                task.getName(),
+                OffsetDateTime.ofInstant(task.getCreateTime().toInstant(), java.time.ZoneId.of("Asia/Shanghai")),
+                definition.dsl().nodes(),
+                definition.dsl().edges()
+        );
         return new ProcessTaskListItemResponse(
                 task.getId(),
                 processInstanceId,
@@ -70,7 +80,8 @@ public class RuntimeTaskAssembler {
                 task.getAssignee(),
                 OffsetDateTime.ofInstant(task.getCreateTime().toInstant(), java.time.ZoneId.of("Asia/Shanghai")),
                 OffsetDateTime.ofInstant(task.getCreateTime().toInstant(), java.time.ZoneId.of("Asia/Shanghai")),
-                null
+                null,
+                prediction
         );
     }
 

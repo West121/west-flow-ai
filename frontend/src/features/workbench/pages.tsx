@@ -77,6 +77,7 @@ import {
   ApprovalTagList,
   ApprovalUserTag,
 } from '@/features/workbench/approval-actor-tags'
+import { ApprovalPredictionSection } from '@/features/workbench/approval-prediction-section'
 import {
   ApprovalSheetAutomationActionTimeline,
   ApprovalSheetAutomationStatusCard,
@@ -377,6 +378,61 @@ function updateApprovalSheetFilter(
       ...prev,
       page: undefined,
       filters: nextFilters.length > 0 ? nextFilters : undefined,
+    }),
+  })
+}
+
+function getTodoPredictionRiskFilterValue(search: ListQuerySearch) {
+  const filter = (search.filters ?? []).find((item) => item.field === 'prediction.overdueRiskLevel')
+  if (!filter) {
+    return undefined
+  }
+  if (Array.isArray(filter.value)) {
+    return filter.value.map(String)
+  }
+  return typeof filter.value === 'string' ? [filter.value] : undefined
+}
+
+function updateTodoPredictionRiskFilter(
+  search: ListQuerySearch,
+  navigate: NavigateFn,
+  values?: string[]
+) {
+  const nextFilters = (search.filters ?? []).filter((item) => item.field !== 'prediction.overdueRiskLevel')
+  if (values && values.length > 0) {
+    nextFilters.push({
+      field: 'prediction.overdueRiskLevel',
+      operator: values.length > 1 ? 'in' : 'eq',
+      value: values.length > 1 ? values : values[0],
+    })
+  }
+  navigate({
+    search: (prev) => ({
+      ...prev,
+      page: undefined,
+      filters: nextFilters.length > 0 ? nextFilters : undefined,
+    }),
+  })
+}
+
+function isTodoPredictionPrioritySortEnabled(search: ListQuerySearch) {
+  return (search.sorts ?? []).some((item) => item.field === 'prediction.overdueRiskLevel' && item.direction === 'desc')
+}
+
+function toggleTodoPredictionPrioritySort(search: ListQuerySearch, navigate: NavigateFn) {
+  const enabled = isTodoPredictionPrioritySortEnabled(search)
+  const nextSorts = (search.sorts ?? []).filter((item) => item.field !== 'prediction.overdueRiskLevel')
+  if (!enabled) {
+    nextSorts.unshift({
+      field: 'prediction.overdueRiskLevel',
+      direction: 'desc',
+    })
+  }
+  navigate({
+    search: (prev) => ({
+      ...prev,
+      page: undefined,
+      sorts: nextSorts.length > 0 ? nextSorts : undefined,
     }),
   })
 }
@@ -1041,6 +1097,42 @@ function TaskRuntimeFormCard({
   )
 }
 
+function resolvePredictionRiskLabel(risk?: string | null) {
+  switch ((risk ?? '').toUpperCase()) {
+    case 'HIGH':
+      return '高风险'
+    case 'MEDIUM':
+      return '中风险'
+    case 'LOW':
+      return '低风险'
+    default:
+      return '--'
+  }
+}
+
+function resolvePredictionRiskVariant(risk?: string | null) {
+  switch ((risk ?? '').toUpperCase()) {
+    case 'HIGH':
+      return 'destructive' as const
+    case 'MEDIUM':
+      return 'secondary' as const
+    default:
+      return 'outline' as const
+  }
+}
+
+function formatPredictionRemainingMinutes(minutes?: number | null) {
+  if (minutes === null || minutes === undefined) {
+    return '--'
+  }
+  if (minutes < 60) {
+    return `${minutes} 分钟`
+  }
+  const hours = Math.floor(minutes / 60)
+  const remain = minutes % 60
+  return remain > 0 ? `${hours} 小时 ${remain} 分钟` : `${hours} 小时`
+}
+
 const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
   {
     accessorKey: 'processName',
@@ -1051,6 +1143,11 @@ const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
         <span className='text-xs text-muted-foreground'>
           {row.original.processKey}
         </span>
+        {row.original.prediction?.explanation ? (
+          <span className='line-clamp-2 text-xs text-muted-foreground'>
+            {row.original.prediction.explanation}
+          </span>
+        ) : null}
       </div>
     ),
   },
@@ -1061,6 +1158,24 @@ const todoColumns: ColumnDef<WorkbenchTaskListItem>[] = [
   {
     accessorKey: 'nodeName',
     header: '当前节点',
+    cell: ({ row }) => (
+      <div className='flex flex-col gap-1'>
+        <span>{row.original.nodeName}</span>
+        {row.original.prediction ? (
+          <div className='flex flex-wrap items-center gap-2 text-xs text-muted-foreground'>
+            <Badge
+              variant={resolvePredictionRiskVariant(row.original.prediction.overdueRiskLevel)}
+              className='font-normal'
+            >
+              {resolvePredictionRiskLabel(row.original.prediction.overdueRiskLevel)}
+            </Badge>
+            <span>
+              预计剩余 {formatPredictionRemainingMinutes(row.original.prediction.remainingDurationMinutes)}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    ),
   },
   {
     accessorKey: 'businessKey',
@@ -1517,6 +1632,8 @@ function WorkbenchTodoBatchActions({
 export function WorkbenchTodoListPage() {
   const search = normalizeListQuerySearch(workbenchTodoListRoute.useSearch())
   const navigate = workbenchTodoListRoute.useNavigate()
+  const predictionRiskFilterValues = getTodoPredictionRiskFilterValue(search) ?? []
+  const prioritySortEnabled = isTodoPredictionPrioritySortEnabled(search)
   const tasksQuery = useQuery({
     queryKey: ['workbench', 'todo-page', search],
     queryFn: () => listWorkbenchTasks(search),
@@ -1571,6 +1688,48 @@ export function WorkbenchTodoListPage() {
             hint: '用于快速确认闭环任务是否已处理。',
           },
         ]}
+        topContent={
+          <div className='flex flex-wrap items-center gap-2'>
+            <Button
+              type='button'
+              size='sm'
+              variant={predictionRiskFilterValues.length === 0 ? 'default' : 'outline'}
+              onClick={() => updateTodoPredictionRiskFilter(search, navigate)}
+            >
+              全部风险
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              variant={predictionRiskFilterValues.length === 1 && predictionRiskFilterValues[0] === 'HIGH' ? 'default' : 'outline'}
+              onClick={() => updateTodoPredictionRiskFilter(search, navigate, ['HIGH'])}
+            >
+              仅看高风险
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              variant={
+                predictionRiskFilterValues.length === 2 &&
+                predictionRiskFilterValues.includes('HIGH') &&
+                predictionRiskFilterValues.includes('MEDIUM')
+                  ? 'default'
+                  : 'outline'
+              }
+              onClick={() => updateTodoPredictionRiskFilter(search, navigate, ['HIGH', 'MEDIUM'])}
+            >
+              中高风险
+            </Button>
+            <Button
+              type='button'
+              size='sm'
+              variant={prioritySortEnabled ? 'default' : 'outline'}
+              onClick={() => toggleTodoPredictionPrioritySort(search, navigate)}
+            >
+              {prioritySortEnabled ? '已按风险优先' : '按风险优先'}
+            </Button>
+          </div>
+        }
         createAction={{
           label: '发起流程',
           href: '/workbench/start',
@@ -3611,12 +3770,14 @@ export function WorkbenchTodoDetailPage({
                         <TabsTrigger value='automation'>自动化</TabsTrigger>
                       </TabsList>
                       <TabsContent value='overview' className='space-y-4'>
+                        <ApprovalPredictionSection prediction={detail.prediction ?? null} />
                         <ApprovalSheetGraph
                           flowNodes={detail.flowNodes ?? []}
                           flowEdges={detail.flowEdges ?? []}
                           taskTrace={detail.taskTrace ?? []}
                           instanceEvents={detail.instanceEvents ?? []}
                           instanceStatus={detail.instanceStatus}
+                          prediction={detail.prediction ?? null}
                           userDisplayNames={detail.userDisplayNames}
                         />
                         <ApprovalSheetCountersignSection

@@ -20,6 +20,7 @@ import { ApprovalTagList, ApprovalUserTag } from './approval-actor-tags'
 import {
   type WorkbenchFlowEdge,
   type WorkbenchFlowNode,
+  type WorkbenchProcessPrediction,
   type WorkbenchProcessInstanceEvent,
   type WorkbenchTaskTraceItem,
 } from '@/lib/api/workbench'
@@ -43,6 +44,7 @@ type ApprovalSheetGraphProps = {
   taskTrace: WorkbenchTaskTraceItem[]
   instanceEvents: WorkbenchProcessInstanceEvent[]
   instanceStatus?: string | null
+  prediction?: WorkbenchProcessPrediction | null
   userDisplayNames?: Record<string, string> | null
   compatibilityMode?: 'default' | 'weapp'
 }
@@ -82,6 +84,12 @@ const compatPreviewStatusClassNames = {
     card: 'border-emerald-300 bg-emerald-50/90 shadow-sm',
     badge: 'bg-emerald-500/12 text-emerald-700',
   },
+} as const
+
+const compatPredictionClassNames = {
+  activeHighRisk: 'ring-2 ring-rose-300 shadow-[0_0_0_4px_rgba(244,63,94,0.08)]',
+  activeMediumRisk: 'ring-2 ring-amber-300 shadow-[0_0_0_4px_rgba(251,191,36,0.08)]',
+  nextCandidate: 'ring-2 ring-violet-200 shadow-[0_0_0_4px_rgba(139,92,246,0.06)]',
 } as const
 
 const compatKindBadgeLabels = {
@@ -444,6 +452,7 @@ function ApprovalSheetGraphInner({
   taskTrace,
   instanceEvents,
   instanceStatus,
+  prediction,
   userDisplayNames,
   compatibilityMode = 'default',
 }: ApprovalSheetGraphProps) {
@@ -603,6 +612,18 @@ function ApprovalSheetGraphInner({
     return next
   }, [activeNodeId, traversalState.visitedNodeIds])
 
+  const predictedNextNodeIds = useMemo(
+    () =>
+      new Set(
+        (prediction?.nextNodeCandidates ?? [])
+          .map((item) => item.nodeId)
+          .filter(Boolean)
+      ),
+    [prediction?.nextNodeCandidates]
+  )
+
+  const predictedRiskLevel = (prediction?.overdueRiskLevel ?? '').toUpperCase()
+
   const nodes = useMemo<Node[]>(
     () =>
       flowNodes.map((node) => {
@@ -614,6 +635,22 @@ function ApprovalSheetGraphInner({
               instanceStatus !== 'TERMINATED'))
         const isCompleted = completedNodeIds.has(node.id)
         const isVisited = visitedNodeIds.has(node.id)
+        const isPredictedNext = predictedNextNodeIds.has(node.id) && node.id !== activeNodeId
+        const activeRiskBoxShadow = highlightActiveNode
+          ? predictedRiskLevel === 'HIGH'
+            ? '0 0 0 4px rgba(244, 63, 94, 0.08)'
+            : predictedRiskLevel === 'MEDIUM'
+              ? '0 0 0 4px rgba(251, 191, 36, 0.08)'
+              : undefined
+          : undefined
+        const activeRiskBorder = highlightActiveNode
+          ? predictedRiskLevel === 'HIGH'
+            ? '#fda4af'
+            : predictedRiskLevel === 'MEDIUM'
+              ? '#fcd34d'
+              : undefined
+          : undefined
+        const predictedNextBorder = isPredictedNext ? '#c4b5fd' : undefined
 
         return {
           id: node.id,
@@ -639,10 +676,12 @@ function ApprovalSheetGraphInner({
           selectable: false,
           style: {
             width: Math.max(node.ui?.width ?? 220, 220),
+            borderColor: activeRiskBorder ?? predictedNextBorder,
+            boxShadow: activeRiskBoxShadow ?? (isPredictedNext ? '0 0 0 4px rgba(139, 92, 246, 0.06)' : undefined),
           },
         }
       }),
-    [activeNodeId, completedNodeIds, flowNodes, instanceStatus, mode, visitedNodeIds]
+    [activeNodeId, completedNodeIds, flowNodes, instanceStatus, mode, predictedNextNodeIds, predictedRiskLevel, visitedNodeIds]
   )
 
   useEffect(() => {
@@ -668,11 +707,14 @@ function ApprovalSheetGraphInner({
         const isActive = mode === 'playing' && traversalState.activeEdgeIds.has(edge.id)
         const isTraversed = traversalState.visitedEdgeIds.has(edge.id)
         const isPlaying = mode === 'playing'
+        const isPredictedNextEdge = predictedNextNodeIds.has(edge.target) && !isActive && !isTraversed
         const edgeColor = isActive
           ? '#2563eb'
           : isTraversed
             ? '#16a34a'
-            : '#94a3b8'
+            : isPredictedNextEdge
+              ? '#8b5cf6'
+              : '#94a3b8'
 
         return {
           id: edge.id,
@@ -683,20 +725,20 @@ function ApprovalSheetGraphInner({
             borderRadius: 18,
             offset: 18,
           },
-          animated: isPlaying && (isActive || isTraversed),
+          animated: isPlaying && (isActive || isTraversed || isPredictedNextEdge),
           markerEnd: {
             type: MarkerType.ArrowClosed,
             color: edgeColor,
           },
           style: {
-            strokeWidth: isActive ? 2.6 : isTraversed ? 2 : 1.5,
-            strokeDasharray: isPlaying && (isActive || isTraversed) ? '7 5' : undefined,
+            strokeWidth: isActive ? 2.6 : isTraversed ? 2 : isPredictedNextEdge ? 2 : 1.5,
+            strokeDasharray: isPlaying && (isActive || isTraversed || isPredictedNextEdge) ? '7 5' : undefined,
             strokeLinecap: 'round',
             stroke: edgeColor,
           },
         }
       }),
-    [flowEdges, mode, traversalState.activeEdgeIds, traversalState.visitedEdgeIds]
+    [flowEdges, mode, predictedNextNodeIds, traversalState.activeEdgeIds, traversalState.visitedEdgeIds]
   )
 
   const compatGraph = useMemo(() => {
@@ -711,6 +753,7 @@ function ApprovalSheetGraphInner({
             instanceStatus !== 'TERMINATED'))
       const isCompleted = completedNodeIds.has(node.id)
       const isVisited = visitedNodeIds.has(node.id)
+      const isPredictedNext = predictedNextNodeIds.has(node.id) && node.id !== activeNodeId
 
       return {
         ...node,
@@ -723,6 +766,7 @@ function ApprovalSheetGraphInner({
             : isVisited
               ? 'VISITED'
               : 'IDLE',
+        isPredictedNext,
       } as const
     })
 
@@ -779,6 +823,7 @@ function ApprovalSheetGraphInner({
     mode,
     traversalState.activeEdgeIds,
     traversalState.visitedEdgeIds,
+    predictedNextNodeIds,
     visitedNodeIds,
   ])
 
@@ -829,6 +874,22 @@ function ApprovalSheetGraphInner({
             {mode === 'playing' ? '播放中' : mode === 'paused' ? '已暂停' : '待开始'}
           </Badge>
           <Badge variant='outline'>事件数 {playbackEvents.length}</Badge>
+          {prediction ? (
+            <Badge
+              variant={
+                predictedRiskLevel === 'HIGH'
+                  ? 'destructive'
+                  : predictedRiskLevel === 'MEDIUM'
+                    ? 'secondary'
+                    : 'outline'
+              }
+            >
+              预测风险 {predictedRiskLevel === 'HIGH' ? '高' : predictedRiskLevel === 'MEDIUM' ? '中' : '低'}
+            </Badge>
+          ) : null}
+          {prediction?.nextNodeCandidates?.length ? (
+            <Badge variant='outline'>候选下一节点 {prediction.nextNodeCandidates.length}</Badge>
+          ) : null}
         </div>
 
         <div className='space-y-4'>
@@ -873,7 +934,10 @@ function ApprovalSheetGraphInner({
                         key={node.id}
                         className={cn(
                           'absolute rounded-2xl border bg-white/95 px-4 py-3 shadow-sm',
-                          previewClasses?.card
+                          previewClasses?.card,
+                          node.previewStatus === 'ACTIVE' && predictedRiskLevel === 'HIGH' && compatPredictionClassNames.activeHighRisk,
+                          node.previewStatus === 'ACTIVE' && predictedRiskLevel === 'MEDIUM' && compatPredictionClassNames.activeMediumRisk,
+                          node.isPredictedNext && compatPredictionClassNames.nextCandidate
                         )}
                         style={{
                           left: node.left,
@@ -896,6 +960,11 @@ function ApprovalSheetGraphInner({
                             {badgeLabel}
                           </span>
                         </div>
+                        {node.isPredictedNext ? (
+                          <div className='mt-2 inline-flex rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700'>
+                            预测候选
+                          </div>
+                        ) : null}
                       </div>
                     )
                   })}

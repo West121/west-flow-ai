@@ -135,6 +135,8 @@ public record ProcessTaskDetailResponse(
         List<RuntimeAppendLinkResponse> appendLinks,
         // 当前激活任务标识列表
         List<String> activeTaskIds,
+        // 流程预测结果
+        ProcessPredictionResponse prediction,
         // 用户名称映射
         Map<String, String> userDisplayNames,
         // 用户组名称映射

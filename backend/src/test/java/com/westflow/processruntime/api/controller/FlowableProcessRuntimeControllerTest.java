@@ -140,6 +140,9 @@ class FlowableProcessRuntimeControllerTest {
         assertThat(detailBody.path("businessData").path("billNo").asText()).isEqualTo("LEAVE-20260322-002");
         assertThat(detailBody.path("flowNodes").isArray()).isTrue();
         assertThat(detailBody.path("activeTaskIds").size()).isEqualTo(1);
+        assertThat(detailBody.path("prediction").isObject()).isTrue();
+        assertThat(detailBody.path("prediction").path("currentElapsedMinutes").isNumber()).isTrue();
+        assertThat(detailBody.path("prediction").path("nextNodeCandidates").isArray()).isTrue();
 
         JsonNode actionsBody = objectMapper.readTree(mockMvc.perform(get("/api/v1/process-runtime/tasks/{taskId}/actions", taskId)
                         .header("Authorization", "Bearer " + managerToken))

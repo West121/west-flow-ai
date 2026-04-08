@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ApprovalSheetGraph } from '@/features/workbench/approval-sheet-graph'
+import { ApprovalPredictionSection } from '@/features/workbench/approval-prediction-section'
 import { getWorkbenchReviewTicketDetail } from '@/lib/api/workbench'
 
 export const Route = createFileRoute('/review/player/$ticket')({
@@ -67,15 +68,19 @@ function ReviewPlayerRoute() {
             </CardDescription>
           </CardHeader>
           <CardContent className='pt-0'>
+            <div className='mb-4'>
+              <ApprovalPredictionSection prediction={detail.prediction ?? null} />
+            </div>
             <ApprovalSheetGraph
               flowNodes={detail.flowNodes ?? []}
               flowEdges={detail.flowEdges ?? []}
               taskTrace={detail.taskTrace ?? []}
-            instanceEvents={detail.instanceEvents ?? []}
-            instanceStatus={detail.instanceStatus}
-            userDisplayNames={detail.userDisplayNames ?? null}
-            compatibilityMode={compatibilityMode}
-          />
+              instanceEvents={detail.instanceEvents ?? []}
+              instanceStatus={detail.instanceStatus}
+              prediction={detail.prediction ?? null}
+              userDisplayNames={detail.userDisplayNames ?? null}
+              compatibilityMode={compatibilityMode}
+            />
           </CardContent>
         </Card>
       </div>

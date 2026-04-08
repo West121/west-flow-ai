@@ -1,11 +1,15 @@
 package com.westflow.processruntime.query;
 
 import com.westflow.common.api.RequestContext;
+import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
+import com.westflow.common.query.SortItem;
 import com.westflow.processruntime.api.response.ProcessTaskListItemResponse;
+import java.util.Comparator;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.flowable.task.api.Task;
 import org.slf4j.Logger;
@@ -67,10 +71,12 @@ public class RuntimeTaskQueryService {
         long enrichElapsedMs = elapsedMs(enrichStartedAt);
         long filterStartedAt = System.nanoTime();
         List<ProcessTaskListItemResponse> filteredRecords = allRecords.stream()
+                .filter(item -> matchesPredictionFilters(item, request.filters()))
                 .filter(item -> runtimeTaskAssembler.matchesTaskKeyword(item, request.keyword()))
                 .toList();
         long filterElapsedMs = elapsedMs(filterStartedAt);
-        PageResponse<ProcessTaskListItemResponse> response = page(filteredRecords, request.page(), request.pageSize());
+        List<ProcessTaskListItemResponse> sortedRecords = applyPredictionSorts(filteredRecords, request.sorts());
+        PageResponse<ProcessTaskListItemResponse> response = page(sortedRecords, request.page(), request.pageSize());
         log.info(
                 "approval-perf requestId={} path={} stage=tasks.page visibleMs={} enrichMs={} filterMs={} totalMs={} totalVisibleTasks={} filteredRecords={} page={} pageSize={} keywordBlank={}",
                 RequestContext.getOrCreateRequestId(),
@@ -80,7 +86,7 @@ public class RuntimeTaskQueryService {
                 filterElapsedMs,
                 elapsedMs(startedAt),
                 visibleTasks.size(),
-                filteredRecords.size(),
+                sortedRecords.size(),
                 request.page(),
                 request.pageSize(),
                 request.keyword() == null || request.keyword().isBlank()
@@ -93,6 +99,96 @@ public class RuntimeTaskQueryService {
                 && request.filters().isEmpty()
                 && request.sorts().isEmpty()
                 && request.groups().isEmpty();
+    }
+
+    private boolean matchesPredictionFilters(ProcessTaskListItemResponse item, List<FilterItem> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return true;
+        }
+        for (FilterItem filter : filters) {
+            if (!matchesPredictionFilter(item, filter)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean matchesPredictionFilter(ProcessTaskListItemResponse item, FilterItem filter) {
+        if (filter == null || filter.field() == null) {
+            return true;
+        }
+        if (!"prediction.overdueRiskLevel".equals(filter.field())) {
+            return true;
+        }
+        String operator = filter.operator() == null ? "eq" : filter.operator().toLowerCase(Locale.ROOT);
+        String riskLevel = item.prediction() == null || item.prediction().overdueRiskLevel() == null
+                ? ""
+                : item.prediction().overdueRiskLevel().toUpperCase(Locale.ROOT);
+        if ("eq".equals(operator)) {
+            String expected = filter.value() == null || filter.value().isNull()
+                    ? ""
+                    : filter.value().asText("").toUpperCase(Locale.ROOT);
+            return riskLevel.equals(expected);
+        }
+        if ("in".equals(operator) && filter.value() != null && filter.value().isArray()) {
+            for (int i = 0; i < filter.value().size(); i++) {
+                if (riskLevel.equals(filter.value().get(i).asText("").toUpperCase(Locale.ROOT))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private List<ProcessTaskListItemResponse> applyPredictionSorts(
+            List<ProcessTaskListItemResponse> records,
+            List<SortItem> sorts
+    ) {
+        if (sorts == null || sorts.isEmpty()) {
+            return records;
+        }
+        List<ProcessTaskListItemResponse> sorted = records;
+        for (int index = sorts.size() - 1; index >= 0; index--) {
+            SortItem sort = sorts.get(index);
+            Comparator<ProcessTaskListItemResponse> comparator = predictionComparator(sort.field());
+            if (comparator == null) {
+                continue;
+            }
+            if ("desc".equalsIgnoreCase(sort.direction())) {
+                comparator = comparator.reversed();
+            }
+            sorted = sorted.stream().sorted(comparator).toList();
+        }
+        return sorted;
+    }
+
+    private Comparator<ProcessTaskListItemResponse> predictionComparator(String field) {
+        if ("prediction.overdueRiskLevel".equals(field)) {
+            return Comparator.comparingInt(item -> riskWeight(item.prediction() == null ? null : item.prediction().overdueRiskLevel()));
+        }
+        if ("prediction.remainingDurationMinutes".equals(field)) {
+            return Comparator.comparingLong(item ->
+                    item.prediction() == null || item.prediction().remainingDurationMinutes() == null
+                            ? Long.MIN_VALUE
+                            : item.prediction().remainingDurationMinutes());
+        }
+        if ("prediction.currentElapsedMinutes".equals(field)) {
+            return Comparator.comparingLong(item ->
+                    item.prediction() == null || item.prediction().currentElapsedMinutes() == null
+                            ? Long.MIN_VALUE
+                            : item.prediction().currentElapsedMinutes());
+        }
+        return null;
+    }
+
+    private int riskWeight(String riskLevel) {
+        return switch ((riskLevel == null ? "" : riskLevel).toUpperCase(Locale.ROOT)) {
+            case "HIGH" -> 3;
+            case "MEDIUM" -> 2;
+            case "LOW" -> 1;
+            default -> 0;
+        };
     }
 
     private <T> PageResponse<T> page(List<T> records, int page, int pageSize) {
