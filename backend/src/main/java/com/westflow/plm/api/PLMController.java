@@ -10,6 +10,7 @@ import com.westflow.plm.service.PlmImplementationEvidenceService;
 import com.westflow.plm.api.PlmImplementationEvidenceUpdateRequest;
 import com.westflow.plm.service.PlmImplementationTemplateService;
 import com.westflow.plm.service.PlmLaunchService;
+import com.westflow.plm.service.PlmProjectService;
 import com.westflow.plm.service.PlmPublicationService;
 import com.westflow.processruntime.api.response.ApprovalSheetListItemResponse;
 import jakarta.validation.Valid;
@@ -39,6 +40,67 @@ public class PLMController {
     private final PlmImplementationTemplateService plmImplementationTemplateService;
     private final PlmImplementationEvidenceService plmImplementationEvidenceService;
     private final PlmPublicationService plmPublicationService;
+    private final PlmProjectService plmProjectService;
+
+    @PostMapping("/projects/page")
+    public ApiResponse<PageResponse<PlmProjectListItemResponse>> projectPage(
+            @Valid @RequestBody PageRequest request
+    ) {
+        return ApiResponse.success(plmProjectService.page(request));
+    }
+
+    @PostMapping("/projects")
+    public ApiResponse<PlmProjectDetailResponse> createProject(
+            @Valid @RequestBody CreatePlmProjectRequest request
+    ) {
+        return ApiResponse.success(plmProjectService.createProject(request));
+    }
+
+    @GetMapping("/projects/{projectId}")
+    public ApiResponse<PlmProjectDetailResponse> projectDetail(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.detail(projectId));
+    }
+
+    @PutMapping("/projects/{projectId}")
+    public ApiResponse<PlmProjectDetailResponse> updateProject(
+            @PathVariable String projectId,
+            @Valid @RequestBody UpdatePlmProjectRequest request
+    ) {
+        return ApiResponse.success(plmProjectService.updateProject(projectId, request));
+    }
+
+    @GetMapping("/projects/{projectId}/dashboard")
+    public ApiResponse<PlmProjectDashboardResponse> projectDashboard(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.dashboard(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/members")
+    public ApiResponse<java.util.List<PlmProjectMemberResponse>> projectMembers(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.members(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/milestones")
+    public ApiResponse<java.util.List<PlmProjectMilestoneResponse>> projectMilestones(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.milestones(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/links")
+    public ApiResponse<java.util.List<PlmProjectLinkResponse>> projectLinks(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.links(projectId));
+    }
+
+    @GetMapping("/projects/{projectId}/stage-events")
+    public ApiResponse<java.util.List<PlmProjectStageEventResponse>> projectStageEvents(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.stageEvents(projectId));
+    }
+
+    @PostMapping("/projects/{projectId}/phase-transition")
+    public ApiResponse<PlmProjectDetailResponse> transitionProjectPhase(
+            @PathVariable String projectId,
+            @Valid @RequestBody PlmProjectPhaseTransitionRequest request
+    ) {
+        return ApiResponse.success(plmProjectService.transitionPhase(projectId, request));
+    }
 
     @GetMapping("/dashboard/summary")
     public ApiResponse<PlmDashboardSummaryResponse> dashboardSummary() {

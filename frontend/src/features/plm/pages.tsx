@@ -1295,6 +1295,12 @@ export function PLMHomePage() {
           href: '/plm/material-master/create',
           cta: '发起物料变更',
         },
+        {
+          title: 'PLM 项目管理',
+          description: '把变更单、里程碑、对象和实施任务统一到项目工作区。',
+          href: '/plm/projects/create',
+          cta: '创建项目',
+        },
       ]}
     />
   )
@@ -1386,6 +1392,27 @@ export function PLMQueryPage() {
             )
           }
         )}
+        <Card>
+          <CardHeader className='space-y-3'>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='space-y-1'>
+                <CardTitle>PLM 项目管理</CardTitle>
+                <CardDescription>
+                  把项目、里程碑、变更单、BOM/文档与实施任务纳入统一工作区。
+                </CardDescription>
+              </div>
+              <Badge variant='outline'>PROJECT</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className='flex flex-wrap gap-2'>
+            <Button asChild size='sm'>
+              <Link to='/plm/projects'>进入项目台账</Link>
+            </Button>
+            <Button asChild size='sm' variant='outline'>
+              <Link to='/plm/projects/create'>创建项目</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <div className='grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]'>

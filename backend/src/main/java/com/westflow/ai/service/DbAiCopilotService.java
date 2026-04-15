@@ -2092,11 +2092,11 @@ public class DbAiCopilotService implements AiCopilotService {
                     tool.toolSource(),
                     Map.of("keyword", content == null ? "" : content, "domain", domain)
             );
-            case "plm.bill.query", "plm.change.summary" -> new AiToolCallRequest(
+            case "plm.bill.query", "plm.change.summary", "plm.project.query", "plm.project.summary" -> new AiToolCallRequest(
                     tool.toolCode(),
                     tool.toolType(),
                     tool.toolSource(),
-                    Map.of("keyword", extractBillKeyword(routePath, content == null ? "" : content), "domain", domain)
+                    Map.of("keyword", extractPlmKeyword(routePath, content == null ? "" : content), "domain", domain)
             );
             default -> new AiToolCallRequest(
                     tool.toolCode(),
@@ -2135,6 +2135,19 @@ public class DbAiCopilotService implements AiCopilotService {
                     Map.copyOf(enrichApprovalSheetArguments(normalized, domain, routePath, approvalSheetView))
             );
         }
+        if (routePath != null && routePath.startsWith("/plm/projects")
+                || normalized.contains("项目")
+                || normalized.contains("里程碑")
+                || normalized.contains("交付阶段")
+                || normalized.contains("项目阶段")) {
+            boolean summaryIntent = normalized.contains("摘要") || normalized.contains("总结");
+            return new AiToolCallRequest(
+                    summaryIntent ? "plm.project.summary" : "plm.project.query",
+                    AiToolType.READ,
+                    summaryIntent ? AiToolSource.SKILL : AiToolSource.PLATFORM,
+                    Map.of("keyword", extractPlmKeyword(routePath, normalized), "domain", domain)
+            );
+        }
         if (normalized.contains("PLM")
                 || normalized.contains("ECR")
                 || normalized.contains("ECO")
@@ -2144,7 +2157,7 @@ public class DbAiCopilotService implements AiCopilotService {
                     normalized.contains("摘要") || normalized.contains("总结") ? "plm.change.summary" : "plm.bill.query",
                     AiToolType.READ,
                     normalized.contains("摘要") || normalized.contains("总结") ? AiToolSource.SKILL : AiToolSource.PLATFORM,
-                    Map.of("keyword", extractBillKeyword(routePath, normalized), "domain", domain)
+                    Map.of("keyword", extractPlmKeyword(routePath, normalized), "domain", domain)
             );
         }
         if (normalized.contains("流程定义")
@@ -2658,7 +2671,7 @@ public class DbAiCopilotService implements AiCopilotService {
             }
             return List.copyOf(blocks);
         }
-        if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
+        if (isPlmBillToolKey(result.toolKey())) {
             return List.of(
                     defaultTextBlock("已通过 PLM 助手读取变更单据与业务摘要。"),
                     traceBlock(
@@ -2681,6 +2694,31 @@ public class DbAiCopilotService implements AiCopilotService {
                             buildPlmSummaryMetrics(result.result())
                     ),
                     buildPlmSummaryStatsBlock(result.result())
+            );
+        }
+        if (isPlmProjectToolKey(result.toolKey())) {
+            return List.of(
+                    defaultTextBlock("已通过 PLM 助手读取项目工作区与交付摘要。"),
+                    traceBlock(
+                            gatewayResponse.routeMode(),
+                            gatewayResponse.agentId(),
+                            gatewayResponse.agentKey(),
+                            "已命中 PLM 项目摘要链路。",
+                            "executed",
+                            trace
+                    ),
+                    resultBlock(
+                            result.toolSource().name(),
+                            result.toolKey(),
+                            result.toolKey(),
+                            result.toolType().name(),
+                            result.summary(),
+                            result.result(),
+                            trace,
+                            buildPlmProjectSummaryFields(result.result(), routePath, result),
+                            buildPlmProjectSummaryMetrics(result.result())
+                    ),
+                    buildPlmProjectSummaryStatsBlock(result.result())
             );
         }
         return List.of(
@@ -2731,8 +2769,11 @@ public class DbAiCopilotService implements AiCopilotService {
                     ? "我已经汇总你发起的申请进度，可继续追问某条申请当前卡在哪个节点。"
                     : "我已经汇总当前审批轨迹，可继续追问节点处理路径。";
         }
-        if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
+        if (isPlmBillToolKey(result.toolKey())) {
             return "我已经生成当前 PLM 业务摘要，已补充对象类型、版本差异、任务进度、阻塞任务、关闭准备度、基线状态、外部集成、验收状态和连接器任务，可继续追问影响对象、同步风险或为什么不能关闭。";
+        }
+        if (isPlmProjectToolKey(result.toolKey())) {
+            return "我已经生成当前 PLM 项目摘要，已补充阶段、里程碑、负责人、交付风险以及关联变更/对象/实施任务，可继续追问项目卡点、逾期里程碑或交付阻塞。";
         }
         if ("stats.query".equals(result.toolKey())) {
             return "我已经整理出当前统计摘要，可继续追问时间范围或业务域。";
@@ -2772,8 +2813,11 @@ public class DbAiCopilotService implements AiCopilotService {
         if ("stats.query".equals(result.toolKey())) {
             return buildStatsFinalAnswer(result.result());
         }
-        if ("plm.bill.query".equals(result.toolKey()) || "plm.change.summary".equals(result.toolKey())) {
+        if (isPlmBillToolKey(result.toolKey())) {
             return buildPlmFinalAnswer(result.result());
+        }
+        if (isPlmProjectToolKey(result.toolKey())) {
+            return buildPlmProjectFinalAnswer(result.result());
         }
         return buildReadSummary(result);
     }
@@ -3408,7 +3452,7 @@ public class DbAiCopilotService implements AiCopilotService {
         return "";
     }
 
-    private String extractBillKeyword(String routePath, String fallbackKeyword) {
+    private String extractPlmKeyword(String routePath, String fallbackKeyword) {
         if (routePath == null || routePath.isBlank()) {
             return fallbackKeyword;
         }
@@ -4377,6 +4421,111 @@ public class DbAiCopilotService implements AiCopilotService {
         );
     }
 
+    private List<Field> buildPlmProjectSummaryFields(
+            Map<String, Object> result,
+            String routePath,
+            AiToolCallResultResponse toolResult
+    ) {
+        Object items = result.get("items");
+        String firstProject = "";
+        String phaseLabel = "";
+        if (items instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> firstItem) {
+            firstProject = stringValue(firstItem.get("billNo"));
+            phaseLabel = stringValue(firstItem.get("phaseLabel"));
+        }
+        String keyword = stringValue(result.get("keyword"));
+        String statusBreakdown = summarizePlmBreakdown(result.get("statusBreakdown"));
+        String phaseBreakdown = summarizePlmBreakdown(result.get("phaseBreakdown"));
+        String domainBreakdown = summarizePlmBreakdown(result.get("domainBreakdown"));
+        String milestoneSummary = stringValue(result.get("milestoneSummary"));
+        String linkSummary = stringValue(result.get("linkSummary"));
+        String riskSummary = stringValue(result.get("riskSummary"));
+        List<Field> fields = new ArrayList<>(List.of(
+                new Field("来源页面", routePath == null || routePath.isBlank() ? "未绑定页面" : routePath, null),
+                new Field("工具调用编号", toolResult.toolCallId(), null),
+                new Field("查询关键词", keyword.isBlank() ? "全部项目" : keyword, null),
+                new Field("首条项目", firstProject.isBlank() ? "无匹配项目" : firstProject, null),
+                new Field("当前阶段", phaseLabel.isBlank() ? "未定位" : phaseLabel, null)
+        ));
+        if (!phaseBreakdown.isBlank()) {
+            fields.add(new Field("阶段分布", phaseBreakdown, "项目阶段分布"));
+        }
+        if (!statusBreakdown.isBlank()) {
+            fields.add(new Field("状态分布", statusBreakdown, "项目状态分布"));
+        }
+        if (!domainBreakdown.isBlank()) {
+            fields.add(new Field("业务域分布", domainBreakdown, "按领域汇总项目"));
+        }
+        if (!milestoneSummary.isBlank()) {
+            fields.add(new Field("里程碑摘要", milestoneSummary, "项目关键里程碑与状态"));
+        }
+        if (!linkSummary.isBlank()) {
+            fields.add(new Field("关联链路", linkSummary, "项目关联变更、对象和实施任务"));
+        }
+        if (!riskSummary.isBlank()) {
+            fields.add(new Field("项目风险", riskSummary, "当前逾期或阻塞里程碑"));
+        }
+        String topSummary = summarizeTopPlmProjectItems(items);
+        if (!topSummary.isBlank()) {
+            fields.add(new Field("命中摘要", topSummary, "最多展示前三条命中项目"));
+        }
+        return List.copyOf(fields);
+    }
+
+    private List<Metric> buildPlmProjectSummaryMetrics(Map<String, Object> result) {
+        int count = countItems(result.get("items"));
+        int phaseCount = countItems(result.get("phaseBreakdown"));
+        int statusCount = countItems(result.get("statusBreakdown"));
+        int memberCount = intValue(result.get("memberCount"));
+        int milestoneCount = intValue(result.get("milestoneCount"));
+        int openMilestoneCount = intValue(result.get("openMilestoneCount"));
+        int overdueMilestoneCount = intValue(result.get("overdueMilestoneCount"));
+        int billLinkCount = intValue(result.get("billLinkCount"));
+        int objectLinkCount = intValue(result.get("objectLinkCount"));
+        int taskLinkCount = intValue(result.get("taskLinkCount"));
+        return List.of(
+                new Metric("命中项目数", String.valueOf(count), count > 0 ? "已读取真实 PLM 项目工作区" : "当前关键词未匹配到 PLM 项目", count > 0 ? "positive" : "warning"),
+                new Metric("阶段数", String.valueOf(phaseCount), "项目阶段分布", phaseCount > 0 ? "positive" : "neutral"),
+                new Metric("状态数", String.valueOf(statusCount), "项目状态分布", statusCount > 0 ? "positive" : "neutral"),
+                new Metric("项目成员", String.valueOf(memberCount), "项目团队规模", memberCount > 0 ? "positive" : "neutral"),
+                new Metric("里程碑总数", String.valueOf(milestoneCount), "项目里程碑数量", milestoneCount > 0 ? "positive" : "neutral"),
+                new Metric("开放里程碑", String.valueOf(openMilestoneCount), "未完成里程碑", openMilestoneCount > 0 ? "warning" : "neutral"),
+                new Metric("逾期里程碑", String.valueOf(overdueMilestoneCount), "当前已逾期的里程碑", overdueMilestoneCount > 0 ? "warning" : "neutral"),
+                new Metric("关联变更", String.valueOf(billLinkCount), "项目下绑定的 PLM 变更", billLinkCount > 0 ? "positive" : "neutral"),
+                new Metric("关联对象", String.valueOf(objectLinkCount), "项目下绑定的对象 / BOM / 文档 / 基线", objectLinkCount > 0 ? "positive" : "neutral"),
+                new Metric("实施任务", String.valueOf(taskLinkCount), "项目关联实施任务", taskLinkCount > 0 ? "positive" : "neutral"),
+                new Metric("业务域", "PLM", null, "neutral")
+        );
+    }
+
+    private AiMessageBlockResponse buildPlmProjectSummaryStatsBlock(Map<String, Object> result) {
+        String summary = stringValue(result.get("summary"));
+        return new AiMessageBlockResponse(
+                "stats",
+                "PLM 项目摘要",
+                null,
+                null,
+                summary.isBlank() ? "当前结果来自 PLM 项目查询，可继续追问项目阶段、里程碑、交付风险或关联变更。" : summary,
+                summary.isBlank() ? "当前结果来自 PLM 项目查询，可继续追问项目阶段、里程碑、交付风险或关联变更。" : summary,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                List.of(
+                        new Field("摘要", summarizeTopPlmProjectItems(result.get("items")), "最多展示前三条命中项目"),
+                        new Field("阶段分布", summarizePlmBreakdown(result.get("phaseBreakdown")), null),
+                        new Field("状态分布", summarizePlmBreakdown(result.get("statusBreakdown")), null),
+                        new Field("业务域分布", summarizePlmBreakdown(result.get("domainBreakdown")), null),
+                        new Field("里程碑摘要", stringValue(result.get("milestoneSummary")), null),
+                        new Field("关联链路", stringValue(result.get("linkSummary")), null),
+                        new Field("项目风险", stringValue(result.get("riskSummary")), null)
+                ),
+                buildPlmProjectSummaryMetrics(result)
+        );
+    }
+
     private String summarizeTopPlmItems(Object value) {
         if (!(value instanceof List<?> list) || list.isEmpty()) {
             return "暂无匹配单据";
@@ -4415,6 +4564,51 @@ public class DbAiCopilotService implements AiCopilotService {
                 })
                 .reduce((left, right) -> left + "；" + right)
                 .orElse("暂无匹配单据");
+    }
+
+    private String summarizeTopPlmProjectItems(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) {
+            return "暂无匹配项目";
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .limit(3)
+                .map(item -> {
+                    String billNo = stringValue(item.get("billNo"));
+                    String title = stringValue(item.get("title"));
+                    String phaseLabel = stringValue(item.get("phaseLabel"));
+                    String businessSummary = stringValue(item.get("businessSummary"));
+                    String statusLabel = stringValue(item.get("statusLabel"));
+                    StringBuilder builder = new StringBuilder();
+                    if (!billNo.isBlank()) {
+                        builder.append(billNo);
+                    }
+                    if (!title.isBlank()) {
+                        if (builder.length() > 0) {
+                            builder.append(" · ");
+                        }
+                        builder.append(title);
+                    }
+                    if (!phaseLabel.isBlank()) {
+                        if (builder.length() > 0) {
+                            builder.append(" · ");
+                        }
+                        builder.append(phaseLabel);
+                    }
+                    if (!businessSummary.isBlank()) {
+                        builder.append("（").append(businessSummary).append("）");
+                    }
+                    if (!statusLabel.isBlank()) {
+                        if (builder.length() > 0) {
+                            builder.append(" · ");
+                        }
+                        builder.append(statusLabel);
+                    }
+                    return builder.isEmpty() ? "未命名项目" : builder.toString();
+                })
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("暂无匹配项目");
     }
 
     private String summarizePlmBreakdown(Object value) {
@@ -4482,6 +4676,43 @@ public class DbAiCopilotService implements AiCopilotService {
             return topSummary;
         }
         return String.join("；", fragments);
+    }
+
+    private String buildPlmProjectFinalAnswer(Map<String, Object> result) {
+        int count = countItems(result.get("items"));
+        if (count <= 0) {
+            return "当前没有命中的 PLM 项目。";
+        }
+        String summary = stringValue(result.get("summary"));
+        if (!summary.isBlank()) {
+            return summary;
+        }
+        List<String> fragments = new ArrayList<>();
+        String topSummary = summarizeTopPlmProjectItems(result.get("items"));
+        if (!topSummary.isBlank()) {
+            fragments.add(topSummary);
+        }
+        String milestoneSummary = stringValue(result.get("milestoneSummary"));
+        if (!milestoneSummary.isBlank()) {
+            fragments.add("里程碑：" + milestoneSummary);
+        }
+        String linkSummary = stringValue(result.get("linkSummary"));
+        if (!linkSummary.isBlank()) {
+            fragments.add("关联链路：" + linkSummary);
+        }
+        String riskSummary = stringValue(result.get("riskSummary"));
+        if (!riskSummary.isBlank()) {
+            fragments.add("项目风险：" + riskSummary);
+        }
+        return fragments.isEmpty() ? topSummary : String.join("；", fragments);
+    }
+
+    private boolean isPlmBillToolKey(String toolKey) {
+        return "plm.bill.query".equals(toolKey) || "plm.change.summary".equals(toolKey);
+    }
+
+    private boolean isPlmProjectToolKey(String toolKey) {
+        return "plm.project.query".equals(toolKey) || "plm.project.summary".equals(toolKey);
     }
 
     /**

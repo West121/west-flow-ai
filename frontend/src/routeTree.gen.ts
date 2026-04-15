@@ -31,6 +31,7 @@ import { Route as AuthenticatedPlmStartRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedPlmQueryRouteImport } from './routes/_authenticated/plm/query'
 import { Route as AuthenticatedOaQueryRouteImport } from './routes/_authenticated/oa/query'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as AuthenticatedPlmProjectsIndexRouteImport } from './routes/_authenticated/plm/projects/index'
 import { Route as AuthenticatedPlmMaterialMasterIndexRouteImport } from './routes/_authenticated/plm/material-master/index'
 import { Route as AuthenticatedPlmEcrIndexRouteImport } from './routes/_authenticated/plm/ecr/index'
 import { Route as AuthenticatedPlmEcoIndexRouteImport } from './routes/_authenticated/plm/eco/index'
@@ -75,6 +76,8 @@ import { Route as AuthenticatedSystemCompaniesListRouteImport } from './routes/_
 import { Route as AuthenticatedSystemCompaniesCreateRouteImport } from './routes/_authenticated/system/companies/create'
 import { Route as AuthenticatedSystemAgentsListRouteImport } from './routes/_authenticated/system/agents/list'
 import { Route as AuthenticatedSystemAgentsCreateRouteImport } from './routes/_authenticated/system/agents/create'
+import { Route as AuthenticatedPlmProjectsCreateRouteImport } from './routes/_authenticated/plm/projects/create'
+import { Route as AuthenticatedPlmProjectsProjectIdRouteImport } from './routes/_authenticated/plm/projects/$projectId'
 import { Route as AuthenticatedPlmMaterialMasterCreateRouteImport } from './routes/_authenticated/plm/material-master/create'
 import { Route as AuthenticatedPlmMaterialMasterBillIdRouteImport } from './routes/_authenticated/plm/material-master/$billId'
 import { Route as AuthenticatedPlmEcrCreateRouteImport } from './routes/_authenticated/plm/ecr/create'
@@ -279,6 +282,12 @@ const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
     path: '/errors/$error',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmProjectsIndexRoute =
+  AuthenticatedPlmProjectsIndexRouteImport.update({
+    id: '/plm/projects/',
+    path: '/plm/projects/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedPlmMaterialMasterIndexRoute =
@@ -543,6 +552,18 @@ const AuthenticatedSystemAgentsCreateRoute =
   AuthenticatedSystemAgentsCreateRouteImport.update({
     id: '/system/agents/create',
     path: '/system/agents/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmProjectsCreateRoute =
+  AuthenticatedPlmProjectsCreateRouteImport.update({
+    id: '/plm/projects/create',
+    path: '/plm/projects/create',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedPlmProjectsProjectIdRoute =
+  AuthenticatedPlmProjectsProjectIdRouteImport.update({
+    id: '/plm/projects/$projectId',
+    path: '/plm/projects/$projectId',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedPlmMaterialMasterCreateRoute =
@@ -1125,6 +1146,8 @@ export interface FileRoutesByFullPath {
   '/plm/ecr/create': typeof AuthenticatedPlmEcrCreateRoute
   '/plm/material-master/$billId': typeof AuthenticatedPlmMaterialMasterBillIdRoute
   '/plm/material-master/create': typeof AuthenticatedPlmMaterialMasterCreateRoute
+  '/plm/projects/$projectId': typeof AuthenticatedPlmProjectsProjectIdRoute
+  '/plm/projects/create': typeof AuthenticatedPlmProjectsCreateRoute
   '/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
   '/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
@@ -1169,6 +1192,7 @@ export interface FileRoutesByFullPath {
   '/plm/eco/': typeof AuthenticatedPlmEcoIndexRoute
   '/plm/ecr/': typeof AuthenticatedPlmEcrIndexRoute
   '/plm/material-master/': typeof AuthenticatedPlmMaterialMasterIndexRoute
+  '/plm/projects/': typeof AuthenticatedPlmProjectsIndexRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
   '/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
@@ -1280,6 +1304,8 @@ export interface FileRoutesByTo {
   '/plm/ecr/create': typeof AuthenticatedPlmEcrCreateRoute
   '/plm/material-master/$billId': typeof AuthenticatedPlmMaterialMasterBillIdRoute
   '/plm/material-master/create': typeof AuthenticatedPlmMaterialMasterCreateRoute
+  '/plm/projects/$projectId': typeof AuthenticatedPlmProjectsProjectIdRoute
+  '/plm/projects/create': typeof AuthenticatedPlmProjectsCreateRoute
   '/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
   '/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
@@ -1324,6 +1350,7 @@ export interface FileRoutesByTo {
   '/plm/eco': typeof AuthenticatedPlmEcoIndexRoute
   '/plm/ecr': typeof AuthenticatedPlmEcrIndexRoute
   '/plm/material-master': typeof AuthenticatedPlmMaterialMasterIndexRoute
+  '/plm/projects': typeof AuthenticatedPlmProjectsIndexRoute
   '/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
   '/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
@@ -1438,6 +1465,8 @@ export interface FileRoutesById {
   '/_authenticated/plm/ecr/create': typeof AuthenticatedPlmEcrCreateRoute
   '/_authenticated/plm/material-master/$billId': typeof AuthenticatedPlmMaterialMasterBillIdRoute
   '/_authenticated/plm/material-master/create': typeof AuthenticatedPlmMaterialMasterCreateRoute
+  '/_authenticated/plm/projects/$projectId': typeof AuthenticatedPlmProjectsProjectIdRoute
+  '/_authenticated/plm/projects/create': typeof AuthenticatedPlmProjectsCreateRoute
   '/_authenticated/system/agents/create': typeof AuthenticatedSystemAgentsCreateRoute
   '/_authenticated/system/agents/list': typeof AuthenticatedSystemAgentsListRoute
   '/_authenticated/system/companies/create': typeof AuthenticatedSystemCompaniesCreateRoute
@@ -1482,6 +1511,7 @@ export interface FileRoutesById {
   '/_authenticated/plm/eco/': typeof AuthenticatedPlmEcoIndexRoute
   '/_authenticated/plm/ecr/': typeof AuthenticatedPlmEcrIndexRoute
   '/_authenticated/plm/material-master/': typeof AuthenticatedPlmMaterialMasterIndexRoute
+  '/_authenticated/plm/projects/': typeof AuthenticatedPlmProjectsIndexRoute
   '/_authenticated/system/agents/$agentId/edit': typeof AuthenticatedSystemAgentsAgentIdEditRoute
   '/_authenticated/system/ai/agents/create': typeof AuthenticatedSystemAiAgentsCreateRoute
   '/_authenticated/system/ai/agents/list': typeof AuthenticatedSystemAiAgentsListRoute
@@ -1596,6 +1626,8 @@ export interface FileRouteTypes {
     | '/plm/ecr/create'
     | '/plm/material-master/$billId'
     | '/plm/material-master/create'
+    | '/plm/projects/$projectId'
+    | '/plm/projects/create'
     | '/system/agents/create'
     | '/system/agents/list'
     | '/system/companies/create'
@@ -1640,6 +1672,7 @@ export interface FileRouteTypes {
     | '/plm/eco/'
     | '/plm/ecr/'
     | '/plm/material-master/'
+    | '/plm/projects/'
     | '/system/agents/$agentId/edit'
     | '/system/ai/agents/create'
     | '/system/ai/agents/list'
@@ -1751,6 +1784,8 @@ export interface FileRouteTypes {
     | '/plm/ecr/create'
     | '/plm/material-master/$billId'
     | '/plm/material-master/create'
+    | '/plm/projects/$projectId'
+    | '/plm/projects/create'
     | '/system/agents/create'
     | '/system/agents/list'
     | '/system/companies/create'
@@ -1795,6 +1830,7 @@ export interface FileRouteTypes {
     | '/plm/eco'
     | '/plm/ecr'
     | '/plm/material-master'
+    | '/plm/projects'
     | '/system/agents/$agentId/edit'
     | '/system/ai/agents/create'
     | '/system/ai/agents/list'
@@ -1908,6 +1944,8 @@ export interface FileRouteTypes {
     | '/_authenticated/plm/ecr/create'
     | '/_authenticated/plm/material-master/$billId'
     | '/_authenticated/plm/material-master/create'
+    | '/_authenticated/plm/projects/$projectId'
+    | '/_authenticated/plm/projects/create'
     | '/_authenticated/system/agents/create'
     | '/_authenticated/system/agents/list'
     | '/_authenticated/system/companies/create'
@@ -1952,6 +1990,7 @@ export interface FileRouteTypes {
     | '/_authenticated/plm/eco/'
     | '/_authenticated/plm/ecr/'
     | '/_authenticated/plm/material-master/'
+    | '/_authenticated/plm/projects/'
     | '/_authenticated/system/agents/$agentId/edit'
     | '/_authenticated/system/ai/agents/create'
     | '/_authenticated/system/ai/agents/list'
@@ -2194,6 +2233,13 @@ declare module '@tanstack/react-router' {
       path: '/errors/$error'
       fullPath: '/errors/$error'
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/projects/': {
+      id: '/_authenticated/plm/projects/'
+      path: '/plm/projects'
+      fullPath: '/plm/projects/'
+      preLoaderRoute: typeof AuthenticatedPlmProjectsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/plm/material-master/': {
@@ -2502,6 +2548,20 @@ declare module '@tanstack/react-router' {
       path: '/system/agents/create'
       fullPath: '/system/agents/create'
       preLoaderRoute: typeof AuthenticatedSystemAgentsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/projects/create': {
+      id: '/_authenticated/plm/projects/create'
+      path: '/plm/projects/create'
+      fullPath: '/plm/projects/create'
+      preLoaderRoute: typeof AuthenticatedPlmProjectsCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/plm/projects/$projectId': {
+      id: '/_authenticated/plm/projects/$projectId'
+      path: '/plm/projects/$projectId'
+      fullPath: '/plm/projects/$projectId'
+      preLoaderRoute: typeof AuthenticatedPlmProjectsProjectIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/plm/material-master/create': {
@@ -3174,6 +3234,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlmEcrCreateRoute: typeof AuthenticatedPlmEcrCreateRoute
   AuthenticatedPlmMaterialMasterBillIdRoute: typeof AuthenticatedPlmMaterialMasterBillIdRoute
   AuthenticatedPlmMaterialMasterCreateRoute: typeof AuthenticatedPlmMaterialMasterCreateRoute
+  AuthenticatedPlmProjectsProjectIdRoute: typeof AuthenticatedPlmProjectsProjectIdRoute
+  AuthenticatedPlmProjectsCreateRoute: typeof AuthenticatedPlmProjectsCreateRoute
   AuthenticatedSystemAgentsCreateRoute: typeof AuthenticatedSystemAgentsCreateRoute
   AuthenticatedSystemAgentsListRoute: typeof AuthenticatedSystemAgentsListRoute
   AuthenticatedSystemCompaniesCreateRoute: typeof AuthenticatedSystemCompaniesCreateRoute
@@ -3218,6 +3280,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPlmEcoIndexRoute: typeof AuthenticatedPlmEcoIndexRoute
   AuthenticatedPlmEcrIndexRoute: typeof AuthenticatedPlmEcrIndexRoute
   AuthenticatedPlmMaterialMasterIndexRoute: typeof AuthenticatedPlmMaterialMasterIndexRoute
+  AuthenticatedPlmProjectsIndexRoute: typeof AuthenticatedPlmProjectsIndexRoute
   AuthenticatedSystemAgentsAgentIdEditRoute: typeof AuthenticatedSystemAgentsAgentIdEditRoute
   AuthenticatedSystemAiAgentsCreateRoute: typeof AuthenticatedSystemAiAgentsCreateRoute
   AuthenticatedSystemAiAgentsListRoute: typeof AuthenticatedSystemAiAgentsListRoute
@@ -3322,6 +3385,9 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedPlmMaterialMasterBillIdRoute,
   AuthenticatedPlmMaterialMasterCreateRoute:
     AuthenticatedPlmMaterialMasterCreateRoute,
+  AuthenticatedPlmProjectsProjectIdRoute:
+    AuthenticatedPlmProjectsProjectIdRoute,
+  AuthenticatedPlmProjectsCreateRoute: AuthenticatedPlmProjectsCreateRoute,
   AuthenticatedSystemAgentsCreateRoute: AuthenticatedSystemAgentsCreateRoute,
   AuthenticatedSystemAgentsListRoute: AuthenticatedSystemAgentsListRoute,
   AuthenticatedSystemCompaniesCreateRoute:
@@ -3388,6 +3454,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPlmEcrIndexRoute: AuthenticatedPlmEcrIndexRoute,
   AuthenticatedPlmMaterialMasterIndexRoute:
     AuthenticatedPlmMaterialMasterIndexRoute,
+  AuthenticatedPlmProjectsIndexRoute: AuthenticatedPlmProjectsIndexRoute,
   AuthenticatedSystemAgentsAgentIdEditRoute:
     AuthenticatedSystemAgentsAgentIdEditRoute,
   AuthenticatedSystemAiAgentsCreateRoute:

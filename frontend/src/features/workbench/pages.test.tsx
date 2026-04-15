@@ -524,6 +524,131 @@ describe('workbench pages', () => {
     expect(screen.getByText('今日可能超期 0')).toBeInTheDocument()
   })
 
+  it('keeps prediction quick filters out of the URL while still querying with risk conditions', async () => {
+    renderWithQuery(<WorkbenchTodoListPage />)
+
+    await screen.findByText('公共认领请假审批')
+    fireEvent.click(screen.getByRole('button', { name: '中高风险' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.listWorkbenchTasks).toHaveBeenLastCalledWith({
+        page: 1,
+        pageSize: 20,
+        keyword: '',
+        filters: [
+          {
+            field: 'prediction.overdueRiskLevel',
+            operator: 'in',
+            value: ['HIGH', 'MEDIUM'],
+          },
+        ],
+        sorts: [],
+        groups: [],
+      })
+    })
+
+    expect(routeNavigateMock).not.toHaveBeenCalled()
+  })
+
+  it('shows loading instead of stale rows when switching prediction tabs', async () => {
+    let resolveSecondPage: ((value: unknown) => void) | null = null
+
+    workbenchApiMocks.listWorkbenchTasks
+      .mockResolvedValueOnce({
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        pages: 1,
+        groups: [],
+        records: [
+          {
+            taskId: 'task_low_001',
+            instanceId: 'pi_low_001',
+            processDefinitionId: 'pd_001',
+            processKey: 'oa_leave',
+            processName: '低风险待办',
+            businessKey: 'biz_low_001',
+            applicantUserId: 'usr_001',
+            nodeId: 'approve_manager',
+            nodeName: '部门经理审批',
+            status: 'PENDING',
+            assignmentMode: 'USER',
+            candidateUserIds: [],
+            assigneeUserId: 'usr_002',
+            createdAt: '2026-03-22T09:00:00+08:00',
+            updatedAt: '2026-03-22T09:00:00+08:00',
+            completedAt: null,
+            prediction: {
+              predictedFinishTime: '2026-03-22T10:00:00+08:00',
+              remainingDurationMinutes: 60,
+              currentElapsedMinutes: 10,
+              overdueRiskLevel: 'LOW',
+              confidence: 'HIGH',
+              historicalSampleSize: 12,
+            },
+          },
+        ],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecondPage = resolve
+          }) as Promise<unknown>
+      )
+
+    renderWithQuery(<WorkbenchTodoListPage />)
+
+    expect(await screen.findByText('低风险待办')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '仅看高风险' }))
+
+    await waitFor(() => {
+      expect(workbenchApiMocks.listWorkbenchTasks).toHaveBeenCalledTimes(2)
+    })
+
+    expect(screen.queryByText('低风险待办')).not.toBeInTheDocument()
+    expect(screen.getByText('正在按当前风险视图刷新…')).toBeInTheDocument()
+    expect(screen.getByText('total:0')).toBeInTheDocument()
+
+    resolveSecondPage?.({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      pages: 1,
+      groups: [],
+      records: [
+        {
+          taskId: 'task_high_001',
+          instanceId: 'pi_high_001',
+          processDefinitionId: 'pd_001',
+          processKey: 'oa_leave',
+          processName: '高风险待办',
+          businessKey: 'biz_high_001',
+          applicantUserId: 'usr_001',
+          nodeId: 'approve_director',
+          nodeName: '总监审批',
+          status: 'PENDING',
+          assignmentMode: 'USER',
+          candidateUserIds: [],
+          assigneeUserId: 'usr_003',
+          createdAt: '2026-03-22T09:00:00+08:00',
+          updatedAt: '2026-03-22T09:00:00+08:00',
+          completedAt: null,
+          prediction: {
+            predictedFinishTime: '2026-03-22T18:00:00+08:00',
+            remainingDurationMinutes: 480,
+            currentElapsedMinutes: 120,
+            overdueRiskLevel: 'HIGH',
+            confidence: 'MEDIUM',
+            historicalSampleSize: 8,
+          },
+        },
+      ],
+    })
+
+    expect(await screen.findByText('高风险待办')).toBeInTheDocument()
+  })
+
   it('renders real overview metrics on the dashboard', async () => {
     workbenchApiMocks.getWorkbenchDashboardSummary.mockResolvedValue({
       todoTodayCount: 7,

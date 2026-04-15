@@ -42,7 +42,9 @@ public class AiKnowledgeExecutor extends AbstractAiExecutor {
         arguments.put("pageRoute", context.pageRoute());
         arguments.put("userId", context.userId());
         arguments.putAll(plan.arguments());
-        AiToolSource toolSource = "plm.change.summary".equals(toolKey) ? AiToolSource.SKILL : AiToolSource.PLATFORM;
+        AiToolSource toolSource = ("plm.change.summary".equals(toolKey) || "plm.project.summary".equals(toolKey))
+                ? AiToolSource.SKILL
+                : AiToolSource.PLATFORM;
         return new AiToolCallRequest(toolKey, AiToolType.READ, toolSource, arguments);
     }
 }

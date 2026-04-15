@@ -72,6 +72,11 @@ class PLMControllerTest {
         jdbcTemplate.execute("DELETE FROM plm_connector_job");
         jdbcTemplate.execute("DELETE FROM plm_external_sync_event");
         jdbcTemplate.execute("DELETE FROM plm_external_integration_record");
+        jdbcTemplate.execute("DELETE FROM plm_project_stage_event");
+        jdbcTemplate.execute("DELETE FROM plm_project_link");
+        jdbcTemplate.execute("DELETE FROM plm_project_milestone");
+        jdbcTemplate.execute("DELETE FROM plm_project_member");
+        jdbcTemplate.execute("DELETE FROM plm_project");
         jdbcTemplate.execute("DELETE FROM plm_configuration_baseline_item");
         jdbcTemplate.execute("DELETE FROM plm_configuration_baseline");
         jdbcTemplate.execute("DELETE FROM plm_document_asset");
@@ -351,6 +356,114 @@ class PLMControllerTest {
         assertThat(cockpit.path("pendingReceiptCount").asLong()).isGreaterThanOrEqualTo(0L);
         assertThat(cockpit.path("acceptanceDueCount").asLong()).isGreaterThanOrEqualTo(0L);
         assertThat(cockpit.path("implementationHealthyRate").asDouble()).isGreaterThanOrEqualTo(0D);
+    }
+
+    @Test
+    void shouldCreatePageUpdateAndTransitionProject() throws Exception {
+        String token = login();
+
+        JsonNode created = postJson(token, "/api/v1/plm/projects", """
+                {
+                  "projectCode": "PRJ-PLM-001",
+                  "projectName": "动力总成变更项目",
+                  "projectType": "NPI",
+                  "projectLevel": "L1",
+                  "ownerUserId": "usr_001",
+                  "sponsorUserId": "usr_002",
+                  "domainCode": "PRODUCT",
+                  "priorityLevel": "HIGH",
+                  "targetRelease": "2026-Q3",
+                  "startDate": "2026-04-01",
+                  "targetEndDate": "2026-06-30",
+                  "summary": "统一管理动力总成相关 ECO、BOM 与验证任务",
+                  "businessGoal": "确保 Q3 前完成量产切换",
+                  "riskSummary": "供应切换与试制验证是主要风险",
+                  "members": [
+                    {"userId": "usr_001", "roleCode": "PM", "roleLabel": "项目经理", "responsibilitySummary": "推进里程碑"},
+                    {"userId": "usr_002", "roleCode": "RND", "roleLabel": "研发负责人", "responsibilitySummary": "控制设计变更"}
+                  ],
+                  "milestones": [
+                    {"milestoneCode": "M1", "milestoneName": "设计冻结", "status": "PENDING", "ownerUserId": "usr_002", "plannedAt": "2026-04-20T10:00:00", "summary": "完成结构和图纸冻结"},
+                    {"milestoneCode": "M2", "milestoneName": "验证完成", "status": "PENDING", "ownerUserId": "usr_001", "plannedAt": "2026-05-20T10:00:00", "summary": "完成试制验证"}
+                  ],
+                  "links": [
+                    {"linkType": "PLM_BILL", "targetBusinessType": "PLM_ECR", "targetId": "bill-ecr-001", "targetNo": "ECR-001", "targetTitle": "动力总成结构变更", "targetStatus": "RUNNING", "summary": "核心变更申请"},
+                    {"linkType": "DOCUMENT", "targetId": "doc-001", "targetNo": "DOC-001", "targetTitle": "总成图纸", "targetStatus": "RELEASED", "summary": "受控图纸"}
+                  ]
+                }
+                """).path("data");
+        String projectId = created.path("projectId").asText();
+        assertThat(created.path("projectCode").asText()).isEqualTo("PRJ-PLM-001");
+        assertThat(created.path("phaseCode").asText()).isEqualTo("INITIATION");
+        assertThat(created.path("members")).hasSize(2);
+        assertThat(created.path("milestones")).hasSize(2);
+        assertThat(created.path("links")).hasSize(2);
+
+        JsonNode page = postJson(token, "/api/v1/plm/projects/page", """
+                {
+                  "page": 1,
+                  "pageSize": 10,
+                  "keyword": "动力总成",
+                  "filters": [
+                    {"field": "ownerUserId", "operator": "eq", "value": "usr_001"}
+                  ],
+                  "sorts": [
+                    {"field": "updatedAt", "direction": "desc"}
+                  ]
+                }
+                """).path("data");
+        assertThat(page.path("total").asInt()).isEqualTo(1);
+        assertThat(page.path("records").get(0).path("projectId").asText()).isEqualTo(projectId);
+
+        JsonNode updated = putJson(token, "/api/v1/plm/projects/" + projectId, """
+                {
+                  "projectName": "动力总成变更项目-更新",
+                  "projectType": "NPI",
+                  "projectLevel": "L2",
+                  "status": "ACTIVE",
+                  "phaseCode": "DESIGN",
+                  "ownerUserId": "usr_001",
+                  "sponsorUserId": "usr_002",
+                  "domainCode": "PRODUCT",
+                  "priorityLevel": "HIGH",
+                  "targetRelease": "2026-Q4",
+                  "startDate": "2026-04-01",
+                  "targetEndDate": "2026-07-15",
+                  "summary": "更新后的项目摘要",
+                  "businessGoal": "完成量产导入",
+                  "riskSummary": "验证窗口紧张",
+                  "members": [
+                    {"userId": "usr_001", "roleCode": "PM", "roleLabel": "项目经理", "responsibilitySummary": "推进整体交付"}
+                  ],
+                  "milestones": [
+                    {"milestoneCode": "M1", "milestoneName": "设计冻结", "status": "RUNNING", "ownerUserId": "usr_002", "plannedAt": "2026-04-20T10:00:00", "summary": "结构冻结推进中"}
+                  ],
+                  "links": [
+                    {"linkType": "PLM_BILL", "targetBusinessType": "PLM_ECO", "targetId": "bill-eco-001", "targetNo": "ECO-001", "targetTitle": "量产执行", "targetStatus": "RUNNING", "summary": "执行主单"}
+                  ]
+                }
+                """).path("data");
+        assertThat(updated.path("projectName").asText()).isEqualTo("动力总成变更项目-更新");
+        assertThat(updated.path("members")).hasSize(1);
+        assertThat(updated.path("milestones")).hasSize(1);
+        assertThat(updated.path("links")).hasSize(1);
+
+        JsonNode transitioned = postJson(token, "/api/v1/plm/projects/" + projectId + "/phase-transition", """
+                {
+                  "toPhaseCode": "VALIDATION",
+                  "actionCode": "ADVANCE",
+                  "comment": "设计评审通过，进入验证阶段"
+                }
+                """).path("data");
+        assertThat(transitioned.path("phaseCode").asText()).isEqualTo("VALIDATION");
+        assertThat(transitioned.path("stageEvents").isArray()).isTrue();
+        assertThat(transitioned.path("stageEvents").get(0).path("actionCode").asText()).isEqualTo("ADVANCE");
+
+        JsonNode dashboard = getJson(token, "/api/v1/plm/projects/" + projectId + "/dashboard").path("data");
+        assertThat(dashboard.path("memberCount").asInt()).isEqualTo(1);
+        assertThat(dashboard.path("milestoneCount").asInt()).isEqualTo(1);
+        assertThat(dashboard.path("linkTypeDistribution").isArray()).isTrue();
+        assertThat(dashboard.path("milestoneStatusDistribution").isArray()).isTrue();
     }
 
     @Test
@@ -1804,5 +1917,90 @@ class PLMControllerTest {
                 "[\"BILL_SUBMITTED\",\"IMPLEMENTATION_STARTED\",\"VALIDATION_SUBMITTED\",\"BILL_CLOSED\",\"BILL_CANCELLED\"]",
                 "{\"transport\":\"stub\",\"target\":\"CAD\",\"ackToken\":\"CAD-ACK-TOKEN\"}"
         );
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS plm_project (
+                    id VARCHAR(64) PRIMARY KEY,
+                    project_no VARCHAR(64) NOT NULL,
+                    project_code VARCHAR(128) NOT NULL,
+                    project_name VARCHAR(255) NOT NULL,
+                    project_type VARCHAR(64) NOT NULL,
+                    project_level VARCHAR(32),
+                    status VARCHAR(32) NOT NULL,
+                    phase_code VARCHAR(64) NOT NULL,
+                    owner_user_id VARCHAR(64),
+                    sponsor_user_id VARCHAR(64),
+                    domain_code VARCHAR(64),
+                    priority_level VARCHAR(32),
+                    target_release VARCHAR(128),
+                    start_date DATE,
+                    target_end_date DATE,
+                    actual_end_date DATE,
+                    summary CLOB,
+                    business_goal CLOB,
+                    risk_summary CLOB,
+                    creator_user_id VARCHAR(64) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS plm_project_member (
+                    id VARCHAR(64) PRIMARY KEY,
+                    project_id VARCHAR(64) NOT NULL,
+                    user_id VARCHAR(64) NOT NULL,
+                    role_code VARCHAR(64) NOT NULL,
+                    role_label VARCHAR(128) NOT NULL,
+                    responsibility_summary CLOB,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS plm_project_milestone (
+                    id VARCHAR(64) PRIMARY KEY,
+                    project_id VARCHAR(64) NOT NULL,
+                    milestone_code VARCHAR(128) NOT NULL,
+                    milestone_name VARCHAR(255) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    owner_user_id VARCHAR(64),
+                    planned_at TIMESTAMP,
+                    actual_at TIMESTAMP,
+                    summary CLOB,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS plm_project_link (
+                    id VARCHAR(64) PRIMARY KEY,
+                    project_id VARCHAR(64) NOT NULL,
+                    link_type VARCHAR(64) NOT NULL,
+                    target_business_type VARCHAR(32),
+                    target_id VARCHAR(64) NOT NULL,
+                    target_no VARCHAR(128),
+                    target_title VARCHAR(255),
+                    target_status VARCHAR(64),
+                    target_href VARCHAR(500),
+                    summary CLOB,
+                    sort_order INT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS plm_project_stage_event (
+                    id VARCHAR(64) PRIMARY KEY,
+                    project_id VARCHAR(64) NOT NULL,
+                    from_phase_code VARCHAR(64),
+                    to_phase_code VARCHAR(64) NOT NULL,
+                    action_code VARCHAR(64) NOT NULL,
+                    comment CLOB,
+                    changed_by VARCHAR(64) NOT NULL,
+                    changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
     }
 }

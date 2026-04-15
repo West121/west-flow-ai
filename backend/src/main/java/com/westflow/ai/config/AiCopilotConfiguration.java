@@ -257,6 +257,12 @@ public class AiCopilotConfiguration {
                         "查询 PLM 单据",
                         context -> queryPlmBills(jdbcTemplate, stringValue(context.request().arguments().get("keyword")))
                 ),
+                AiToolDefinition.read(
+                        "plm.project.query",
+                        AiToolSource.PLATFORM,
+                        "查询 PLM 项目",
+                        context -> queryPlmProjects(jdbcTemplate, stringValue(context.request().arguments().get("keyword")))
+                ),
                 AiToolDefinition.write(
                         "process.start",
                         AiToolSource.PLATFORM,
@@ -314,6 +320,12 @@ public class AiCopilotConfiguration {
                         AiToolSource.SKILL,
                         "查询 PLM 单据",
                         context -> queryPlmBills(jdbcTemplate, stringValue(context.request().arguments().getOrDefault("keyword", context.request().arguments().get("content"))))
+                ),
+                AiToolDefinition.read(
+                        "plm.project.summary",
+                        AiToolSource.SKILL,
+                        "查询 PLM 项目",
+                        context -> queryPlmProjects(jdbcTemplate, stringValue(context.request().arguments().getOrDefault("keyword", context.request().arguments().get("content"))))
                 ),
                 AiToolDefinition.read(
                         "workflow.trace.summary",
@@ -1014,6 +1026,328 @@ public class AiCopilotConfiguration {
         return Map.copyOf(result);
     }
 
+    private static Map<String, Object> queryPlmProjects(JdbcTemplate jdbcTemplate, String keyword) {
+        String normalizedKeyword = keyword == null ? "" : keyword.trim();
+        String likeKeyword = "%" + normalizedKeyword + "%";
+        PlmProjectQuerySchema schema = inspectPlmProjectQuerySchema(jdbcTemplate);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("keyword", normalizedKeyword);
+        if (!schema.hasProjectTable()) {
+            result.put("count", 0);
+            result.put("items", List.of());
+            result.put("summary", "当前环境尚未初始化 PLM 项目管理数据。");
+            result.put("statusBreakdown", List.of());
+            result.put("phaseBreakdown", List.of());
+            result.put("domainBreakdown", List.of());
+            result.put("memberCount", 0);
+            result.put("milestoneCount", 0);
+            result.put("openMilestoneCount", 0);
+            result.put("overdueMilestoneCount", 0);
+            result.put("billLinkCount", 0);
+            result.put("objectLinkCount", 0);
+            result.put("taskLinkCount", 0);
+            result.put("riskSummary", "");
+            result.put("milestoneSummary", "");
+            result.put("linkSummary", "");
+            result.put("highlights", List.of());
+            return Map.copyOf(result);
+        }
+
+        String memberCountExpression = schema.hasMemberTable()
+                ? "(SELECT COUNT(1) FROM plm_project_member pm WHERE pm.project_id = p.id)"
+                : "0";
+        String milestoneCountExpression = schema.hasMilestoneTable()
+                ? "(SELECT COUNT(1) FROM plm_project_milestone mm WHERE mm.project_id = p.id)"
+                : "0";
+        String openMilestoneCountExpression = schema.hasMilestoneTable()
+                ? "(SELECT COUNT(1) FROM plm_project_milestone mm WHERE mm.project_id = p.id AND UPPER(mm.status) NOT IN ('COMPLETED','CANCELLED'))"
+                : "0";
+        String overdueMilestoneCountExpression = schema.hasMilestoneTable()
+                ? "(SELECT COUNT(1) FROM plm_project_milestone mm WHERE mm.project_id = p.id AND UPPER(mm.status) NOT IN ('COMPLETED','CANCELLED') AND mm.planned_at IS NOT NULL AND mm.planned_at < CURRENT_TIMESTAMP)"
+                : "0";
+        String milestoneSummaryExpression = schema.hasMilestoneTable()
+                ? """
+                  (
+                    SELECT STRING_AGG(
+                      NULLIF(CONCAT_WS(' · ',
+                        NULLIF(mm.milestone_name, ''),
+                        NULLIF(mm.status, ''),
+                        NULLIF(COALESCE(mm.summary, ''), '')
+                      ), ''),
+                      '；' ORDER BY mm.sort_order, mm.id
+                    )
+                    FROM plm_project_milestone mm
+                    WHERE mm.project_id = p.id
+                  )
+                  """
+                : "NULL";
+        String billLinkCountExpression = schema.hasLinkTable()
+                ? "(SELECT COUNT(1) FROM plm_project_link pl WHERE pl.project_id = p.id AND UPPER(pl.link_type) = 'PLM_BILL')"
+                : "0";
+        String objectLinkCountExpression = schema.hasLinkTable()
+                ? "(SELECT COUNT(1) FROM plm_project_link pl WHERE pl.project_id = p.id AND UPPER(pl.link_type) IN ('OBJECT','BOM','DOCUMENT','BASELINE'))"
+                : "0";
+        String taskLinkCountExpression = schema.hasLinkTable()
+                ? "(SELECT COUNT(1) FROM plm_project_link pl WHERE pl.project_id = p.id AND UPPER(pl.link_type) = 'IMPLEMENTATION_TASK')"
+                : "0";
+        String linkSummaryExpression = schema.hasLinkTable()
+                ? """
+                  (
+                    SELECT STRING_AGG(
+                      NULLIF(CONCAT_WS(' · ',
+                        NULLIF(COALESCE(pl.target_title, pl.target_no, pl.target_id), ''),
+                        NULLIF(pl.link_type, ''),
+                        NULLIF(COALESCE(pl.summary, ''), '')
+                      ), ''),
+                      '；' ORDER BY pl.sort_order, pl.id
+                    )
+                    FROM plm_project_link pl
+                    WHERE pl.project_id = p.id
+                  )
+                  """
+                : "NULL";
+        String recentRiskExpression = schema.hasMilestoneTable()
+                ? """
+                  (
+                    SELECT STRING_AGG(
+                      NULLIF(CONCAT_WS(' · ',
+                        NULLIF(mm.milestone_name, ''),
+                        NULLIF(mm.status, ''),
+                        NULLIF(COALESCE(mm.summary, ''), '')
+                      ), ''),
+                      '；' ORDER BY mm.planned_at NULLS LAST, mm.sort_order, mm.id
+                    )
+                    FROM plm_project_milestone mm
+                    WHERE mm.project_id = p.id
+                      AND UPPER(mm.status) NOT IN ('COMPLETED','CANCELLED')
+                      AND (mm.planned_at IS NOT NULL AND mm.planned_at < CURRENT_TIMESTAMP)
+                  )
+                  """
+                : "NULL";
+
+        List<Map<String, Object>> items = jdbcTemplate.query(
+                """
+                SELECT
+                  p.id AS project_id,
+                  p.project_no,
+                  p.project_code,
+                  p.project_name,
+                  p.project_type,
+                  p.status,
+                  p.phase_code,
+                  p.domain_code,
+                  p.priority_level,
+                  p.target_release,
+                  p.target_end_date,
+                  p.summary,
+                  p.business_goal,
+                  p.risk_summary,
+                  p.updated_at,
+                  COALESCE(owner.display_name, p.owner_user_id, '--') AS owner_display_name,
+                  COALESCE(%s, 0) AS member_count,
+                  COALESCE(%s, 0) AS milestone_count,
+                  COALESCE(%s, 0) AS open_milestone_count,
+                  COALESCE(%s, 0) AS overdue_milestone_count,
+                  COALESCE(%s, 0) AS bill_link_count,
+                  COALESCE(%s, 0) AS object_link_count,
+                  COALESCE(%s, 0) AS task_link_count,
+                  %s AS milestone_summary,
+                  %s AS link_summary,
+                  %s AS recent_risk_summary
+                FROM plm_project p
+                LEFT JOIN wf_user owner ON owner.id = p.owner_user_id
+                WHERE (
+                  ? = ''
+                  OR p.id = ?
+                  OR p.project_no ILIKE ?
+                  OR p.project_code ILIKE ?
+                  OR p.project_name ILIKE ?
+                  OR COALESCE(p.summary, '') ILIKE ?
+                  OR COALESCE(p.business_goal, '') ILIKE ?
+                  OR COALESCE(p.risk_summary, '') ILIKE ?
+                  OR COALESCE(p.domain_code, '') ILIKE ?
+                )
+                ORDER BY p.updated_at DESC, p.project_no DESC
+                LIMIT 10
+                """.formatted(
+                        memberCountExpression,
+                        milestoneCountExpression,
+                        openMilestoneCountExpression,
+                        overdueMilestoneCountExpression,
+                        billLinkCountExpression,
+                        objectLinkCountExpression,
+                        taskLinkCountExpression,
+                        milestoneSummaryExpression,
+                        linkSummaryExpression,
+                        recentRiskExpression
+                ),
+                (rs, rowNum) -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("businessType", "PLM_PROJECT");
+                    item.put("businessTypeLabel", "PLM 项目");
+                    item.put("projectId", rs.getString("project_id"));
+                    item.put("billNo", rs.getString("project_no"));
+                    item.put("projectCode", rs.getString("project_code"));
+                    item.put("title", rs.getString("project_name"));
+                    item.put("projectType", rs.getString("project_type"));
+                    item.put("status", rs.getString("status"));
+                    item.put("statusLabel", formatProjectStatus(rs.getString("status")));
+                    item.put("phaseCode", rs.getString("phase_code"));
+                    item.put("phaseLabel", formatProjectPhase(rs.getString("phase_code")));
+                    item.put("domainCode", rs.getString("domain_code"));
+                    item.put("priorityLevel", rs.getString("priority_level"));
+                    item.put("ownerDisplayName", rs.getString("owner_display_name"));
+                    item.put("targetRelease", rs.getString("target_release"));
+                    item.put("targetEndDate", stringValue(rs.getObject("target_end_date")));
+                    item.put("updatedAt", stringValue(rs.getObject("updated_at")));
+                    item.put("summary", stringValue(rs.getString("summary")));
+                    item.put("businessGoal", stringValue(rs.getString("business_goal")));
+                    item.put("riskSummary", stringValue(rs.getString("risk_summary")));
+                    item.put("memberCount", rs.getInt("member_count"));
+                    item.put("milestoneCount", rs.getInt("milestone_count"));
+                    item.put("openMilestoneCount", rs.getInt("open_milestone_count"));
+                    item.put("overdueMilestoneCount", rs.getInt("overdue_milestone_count"));
+                    item.put("billLinkCount", rs.getInt("bill_link_count"));
+                    item.put("objectLinkCount", rs.getInt("object_link_count"));
+                    item.put("taskLinkCount", rs.getInt("task_link_count"));
+                    item.put("milestoneSummary", stringValue(rs.getString("milestone_summary")));
+                    item.put("linkSummary", stringValue(rs.getString("link_summary")));
+                    item.put("recentRiskSummary", stringValue(rs.getString("recent_risk_summary")));
+                    item.put(
+                            "businessSummary",
+                            "阶段 " + formatProjectPhase(rs.getString("phase_code"))
+                                    + " · 里程碑 " + rs.getInt("milestone_count")
+                                    + " · 逾期 " + rs.getInt("overdue_milestone_count")
+                    );
+                    return Map.copyOf(item);
+                },
+                normalizedKeyword,
+                normalizedKeyword,
+                likeKeyword,
+                likeKeyword,
+                likeKeyword,
+                likeKeyword,
+                likeKeyword,
+                likeKeyword,
+                likeKeyword
+        );
+
+        List<Map<String, Object>> statusBreakdown = buildProjectBreakdown(items, "status", "statusLabel");
+        List<Map<String, Object>> phaseBreakdown = buildProjectBreakdown(items, "phaseCode", "phaseLabel");
+        List<Map<String, Object>> domainBreakdown = buildProjectBreakdown(items, "domainCode", "domainCode");
+        int memberCount = sumPlmIntegerField(items, "memberCount");
+        int milestoneCount = sumPlmIntegerField(items, "milestoneCount");
+        int openMilestoneCount = sumPlmIntegerField(items, "openMilestoneCount");
+        int overdueMilestoneCount = sumPlmIntegerField(items, "overdueMilestoneCount");
+        int billLinkCount = sumPlmIntegerField(items, "billLinkCount");
+        int objectLinkCount = sumPlmIntegerField(items, "objectLinkCount");
+        int taskLinkCount = sumPlmIntegerField(items, "taskLinkCount");
+        String milestoneSummary = summarizePlmField(items, "milestoneSummary");
+        String linkSummary = summarizePlmField(items, "linkSummary");
+        String riskSummary = summarizePlmField(items, "recentRiskSummary");
+
+        result.put("count", items.size());
+        result.put("items", items);
+        result.put("statusBreakdown", statusBreakdown);
+        result.put("phaseBreakdown", phaseBreakdown);
+        result.put("domainBreakdown", domainBreakdown);
+        result.put("memberCount", memberCount);
+        result.put("milestoneCount", milestoneCount);
+        result.put("openMilestoneCount", openMilestoneCount);
+        result.put("overdueMilestoneCount", overdueMilestoneCount);
+        result.put("billLinkCount", billLinkCount);
+        result.put("objectLinkCount", objectLinkCount);
+        result.put("taskLinkCount", taskLinkCount);
+        result.put("milestoneSummary", milestoneSummary);
+        result.put("linkSummary", linkSummary);
+        result.put("riskSummary", riskSummary);
+        result.put("summary", buildPlmProjectSummary(items, milestoneSummary, linkSummary, riskSummary));
+        result.put("highlights", items.stream().limit(3).toList());
+        return Map.copyOf(result);
+    }
+
+    private static String buildPlmProjectSummary(
+            List<Map<String, Object>> items,
+            String milestoneSummary,
+            String linkSummary,
+            String riskSummary
+    ) {
+        if (items.isEmpty()) {
+            return "当前没有命中的 PLM 项目。";
+        }
+        List<String> fragments = new ArrayList<>();
+        fragments.add(summarizeTopPlmProjectItems(items));
+        if (!riskSummary.isBlank()) {
+            fragments.add("项目风险：" + riskSummary);
+        }
+        if (!milestoneSummary.isBlank()) {
+            fragments.add("里程碑：" + milestoneSummary);
+        }
+        if (!linkSummary.isBlank()) {
+            fragments.add("关联链路：" + linkSummary);
+        }
+        return String.join("；", fragments);
+    }
+
+    private static List<Map<String, Object>> buildProjectBreakdown(
+            List<Map<String, Object>> items,
+            String codeKey,
+            String labelKey
+    ) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (Map<String, Object> item : items) {
+            String code = stringValue(item.get(codeKey));
+            if (code.isBlank()) {
+                code = "UNKNOWN";
+            }
+            counts.merge(code, 1L, Long::sum);
+            labels.putIfAbsent(code, stringValue(item.get(labelKey)).isBlank() ? code : stringValue(item.get(labelKey)));
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed().thenComparing(Map.Entry::getKey))
+                .map(entry -> Map.<String, Object>of(
+                        "code", entry.getKey(),
+                        "label", labels.getOrDefault(entry.getKey(), entry.getKey()),
+                        "count", entry.getValue()
+                ))
+                .toList();
+    }
+
+    private static String summarizeTopPlmProjectItems(Object value) {
+        if (!(value instanceof List<?> list) || list.isEmpty()) {
+            return "暂无匹配项目";
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(Map.class::cast)
+                .limit(3)
+                .map(item -> {
+                    String projectNo = stringValue(item.get("billNo"));
+                    String title = stringValue(item.get("title"));
+                    String phaseLabel = stringValue(item.get("phaseLabel"));
+                    String businessSummary = stringValue(item.get("businessSummary"));
+                    String statusLabel = stringValue(item.get("statusLabel"));
+                    StringBuilder builder = new StringBuilder();
+                    builder.append(projectNo.isBlank() ? "--" : projectNo);
+                    if (!title.isBlank()) {
+                        builder.append(" · ").append(title);
+                    }
+                    if (!phaseLabel.isBlank()) {
+                        builder.append(" · ").append(phaseLabel);
+                    }
+                    if (!businessSummary.isBlank()) {
+                        builder.append("（").append(businessSummary).append("）");
+                    }
+                    if (!statusLabel.isBlank()) {
+                        builder.append(" · ").append(statusLabel);
+                    }
+                    return builder.toString();
+                })
+                .reduce((left, right) -> left + "；" + right)
+                .orElse("暂无匹配项目");
+    }
+
     private static List<Map<String, Object>> queryPlmBillTable(
             JdbcTemplate jdbcTemplate,
             PlmBillQuerySchema schema,
@@ -1386,6 +1720,28 @@ public class AiCopilotConfiguration {
         }
     }
 
+    private record PlmProjectQuerySchema(Map<String, Set<String>> tableColumns) {
+        boolean hasProjectTable() {
+            return tableColumns.containsKey("plm_project") && !tableColumns.get("plm_project").isEmpty();
+        }
+
+        boolean hasMemberTable() {
+            return tableColumns.containsKey("plm_project_member") && !tableColumns.get("plm_project_member").isEmpty();
+        }
+
+        boolean hasMilestoneTable() {
+            return tableColumns.containsKey("plm_project_milestone") && !tableColumns.get("plm_project_milestone").isEmpty();
+        }
+
+        boolean hasLinkTable() {
+            return tableColumns.containsKey("plm_project_link") && !tableColumns.get("plm_project_link").isEmpty();
+        }
+
+        boolean hasStageEventTable() {
+            return tableColumns.containsKey("plm_project_stage_event") && !tableColumns.get("plm_project_stage_event").isEmpty();
+        }
+    }
+
     private static PlmBillQuerySchema inspectPlmBillQuerySchema(JdbcTemplate jdbcTemplate) {
         return jdbcTemplate.execute((ConnectionCallback<PlmBillQuerySchema>) connection -> {
             DatabaseMetaData metaData = connection.getMetaData();
@@ -1404,6 +1760,42 @@ public class AiCopilotConfiguration {
             tableColumns.put("plm_connector_job", loadTableColumns(metaData, "plm_connector_job"));
             return new PlmBillQuerySchema(tableColumns);
         });
+    }
+
+    private static PlmProjectQuerySchema inspectPlmProjectQuerySchema(JdbcTemplate jdbcTemplate) {
+        return jdbcTemplate.execute((ConnectionCallback<PlmProjectQuerySchema>) connection -> {
+            DatabaseMetaData metaData = connection.getMetaData();
+            Map<String, Set<String>> tableColumns = new LinkedHashMap<>();
+            tableColumns.put("plm_project", loadTableColumns(metaData, "plm_project"));
+            tableColumns.put("plm_project_member", loadTableColumns(metaData, "plm_project_member"));
+            tableColumns.put("plm_project_milestone", loadTableColumns(metaData, "plm_project_milestone"));
+            tableColumns.put("plm_project_link", loadTableColumns(metaData, "plm_project_link"));
+            tableColumns.put("plm_project_stage_event", loadTableColumns(metaData, "plm_project_stage_event"));
+            return new PlmProjectQuerySchema(tableColumns);
+        });
+    }
+
+    private static String formatProjectStatus(String status) {
+        return switch (stringValue(status).toUpperCase(Locale.ROOT)) {
+            case "PLANNING" -> "筹备中";
+            case "ACTIVE" -> "进行中";
+            case "ON_HOLD" -> "已暂停";
+            case "COMPLETED" -> "已完成";
+            case "CANCELLED" -> "已取消";
+            default -> stringValue(status);
+        };
+    }
+
+    private static String formatProjectPhase(String phase) {
+        return switch (stringValue(phase).toUpperCase(Locale.ROOT)) {
+            case "INITIATION" -> "立项";
+            case "DESIGN" -> "设计";
+            case "VALIDATION" -> "验证";
+            case "RELEASE" -> "发布";
+            case "CLOSED" -> "关闭";
+            case "ON_HOLD" -> "暂停";
+            default -> stringValue(phase);
+        };
     }
 
     private static Set<String> loadTableColumns(DatabaseMetaData metaData, String tableName) throws SQLException {

@@ -898,6 +898,13 @@ public class AiPlanAgentService {
         if (isUserProfileIntent(content)) {
             return List.of("user.profile.query");
         }
+        if (containsAny(content, "项目", "里程碑", "阶段", "交付")
+                || containsAny(routePath, "/plm/projects")) {
+            if (containsAny(content, "摘要", "总结")) {
+                return List.of("plm.project.summary");
+            }
+            return List.of("plm.project.query");
+        }
         if (containsAny(content, "PLM", "ECR", "ECO", "物料", "摘要", "变更")
                 || containsAny(routePath, "/plm/")) {
             return List.of("plm.bill.query");

@@ -1154,6 +1154,9 @@ function buildContextualSessionTitle(sourceRoute: string) {
   if (sourceRoute.startsWith('/oa/')) {
     return '当前 OA 单据 Copilot'
   }
+  if (sourceRoute.startsWith('/plm/projects')) {
+    return '当前 PLM 项目 Copilot'
+  }
   if (sourceRoute.startsWith('/plm/')) {
     return '当前 PLM 单据 Copilot'
   }
@@ -1270,6 +1273,15 @@ function formatSourceRouteLabel(sourceRoute: string) {
   }
   if (sourceRoute.startsWith('/plm/material-master/create')) {
     return 'PLM / 物料主数据变更'
+  }
+  if (sourceRoute.startsWith('/plm/projects/create')) {
+    return 'PLM / 项目创建'
+  }
+  if (sourceRoute.startsWith('/plm/projects/')) {
+    return 'PLM / 项目详情'
+  }
+  if (sourceRoute.startsWith('/plm/projects')) {
+    return 'PLM / 项目台账'
   }
   if (sourceRoute.startsWith('/plm/')) {
     return 'PLM 业务页'
@@ -2738,7 +2750,9 @@ function shouldShowRawResultPayload(
     block.sourceKey === 'process.start' ||
     block.sourceKey === 'task.handle' ||
     block.sourceKey === 'plm.bill.query' ||
-    block.sourceKey === 'plm.change.summary'
+    block.sourceKey === 'plm.change.summary' ||
+    block.sourceKey === 'plm.project.query' ||
+    block.sourceKey === 'plm.project.summary'
   ) {
     return false
   }

@@ -21,6 +21,12 @@ import {
   PLMMaterialChangeListPage,
   PLMQueryPage,
 } from './pages'
+import {
+  PLMProjectCreatePage,
+  PLMProjectDetailPage,
+  PLMProjectListPage,
+} from './project-pages'
+import { normalizeListQuerySearch } from '@/features/shared/table/query-contract'
 
 const {
   navigateMock,
@@ -36,15 +42,19 @@ const {
     createPLMECRRequest: vi.fn(),
     createPLMECOExecution: vi.fn(),
     createPLMMaterialChangeRequest: vi.fn(),
+    createPLMProject: vi.fn(),
     addPLMImplementationEvidence: vi.fn(),
     dispatchPLMConnectorTask: vi.fn(),
     releasePLMConfigurationBaseline: vi.fn(),
     releasePLMDocumentAsset: vi.fn(),
     getPLMDashboardSummary: vi.fn(),
     getPLMDashboardCockpit: vi.fn(),
+    getPLMProjectDashboard: vi.fn(),
+    getPLMProjectDetail: vi.fn(),
     listPLMECRRequests: vi.fn(),
     listPLMECOExecutions: vi.fn(),
     listPLMMaterialChangeRequests: vi.fn(),
+    listPLMProjects: vi.fn(),
     getPLMECRRequestDetail: vi.fn(),
     getPLMECOExecutionDetail: vi.fn(),
     getPLMMaterialChangeDetail: vi.fn(),
@@ -70,6 +80,8 @@ const {
     retryPLMConnectorTask: vi.fn(),
     updatePLMAcceptanceChecklist: vi.fn(),
     closePLMBusinessBill: vi.fn(),
+    transitionPLMProjectPhase: vi.fn(),
+    updatePLMProject: vi.fn(),
   },
   workbenchApiMocks: {
     getApprovalSheetDetailByBusiness: vi.fn(),
@@ -237,6 +249,117 @@ function createLaunchResponse(taskId = 'task_plm_001') {
   }
 }
 
+function createProjectDashboardMock() {
+  return {
+    memberCount: 3,
+    milestoneCount: 4,
+    openMilestoneCount: 2,
+    overdueMilestoneCount: 1,
+    billLinkCount: 3,
+    objectLinkCount: 2,
+    taskLinkCount: 2,
+    linkTypeDistribution: [
+      { code: 'PLM_BILL', label: '业务单', totalCount: 1 },
+      { code: 'DOCUMENT', label: '文档', totalCount: 1 },
+      { code: 'TASK', label: '任务', totalCount: 1 },
+    ],
+    milestoneStatusDistribution: [
+      { code: 'RUNNING', label: '进行中', totalCount: 1 },
+      { code: 'PENDING', label: '待开始', totalCount: 1 },
+    ],
+    recentRisks: [
+      {
+        id: 'risk_001',
+        title: '样机试装延期风险',
+        status: 'OPEN',
+        hint: '关键试制资源还未锁定',
+      },
+    ],
+  }
+}
+
+function createProjectDetailMock() {
+  return {
+    projectId: 'proj_001',
+    projectNo: 'PRJ-2026-001',
+    projectCode: 'PROJ-001',
+    projectName: '电驱平台升级',
+    projectType: 'NPI',
+    projectLevel: 'L1',
+    status: 'ACTIVE',
+    phaseCode: 'VALIDATION',
+    domainCode: 'PRODUCT',
+    ownerUserId: 'usr_001',
+    ownerDisplayName: '张三',
+    sponsorUserId: 'usr_002',
+    sponsorDisplayName: '李四',
+    priorityLevel: 'HIGH',
+    targetRelease: '2026-Q3',
+    startDate: '2026-04-01',
+    targetEndDate: '2026-09-30',
+    actualEndDate: null,
+    summary: '聚合变更与交付链路的项目工作区',
+    businessGoal: '完成平台验证并准备发布',
+    riskSummary: '样机试装延期',
+    creatorUserId: 'usr_001',
+    creatorDisplayName: '张三',
+    createdAt: '2026-04-15T08:00:00+08:00',
+    updatedAt: '2026-04-15T09:00:00+08:00',
+    members: [
+      {
+        id: 'mem_001',
+        userId: 'usr_001',
+        displayName: '张三',
+        roleCode: 'PM',
+        roleLabel: '项目经理',
+        responsibilitySummary: '统筹交付',
+        sortOrder: 1,
+      },
+    ],
+    milestones: [
+      {
+        id: 'mile_001',
+        milestoneCode: 'M1',
+        milestoneName: '样机试装',
+        status: 'RUNNING',
+        ownerUserId: 'usr_003',
+        ownerDisplayName: '王工',
+        plannedAt: '2026-05-01T00:00:00+08:00',
+        actualAt: null,
+        summary: '等待试制回签',
+        sortOrder: 1,
+      },
+    ],
+    links: [
+      {
+        id: 'link_001',
+        linkType: 'PLM_BILL',
+        targetBusinessType: 'PLM_ECR',
+        targetId: 'ecr_001',
+        targetNo: 'ECR-001',
+        targetTitle: '电驱系统 ECR',
+        targetStatus: 'ACTIVE',
+        targetHref: '/plm/ecr/ecr_001',
+        summary: '核心变更单',
+        sortOrder: 1,
+      },
+    ],
+    stageEvents: [
+      {
+        id: 'evt_001',
+        fromPhaseCode: 'DESIGN',
+        toPhaseCode: 'VALIDATION',
+        actionCode: 'ADVANCE',
+        comment: '推进到验证',
+        changedBy: 'usr_001',
+        changedByDisplayName: '张三',
+        changedAt: '2026-04-15T09:00:00+08:00',
+      },
+    ],
+    dashboard: createProjectDashboardMock(),
+  }
+}
+
 function createApprovalDetail(overrides: Record<string, unknown> = {}) {
   return {
     taskId: 'task_plm_001',
@@ -400,6 +523,72 @@ describe('plm pages', () => {
       dependencies: [],
       evidences: [],
       acceptanceCheckpoints: [],
+    })
+    plmApiMocks.listPLMProjects.mockResolvedValue({
+      page: 1,
+      pageSize: 20,
+      total: 1,
+      pages: 1,
+      records: [
+        {
+          projectId: 'proj_001',
+          projectNo: 'PRJ-2026-001',
+          projectCode: 'PROJ-001',
+          projectName: '电驱平台升级',
+          projectType: 'NPI',
+          projectLevel: 'L1',
+          status: 'ACTIVE',
+          phaseCode: 'VALIDATION',
+          domainCode: 'PRODUCT',
+          ownerUserId: 'usr_001',
+          ownerDisplayName: '张三',
+          priorityLevel: 'HIGH',
+          targetRelease: '2026-Q3',
+          startDate: '2026-04-01',
+          targetEndDate: '2026-09-30',
+          actualEndDate: null,
+          summary: '聚合变更与交付链路的项目工作区',
+          creatorUserId: 'usr_001',
+          creatorDisplayName: '张三',
+          riskSummary: '样机试装存在延期风险',
+          memberCount: 3,
+          milestoneCount: 4,
+          linkCount: 7,
+          updatedAt: '2026-04-15T08:00:00+08:00',
+          createdAt: '2026-04-15T08:00:00+08:00',
+        },
+      ],
+    })
+    plmApiMocks.getPLMProjectDetail.mockResolvedValue(createProjectDetailMock())
+    plmApiMocks.getPLMProjectDashboard.mockResolvedValue(createProjectDashboardMock())
+    plmApiMocks.createPLMProject.mockResolvedValue({
+      ...createProjectDetailMock(),
+      status: 'PLANNING',
+      phaseCode: 'INITIATION',
+      projectId: 'proj_new_001',
+      projectNo: 'PRJ-2026-NEW-001',
+      projectCode: 'PROJ-NEW-001',
+      projectName: '整车热管理升级',
+      projectType: 'Platform',
+      dashboard: createProjectDashboardMock(),
+    })
+    plmApiMocks.updatePLMProject.mockResolvedValue(undefined)
+    plmApiMocks.transitionPLMProjectPhase.mockResolvedValue({
+      ...createProjectDetailMock(),
+      phaseCode: 'RELEASE',
+      stageEvents: [
+        ...createProjectDetailMock().stageEvents,
+        {
+          id: 'evt_002',
+          fromPhaseCode: 'VALIDATION',
+          toPhaseCode: 'RELEASE',
+          actionCode: 'ADVANCE',
+          comment: '项目阶段推进到 RELEASE',
+          changedBy: 'usr_001',
+          changedByDisplayName: '张三',
+          changedAt: '2026-04-15T10:00:00+08:00',
+        },
+      ],
     })
   })
 
@@ -818,10 +1007,88 @@ describe('plm pages', () => {
       groups: [],
     })
 
-    expect(nextSearch.filters).toEqual([
+  expect(nextSearch.filters).toEqual([
       { field: 'sceneCode', operator: 'eq', value: 'SCENE_A' },
       { field: 'creatorUserId', operator: 'eq', value: 'usr_001' },
     ])
+  })
+
+  it('renders PLM project list page and project entry actions', async () => {
+    renderWithQuery(
+      <PLMProjectListPage
+        search={normalizeListQuerySearch({})}
+        navigate={navigateMock}
+      />
+    )
+
+    expect(await screen.findByText('PLM 项目台账')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(plmApiMocks.listPLMProjects).toHaveBeenCalledWith(
+        expect.objectContaining({ page: 1, pageSize: 10 })
+      )
+    })
+    expect(
+      screen.getByRole('button', { name: '用 AI 分析项目台账' })
+    ).toHaveAttribute('data-source-route', '/plm/projects')
+    expect(screen.getByRole('link', { name: '创建项目' })).toHaveAttribute(
+      'href',
+      '/plm/projects/create'
+    )
+  })
+
+  it('submits the PLM project create page', async () => {
+    renderWithQuery(<PLMProjectCreatePage />)
+
+    fireEvent.change(screen.getByPlaceholderText('项目编码'), {
+      target: { value: 'PROJ-NEW-001' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('项目名称'), {
+      target: { value: '整车热管理升级' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('项目类型，例如 NPI'), {
+      target: { value: 'Platform' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('成员 userId'), {
+      target: { value: 'usr_001' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '创建项目' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.createPLMProject).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectCode: 'PROJ-NEW-001',
+          projectName: '整车热管理升级',
+          projectType: 'Platform',
+        })
+      )
+    })
+    expect(navigateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: '/plm/projects/$projectId',
+        params: { projectId: 'proj_new_001' },
+      })
+    )
+  })
+
+  it('renders PLM project detail page and supports phase transition', async () => {
+    renderWithQuery(<PLMProjectDetailPage projectId='proj_001' />)
+
+    expect(await screen.findByText('电驱平台升级')).toBeInTheDocument()
+    expect(screen.getByText('阶段推进')).toBeInTheDocument()
+    expect(screen.getByText('项目驾驶舱')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('样机试装')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '推进到发布' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.transitionPLMProjectPhase).toHaveBeenCalledWith(
+        'proj_001',
+        expect.objectContaining({
+          toPhaseCode: 'RELEASE',
+          actionCode: 'ADVANCE',
+        })
+      )
+    })
   })
 
   it('allows adding and removing structured affected items in the ECR create form', async () => {

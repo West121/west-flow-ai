@@ -731,6 +731,218 @@ export type PLMBillPage<T> = {
   records: T[]
 }
 
+export type PLMProjectStatus =
+  | 'PLANNING'
+  | 'ACTIVE'
+  | 'ON_HOLD'
+  | 'COMPLETED'
+  | 'CANCELLED'
+
+export type PLMProjectPhaseCode =
+  | 'INITIATION'
+  | 'DESIGN'
+  | 'VALIDATION'
+  | 'RELEASE'
+  | 'CLOSED'
+  | 'ON_HOLD'
+
+export type PLMProjectMemberPayload = {
+  userId: string
+  roleCode: string
+  roleLabel: string
+  responsibilitySummary?: string
+}
+
+export type PLMProjectMilestonePayload = {
+  milestoneCode: string
+  milestoneName: string
+  status: string
+  ownerUserId?: string
+  plannedAt?: string
+  actualAt?: string
+  summary?: string
+}
+
+export type PLMProjectLinkPayload = {
+  linkType: string
+  targetBusinessType?: string
+  targetId: string
+  targetNo?: string
+  targetTitle?: string
+  targetStatus?: string
+  targetHref?: string
+  summary?: string
+}
+
+export type PLMProjectPayload = {
+  projectCode: string
+  projectName: string
+  projectType: string
+  projectLevel?: string
+  ownerUserId?: string
+  sponsorUserId?: string
+  domainCode?: string
+  priorityLevel?: string
+  targetRelease?: string
+  startDate?: string
+  targetEndDate?: string
+  summary?: string
+  businessGoal?: string
+  riskSummary?: string
+  members?: PLMProjectMemberPayload[]
+  milestones?: PLMProjectMilestonePayload[]
+  links?: PLMProjectLinkPayload[]
+}
+
+export type PLMProjectUpdatePayload = Omit<PLMProjectPayload, 'projectCode'> & {
+  status?: PLMProjectStatus | string
+  phaseCode?: PLMProjectPhaseCode | string
+  actualEndDate?: string
+}
+
+export type PLMProjectPhaseTransitionPayload = {
+  toPhaseCode: PLMProjectPhaseCode | string
+  actionCode: string
+  comment?: string
+  status?: PLMProjectStatus | string
+  actualEndDate?: string
+}
+
+export type PLMProjectMember = {
+  id: string
+  userId: string
+  displayName?: string | null
+  roleCode: string
+  roleLabel: string
+  responsibilitySummary?: string | null
+  sortOrder: number
+}
+
+export type PLMProjectMilestone = {
+  id: string
+  milestoneCode: string
+  milestoneName: string
+  status: string
+  ownerUserId?: string | null
+  ownerDisplayName?: string | null
+  plannedAt?: string | null
+  actualAt?: string | null
+  summary?: string | null
+  sortOrder: number
+}
+
+export type PLMProjectLink = {
+  id: string
+  linkType: string
+  targetBusinessType?: string | null
+  targetId: string
+  targetNo?: string | null
+  targetTitle?: string | null
+  targetStatus?: string | null
+  targetHref?: string | null
+  summary?: string | null
+  sortOrder: number
+}
+
+export type PLMProjectStageEvent = {
+  id: string
+  fromPhaseCode?: string | null
+  toPhaseCode: string
+  actionCode: string
+  comment?: string | null
+  changedBy: string
+  changedByDisplayName?: string | null
+  changedAt: string
+}
+
+export type PLMProjectDashboard = {
+  memberCount: number
+  milestoneCount: number
+  openMilestoneCount: number
+  overdueMilestoneCount: number
+  billLinkCount: number
+  objectLinkCount: number
+  taskLinkCount: number
+  linkTypeDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  milestoneStatusDistribution: Array<{
+    code: string
+    label?: string | null
+    totalCount: number
+  }>
+  recentRisks: Array<{
+    id: string
+    title: string
+    status: string
+    hint: string
+  }>
+}
+
+export type PLMProjectListItem = {
+  projectId: string
+  projectNo: string
+  projectCode: string
+  projectName: string
+  projectType: string
+  projectLevel?: string | null
+  status: string
+  phaseCode: string
+  ownerUserId?: string | null
+  ownerDisplayName?: string | null
+  sponsorUserId?: string | null
+  sponsorDisplayName?: string | null
+  domainCode?: string | null
+  priorityLevel?: string | null
+  targetRelease?: string | null
+  startDate?: string | null
+  targetEndDate?: string | null
+  actualEndDate?: string | null
+  summary?: string | null
+  creatorUserId: string
+  creatorDisplayName?: string | null
+  createdAt: string
+  updatedAt: string
+  memberCount: number
+  milestoneCount: number
+  linkCount: number
+}
+
+export type PLMProjectDetail = {
+  projectId: string
+  projectNo: string
+  projectCode: string
+  projectName: string
+  projectType: string
+  projectLevel?: string | null
+  status: string
+  phaseCode: string
+  ownerUserId?: string | null
+  ownerDisplayName?: string | null
+  sponsorUserId?: string | null
+  sponsorDisplayName?: string | null
+  domainCode?: string | null
+  priorityLevel?: string | null
+  targetRelease?: string | null
+  startDate?: string | null
+  targetEndDate?: string | null
+  actualEndDate?: string | null
+  summary?: string | null
+  businessGoal?: string | null
+  riskSummary?: string | null
+  creatorUserId: string
+  creatorDisplayName?: string | null
+  createdAt: string
+  updatedAt: string
+  members: PLMProjectMember[]
+  milestones: PLMProjectMilestone[]
+  links: PLMProjectLink[]
+  stageEvents: PLMProjectStageEvent[]
+  dashboard: PLMProjectDashboard
+}
+
 export type PLMApprovalSheetPage = {
   page: number
   pageSize: number
@@ -1106,6 +1318,86 @@ export async function getPLMDashboardSummary(): Promise<PLMDashboardSummary> {
 
 export async function getPLMDashboardCockpit(): Promise<PLMDashboardCockpit> {
   return getPLMDashboardCockpitInternal()
+}
+
+export async function createPLMProject(
+  payload: PLMProjectPayload
+): Promise<PLMProjectDetail> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDetail
+    requestId: string
+  }>('/plm/projects', payload)
+
+  return unwrapResponse(response)
+}
+
+export async function updatePLMProject(
+  projectId: string,
+  payload: PLMProjectUpdatePayload
+): Promise<PLMProjectDetail> {
+  const response = await apiClient.put<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDetail
+    requestId: string
+  }>(`/plm/projects/${projectId}`, payload)
+
+  return unwrapResponse(response)
+}
+
+export async function listPLMProjects(
+  search: ListQuerySearch
+): Promise<PLMBillPage<PLMProjectListItem>> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: PLMBillPage<PLMProjectListItem>
+    requestId: string
+  }>('/plm/projects/page', toPaginationRequest(search))
+
+  return unwrapResponse(response)
+}
+
+export async function getPLMProjectDetail(
+  projectId: string
+): Promise<PLMProjectDetail> {
+  const response = await apiClient.get<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDetail
+    requestId: string
+  }>(`/plm/projects/${projectId}`)
+
+  return unwrapResponse(response)
+}
+
+export async function getPLMProjectDashboard(
+  projectId: string
+): Promise<PLMProjectDashboard> {
+  const response = await apiClient.get<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDashboard
+    requestId: string
+  }>(`/plm/projects/${projectId}/dashboard`)
+
+  return unwrapResponse(response)
+}
+
+export async function transitionPLMProjectPhase(
+  projectId: string,
+  payload: PLMProjectPhaseTransitionPayload
+): Promise<PLMProjectDetail> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDetail
+    requestId: string
+  }>(`/plm/projects/${projectId}/phase-transition`, payload)
+
+  return unwrapResponse(response)
 }
 
 export async function submitPLMECRDraft(

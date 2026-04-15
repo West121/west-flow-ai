@@ -94,6 +94,16 @@ class AiRegistryCatalogServiceTest {
                         "ai:plm:assist",
                         true,
                         "{\"businessDomains\":[\"PLM\"],\"triggerKeywords\":[\"PLM\",\"ECR\",\"物料\"],\"routePrefixes\":[\"/plm/\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":90}"
+                ),
+                new AiRegistryMapper.AiToolRegistryRow(
+                        "ai_tool_003",
+                        "plm.project.query",
+                        "查询 PLM 项目",
+                        "PLATFORM",
+                        "READ",
+                        "ai:plm:assist",
+                        true,
+                        "{\"businessDomains\":[\"PLM\"],\"triggerKeywords\":[\"项目\",\"里程碑\",\"交付\"],\"routePrefixes\":[\"/plm/projects\"],\"mcpCode\":\"westflow-internal-mcp\",\"priority\":93}"
                 )
         ));
 
@@ -118,10 +128,19 @@ class AiRegistryCatalogServiceTest {
                 List.of("plm-change-summary"),
                 "/plm/ecr/create"
         );
+        var matchedProjectTool = service.matchReadTool(
+                "usr_001",
+                "帮我总结一下当前项目里程碑",
+                "PLM",
+                List.of("plm-project-summary"),
+                "/plm/projects/proj_001"
+        );
 
         assertThat(matchedTraceTool).isPresent();
         assertThat(matchedTraceTool.get().toolCode()).isEqualTo("task.query");
         assertThat(matchedPlmTool).isPresent();
         assertThat(matchedPlmTool.get().toolCode()).isEqualTo("plm.bill.query");
+        assertThat(matchedProjectTool).isPresent();
+        assertThat(matchedProjectTool.get().toolCode()).isEqualTo("plm.project.query");
     }
 }

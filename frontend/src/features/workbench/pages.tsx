@@ -7,7 +7,11 @@ import {
 } from 'react'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { getRouteApi, Link, useNavigate } from '@tanstack/react-router'
 import { type ColumnDef } from '@tanstack/react-table'
 import {
@@ -449,6 +453,14 @@ function toggleTodoPredictionPrioritySort(search: ListQuerySearch, navigate: Nav
       sorts: nextSorts.length > 0 ? nextSorts : undefined,
     }),
   })
+}
+
+function removeTodoPredictionSearch(search: ListQuerySearch): ListQuerySearch {
+  return {
+    ...search,
+    filters: (search.filters ?? []).filter((item) => item.field !== 'prediction.overdueRiskLevel'),
+    sorts: (search.sorts ?? []).filter((item) => item.field !== 'prediction.overdueRiskLevel'),
+  }
 }
 
 // CC 列表用“已读/已完成”来区分待办状态，和普通待办口径不同。
@@ -1135,6 +1147,19 @@ function resolvePredictionRiskVariant(risk?: string | null) {
   }
 }
 
+function resolvePredictionRiskRank(risk?: string | null) {
+  switch ((risk ?? '').toUpperCase()) {
+    case 'HIGH':
+      return 3
+    case 'MEDIUM':
+      return 2
+    case 'LOW':
+      return 1
+    default:
+      return 0
+  }
+}
+
 function formatPredictionRemainingMinutes(minutes?: number | null) {
   if (minutes === null || minutes === undefined) {
     return '--'
@@ -1816,16 +1841,80 @@ function WorkbenchTodoBatchActions({
 export function WorkbenchTodoListPage() {
   const search = normalizeListQuerySearch(workbenchTodoListRoute.useSearch())
   const navigate = workbenchTodoListRoute.useNavigate()
-  const predictionRiskFilterValues = getTodoPredictionRiskFilterValue(search) ?? []
-  const prioritySortEnabled = isTodoPredictionPrioritySortEnabled(search)
+  const routePredictionRiskFilterValues = useMemo(
+    () => getTodoPredictionRiskFilterValue(search) ?? [],
+    [search]
+  )
+  const routePredictionRiskFilterKey = routePredictionRiskFilterValues.join('|')
+  const routePrioritySortEnabled = isTodoPredictionPrioritySortEnabled(search)
+  const [predictionRiskFilterValues, setPredictionRiskFilterValues] = useState<string[]>(
+    () => routePredictionRiskFilterValues
+  )
+  const [prioritySortEnabled, setPrioritySortEnabled] = useState(() => routePrioritySortEnabled)
+  const baseSearch = useMemo(() => removeTodoPredictionSearch(search), [search])
+  const effectiveSearch = useMemo<ListQuerySearch>(() => {
+    const nextFilters = [...(baseSearch.filters ?? [])]
+    const nextSorts = [...(baseSearch.sorts ?? [])]
+
+    if (predictionRiskFilterValues.length > 0) {
+      nextFilters.push({
+        field: 'prediction.overdueRiskLevel',
+        operator: predictionRiskFilterValues.length > 1 ? 'in' : 'eq',
+        value: predictionRiskFilterValues.length > 1 ? predictionRiskFilterValues : predictionRiskFilterValues[0],
+      })
+    }
+    if (prioritySortEnabled) {
+      nextSorts.unshift({
+        field: 'prediction.overdueRiskLevel',
+        direction: 'desc',
+      })
+    }
+
+    return {
+      ...baseSearch,
+      filters: nextFilters,
+      sorts: nextSorts,
+    }
+  }, [baseSearch, predictionRiskFilterValues, prioritySortEnabled])
+
+  useEffect(() => {
+    if (routePredictionRiskFilterValues.length === 0 && !routePrioritySortEnabled) {
+      return
+    }
+
+    startTransition(() => {
+      navigate({
+        replace: true,
+        search: (prev) => {
+          const next = removeTodoPredictionSearch(normalizeListQuerySearch(prev))
+          return {
+            ...next,
+            page: undefined,
+            filters: next.filters.length > 0 ? next.filters : undefined,
+            sorts: next.sorts.length > 0 ? next.sorts : undefined,
+          }
+        },
+      })
+    })
+  }, [navigate, routePredictionRiskFilterKey, routePrioritySortEnabled])
+
+  function updateLocalTodoPredictionRiskFilter(values?: string[]) {
+    setPredictionRiskFilterValues(values ?? [])
+  }
+
+  function toggleLocalTodoPredictionPrioritySort() {
+    setPrioritySortEnabled((current) => !current)
+  }
+
   const tasksQuery = useQuery({
-    queryKey: ['workbench', 'todo-page', search],
-    queryFn: () => listWorkbenchTasks(search),
+    queryKey: ['workbench', 'todo-page', effectiveSearch],
+    queryFn: () => listWorkbenchTasks(effectiveSearch),
   })
 
+  const showListLoading = tasksQuery.isPending || (tasksQuery.isFetching && !tasksQuery.data)
   const pageData = tasksQuery.data ?? {
-    page: search.page,
-    pageSize: search.pageSize,
+    page: effectiveSearch.page,
+    pageSize: effectiveSearch.pageSize,
     total: 0,
     pages: 0,
     records: [],
@@ -1853,13 +1942,15 @@ export function WorkbenchTodoListPage() {
         search={search}
         navigate={navigate}
         columns={todoColumns}
-        data={pageData.records}
+        data={showListLoading ? [] : pageData.records}
         total={pageData.total}
         summaries={[
           {
             label: '待办总量',
-            value: String(pageData.total),
-            hint: '后端分页接口返回的真实总量。',
+            value: showListLoading ? '刷新中…' : String(pageData.total),
+            hint: showListLoading
+              ? '正在按当前风险视图刷新总量。'
+              : '后端分页接口返回的真实总量。',
           },
           {
             label: '当前页待处理',
@@ -1882,7 +1973,7 @@ export function WorkbenchTodoListPage() {
               type='button'
               size='sm'
               variant={predictionRiskFilterValues.length === 0 ? 'default' : 'outline'}
-              onClick={() => updateTodoPredictionRiskFilter(search, navigate)}
+              onClick={() => updateLocalTodoPredictionRiskFilter()}
             >
               全部风险
             </Button>
@@ -1890,7 +1981,7 @@ export function WorkbenchTodoListPage() {
               type='button'
               size='sm'
               variant={predictionRiskFilterValues.length === 1 && predictionRiskFilterValues[0] === 'HIGH' ? 'default' : 'outline'}
-              onClick={() => updateTodoPredictionRiskFilter(search, navigate, ['HIGH'])}
+              onClick={() => updateLocalTodoPredictionRiskFilter(['HIGH'])}
             >
               仅看高风险
             </Button>
@@ -1904,7 +1995,7 @@ export function WorkbenchTodoListPage() {
                   ? 'default'
                   : 'outline'
               }
-              onClick={() => updateTodoPredictionRiskFilter(search, navigate, ['HIGH', 'MEDIUM'])}
+              onClick={() => updateLocalTodoPredictionRiskFilter(['HIGH', 'MEDIUM'])}
             >
               中高风险
             </Button>
@@ -1912,7 +2003,7 @@ export function WorkbenchTodoListPage() {
               type='button'
               size='sm'
               variant={prioritySortEnabled ? 'default' : 'outline'}
-              onClick={() => toggleTodoPredictionPrioritySort(search, navigate)}
+              onClick={() => toggleLocalTodoPredictionPrioritySort()}
             >
               {prioritySortEnabled ? '已按风险优先' : '按风险优先'}
             </Button>
@@ -1925,6 +2016,11 @@ export function WorkbenchTodoListPage() {
                 return new Date(threshold).toDateString() === new Date().toDateString()
               }).length}
             </Badge>
+            {showListLoading ? (
+              <span className='text-xs text-muted-foreground'>
+                正在按当前风险视图刷新…
+              </span>
+            ) : null}
           </div>
         }
         createAction={{
@@ -1943,7 +2039,7 @@ export function WorkbenchTodoListPage() {
         onRefresh={() => {
           void tasksQuery.refetch()
         }}
-        isRefreshing={tasksQuery.isFetching}
+        isRefreshing={showListLoading || tasksQuery.isFetching}
         enableRowSelection
         getRowId={(row) => row.taskId}
         renderBulkActions={({ selectedRows, clearSelection }) => (

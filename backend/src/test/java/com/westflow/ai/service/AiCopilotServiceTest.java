@@ -386,6 +386,18 @@ class AiCopilotServiceTest {
                         "已返回 PLM 变更摘要",
                         context -> plmBillV4Result()
                 ),
+                AiToolDefinition.read(
+                        "plm.project.query",
+                        AiToolSource.PLATFORM,
+                        "已返回 PLM 项目列表",
+                        context -> plmProjectResult()
+                ),
+                AiToolDefinition.read(
+                        "plm.project.summary",
+                        AiToolSource.SKILL,
+                        "已返回 PLM 项目摘要",
+                        context -> plmProjectResult()
+                ),
                 AiToolDefinition.write(
                         "process.start",
                         AiToolSource.PLATFORM,
@@ -508,13 +520,29 @@ class AiCopilotServiceTest {
                                 Map.of()
                         ));
                     }
+                    if (content != null && (content.contains("项目") || content.contains("里程碑") || content.contains("交付"))) {
+                        return java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                                content.contains("摘要") || content.contains("总结") ? "plm.project.summary" : "plm.project.query",
+                                "查询 PLM 项目",
+                                content.contains("摘要") || content.contains("总结") ? AiToolSource.SKILL : AiToolSource.PLATFORM,
+                                AiToolType.READ,
+                                "ai:copilot:open",
+                                List.of("PLM"),
+                                List.of("项目", "里程碑", "交付"),
+                                List.of("/plm/projects"),
+                                "plm-project-summary",
+                                "",
+                                94,
+                                Map.of()
+                        ));
+                    }
                     return java.util.Optional.empty();
                 });
         lenient().when(aiRegistryCatalogService.findTool(anyString(), anyString()))
                 .thenAnswer(invocation -> {
                     String toolKey = invocation.getArgument(1, String.class);
                     return switch (toolKey) {
-                        case "task.query", "workflow.todo.list", "plm.bill.query" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                        case "task.query", "workflow.todo.list", "plm.bill.query", "plm.project.query" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
                                 toolKey,
                                 toolKey,
                                 AiToolSource.PLATFORM,
@@ -528,10 +556,10 @@ class AiCopilotServiceTest {
                                 90,
                                 Map.of()
                         ));
-                        case "stats.query", "feature.catalog.query", "user.profile.query", "workflow.trace.summary", "plm.change.summary" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
+                        case "stats.query", "feature.catalog.query", "user.profile.query", "workflow.trace.summary", "plm.change.summary", "plm.project.summary" -> java.util.Optional.of(new AiRegistryCatalogService.AiToolCatalogItem(
                                 toolKey,
                                 toolKey,
-                                "workflow.trace.summary".equals(toolKey) || "plm.change.summary".equals(toolKey)
+                                "workflow.trace.summary".equals(toolKey) || "plm.change.summary".equals(toolKey) || "plm.project.summary".equals(toolKey)
                                         ? AiToolSource.SKILL
                                         : AiToolSource.PLATFORM,
                                 AiToolType.READ,
@@ -1693,6 +1721,49 @@ class AiCopilotServiceTest {
     }
 
     @Test
+    void shouldAppendPlmProjectSummaryBlocksForProjectQueries() {
+        when(aiConversationMapper.selectById("conv_001"))
+                .thenReturn(conversationWithTags("PLM", "route:/plm/projects/proj_001"));
+        List<AiMessageRecord> storedMessages = mockStoredMessages();
+        when(aiToolCallMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+        when(aiAuditMapper.selectByConversationId("conv_001")).thenReturn(List.of());
+
+        AiConversationDetailResponse detail = aiCopilotService.appendMessage(
+                "conv_001",
+                new AiMessageAppendRequest("帮我总结一下当前项目的里程碑和交付风险")
+        );
+
+        AiMessageResponse assistantMessage = detail.history().get(detail.history().size() - 1);
+        assertThat(assistantMessage.content())
+                .contains("PROJ-20260415-001 · 电驱平台升级")
+                .contains("项目风险：样机试装 · RUNNING · 等待试制回签")
+                .contains("里程碑：方案冻结 · COMPLETED")
+                .contains("关联链路：ECR-20260415-001 · PLM_BILL");
+        List<AiMessageBlockResponse> blocks = assistantMessage.blocks();
+        assertThat(blocks)
+                .extracting(AiMessageBlockResponse::type)
+                .contains("trace", "result", "stats");
+        AiMessageBlockResponse resultBlock = blocks.stream()
+                .filter(block -> "result".equals(block.type()))
+                .findFirst()
+                .orElseThrow();
+        AiMessageBlockResponse statsBlock = blocks.stream()
+                .filter(block -> "stats".equals(block.type()) && "PLM 项目摘要".equals(block.title()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(resultBlock.sourceKey()).isEqualTo("plm.project.summary");
+        assertThat(resultBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("来源页面", "工具调用编号", "查询关键词", "首条项目", "当前阶段", "阶段分布", "状态分布", "业务域分布", "里程碑摘要", "关联链路", "项目风险", "命中摘要");
+        assertThat(resultBlock.metrics())
+                .extracting(AiMessageBlockResponse.Metric::label)
+                .contains("命中项目数", "阶段数", "状态数", "项目成员", "里程碑总数", "开放里程碑", "逾期里程碑", "关联变更", "关联对象", "实施任务", "业务域");
+        assertThat(statsBlock.fields())
+                .extracting(AiMessageBlockResponse.Field::label)
+                .contains("摘要", "阶段分布", "状态分布", "业务域分布", "里程碑摘要", "关联链路", "项目风险");
+    }
+
+    @Test
     void shouldRenderFailureBlockWhenConfirmedWriteExecutionFails() throws Exception {
         when(aiConversationMapper.selectById("conv_001")).thenReturn(conversation());
         java.util.ArrayList<AiMessageRecord> storedMessages = new java.util.ArrayList<>();
@@ -2237,6 +2308,72 @@ class AiCopilotServiceTest {
         result.put("blockedTaskSummary", "TASK-003 · 评审图纸 · 等待图纸冻结");
         result.put("closeReadinessSummary", "不可关闭：存在阻塞任务");
         result.put("summary", "当前命中 2 条 PLM 单据，类型分布：ECR 1 条、物料主数据变更 1 条，状态分布：草稿 1 条、已完成 1 条，受影响对象共 3 个，对象类型：BOM、图纸、物料，版本差异：ATTRIBUTE · 关键参数调整；BOM_STRUCTURE · BOM 结构冻结；ATTRIBUTE · 物料编码与名称同步，任务进度：共 6 条任务，已完成 4，进行中 1，阻塞 1，待处理 1，超期 1，必做未完 1；阻塞任务：TASK-003 · 评审图纸 · 等待图纸冻结，关闭准备度：不可关闭：存在阻塞任务，基线状态：BL-20260323-001 · 设计发布基线 · RELEASED；BL-20260320-003 · 主数据发布基线 · RELEASED，外部集成：ERP 主数据 · PENDING · 等待编码同步；PDM 文档库 · SYNCED · 图纸已发布；ERP 主数据 · SYNCED · 主数据已同步，待验收：待验收 1 项，已完成 2/3，连接器任务：ERP_SYNC · PENDING · 等待派发；PDM_RELEASE · ACKED；ERP_SYNC · ACKED，卡点同步：ECR-20260323-001 · 电机外壳 BOM 变更（失败 1 / 待处理 1），关闭阻塞：ECR-20260323-001 · 存在阻塞实施任务（不可关闭：存在阻塞任务），失败热点：ERP 主数据（失败 1 / 待处理 1 / 影响 1 单）；重点包括：ECR · ECR-20260323-001 · 电机外壳 BOM 变更（影响产品 P-1001 · 优先级 高 · 草稿 · 当前节点 待同步）；物料主数据变更 · MAT-20260323-003 · 主数据属性调整（物料 MAT-7788 / 电机外壳 · 已完成 · 当前节点 proc_mat_001）。");
+        return Map.copyOf(result);
+    }
+
+    private Map<String, Object> plmProjectResult() {
+        java.util.LinkedHashMap<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("keyword", "proj_001");
+        result.put("count", 2);
+        result.put("items", List.of(
+                Map.<String, Object>ofEntries(
+                        Map.entry("businessType", "PLM_PROJECT"),
+                        Map.entry("businessTypeLabel", "PLM 项目"),
+                        Map.entry("projectId", "proj_001"),
+                        Map.entry("billNo", "PROJ-20260415-001"),
+                        Map.entry("title", "电驱平台升级"),
+                        Map.entry("status", "ACTIVE"),
+                        Map.entry("statusLabel", "进行中"),
+                        Map.entry("phaseCode", "VALIDATION"),
+                        Map.entry("phaseLabel", "验证"),
+                        Map.entry("domainCode", "PRODUCT"),
+                        Map.entry("ownerDisplayName", "张三"),
+                        Map.entry("businessSummary", "阶段 验证 · 里程碑 4 · 逾期 1"),
+                        Map.entry("milestoneSummary", "方案冻结 · COMPLETED；样机试装 · RUNNING"),
+                        Map.entry("linkSummary", "ECR-20260415-001 · PLM_BILL · 电驱系统 ECR；BASE-20260415-001 · BASELINE · 验证基线"),
+                        Map.entry("recentRiskSummary", "样机试装 · RUNNING · 等待试制回签")
+                ),
+                Map.<String, Object>ofEntries(
+                        Map.entry("businessType", "PLM_PROJECT"),
+                        Map.entry("businessTypeLabel", "PLM 项目"),
+                        Map.entry("projectId", "proj_002"),
+                        Map.entry("billNo", "PROJ-20260415-002"),
+                        Map.entry("title", "BMS 控制器换版"),
+                        Map.entry("status", "PLANNING"),
+                        Map.entry("statusLabel", "筹备中"),
+                        Map.entry("phaseCode", "DESIGN"),
+                        Map.entry("phaseLabel", "设计"),
+                        Map.entry("domainCode", "ELECTRONICS"),
+                        Map.entry("ownerDisplayName", "李四"),
+                        Map.entry("businessSummary", "阶段 设计 · 里程碑 2 · 逾期 0"),
+                        Map.entry("milestoneSummary", "详细设计评审 · PENDING"),
+                        Map.entry("linkSummary", "ECO-20260415-011 · PLM_BILL · BMS 控制器 ECO"),
+                        Map.entry("recentRiskSummary", "")
+                )
+        ));
+        result.put("statusBreakdown", List.of(
+                Map.of("code", "ACTIVE", "label", "进行中", "count", 1),
+                Map.of("code", "PLANNING", "label", "筹备中", "count", 1)
+        ));
+        result.put("phaseBreakdown", List.of(
+                Map.of("code", "VALIDATION", "label", "验证", "count", 1),
+                Map.of("code", "DESIGN", "label", "设计", "count", 1)
+        ));
+        result.put("domainBreakdown", List.of(
+                Map.of("code", "PRODUCT", "label", "PRODUCT", "count", 1),
+                Map.of("code", "ELECTRONICS", "label", "ELECTRONICS", "count", 1)
+        ));
+        result.put("memberCount", 8);
+        result.put("milestoneCount", 6);
+        result.put("openMilestoneCount", 3);
+        result.put("overdueMilestoneCount", 1);
+        result.put("billLinkCount", 2);
+        result.put("objectLinkCount", 3);
+        result.put("taskLinkCount", 2);
+        result.put("milestoneSummary", "方案冻结 · COMPLETED；样机试装 · RUNNING；详细设计评审 · PENDING");
+        result.put("linkSummary", "ECR-20260415-001 · PLM_BILL · 电驱系统 ECR；BASE-20260415-001 · BASELINE · 验证基线；ECO-20260415-011 · PLM_BILL · BMS 控制器 ECO");
+        result.put("riskSummary", "样机试装 · RUNNING · 等待试制回签");
+        result.put("summary", "PROJ-20260415-001 · 电驱平台升级 · 验证（阶段 验证 · 里程碑 4 · 逾期 1） · 进行中；PROJ-20260415-002 · BMS 控制器换版 · 设计（阶段 设计 · 里程碑 2 · 逾期 0） · 筹备中；项目风险：样机试装 · RUNNING · 等待试制回签；里程碑：方案冻结 · COMPLETED；样机试装 · RUNNING；详细设计评审 · PENDING；关联链路：ECR-20260415-001 · PLM_BILL · 电驱系统 ECR；BASE-20260415-001 · BASELINE · 验证基线；ECO-20260415-011 · PLM_BILL · BMS 控制器 ECO");
         return Map.copyOf(result);
     }
 

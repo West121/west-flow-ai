@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import { type NavigateFn, useTableUrlState } from '@/hooks/use-table-url-state'
@@ -680,7 +681,15 @@ export function ProTable<TData extends object>({
                     ) : (
                       <TableRow>
                         <TableCell colSpan={visibleColumnCount} className='h-24 text-center text-muted-foreground'>
-                          暂无数据，请调整查询条件或稍后再试。
+                          {isRefreshing ? (
+                            <div className='flex flex-col gap-3 py-2'>
+                              <Skeleton className='h-4 w-1/3' />
+                              <Skeleton className='h-4 w-2/3' />
+                              <Skeleton className='h-4 w-1/2' />
+                            </div>
+                          ) : (
+                            '暂无数据，请调整查询条件或稍后再试。'
+                          )}
                         </TableCell>
                       </TableRow>
                     )}

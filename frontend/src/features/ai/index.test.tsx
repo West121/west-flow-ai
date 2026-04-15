@@ -6,6 +6,7 @@ const aiCopilotApiMocks = vi.hoisted(() => ({
   listAICopilotSessions: vi.fn(),
   getAICopilotSession: vi.fn(),
   createAICopilotSession: vi.fn(),
+  clearAICopilotSessions: vi.fn(),
   deleteAICopilotSession: vi.fn(),
   sendAICopilotMessage: vi.fn(),
   uploadAICopilotAsset: vi.fn(),
