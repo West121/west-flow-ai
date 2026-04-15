@@ -9,12 +9,15 @@ import { ArrowRight, Loader2, Plus, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   createPLMProject,
+  cancelPLMProjectInitiation,
   getPLMProjectDetail,
   listPLMProjects,
+  submitPLMProjectInitiation,
   transitionPLMProjectPhase,
   updatePLMProject,
   type PLMProjectDashboard,
   type PLMProjectDetail,
+  type PLMProjectInitiationStatus,
   type PLMProjectLink,
   type PLMProjectListItem,
   type PLMProjectPayload,
@@ -22,6 +25,7 @@ import {
   type PLMProjectStatus,
   type PLMProjectUpdatePayload,
 } from '@/lib/api/plm'
+import { getApprovalSheetDetailByBusiness } from '@/lib/api/workbench'
 import { handleServerError } from '@/lib/handle-server-error'
 import { ContextualCopilotEntry } from '@/features/ai/context-entry'
 import { PageShell } from '@/features/shared/page-shell'
@@ -291,6 +295,37 @@ function resolveProjectStatusVariant(status?: string | null) {
   }
 }
 
+function formatProjectInitiationStatus(status?: string | null) {
+  switch ((status ?? '').toUpperCase()) {
+    case 'DRAFT':
+      return '草稿'
+    case 'PENDING_APPROVAL':
+      return '审批中'
+    case 'APPROVED':
+      return '已通过'
+    case 'REJECTED':
+      return '已驳回'
+    case 'CANCELLED':
+      return '已撤回'
+    default:
+      return status ?? '--'
+  }
+}
+
+function resolveProjectInitiationStatusVariant(status?: string | null) {
+  switch ((status ?? '').toUpperCase()) {
+    case 'APPROVED':
+      return 'default' as const
+    case 'PENDING_APPROVAL':
+      return 'secondary' as const
+    case 'REJECTED':
+    case 'CANCELLED':
+      return 'destructive' as const
+    default:
+      return 'outline' as const
+  }
+}
+
 function buildProjectListSearch(
   search: ListQuerySearch,
   values: {
@@ -503,7 +538,13 @@ function ProjectSummaryItems(total: number, search: ListQuerySearch) {
   ]
 }
 
-function ProjectMembersEditor({ form }: { form: ReturnType<typeof useForm<ProjectFormValues>> }) {
+function ProjectMembersEditor({
+  form,
+  disabled = false,
+}: {
+  form: ReturnType<typeof useForm<ProjectFormValues>>
+  disabled?: boolean
+}) {
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: 'members',
@@ -519,6 +560,7 @@ function ProjectMembersEditor({ form }: { form: ReturnType<typeof useForm<Projec
           type='button'
           size='sm'
           variant='outline'
+          disabled={disabled}
           onClick={() =>
             append({
               userId: '',
@@ -540,24 +582,29 @@ function ProjectMembersEditor({ form }: { form: ReturnType<typeof useForm<Projec
           >
             <Input
               placeholder='成员 userId'
+              disabled={disabled}
               {...form.register(`members.${index}.userId`)}
             />
             <Input
               placeholder='角色编码'
+              disabled={disabled}
               {...form.register(`members.${index}.roleCode`)}
             />
             <Input
               placeholder='角色名称'
+              disabled={disabled}
               {...form.register(`members.${index}.roleLabel`)}
             />
             <div className='flex gap-2'>
               <Input
                 placeholder='职责说明'
+                disabled={disabled}
                 {...form.register(`members.${index}.responsibilitySummary`)}
               />
               <Button
                 type='button'
                 variant='ghost'
+                disabled={disabled}
                 onClick={() => remove(index)}
               >
                 删除
@@ -570,7 +617,13 @@ function ProjectMembersEditor({ form }: { form: ReturnType<typeof useForm<Projec
   )
 }
 
-function ProjectMilestonesEditor({ form }: { form: ReturnType<typeof useForm<ProjectFormValues>> }) {
+function ProjectMilestonesEditor({
+  form,
+  disabled = false,
+}: {
+  form: ReturnType<typeof useForm<ProjectFormValues>>
+  disabled?: boolean
+}) {
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: 'milestones',
@@ -586,6 +639,7 @@ function ProjectMilestonesEditor({ form }: { form: ReturnType<typeof useForm<Pro
           type='button'
           size='sm'
           variant='outline'
+          disabled={disabled}
           onClick={() =>
             append({
               milestoneCode: '',
@@ -610,38 +664,46 @@ function ProjectMilestonesEditor({ form }: { form: ReturnType<typeof useForm<Pro
           >
             <Input
               placeholder='里程碑编码'
+              disabled={disabled}
               {...form.register(`milestones.${index}.milestoneCode`)}
             />
             <Input
               placeholder='里程碑名称'
+              disabled={disabled}
               {...form.register(`milestones.${index}.milestoneName`)}
             />
             <Input
               placeholder='状态'
+              disabled={disabled}
               {...form.register(`milestones.${index}.status`)}
             />
             <Input
               placeholder='负责人 userId'
+              disabled={disabled}
               {...form.register(`milestones.${index}.ownerUserId`)}
             />
             <Input
               type='datetime-local'
               placeholder='计划时间'
+              disabled={disabled}
               {...form.register(`milestones.${index}.plannedAt`)}
             />
             <Input
               type='datetime-local'
               placeholder='实际时间'
+              disabled={disabled}
               {...form.register(`milestones.${index}.actualAt`)}
             />
             <div className='md:col-span-3 flex gap-2'>
               <Textarea
                 placeholder='里程碑说明'
+                disabled={disabled}
                 {...form.register(`milestones.${index}.summary`)}
               />
               <Button
                 type='button'
                 variant='ghost'
+                disabled={disabled}
                 onClick={() => remove(index)}
               >
                 删除
@@ -654,7 +716,13 @@ function ProjectMilestonesEditor({ form }: { form: ReturnType<typeof useForm<Pro
   )
 }
 
-function ProjectLinksEditor({ form }: { form: ReturnType<typeof useForm<ProjectFormValues>> }) {
+function ProjectLinksEditor({
+  form,
+  disabled = false,
+}: {
+  form: ReturnType<typeof useForm<ProjectFormValues>>
+  disabled?: boolean
+}) {
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: 'links',
@@ -670,6 +738,7 @@ function ProjectLinksEditor({ form }: { form: ReturnType<typeof useForm<ProjectF
           type='button'
           size='sm'
           variant='outline'
+          disabled={disabled}
           onClick={() =>
             append({
               linkType: 'PLM_BILL',
@@ -695,40 +764,49 @@ function ProjectLinksEditor({ form }: { form: ReturnType<typeof useForm<ProjectF
           >
             <Input
               placeholder='关联类型'
+              disabled={disabled}
               {...form.register(`links.${index}.linkType`)}
             />
             <Input
               placeholder='业务类型'
+              disabled={disabled}
               {...form.register(`links.${index}.targetBusinessType`)}
             />
             <Input
               placeholder='目标 ID'
+              disabled={disabled}
               {...form.register(`links.${index}.targetId`)}
             />
             <Input
               placeholder='目标编号'
+              disabled={disabled}
               {...form.register(`links.${index}.targetNo`)}
             />
             <Input
               placeholder='目标标题'
+              disabled={disabled}
               {...form.register(`links.${index}.targetTitle`)}
             />
             <Input
               placeholder='目标状态'
+              disabled={disabled}
               {...form.register(`links.${index}.targetStatus`)}
             />
             <Input
               placeholder='跳转地址'
+              disabled={disabled}
               {...form.register(`links.${index}.targetHref`)}
             />
             <div className='flex gap-2'>
               <Input
                 placeholder='摘要'
+                disabled={disabled}
                 {...form.register(`links.${index}.summary`)}
               />
               <Button
                 type='button'
                 variant='ghost'
+                disabled={disabled}
                 onClick={() => remove(index)}
               >
                 删除
@@ -756,6 +834,11 @@ function ProjectEditorForm({
     resolver: zodResolver(projectFormSchema),
     defaultValues: detail ? mapProjectDetailToForm(detail) : emptyProjectFormValues(),
   })
+  const initiationStatus = (detail?.initiationStatus ?? 'DRAFT').toUpperCase() as PLMProjectInitiationStatus
+  const formLocked = mode === 'edit' && initiationStatus === 'PENDING_APPROVAL'
+  const canSubmitInitiation =
+    mode === 'create' ||
+    ['DRAFT', 'REJECTED', 'CANCELLED'].includes(initiationStatus)
 
   useEffect(() => {
     if (detail) {
@@ -763,19 +846,21 @@ function ProjectEditorForm({
     }
   }, [detail, form])
 
+  const persistProject = async (values: ProjectFormValues) => {
+    if (mode === 'create') {
+      return createPLMProject(normalizeProjectPayload(values))
+    }
+    return updatePLMProject(
+      detail!.projectId,
+      normalizeProjectUpdatePayload(values, detail!)
+    )
+  }
+
   const saveMutation = useMutation({
-    mutationFn: async (values: ProjectFormValues) => {
-      if (mode === 'create') {
-        return createPLMProject(normalizeProjectPayload(values))
-      }
-      return updatePLMProject(
-        detail!.projectId,
-        normalizeProjectUpdatePayload(values, detail!)
-      )
-    },
+    mutationFn: persistProject,
     onSuccess: (project) => {
-      toast.success(mode === 'create' ? 'PLM 项目创建成功' : 'PLM 项目已更新')
-      void queryClient.invalidateQueries({ queryKey: ['plm', 'projects'] })
+      toast.success(mode === 'create' ? '项目草稿已保存' : '项目已更新')
+      void queryClient.invalidateQueries({ queryKey: ['plm', 'project-list'] })
       void queryClient.invalidateQueries({ queryKey: ['plm', 'workspace-summary'] })
       onSuccess?.(project)
       if (mode === 'create') {
@@ -784,6 +869,21 @@ function ProjectEditorForm({
     },
     onError: handleServerError,
   })
+  const submitMutation = useMutation({
+    mutationFn: async (values: ProjectFormValues) => {
+      const project = await persistProject(values)
+      return submitPLMProjectInitiation(project.projectId)
+    },
+    onSuccess: (project) => {
+      toast.success('项目已提交立项审批')
+      void queryClient.invalidateQueries({ queryKey: ['plm', 'project-list'] })
+      void queryClient.invalidateQueries({ queryKey: ['plm', 'workspace-summary'] })
+      onSuccess?.(project)
+      navigate({ to: '/plm/projects/$projectId', params: { projectId: project.projectId } })
+    },
+    onError: handleServerError,
+  })
+  const pending = saveMutation.isPending || submitMutation.isPending
 
   return (
     <form
@@ -794,43 +894,64 @@ function ProjectEditorForm({
         <CardHeader>
           <CardTitle>{mode === 'create' ? '项目立项信息' : '项目维护'}</CardTitle>
           <CardDescription>
-            统一维护项目主信息、成员、里程碑和关联对象。
+            {mode === 'create'
+              ? '先保存项目草稿，再提交立项审批；审批通过后进入正式项目管理。'
+              : '统一维护项目主信息、成员、里程碑和关联对象。'}
           </CardDescription>
         </CardHeader>
         <CardContent className='grid gap-4 md:grid-cols-2 xl:grid-cols-4'>
-          <Input placeholder='项目编码' disabled={mode === 'edit'} {...form.register('projectCode')} />
-          <Input placeholder='项目名称' {...form.register('projectName')} />
-          <Input placeholder='项目类型，例如 NPI' {...form.register('projectType')} />
-          <Input placeholder='项目级别，例如 L1' {...form.register('projectLevel')} />
-          <Input placeholder='负责人 userId' {...form.register('ownerUserId')} />
-          <Input placeholder='发起/赞助人 userId' {...form.register('sponsorUserId')} />
-          <Input placeholder='领域，例如 PRODUCT' {...form.register('domainCode')} />
-          <Input placeholder='优先级，例如 HIGH' {...form.register('priorityLevel')} />
-          <Input placeholder='目标发布，例如 2026-Q3' {...form.register('targetRelease')} />
-          <Input type='date' {...form.register('startDate')} />
-          <Input type='date' {...form.register('targetEndDate')} />
-          <Input type='date' disabled={mode === 'create'} {...form.register('actualEndDate')} />
+          <Input placeholder='项目编码' disabled={mode === 'edit' || formLocked} {...form.register('projectCode')} />
+          <Input placeholder='项目名称' disabled={formLocked} {...form.register('projectName')} />
+          <Input placeholder='项目类型，例如 NPI' disabled={formLocked} {...form.register('projectType')} />
+          <Input placeholder='项目级别，例如 L1' disabled={formLocked} {...form.register('projectLevel')} />
+          <Input placeholder='负责人 userId' disabled={formLocked} {...form.register('ownerUserId')} />
+          <Input placeholder='发起/赞助人 userId' disabled={formLocked} {...form.register('sponsorUserId')} />
+          <Input placeholder='领域，例如 PRODUCT' disabled={formLocked} {...form.register('domainCode')} />
+          <Input placeholder='优先级，例如 HIGH' disabled={formLocked} {...form.register('priorityLevel')} />
+          <Input placeholder='目标发布，例如 2026-Q3' disabled={formLocked} {...form.register('targetRelease')} />
+          <Input type='date' disabled={formLocked} {...form.register('startDate')} />
+          <Input type='date' disabled={formLocked} {...form.register('targetEndDate')} />
+          <Input type='date' disabled={mode === 'create' || formLocked} {...form.register('actualEndDate')} />
           <div className='md:col-span-2 xl:col-span-4'>
-            <Textarea placeholder='项目摘要' {...form.register('summary')} />
+            <Textarea placeholder='项目摘要' disabled={formLocked} {...form.register('summary')} />
           </div>
           <div className='md:col-span-2'>
-            <Textarea placeholder='业务目标' {...form.register('businessGoal')} />
+            <Textarea placeholder='业务目标' disabled={formLocked} {...form.register('businessGoal')} />
           </div>
           <div className='md:col-span-2'>
-            <Textarea placeholder='风险摘要' {...form.register('riskSummary')} />
+            <Textarea placeholder='风险摘要' disabled={formLocked} {...form.register('riskSummary')} />
           </div>
         </CardContent>
       </Card>
 
-      <ProjectMembersEditor form={form} />
-      <ProjectMilestonesEditor form={form} />
-      <ProjectLinksEditor form={form} />
+      {formLocked ? (
+        <Alert>
+          <AlertTitle>立项审批进行中</AlertTitle>
+          <AlertDescription>
+            当前项目已提交立项审批，字段暂时锁定；如需调整，请先撤回立项审批。
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
-      <div className='flex justify-end'>
-        <Button type='submit' disabled={saveMutation.isPending}>
+      <ProjectMembersEditor form={form} disabled={formLocked} />
+      <ProjectMilestonesEditor form={form} disabled={formLocked} />
+      <ProjectLinksEditor form={form} disabled={formLocked} />
+
+      <div className='flex flex-wrap justify-end gap-2'>
+        <Button type='submit' disabled={pending || formLocked}>
           {saveMutation.isPending ? <Loader2 className='animate-spin' /> : <Save />}
-          {mode === 'create' ? '创建项目' : '保存项目'}
+          {mode === 'create' ? '保存草稿' : '保存项目'}
         </Button>
+        {canSubmitInitiation ? (
+          <Button
+            type='button'
+            disabled={pending || formLocked}
+            onClick={form.handleSubmit((values) => submitMutation.mutate(values))}
+          >
+            {submitMutation.isPending ? <Loader2 className='animate-spin' /> : <ArrowRight />}
+            提交立项审批
+          </Button>
+        ) : null}
       </div>
     </form>
   )
@@ -949,8 +1070,123 @@ function ProjectLinksCard({ links }: { links: PLMProjectLink[] }) {
   )
 }
 
+function ProjectInitiationCard({
+  detail,
+}: {
+  detail: PLMProjectDetail
+}) {
+  const queryClient = useQueryClient()
+  const approvalDetailQuery = useQuery({
+    queryKey: ['workbench', 'approval-by-business', 'PLM_PROJECT', detail.projectId],
+    queryFn: () =>
+      getApprovalSheetDetailByBusiness({
+        businessType: 'PLM_PROJECT',
+        businessId: detail.projectId,
+      }),
+    enabled: detail.initiationStatus !== 'DRAFT',
+    retry: false,
+  })
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelPLMProjectInitiation(detail.projectId),
+    onSuccess: (project) => {
+      toast.success('项目立项审批已撤回')
+      queryClient.setQueryData(['plm', 'project-detail', detail.projectId], project)
+      void queryClient.invalidateQueries({ queryKey: ['plm', 'project-list'] })
+    },
+    onError: handleServerError,
+  })
+  const taskId = approvalDetailQuery.data?.taskId
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>立项审批</CardTitle>
+        <CardDescription>项目先走立项审批，审批通过后再进入正式阶段推进。</CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-3 text-sm'>
+        <div className='flex items-center justify-between gap-3'>
+          <span className='text-muted-foreground'>审批状态</span>
+          <Badge variant={resolveProjectInitiationStatusVariant(detail.initiationStatus)}>
+            {formatProjectInitiationStatus(detail.initiationStatus)}
+          </Badge>
+        </div>
+        <div className='flex items-center justify-between gap-3'>
+          <span className='text-muted-foreground'>审批场景</span>
+          <span className='font-medium'>{detail.initiationSceneCode ?? 'default'}</span>
+        </div>
+        <div className='flex items-center justify-between gap-3'>
+          <span className='text-muted-foreground'>提交流程</span>
+          <span className='font-medium'>{detail.initiationProcessInstanceId ?? '--'}</span>
+        </div>
+        <div className='flex items-center justify-between gap-3'>
+          <span className='text-muted-foreground'>提交时间</span>
+          <span className='font-medium'>
+            {detail.initiationSubmittedAt
+              ? formatApprovalSheetDateTime(detail.initiationSubmittedAt)
+              : '--'}
+          </span>
+        </div>
+        <div className='flex items-center justify-between gap-3'>
+          <span className='text-muted-foreground'>完成时间</span>
+          <span className='font-medium'>
+            {detail.initiationDecidedAt
+              ? formatApprovalSheetDateTime(detail.initiationDecidedAt)
+              : '--'}
+          </span>
+        </div>
+
+        {detail.initiationStatus === 'PENDING_APPROVAL' ? (
+          <Alert>
+            <AlertTitle>审批进行中</AlertTitle>
+            <AlertDescription>
+              立项审批完成前，项目阶段不能推进。需要修改项目信息时请先撤回。
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {detail.initiationStatus === 'REJECTED' ? (
+          <Alert variant='destructive'>
+            <AlertTitle>立项审批已驳回</AlertTitle>
+            <AlertDescription>
+              请调整项目方案后重新提交立项审批。
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className='flex flex-wrap gap-2'>
+          {taskId ? (
+            <Button asChild size='sm' variant='outline'>
+              <Link to='/workbench/todos/$taskId' params={{ taskId }}>
+                打开审批详情
+              </Link>
+            </Button>
+          ) : null}
+          {detail.initiationStatus === 'PENDING_APPROVAL' ? (
+            <Button
+              type='button'
+              size='sm'
+              variant='destructive'
+              disabled={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate()}
+            >
+              {cancelMutation.isPending ? <Loader2 className='animate-spin' /> : null}
+              撤回立项
+            </Button>
+          ) : null}
+        </div>
+
+        {approvalDetailQuery.isError ? (
+          <p className='text-xs text-muted-foreground'>
+            审批详情暂时不可用，稍后可从工作台按业务单重新进入。
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 function ProjectStageTimeline({ detail }: { detail: PLMProjectDetail }) {
   const queryClient = useQueryClient()
+  const initiationApproved = detail.initiationStatus === 'APPROVED'
   const phaseMutation = useMutation({
     mutationFn: (payload: PLMProjectPhaseTransitionPayload) =>
       transitionPLMProjectPhase(detail.projectId, payload),
@@ -974,13 +1210,25 @@ function ProjectStageTimeline({ detail }: { detail: PLMProjectDetail }) {
         <CardDescription>项目阶段流转、挂起和关闭都在这里统一处理。</CardDescription>
       </CardHeader>
       <CardContent className='space-y-4'>
+        {!initiationApproved ? (
+          <Alert>
+            <AlertTitle>阶段推进受限</AlertTitle>
+            <AlertDescription>
+              项目立项审批通过后，才能推进到设计、验证、发布和关闭阶段。
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <div className='flex flex-wrap gap-2'>
           {quickActions.map((action) => (
             <Button
               key={action.phase}
               type='button'
               variant='outline'
-              disabled={phaseMutation.isPending || detail.phaseCode === action.phase}
+              disabled={
+                phaseMutation.isPending ||
+                detail.phaseCode === action.phase ||
+                !initiationApproved
+              }
               onClick={() =>
                 phaseMutation.mutate({
                   toPhaseCode: action.phase,
@@ -995,7 +1243,7 @@ function ProjectStageTimeline({ detail }: { detail: PLMProjectDetail }) {
           <Button
             type='button'
             variant='secondary'
-            disabled={phaseMutation.isPending}
+            disabled={phaseMutation.isPending || !initiationApproved}
             onClick={() =>
               phaseMutation.mutate({
                 toPhaseCode: 'ON_HOLD',
@@ -1061,6 +1309,15 @@ export function PLMProjectListPage({
       { accessorKey: 'projectName', header: '项目名称' },
       { accessorKey: 'projectType', header: '项目类型' },
       {
+        accessorKey: 'initiationStatus',
+        header: '立项审批',
+        cell: ({ row }) => (
+          <Badge variant={resolveProjectInitiationStatusVariant(row.original.initiationStatus)}>
+            {formatProjectInitiationStatus(row.original.initiationStatus)}
+          </Badge>
+        ),
+      },
+      {
         accessorKey: 'phaseCode',
         header: '当前阶段',
         cell: ({ row }) => formatProjectPhase(row.original.phaseCode),
@@ -1123,7 +1380,7 @@ export function PLMProjectCreatePage() {
   return (
     <PageShell
       title='创建 PLM 项目'
-      description='把变更单、里程碑、对象和实施任务收敛到项目工作区。'
+      description='先保存项目草稿，再提交立项审批；审批通过后进入正式项目管理。'
       actions={
         <div className='flex flex-wrap gap-2'>
           <ContextualCopilotEntry sourceRoute='/plm/projects/create' label='用 AI 总结项目方案' />
@@ -1174,7 +1431,7 @@ export function PLMProjectDetailPage({ projectId }: { projectId: string }) {
   return (
     <PageShell
       title={detail.projectName}
-      description={`${formatProjectPhase(detail.phaseCode)} · ${formatProjectStatus(detail.status)} · 负责人 ${detail.ownerDisplayName ?? detail.ownerUserId ?? '--'}`}
+      description={`${formatProjectPhase(detail.phaseCode)} · ${formatProjectStatus(detail.status)} · 立项${formatProjectInitiationStatus(detail.initiationStatus)} · 负责人 ${detail.ownerDisplayName ?? detail.ownerUserId ?? '--'}`}
       actions={
         <div className='flex flex-wrap gap-2'>
           <ContextualCopilotEntry
@@ -1199,6 +1456,7 @@ export function PLMProjectDetailPage({ projectId }: { projectId: string }) {
           <ProjectLinksCard links={detail.links} />
         </div>
         <div className='space-y-4'>
+          <ProjectInitiationCard detail={detail} />
           <Card>
             <CardHeader>
               <CardTitle>项目摘要</CardTitle>

@@ -1,6 +1,7 @@
 package com.westflow.plm.model;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 /**
  * PLM 项目主记录。
@@ -25,6 +26,11 @@ public record PlmProjectRecord(
         String summary,
         String businessGoal,
         String riskSummary,
-        String creatorUserId
+        String creatorUserId,
+        String initiationStatus,
+        String initiationSceneCode,
+        String initiationProcessInstanceId,
+        LocalDateTime initiationSubmittedAt,
+        LocalDateTime initiationDecidedAt
 ) {
 }

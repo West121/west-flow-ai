@@ -32,6 +32,7 @@ public class ApprovalSheetQueryService {
             case "PLM_ECR" -> resolvePlmEcrBusinessData(businessKey);
             case "PLM_ECO" -> resolvePlmEcoBusinessData(businessKey);
             case "PLM_MATERIAL" -> resolvePlmMaterialBusinessData(businessKey);
+            case "PLM_PROJECT" -> resolvePlmProjectBusinessData(businessKey);
             default -> Map.of();
         };
     }
@@ -196,6 +197,33 @@ public class ApprovalSheetQueryService {
                     data.put("processInstanceId", resultSet.getObject(8));
                     data.put("status", resultSet.getObject(9));
                     data.put("creatorUserId", resultSet.getObject(10));
+                    return data;
+                }
+        );
+    }
+
+    private Map<String, Object> resolvePlmProjectBusinessData(String businessKey) {
+        return queryBusinessData(
+                """
+                SELECT id, project_no, initiation_scene_code, project_code, project_name, project_type,
+                       owner_user_id, sponsor_user_id, initiation_process_instance_id, initiation_status, creator_user_id
+                FROM plm_project
+                WHERE id = ?
+                """,
+                businessKey,
+                resultSet -> {
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("billId", resultSet.getObject(1));
+                    data.put("billNo", resultSet.getObject(2));
+                    data.put("sceneCode", resultSet.getObject(3));
+                    data.put("projectCode", resultSet.getObject(4));
+                    data.put("projectName", resultSet.getObject(5));
+                    data.put("projectType", resultSet.getObject(6));
+                    data.put("ownerUserId", resultSet.getObject(7));
+                    data.put("sponsorUserId", resultSet.getObject(8));
+                    data.put("processInstanceId", resultSet.getObject(9));
+                    data.put("status", resultSet.getObject(10));
+                    data.put("creatorUserId", resultSet.getObject(11));
                     return data;
                 }
         );

@@ -69,6 +69,16 @@ public class PLMController {
         return ApiResponse.success(plmProjectService.updateProject(projectId, request));
     }
 
+    @PostMapping("/projects/{projectId}/submit-initiation")
+    public ApiResponse<PlmProjectDetailResponse> submitProjectInitiation(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.submitInitiation(projectId));
+    }
+
+    @PostMapping("/projects/{projectId}/cancel-initiation")
+    public ApiResponse<PlmProjectDetailResponse> cancelProjectInitiation(@PathVariable String projectId) {
+        return ApiResponse.success(plmProjectService.cancelInitiation(projectId));
+    }
+
     @GetMapping("/projects/{projectId}/dashboard")
     public ApiResponse<PlmProjectDashboardResponse> projectDashboard(@PathVariable String projectId) {
         return ApiResponse.success(plmProjectService.dashboard(projectId));

@@ -43,6 +43,7 @@ const {
     createPLMECOExecution: vi.fn(),
     createPLMMaterialChangeRequest: vi.fn(),
     createPLMProject: vi.fn(),
+    cancelPLMProjectInitiation: vi.fn(),
     addPLMImplementationEvidence: vi.fn(),
     dispatchPLMConnectorTask: vi.fn(),
     releasePLMConfigurationBaseline: vi.fn(),
@@ -78,6 +79,7 @@ const {
     startPLMBusinessImplementation: vi.fn(),
     markPLMBusinessValidating: vi.fn(),
     retryPLMConnectorTask: vi.fn(),
+    submitPLMProjectInitiation: vi.fn(),
     updatePLMAcceptanceChecklist: vi.fn(),
     closePLMBusinessBill: vi.fn(),
     transitionPLMProjectPhase: vi.fn(),
@@ -303,6 +305,11 @@ function createProjectDetailMock() {
     riskSummary: '样机试装延期',
     creatorUserId: 'usr_001',
     creatorDisplayName: '张三',
+    initiationStatus: 'APPROVED',
+    initiationSceneCode: 'default',
+    initiationProcessInstanceId: 'pi_proj_001',
+    initiationSubmittedAt: '2026-04-14T08:00:00+08:00',
+    initiationDecidedAt: '2026-04-14T12:00:00+08:00',
     createdAt: '2026-04-15T08:00:00+08:00',
     updatedAt: '2026-04-15T09:00:00+08:00',
     members: [
@@ -550,6 +557,10 @@ describe('plm pages', () => {
           summary: '聚合变更与交付链路的项目工作区',
           creatorUserId: 'usr_001',
           creatorDisplayName: '张三',
+          initiationStatus: 'APPROVED',
+          initiationProcessInstanceId: 'pi_proj_001',
+          initiationSubmittedAt: '2026-04-14T08:00:00+08:00',
+          initiationDecidedAt: '2026-04-14T12:00:00+08:00',
           riskSummary: '样机试装存在延期风险',
           memberCount: 3,
           milestoneCount: 4,
@@ -565,6 +576,10 @@ describe('plm pages', () => {
       ...createProjectDetailMock(),
       status: 'PLANNING',
       phaseCode: 'INITIATION',
+      initiationStatus: 'DRAFT',
+      initiationProcessInstanceId: null,
+      initiationSubmittedAt: null,
+      initiationDecidedAt: null,
       projectId: 'proj_new_001',
       projectNo: 'PRJ-2026-NEW-001',
       projectCode: 'PROJ-NEW-001',
@@ -572,7 +587,26 @@ describe('plm pages', () => {
       projectType: 'Platform',
       dashboard: createProjectDashboardMock(),
     })
-    plmApiMocks.updatePLMProject.mockResolvedValue(undefined)
+    plmApiMocks.updatePLMProject.mockResolvedValue(createProjectDetailMock())
+    plmApiMocks.submitPLMProjectInitiation.mockResolvedValue({
+      ...createProjectDetailMock(),
+      projectId: 'proj_new_001',
+      projectNo: 'PRJ-2026-NEW-001',
+      projectCode: 'PROJ-NEW-001',
+      projectName: '整车热管理升级',
+      projectType: 'Platform',
+      phaseCode: 'INITIATION',
+      status: 'PLANNING',
+      initiationStatus: 'PENDING_APPROVAL',
+      initiationProcessInstanceId: 'pi_proj_new_001',
+      initiationSubmittedAt: '2026-04-15T10:00:00+08:00',
+      initiationDecidedAt: null,
+    })
+    plmApiMocks.cancelPLMProjectInitiation.mockResolvedValue({
+      ...createProjectDetailMock(),
+      initiationStatus: 'CANCELLED',
+      initiationDecidedAt: '2026-04-15T10:30:00+08:00',
+    })
     plmApiMocks.transitionPLMProjectPhase.mockResolvedValue({
       ...createProjectDetailMock(),
       phaseCode: 'RELEASE',
@@ -590,6 +624,12 @@ describe('plm pages', () => {
         },
       ],
     })
+    workbenchApiMocks.getApprovalSheetDetailByBusiness.mockResolvedValue(
+      createApprovalDetail({
+        businessType: 'PLM_PROJECT',
+        businessKey: 'proj_001',
+      })
+    )
   })
 
   afterEach(() => {
@@ -1036,7 +1076,7 @@ describe('plm pages', () => {
     )
   })
 
-  it('submits the PLM project create page', async () => {
+  it('submits project initiation from the PLM project create page', async () => {
     renderWithQuery(<PLMProjectCreatePage />)
 
     fireEvent.change(screen.getByPlaceholderText('项目编码'), {
@@ -1051,7 +1091,7 @@ describe('plm pages', () => {
     fireEvent.change(screen.getByPlaceholderText('成员 userId'), {
       target: { value: 'usr_001' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '创建项目' }))
+    fireEvent.click(screen.getByRole('button', { name: '提交立项审批' }))
 
     await waitFor(() => {
       expect(plmApiMocks.createPLMProject).toHaveBeenCalledWith(
@@ -1060,6 +1100,11 @@ describe('plm pages', () => {
           projectName: '整车热管理升级',
           projectType: 'Platform',
         })
+      )
+    })
+    await waitFor(() => {
+      expect(plmApiMocks.submitPLMProjectInitiation).toHaveBeenCalledWith(
+        'proj_new_001'
       )
     })
     expect(navigateMock).toHaveBeenCalledWith(
@@ -1076,6 +1121,7 @@ describe('plm pages', () => {
     expect(await screen.findByText('电驱平台升级')).toBeInTheDocument()
     expect(screen.getByText('阶段推进')).toBeInTheDocument()
     expect(screen.getByText('项目驾驶舱')).toBeInTheDocument()
+    expect(screen.getByText('立项审批')).toBeInTheDocument()
     expect(screen.getByDisplayValue('样机试装')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '推进到发布' }))
@@ -1087,6 +1133,25 @@ describe('plm pages', () => {
           toPhaseCode: 'RELEASE',
           actionCode: 'ADVANCE',
         })
+      )
+    })
+  })
+
+  it('allows cancelling project initiation from detail page', async () => {
+    plmApiMocks.getPLMProjectDetail.mockResolvedValue({
+      ...createProjectDetailMock(),
+      initiationStatus: 'PENDING_APPROVAL',
+      initiationDecidedAt: null,
+    })
+
+    renderWithQuery(<PLMProjectDetailPage projectId='proj_001' />)
+
+    expect(await screen.findByText('审批进行中')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '撤回立项' }))
+
+    await waitFor(() => {
+      expect(plmApiMocks.cancelPLMProjectInitiation).toHaveBeenCalledWith(
+        'proj_001'
       )
     })
   })

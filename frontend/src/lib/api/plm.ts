@@ -746,6 +746,13 @@ export type PLMProjectPhaseCode =
   | 'CLOSED'
   | 'ON_HOLD'
 
+export type PLMProjectInitiationStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+
 export type PLMProjectMemberPayload = {
   userId: string
   roleCode: string
@@ -903,6 +910,10 @@ export type PLMProjectListItem = {
   summary?: string | null
   creatorUserId: string
   creatorDisplayName?: string | null
+  initiationStatus: PLMProjectInitiationStatus | string
+  initiationProcessInstanceId?: string | null
+  initiationSubmittedAt?: string | null
+  initiationDecidedAt?: string | null
   createdAt: string
   updatedAt: string
   memberCount: number
@@ -934,6 +945,11 @@ export type PLMProjectDetail = {
   riskSummary?: string | null
   creatorUserId: string
   creatorDisplayName?: string | null
+  initiationStatus: PLMProjectInitiationStatus | string
+  initiationSceneCode?: string | null
+  initiationProcessInstanceId?: string | null
+  initiationSubmittedAt?: string | null
+  initiationDecidedAt?: string | null
   createdAt: string
   updatedAt: string
   members: PLMProjectMember[]
@@ -1382,6 +1398,32 @@ export async function getPLMProjectDashboard(
     data: PLMProjectDashboard
     requestId: string
   }>(`/plm/projects/${projectId}/dashboard`)
+
+  return unwrapResponse(response)
+}
+
+export async function submitPLMProjectInitiation(
+  projectId: string
+): Promise<PLMProjectDetail> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDetail
+    requestId: string
+  }>(`/plm/projects/${projectId}/submit-initiation`, {})
+
+  return unwrapResponse(response)
+}
+
+export async function cancelPLMProjectInitiation(
+  projectId: string
+): Promise<PLMProjectDetail> {
+  const response = await apiClient.post<{
+    code: 'OK'
+    message: string
+    data: PLMProjectDetail
+    requestId: string
+  }>(`/plm/projects/${projectId}/cancel-initiation`, {})
 
   return unwrapResponse(response)
 }

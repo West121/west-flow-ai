@@ -39,6 +39,11 @@ public interface PlmProjectMapper {
               business_goal,
               risk_summary,
               creator_user_id,
+              initiation_status,
+              initiation_scene_code,
+              initiation_process_instance_id,
+              initiation_submitted_at,
+              initiation_decided_at,
               created_at,
               updated_at
             ) VALUES (
@@ -62,6 +67,11 @@ public interface PlmProjectMapper {
               #{businessGoal},
               #{riskSummary},
               #{creatorUserId},
+              #{initiationStatus},
+              #{initiationSceneCode},
+              #{initiationProcessInstanceId},
+              #{initiationSubmittedAt},
+              #{initiationDecidedAt},
               CURRENT_TIMESTAMP,
               CURRENT_TIMESTAMP
             )
@@ -90,6 +100,25 @@ public interface PlmProjectMapper {
             WHERE id = #{id}
             """)
     int update(PlmProjectRecord record);
+
+    @Update("""
+            UPDATE plm_project
+            SET initiation_status = #{initiationStatus},
+                initiation_scene_code = #{initiationSceneCode},
+                initiation_process_instance_id = #{initiationProcessInstanceId},
+                initiation_submitted_at = #{initiationSubmittedAt},
+                initiation_decided_at = #{initiationDecidedAt},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{projectId}
+            """)
+    int updateInitiation(
+            @Param("projectId") String projectId,
+            @Param("initiationStatus") String initiationStatus,
+            @Param("initiationSceneCode") String initiationSceneCode,
+            @Param("initiationProcessInstanceId") String initiationProcessInstanceId,
+            @Param("initiationSubmittedAt") java.time.LocalDateTime initiationSubmittedAt,
+            @Param("initiationDecidedAt") java.time.LocalDateTime initiationDecidedAt
+    );
 
     @Update("""
             UPDATE plm_project
@@ -127,7 +156,12 @@ public interface PlmProjectMapper {
               summary,
               business_goal AS businessGoal,
               risk_summary AS riskSummary,
-              creator_user_id AS creatorUserId
+              creator_user_id AS creatorUserId,
+              initiation_status AS initiationStatus,
+              initiation_scene_code AS initiationSceneCode,
+              initiation_process_instance_id AS initiationProcessInstanceId,
+              initiation_submitted_at AS initiationSubmittedAt,
+              initiation_decided_at AS initiationDecidedAt
             FROM plm_project
             WHERE id = #{projectId}
             """)
@@ -158,6 +192,11 @@ public interface PlmProjectMapper {
               p.risk_summary AS riskSummary,
               p.creator_user_id AS creatorUserId,
               creator.display_name AS creatorDisplayName,
+              p.initiation_status AS initiationStatus,
+              p.initiation_scene_code AS initiationSceneCode,
+              p.initiation_process_instance_id AS initiationProcessInstanceId,
+              p.initiation_submitted_at AS initiationSubmittedAt,
+              p.initiation_decided_at AS initiationDecidedAt,
               p.created_at AS createdAt,
               p.updated_at AS updatedAt,
               NULL AS members,
@@ -241,6 +280,10 @@ public interface PlmProjectMapper {
             "  p.summary AS summary,",
             "  p.creator_user_id AS creatorUserId,",
             "  creator.display_name AS creatorDisplayName,",
+            "  p.initiation_status AS initiationStatus,",
+            "  p.initiation_process_instance_id AS initiationProcessInstanceId,",
+            "  p.initiation_submitted_at AS initiationSubmittedAt,",
+            "  p.initiation_decided_at AS initiationDecidedAt,",
             "  p.created_at AS createdAt,",
             "  p.updated_at AS updatedAt,",
             "  (SELECT COUNT(1) FROM plm_project_member pm WHERE pm.project_id = p.id) AS memberCount,",

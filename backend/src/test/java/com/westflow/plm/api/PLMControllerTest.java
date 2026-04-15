@@ -2,10 +2,12 @@ package com.westflow.plm.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.processdef.service.ProcessDefinitionService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.StreamSupport;
+import org.flowable.task.api.Task;
 import org.flowable.engine.RepositoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +54,9 @@ class PLMControllerTest {
 
     @Autowired
     private RepositoryService repositoryService;
+
+    @Autowired
+    private FlowableEngineFacade flowableEngineFacade;
 
     @BeforeEach
     void resetRuntime() {
@@ -361,6 +366,8 @@ class PLMControllerTest {
     @Test
     void shouldCreatePageUpdateAndTransitionProject() throws Exception {
         String token = login();
+        publishDefinition("plm_project_initiation", "PLM 项目立项审批");
+        seedBinding("PLM_PROJECT", "default", "plm_project_initiation", "bind_plm_project_default");
 
         JsonNode created = postJson(token, "/api/v1/plm/projects", """
                 {
@@ -395,6 +402,7 @@ class PLMControllerTest {
         String projectId = created.path("projectId").asText();
         assertThat(created.path("projectCode").asText()).isEqualTo("PRJ-PLM-001");
         assertThat(created.path("phaseCode").asText()).isEqualTo("INITIATION");
+        assertThat(created.path("initiationStatus").asText()).isEqualTo("DRAFT");
         assertThat(created.path("members")).hasSize(2);
         assertThat(created.path("milestones")).hasSize(2);
         assertThat(created.path("links")).hasSize(2);
@@ -414,14 +422,15 @@ class PLMControllerTest {
                 """).path("data");
         assertThat(page.path("total").asInt()).isEqualTo(1);
         assertThat(page.path("records").get(0).path("projectId").asText()).isEqualTo(projectId);
+        assertThat(page.path("records").get(0).path("initiationStatus").asText()).isEqualTo("DRAFT");
 
         JsonNode updated = putJson(token, "/api/v1/plm/projects/" + projectId, """
                 {
                   "projectName": "动力总成变更项目-更新",
                   "projectType": "NPI",
                   "projectLevel": "L2",
-                  "status": "ACTIVE",
-                  "phaseCode": "DESIGN",
+                  "status": "PLANNING",
+                  "phaseCode": "INITIATION",
                   "ownerUserId": "usr_001",
                   "sponsorUserId": "usr_002",
                   "domainCode": "PRODUCT",
@@ -447,6 +456,35 @@ class PLMControllerTest {
         assertThat(updated.path("members")).hasSize(1);
         assertThat(updated.path("milestones")).hasSize(1);
         assertThat(updated.path("links")).hasSize(1);
+
+        JsonNode submitted = postJson(token, "/api/v1/plm/projects/" + projectId + "/submit-initiation", "").path("data");
+        assertThat(submitted.path("initiationStatus").asText()).isEqualTo("PENDING_APPROVAL");
+        String processInstanceId = submitted.path("initiationProcessInstanceId").asText();
+        assertThat(processInstanceId).isNotBlank();
+
+        mockMvc.perform(post("/api/v1/plm/projects/" + projectId + "/phase-transition")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "toPhaseCode": "VALIDATION",
+                                  "actionCode": "ADVANCE",
+                                  "comment": "审批未通过前不能推进"
+                                }
+                                """))
+                .andExpect(status().isUnprocessableEntity());
+
+        Task activeTask = flowableEngineFacade.taskService()
+                .createTaskQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        assertThat(activeTask).isNotNull();
+        flowableEngineFacade.taskService().complete(activeTask.getId(), java.util.Map.of(
+                "westflowLastAction", "APPROVE"
+        ));
+
+        JsonNode approved = getJson(token, "/api/v1/plm/projects/" + projectId).path("data");
+        assertThat(approved.path("initiationStatus").asText()).isEqualTo("APPROVED");
 
         JsonNode transitioned = postJson(token, "/api/v1/plm/projects/" + projectId + "/phase-transition", """
                 {

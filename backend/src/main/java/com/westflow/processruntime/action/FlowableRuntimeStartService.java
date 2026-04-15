@@ -223,6 +223,7 @@ public class FlowableRuntimeStartService {
             case "plm_ecr" -> "PLM_ECR";
             case "plm_eco" -> "PLM_ECO";
             case "plm_material" -> "PLM_MATERIAL";
+            case "plm_project_initiation" -> "PLM_PROJECT";
             default -> businessType;
         };
     }

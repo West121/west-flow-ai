@@ -2990,10 +2990,12 @@ export function WorkbenchTodoDetailPage({
             ? `/oa/common/${locator.businessId}`
             : detail?.businessType === 'PLM_ECR'
               ? `/plm/ecr/${locator.businessId}`
-              : detail?.businessType === 'PLM_ECO'
-                ? `/plm/eco/${locator.businessId}`
-                : detail?.businessType === 'PLM_MATERIAL'
-                  ? `/plm/material-master/${locator.businessId}`
+            : detail?.businessType === 'PLM_ECO'
+              ? `/plm/eco/${locator.businessId}`
+              : detail?.businessType === 'PLM_MATERIAL'
+                ? `/plm/material-master/${locator.businessId}`
+                : detail?.businessType === 'PLM_PROJECT'
+                  ? `/plm/projects/${locator.businessId}`
                   : '/workbench/todos/list'
 
   const detailActionToolbar: ReactNode = actionsQuery.isLoading ? (

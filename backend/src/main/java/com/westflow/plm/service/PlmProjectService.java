@@ -6,6 +6,7 @@ import com.westflow.common.error.ContractException;
 import com.westflow.common.query.FilterItem;
 import com.westflow.common.query.PageRequest;
 import com.westflow.common.query.PageResponse;
+import com.westflow.flowable.FlowableEngineFacade;
 import com.westflow.plm.api.CreatePlmProjectRequest;
 import com.westflow.plm.api.PlmProjectDashboardResponse;
 import com.westflow.plm.api.PlmProjectDetailResponse;
@@ -16,6 +17,11 @@ import com.westflow.plm.api.PlmProjectMemberRequest;
 import com.westflow.plm.api.PlmProjectMilestoneRequest;
 import com.westflow.plm.api.PlmProjectPhaseTransitionRequest;
 import com.westflow.plm.api.UpdatePlmProjectRequest;
+import com.westflow.processbinding.service.BusinessProcessBindingService;
+import com.westflow.processruntime.action.FlowableRuntimeStartService;
+import com.westflow.processruntime.api.request.StartProcessRequest;
+import com.westflow.processruntime.api.response.StartProcessResponse;
+import com.westflow.processruntime.link.RuntimeBusinessLinkService;
 import com.westflow.plm.mapper.PlmProjectLinkMapper;
 import com.westflow.plm.mapper.PlmProjectMapper;
 import com.westflow.plm.mapper.PlmProjectMemberMapper;
@@ -28,6 +34,7 @@ import com.westflow.plm.model.PlmProjectRecord;
 import com.westflow.plm.model.PlmProjectStageEventRecord;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +42,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
+import org.flowable.engine.history.HistoricProcessInstance;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -47,12 +56,18 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class PlmProjectService {
 
+    private static final ZoneId TIME_ZONE = ZoneId.of("Asia/Shanghai");
+
     private final PlmProjectMapper plmProjectMapper;
     private final PlmProjectMemberMapper plmProjectMemberMapper;
     private final PlmProjectMilestoneMapper plmProjectMilestoneMapper;
     private final PlmProjectLinkMapper plmProjectLinkMapper;
     private final PlmProjectStageEventMapper plmProjectStageEventMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final BusinessProcessBindingService businessProcessBindingService;
+    private final FlowableRuntimeStartService flowableRuntimeStartService;
+    private final RuntimeBusinessLinkService runtimeBusinessLinkService;
+    private final FlowableEngineFacade flowableEngineFacade;
 
     @Transactional
     public PlmProjectDetailResponse createProject(CreatePlmProjectRequest request) {
@@ -78,7 +93,12 @@ public class PlmProjectService {
                 trimToNull(request.summary()),
                 trimToNull(request.businessGoal()),
                 trimToNull(request.riskSummary()),
-                creatorUserId
+                creatorUserId,
+                "DRAFT",
+                "default",
+                null,
+                null,
+                null
         ));
         replaceProjectChildren(projectId, request.members(), request.milestones(), request.links());
         appendStageEvent(projectId, null, "INITIATION", "CREATE", "项目已创建", creatorUserId);
@@ -108,9 +128,79 @@ public class PlmProjectService {
                 trimToNull(request.summary()),
                 trimToNull(request.businessGoal()),
                 trimToNull(request.riskSummary()),
-                existing.creatorUserId()
+                existing.creatorUserId(),
+                existing.initiationStatus(),
+                existing.initiationSceneCode(),
+                existing.initiationProcessInstanceId(),
+                existing.initiationSubmittedAt(),
+                existing.initiationDecidedAt()
         ));
         replaceProjectChildren(projectId, request.members(), request.milestones(), request.links());
+        return detail(projectId);
+    }
+
+    @Transactional
+    public PlmProjectDetailResponse submitInitiation(String projectId) {
+        PlmProjectRecord project = requireWritableProject(projectId);
+        String initiationStatus = normalizeInitiationStatus(project.initiationStatus());
+        if (!List.of("DRAFT", "REJECTED", "CANCELLED").contains(initiationStatus)) {
+            throw new ContractException(
+                    "PLM.PROJECT_INITIATION_NOT_SUBMITTABLE",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前项目状态不支持提交立项审批",
+                    Map.of("projectId", projectId, "initiationStatus", initiationStatus)
+            );
+        }
+        String sceneCode = trimToNull(project.initiationSceneCode()) == null ? "default" : trimToNull(project.initiationSceneCode());
+        StartProcessResponse startResponse = startInitiationProcess(project, sceneCode);
+        plmProjectMapper.updateInitiation(
+                projectId,
+                "PENDING_APPROVAL",
+                sceneCode,
+                startResponse.instanceId(),
+                LocalDateTime.now(),
+                null
+        );
+        runtimeBusinessLinkService.insertLink(
+                "PLM_PROJECT",
+                projectId,
+                startResponse.instanceId(),
+                startResponse.processDefinitionId(),
+                project.creatorUserId(),
+                startResponse.status()
+        );
+        return detail(projectId);
+    }
+
+    @Transactional
+    public PlmProjectDetailResponse cancelInitiation(String projectId) {
+        PlmProjectRecord project = requireWritableProject(projectId);
+        String initiationStatus = normalizeInitiationStatus(project.initiationStatus());
+        if (!List.of("DRAFT", "PENDING_APPROVAL", "REJECTED").contains(initiationStatus)) {
+            throw new ContractException(
+                    "PLM.PROJECT_INITIATION_NOT_CANCELLABLE",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "当前项目状态不支持撤回立项",
+                    Map.of("projectId", projectId, "initiationStatus", initiationStatus)
+            );
+        }
+        String processInstanceId = trimToNull(project.initiationProcessInstanceId());
+        if ("PENDING_APPROVAL".equals(initiationStatus) && processInstanceId != null) {
+            try {
+                flowableEngineFacade.runtimeService().deleteProcessInstance(processInstanceId, "WESTFLOW_REVOKED");
+            } catch (FlowableObjectNotFoundException ignored) {
+                // 流程实例已经结束时，交给状态同步逻辑兜底。
+            }
+            runtimeBusinessLinkService.updateStatus(processInstanceId, "REVOKED");
+        }
+        plmProjectMapper.updateInitiation(
+                projectId,
+                "CANCELLED",
+                project.initiationSceneCode(),
+                processInstanceId,
+                project.initiationSubmittedAt(),
+                LocalDateTime.now()
+        );
         return detail(projectId);
     }
 
@@ -146,6 +236,27 @@ public class PlmProjectService {
                         request.pageSize(),
                         (long) (request.page() - 1) * request.pageSize()
                 );
+        if (!records.isEmpty()) {
+            boolean changed = false;
+            for (PlmProjectListItemResponse item : records) {
+                changed |= synchronizeInitiationState(item.projectId());
+            }
+            if (changed) {
+                records = plmProjectMapper.selectPage(
+                        keyword,
+                        status,
+                        phaseCode,
+                        ownerUserId,
+                        domainCode,
+                        targetEndDateFrom,
+                        targetEndDateTo,
+                        resolveOrderBy(request),
+                        resolveOrderDirection(request),
+                        request.pageSize(),
+                        (long) (request.page() - 1) * request.pageSize()
+                );
+            }
+        }
         long pages = total == 0 ? 0 : (long) Math.ceil((double) total / request.pageSize());
         return new PageResponse<>(
                 request.page(),
@@ -158,6 +269,7 @@ public class PlmProjectService {
     }
 
     public PlmProjectDetailResponse detail(String projectId) {
+        synchronizeInitiationState(projectId);
         PlmProjectDetailResponse base = requireReadableProject(projectId);
         return new PlmProjectDetailResponse(
                 base.projectId(),
@@ -183,6 +295,11 @@ public class PlmProjectService {
                 base.riskSummary(),
                 base.creatorUserId(),
                 base.creatorDisplayName(),
+                base.initiationStatus(),
+                base.initiationSceneCode(),
+                base.initiationProcessInstanceId(),
+                base.initiationSubmittedAt(),
+                base.initiationDecidedAt(),
                 base.createdAt(),
                 base.updatedAt(),
                 plmProjectMemberMapper.selectByProjectId(projectId),
@@ -194,6 +311,7 @@ public class PlmProjectService {
     }
 
     public PlmProjectDashboardResponse dashboard(String projectId) {
+        synchronizeInitiationState(projectId);
         requireReadableProject(projectId);
         long memberCount = count("SELECT COUNT(1) FROM plm_project_member WHERE project_id = ?", projectId);
         long milestoneCount = count("SELECT COUNT(1) FROM plm_project_milestone WHERE project_id = ?", projectId);
@@ -303,6 +421,7 @@ public class PlmProjectService {
     public PlmProjectDetailResponse transitionPhase(String projectId, PlmProjectPhaseTransitionRequest request) {
         PlmProjectRecord project = requireWritableProject(projectId);
         String nextPhaseCode = normalizePhaseCode(request.toPhaseCode(), project.phaseCode());
+        ensureInitiationApprovedForTransition(project, nextPhaseCode);
         String nextStatus = normalizeStatus(request.status(), nextPhaseCode);
         plmProjectMapper.updatePhase(projectId, nextPhaseCode, nextStatus, request.actualEndDate());
         appendStageEvent(projectId, project.phaseCode(), nextPhaseCode, request.actionCode(), trimToNull(request.comment()), currentUserId());
@@ -426,6 +545,9 @@ public class PlmProjectService {
                     Map.of("projectId", projectId)
             );
         }
+        if (synchronizeInitiationState(projectId)) {
+            record = plmProjectMapper.selectRecord(projectId);
+        }
         String currentUserId = currentUserId();
         if (!Objects.equals(currentUserId, record.creatorUserId()) && !Objects.equals(currentUserId, record.ownerUserId())) {
             throw new ContractException(
@@ -436,6 +558,151 @@ public class PlmProjectService {
             );
         }
         return record;
+    }
+
+    private void ensureInitiationApprovedForTransition(PlmProjectRecord project, String nextPhaseCode) {
+        if ("INITIATION".equalsIgnoreCase(nextPhaseCode)) {
+            return;
+        }
+        if (!"APPROVED".equalsIgnoreCase(normalizeInitiationStatus(project.initiationStatus()))) {
+            throw new ContractException(
+                    "PLM.PROJECT_INITIATION_APPROVAL_REQUIRED",
+                    HttpStatus.UNPROCESSABLE_ENTITY,
+                    "项目立项审批通过后才能推进阶段",
+                    Map.of(
+                            "projectId", project.id(),
+                            "phaseCode", nextPhaseCode,
+                            "initiationStatus", project.initiationStatus()
+                    )
+            );
+        }
+    }
+
+    private StartProcessResponse startInitiationProcess(PlmProjectRecord project, String sceneCode) {
+        String processKey = businessProcessBindingService.resolveProcessKey("PLM_PROJECT", sceneCode);
+        Map<String, Object> formData = new java.util.LinkedHashMap<>();
+        formData.put("projectNo", project.projectNo());
+        formData.put("projectCode", project.projectCode());
+        formData.put("projectName", project.projectName());
+        formData.put("projectType", project.projectType());
+        formData.put("projectLevel", project.projectLevel());
+        formData.put("ownerUserId", project.ownerUserId());
+        formData.put("sponsorUserId", project.sponsorUserId());
+        formData.put("domainCode", project.domainCode());
+        formData.put("priorityLevel", project.priorityLevel());
+        formData.put("targetRelease", project.targetRelease());
+        formData.put("summary", project.summary());
+        formData.put("businessGoal", project.businessGoal());
+        formData.put("riskSummary", project.riskSummary());
+        return flowableRuntimeStartService.start(new StartProcessRequest(
+                processKey,
+                project.id(),
+                "PLM_PROJECT",
+                formData
+        ));
+    }
+
+    private boolean synchronizeInitiationState(String projectId) {
+        PlmProjectRecord record = plmProjectMapper.selectRecord(projectId);
+        if (record == null) {
+            return false;
+        }
+        String normalizedStatus = normalizeInitiationStatus(record.initiationStatus());
+        String sceneCode = trimToNull(record.initiationSceneCode()) == null ? "default" : trimToNull(record.initiationSceneCode());
+        String processInstanceId = trimToNull(record.initiationProcessInstanceId());
+        var link = runtimeBusinessLinkService.findByBusiness("PLM_PROJECT", projectId).orElse(null);
+        if (processInstanceId == null && link != null) {
+            processInstanceId = trimToNull(link.processInstanceId());
+        }
+        if (processInstanceId == null || List.of("DRAFT", "CANCELLED").contains(normalizedStatus)) {
+            return false;
+        }
+        HistoricProcessInstance historicProcessInstance = flowableEngineFacade.historyService()
+                .createHistoricProcessInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .singleResult();
+        String derivedStatus = deriveInitiationStatus(processInstanceId, normalizedStatus, historicProcessInstance);
+        LocalDateTime decidedAt = "PENDING_APPROVAL".equals(derivedStatus)
+                ? null
+                : resolveDecidedAt(record.initiationDecidedAt(), historicProcessInstance);
+        if (Objects.equals(normalizedStatus, derivedStatus)
+                && Objects.equals(processInstanceId, trimToNull(record.initiationProcessInstanceId()))
+                && Objects.equals(record.initiationDecidedAt(), decidedAt)) {
+            return false;
+        }
+        plmProjectMapper.updateInitiation(
+                projectId,
+                derivedStatus,
+                sceneCode,
+                processInstanceId,
+                record.initiationSubmittedAt(),
+                decidedAt
+        );
+        return true;
+    }
+
+    private String deriveInitiationStatus(
+            String processInstanceId,
+            String fallbackStatus,
+            HistoricProcessInstance historicProcessInstance
+    ) {
+        try {
+            long activeCount = flowableEngineFacade.taskService()
+                    .createTaskQuery()
+                    .processInstanceId(processInstanceId)
+                    .active()
+                    .count();
+            if (activeCount > 0) {
+                return "PENDING_APPROVAL";
+            }
+        } catch (FlowableObjectNotFoundException ignored) {
+            // 运行态实例不存在时继续走历史实例判断。
+        }
+        if (historicProcessInstance == null) {
+            return fallbackStatus;
+        }
+        if (historicProcessInstance.getDeleteReason() != null) {
+            return "CANCELLED";
+        }
+        Map<String, Object> variables = historicVariables(processInstanceId);
+        String latestAction = trimToNull(stringValue(variables.get("westflowLastAction")));
+        if (latestAction != null && List.of("REJECT", "RETURN").contains(latestAction.toUpperCase(Locale.ROOT))) {
+            return "REJECTED";
+        }
+        return "APPROVED";
+    }
+
+    private Map<String, Object> historicVariables(String processInstanceId) {
+        Map<String, Object> variables = new java.util.LinkedHashMap<>();
+        flowableEngineFacade.historyService()
+                .createHistoricVariableInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .list()
+                .forEach(variable -> variables.put(variable.getVariableName(), variable.getValue()));
+        return variables;
+    }
+
+    private LocalDateTime resolveDecidedAt(LocalDateTime existing, HistoricProcessInstance historicProcessInstance) {
+        if (existing != null) {
+            return existing;
+        }
+        if (historicProcessInstance == null || historicProcessInstance.getEndTime() == null) {
+            return LocalDateTime.now(TIME_ZONE);
+        }
+        return LocalDateTime.ofInstant(historicProcessInstance.getEndTime().toInstant(), TIME_ZONE);
+    }
+
+    private String normalizeInitiationStatus(String value) {
+        String normalized = trimToNull(value);
+        return normalized == null ? "DRAFT" : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String stringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private long count(String sql, Object... args) {

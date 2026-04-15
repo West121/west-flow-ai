@@ -271,6 +271,29 @@ public class RuntimeProcessActionSupportService {
                     status,
                     businessId
             );
+            case "PLM_PROJECT" -> jdbcTemplate.update(
+                    """
+                    UPDATE plm_project
+                    SET initiation_process_instance_id = ?,
+                        initiation_status = ?,
+                        initiation_submitted_at = COALESCE(initiation_submitted_at, CURRENT_TIMESTAMP),
+                        initiation_decided_at = CASE
+                            WHEN ? IN ('RUNNING', 'PENDING_APPROVAL') THEN NULL
+                            ELSE CURRENT_TIMESTAMP
+                        END,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    processInstanceId,
+                    switch (status) {
+                        case "RUNNING" -> "PENDING_APPROVAL";
+                        case "REVOKED" -> "CANCELLED";
+                        case "COMPLETED" -> "APPROVED";
+                        default -> status;
+                    },
+                    status,
+                    businessId
+            );
             default -> {
             }
         }
@@ -283,6 +306,7 @@ public class RuntimeProcessActionSupportService {
         return switch (businessType) {
             case "OA_LEAVE", "OA_EXPENSE" -> coreSupportService.stringValue(businessData.get("reason"));
             case "OA_COMMON" -> coreSupportService.stringValue(businessData.get("title"));
+            case "PLM_PROJECT" -> coreSupportService.stringValue(businessData.get("projectName"));
             default -> coreSupportService.stringValue(businessData.get("billNo"));
         };
     }
@@ -326,6 +350,7 @@ public class RuntimeProcessActionSupportService {
             case "plm_ecr" -> "PLM_ECR";
             case "plm_eco" -> "PLM_ECO";
             case "plm_material" -> "PLM_MATERIAL";
+            case "plm_project_initiation" -> "PLM_PROJECT";
             default -> request.businessType();
         };
     }
